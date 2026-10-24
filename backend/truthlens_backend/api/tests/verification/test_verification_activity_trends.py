@@ -243,14 +243,19 @@ class OrdinaryActivityEventProjectionTests(TestCase):
                             created_after=self.at, created_before=self.at + timedelta(hours=1),
                         )
 
-    def test_malformed_assignment_history_outside_window_fails_closed(self):
+    def test_conflicting_assignment_history_outside_window_fails_closed(self):
+        actions = AccountabilityEvent.ActionType
+        assignment_id = str(uuid.uuid4())
         with self.assertRaises(VerificationMetricsIntegrityError):
             with transaction.atomic():
-                self.record(AccountabilityEvent.ActionType.VERIFICATION_ASSIGNMENT_COMPLETED,
-                            at=self.at - timedelta(days=100),
-                            resource_type=AccountabilityEvent.ResourceType.VERIFICATION_ASSIGNMENT,
-                            authority_scope=AccountabilityEvent.AuthorityScope.SYSTEM,
-                            actor=None, authority_organization=None, capability="")
+                for offset in (100, 99):
+                    self.record(
+                        actions.VERIFICATION_ASSIGNMENT_CLAIMED,
+                        at=self.at - timedelta(days=offset),
+                        resource_type=AccountabilityEvent.ResourceType.VERIFICATION_ASSIGNMENT,
+                        resource_id=assignment_id,
+                        capability=PartnerCapability.CLAIM_VERIFICATION_WORK,
+                    )
                 get_organization_verification_activity_trend(
                     organization=self.organization,
                     created_after=self.at, created_before=self.at + timedelta(hours=1),

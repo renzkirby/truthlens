@@ -1228,6 +1228,36 @@ class VerificationAssignmentSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class VerificationWorkloadAssignmentSerializer(
+    VerificationAssignmentSerializer
+):
+    evidence_count = serializers.IntegerField(
+        read_only=True,
+    )
+
+    class Meta(VerificationAssignmentSerializer.Meta):
+        fields = VerificationAssignmentSerializer.Meta.fields + [
+            "evidence_count",
+        ]
+
+        read_only_fields = fields
+
+
+class VerificationIntakeAssignmentSerializer(
+    VerificationAssignmentSerializer
+):
+    evidence_count = serializers.IntegerField(
+        read_only=True,
+    )
+
+    class Meta(VerificationAssignmentSerializer.Meta):
+        fields = VerificationAssignmentSerializer.Meta.fields + [
+            "evidence_count",
+        ]
+
+        read_only_fields = fields
+
+
 class VerificationAssignmentClaimSerializer(serializers.Serializer):
     organization_id = serializers.UUIDField()
 
@@ -2862,6 +2892,11 @@ class AdjudicationCaseDetailEvidenceSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     is_current_user_contributor = serializers.SerializerMethodField()
+    evidence_case_id = serializers.UUIDField(
+        source="adjudication_evidence_case_id",
+        read_only=True,
+        allow_null=True,
+    )
 
     def get_is_current_user_contributor(self, obj):
         request = self.context.get("request")
@@ -2876,6 +2911,7 @@ class AdjudicationCaseDetailEvidenceSerializer(serializers.ModelSerializer):
         model = EvidenceSubmission
         fields = [
             "id",
+            "evidence_case_id",
             "thread_id",
             "evidence_caption",
             "evidence_type",
@@ -3016,6 +3052,7 @@ class AdjudicationCaseDetailSerializer(serializers.ModelSerializer):
     decision_history = serializers.SerializerMethodField()
     events = serializers.SerializerMethodField()
     action_state = serializers.SerializerMethodField()
+    drafting_handoff = serializers.SerializerMethodField()
 
     def get_workflow_state(self, obj):
         if obj.status == ModerationCase.Status.RESOLVED:
@@ -3146,6 +3183,9 @@ class AdjudicationCaseDetailSerializer(serializers.ModelSerializer):
             ).data,
         }
 
+    def get_drafting_handoff(self, obj):
+        return obj.adjudication_drafting_handoff
+
     def get_action_state(self, obj):
         state = obj.adjudication_action_state
         return {
@@ -3186,6 +3226,7 @@ class AdjudicationCaseDetailSerializer(serializers.ModelSerializer):
             "decision_history",
             "events",
             "action_state",
+            "drafting_handoff",
         ]
         read_only_fields = fields
 
@@ -3380,12 +3421,23 @@ class FactCheckRecoverySerializer(serializers.Serializer):
 class PublicationWorkflowQueueQuerySerializer(serializers.Serializer):
     organization_id = serializers.UUIDField()
     queue = serializers.ChoiceField(choices=["DRAFTING", "REVIEW"])
+    view = serializers.ChoiceField(
+        choices=["ACTIVE", "ARCHIVED"],
+        default="ACTIVE",
+    )
     workflow_kind = serializers.ChoiceField(
         choices=["INITIAL", "EDITORIAL_REVISION", "ALL"],
         default="INITIAL",
     )
     limit = serializers.IntegerField(default=20, min_value=1, max_value=100)
     offset = serializers.IntegerField(default=0, min_value=0)
+
+    def validate(self, attrs):
+        if attrs["view"] == "ARCHIVED" and attrs["queue"] != "DRAFTING":
+            raise serializers.ValidationError(
+                {"view": "Archived publication work is only available in Drafting."}
+            )
+        return attrs
 
 
 class PublicationWorkflowDetailQuerySerializer(serializers.Serializer):
@@ -3399,6 +3451,12 @@ class PublicationWorkflowDetailQuerySerializer(serializers.Serializer):
 class PublicationWorkflowActorSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     username = serializers.CharField()
+
+
+class PublicationWorkflowAbandonmentSerializer(serializers.Serializer):
+    abandoned_at = serializers.DateTimeField()
+    abandoned_by = PublicationWorkflowActorSerializer(allow_null=True)
+    reason = serializers.CharField(allow_blank=True)
 
 
 class PublicationWorkflowOrganizationSerializer(serializers.Serializer):
@@ -3544,6 +3602,7 @@ class PublicationWorkflowListItemSerializer(serializers.Serializer):
     article = PublicationWorkflowListArticleSerializer(allow_null=True)
     lifecycle = PublicationWorkflowLifecycleSerializer()
     concurrency = PublicationWorkflowConcurrencySerializer()
+    abandonment = PublicationWorkflowAbandonmentSerializer(allow_null=True)
     allowed_actions = serializers.ListField(child=serializers.CharField())
     blockers = PublicationWorkflowBlockerSerializer(many=True)
 

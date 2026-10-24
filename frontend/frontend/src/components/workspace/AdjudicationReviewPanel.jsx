@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 
 import { useAuth } from "../../hooks/useAuth";
+import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
+import { showWorkspaceSuccess, WORKSPACE_LONG_TOAST_DURATION } from "../../utils/workspaceToast";
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
-import Select from "../ui/Select.jsx";
 import Textarea from "../ui/Textarea.jsx";
 import VerificationIntelligencePanel from "./VerificationIntelligencePanel.jsx";
 
@@ -14,22 +16,9 @@ import "./AdjudicationReviewPanel.css";
 
 const PAGE_SIZE = 20;
 
-const STATUS_OPTIONS = [
-   { value: "", label: "Active work" },
-   { value: "OPEN", label: "Open" },
-   { value: "IN_REVIEW", label: "In review" },
-   { value: "ESCALATED", label: "Escalated" },
-   { value: "REOPENED", label: "Reopened" },
-   { value: "RESOLVED", label: "Resolved" },
-   { value: "CANCELLED", label: "Cancelled" },
-];
-
-const PRIORITY_OPTIONS = [
-   { value: "", label: "All priorities" },
-   { value: "LOW", label: "Low" },
-   { value: "NORMAL", label: "Normal" },
-   { value: "HIGH", label: "High" },
-   { value: "URGENT", label: "Urgent" },
+const QUEUE_VIEW_OPTIONS = [
+   { value: "", label: "Current work" },
+   { value: "RESOLVED", label: "Resolved history" },
 ];
 
 const VERDICT_OPTIONS = [
@@ -199,8 +188,8 @@ function DecisionRecord({ decision, current = false }) {
          )}
 
          <div className="adjudication-reading-block">
-            <strong>Canonical wording</strong>
-            <p>{decision?.canonical_claim || "Canonical wording unavailable."}</p>
+            <strong>Claim statement</strong>
+            <p>{decision?.canonical_claim || "Claim statement unavailable."}</p>
          </div>
          <div className="adjudication-reading-block">
             <strong>Rationale</strong>
@@ -254,9 +243,24 @@ function SafeExternalLink({ value, children, className = "" }) {
    );
 }
 
-function EvidenceRecord({ evidence }) {
+function EvidenceRecord({
+   evidence,
+   organizationId,
+   adjudicationCaseId,
+   canReviewEvidence,
+}) {
    const safeEvidenceUrl = getSafeHttpUrl(evidence?.evidence_url);
    const rejected = evidence?.evidence_status === "REJECTED";
+   const canOpenEvidenceReview =
+      canReviewEvidence &&
+      evidence?.evidence_status === "UNVERIFIED" &&
+      evidence?.evidence_case_id &&
+      organizationId &&
+      adjudicationCaseId &&
+      !evidence?.is_current_user_contributor;
+   const reviewEvidencePath = canOpenEvidenceReview
+      ? `/workspace?section=evidence&organization_id=${encodeURIComponent(organizationId)}&case_id=${encodeURIComponent(evidence.evidence_case_id)}&from_adjudication_case=${encodeURIComponent(adjudicationCaseId)}`
+      : null;
    const evidenceStatusTone =
       evidence?.evidence_status === "VERIFIED"
          ? "verified"
@@ -276,11 +280,12 @@ function EvidenceRecord({ evidence }) {
          </div>
 
          <div className="adjudication-source-row">
-            <span className="adjudication-url-text">{evidence?.evidence_url || "Source URL unavailable"}</span>
-            {safeEvidenceUrl && (
-               <SafeExternalLink value={safeEvidenceUrl} className="adjudication-external-link">
-                  Open evidence source
+            {safeEvidenceUrl ? (
+               <SafeExternalLink value={safeEvidenceUrl} className="adjudication-evidence-source-link">
+                  {evidence?.evidence_url}
                </SafeExternalLink>
+            ) : (
+               <span className="adjudication-url-text">{evidence?.evidence_url || "Source URL unavailable"}</span>
             )}
          </div>
          {!safeEvidenceUrl && evidence?.evidence_url && (
@@ -316,7 +321,15 @@ function EvidenceRecord({ evidence }) {
                   {evidence?.rejection_reason && ` (${evidence.rejection_reason})`}
                </p>
             )}
-            <p><strong>Review notes:</strong> {evidence?.review_notes || "No review notes were recorded."}</p>
+            <div className="adjudication-review-notes-row">
+               <p><strong>Review notes:</strong> {evidence?.review_notes || "No review notes were recorded."}</p>
+               {reviewEvidencePath && (
+                  <Link to={reviewEvidencePath} className="adjudication-review-evidence-link">
+                     Review evidence
+                     <Icons name="arrow-right" size={12} aria-hidden="true" />
+                  </Link>
+               )}
+            </div>
          </div>
 
          <details className="adjudication-record-disclosure">
@@ -431,15 +444,162 @@ function getActionValidationErrors(error) {
    return { fieldErrors, generalMessage };
 }
 
+
+const ADJUDICATION_DIALOG_FOCUSABLE = [
+   "button:not([disabled])",
+   "[href]",
+   "input:not([disabled])",
+   "select:not([disabled])",
+   "textarea:not([disabled])",
+   '[tabindex]:not([tabindex="-1"])',
+].join(",");
+
+function AdjudicationModal({
+   open,
+   title,
+   description,
+   onClose,
+   busy = false,
+   returnFocusRef,
+   children,
+   className = "",
+}) {
+   const id = useId();
+   const dialogRef = useRef(null);
+   const onCloseRef = useRef(onClose);
+   const busyRef = useRef(busy);
+   const titleId = `${id}-title`;
+   const descriptionId = `${id}-description`;
+
+   useEffect(() => {
+      onCloseRef.current = onClose;
+      busyRef.current = busy;
+   }, [busy, onClose]);
+
+   useEffect(() => {
+      if (!open) {
+         return undefined;
+      }
+
+      const previousFocus = document.activeElement;
+      const explicitReturnTarget = returnFocusRef?.current;
+      const previousOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+
+      const focusFrame = window.requestAnimationFrame(() => {
+         const initialTarget =
+            dialogRef.current?.querySelector("[data-dialog-initial]") ||
+            dialogRef.current?.querySelector(ADJUDICATION_DIALOG_FOCUSABLE) ||
+            dialogRef.current;
+         initialTarget?.focus();
+      });
+
+      const handleKeyDown = (event) => {
+         if (event.key === "Escape" && !busyRef.current) {
+            event.preventDefault();
+            onCloseRef.current?.();
+            return;
+         }
+         if (event.key !== "Tab") {
+            return;
+         }
+
+         const focusable = Array.from(
+            dialogRef.current?.querySelectorAll(ADJUDICATION_DIALOG_FOCUSABLE) || [],
+         ).filter((node) => !node.hidden && node.getClientRects().length > 0);
+
+         if (focusable.length === 0) {
+            event.preventDefault();
+            dialogRef.current?.focus();
+            return;
+         }
+
+         const first = focusable[0];
+         const last = focusable[focusable.length - 1];
+
+         if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+         } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+         }
+      };
+
+      document.addEventListener("keydown", handleKeyDown);
+
+      return () => {
+         window.cancelAnimationFrame(focusFrame);
+         document.removeEventListener("keydown", handleKeyDown);
+         document.body.style.overflow = previousOverflow;
+         const returnTarget = explicitReturnTarget?.isConnected ? explicitReturnTarget : previousFocus;
+         if (returnTarget?.isConnected) {
+            returnTarget.focus();
+         }
+      };
+   }, [open, returnFocusRef]);
+
+   if (!open) {
+      return null;
+   }
+
+   return createPortal(
+      <div
+         className="adjudication-dialog-backdrop"
+         onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !busy) {
+               onClose();
+            }
+         }}
+      >
+         <section
+            ref={dialogRef}
+            className={`adjudication-dialog ${className}`.trim()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            aria-describedby={descriptionId}
+            aria-busy={busy || undefined}
+            tabIndex="-1"
+         >
+            <header className="adjudication-dialog-header">
+               <div>
+                  <h2 id={titleId}>{title}</h2>
+                  <p id={descriptionId}>{description}</p>
+               </div>
+               <button
+                  type="button"
+                  className="adjudication-dialog-close"
+                  onClick={onClose}
+                  disabled={busy}
+                  aria-label="Close dialog"
+               >
+                  <Icons name="x" size={19} aria-hidden="true" />
+               </button>
+            </header>
+            <div className="adjudication-dialog-body">{children}</div>
+         </section>
+      </div>,
+      document.body,
+   );
+}
+
 function AdjudicationReviewContent({
    authFetch,
    authIdentity,
    organizationId,
    organizationName,
    canAdjudicate,
+   canReviewEvidence = false,
+   initialCaseId,
+   returnToInvestigationPath,
+   guidedMode = false,
+   onWorkflowChanged,
+   onReturnToInvestigation,
 }) {
+   const { addToast } = useNotification();
+   const initialCaseKey = initialCaseId ? String(initialCaseId) : null;
    const [statusFilter, setStatusFilter] = useState("");
-   const [priorityFilter, setPriorityFilter] = useState("");
    const [offset, setOffset] = useState(0);
    const [queue, setQueue] = useState({
       count: 0,
@@ -447,12 +607,12 @@ function AdjudicationReviewContent({
       offset: 0,
       results: [],
    });
-   const [queueLoading, setQueueLoading] = useState(true);
+   const [queueLoading, setQueueLoading] = useState(!guidedMode);
    const [queueError, setQueueError] = useState("");
    const [queueRequestVersion, setQueueRequestVersion] = useState(0);
-   const [selectedCaseId, setSelectedCaseId] = useState(null);
+   const [selectedCaseId, setSelectedCaseId] = useState(initialCaseKey);
    const [detail, setDetail] = useState(null);
-   const [detailLoading, setDetailLoading] = useState(false);
+   const [detailLoading, setDetailLoading] = useState(Boolean(initialCaseKey));
    const [detailError, setDetailError] = useState("");
    const [detailUnavailable, setDetailUnavailable] = useState(false);
    const [detailRequestVersion, setDetailRequestVersion] = useState(0);
@@ -467,6 +627,8 @@ function AdjudicationReviewContent({
    const [actionNotice, setActionNotice] = useState(null);
    const [actionError, setActionError] = useState("");
    const [reconciliationPending, setReconciliationPending] = useState(null);
+   const [guidedEvidenceOpen, setGuidedEvidenceOpen] = useState(false);
+   const [caseDetailsView, setCaseDetailsView] = useState(null);
 
    const mountedRef = useRef(true);
    const panelRef = useRef(null);
@@ -475,19 +637,20 @@ function AdjudicationReviewContent({
    const queueRequestIdRef = useRef(0);
    const detailRequestIdRef = useRef(0);
    const reconciliationRequestIdRef = useRef(0);
-   const selectedCaseIdRef = useRef(null);
-   const originatingQueueCaseIdRef = useRef(null);
+   const selectedCaseIdRef = useRef(initialCaseKey);
+   const originatingQueueCaseIdRef = useRef(initialCaseKey);
    const returnFocusCaseIdRef = useRef(null);
    const queueRowRefs = useRef(new Map());
    const queueHeadingRef = useRef(null);
    const selectedCaseHeadingRef = useRef(null);
    const authorityErrorRef = useRef(null);
    const detailErrorRef = useRef(null);
-   const focusSelectedCaseRef = useRef(false);
+   const focusSelectedCaseRef = useRef(Boolean(initialCaseKey));
    const focusDetailErrorRef = useRef(false);
    const focusQueueAfterReturnRef = useRef(false);
    const focusQueueAfterAuthorityRetryRef = useRef(false);
    const decisionTriggerRef = useRef(null);
+   const caseDetailsTriggerRef = useRef(null);
    const firstVerdictRef = useRef(null);
    const canonicalClaimRef = useRef(null);
    const rationaleRef = useRef(null);
@@ -547,6 +710,7 @@ function AdjudicationReviewContent({
       setActionNotice(null);
       setActionError("");
       setReconciliationPending(null);
+      setCaseDetailsView(null);
       setAuthorityError(
          error?.status === 401
             ? "Your session is no longer available. Sign in again or retry after authentication is restored."
@@ -577,15 +741,11 @@ function AdjudicationReviewContent({
          query.set("status", statusFilter);
       }
 
-      if (priorityFilter) {
-         query.set("priority", priorityFilter);
-      }
-
       return `${resolveApiEndpoint("ADJUDICATION_CASES")}?${query.toString()}`;
-   }, [offset, organizationId, priorityFilter, statusFilter]);
+   }, [offset, organizationId, statusFilter]);
 
    useEffect(() => {
-      if (!canAdjudicate || !organizationId) {
+      if (!canAdjudicate || !organizationId || guidedMode) {
          return undefined;
       }
 
@@ -650,6 +810,7 @@ function AdjudicationReviewContent({
    }, [
       authFetch,
       canAdjudicate,
+      guidedMode,
       isAuthorityGenerationCurrent,
       offset,
       organizationId,
@@ -772,7 +933,7 @@ function AdjudicationReviewContent({
             if (confirmationAttempt && !unavailable) {
                setDecisionFormOpen(true);
                setDecisionErrors({
-                  general: "Canonical detail could not be refreshed. Retry the case refresh before reviewing this decision again.",
+                  general: "The latest case details could not be refreshed. Retry the case refresh before reviewing this decision again.",
                });
             } else if (unavailable) {
                setDecisionFormOpen(false);
@@ -871,11 +1032,25 @@ function AdjudicationReviewContent({
    }, [confirmation, confirmationChecking, decisionFormOpen]);
 
    useEffect(() => {
-      if ((actionError || actionNotice) && focusActionMessageRef.current) {
+      const decisionDialogActive =
+         decisionFormOpen ||
+         confirmationChecking ||
+         Boolean(confirmation) ||
+         Boolean(mutation && identifiersMatch(mutation.caseId, selectedCaseId));
+
+      if ((actionError || actionNotice) && focusActionMessageRef.current && !decisionDialogActive) {
          focusActionMessageRef.current = false;
          actionMessageRef.current?.focus();
       }
-   }, [actionError, actionNotice]);
+   }, [
+      actionError,
+      actionNotice,
+      confirmation,
+      confirmationChecking,
+      decisionFormOpen,
+      mutation,
+      selectedCaseId,
+   ]);
 
    useEffect(() => {
       if (detail && focusDetailAfterMutationRef.current) {
@@ -915,6 +1090,7 @@ function AdjudicationReviewContent({
       setDetailError("");
       setDetailUnavailable(false);
       setDetailIdentity(null);
+      setCaseDetailsView(null);
       resetDecisionWorkflow({ clearMessages: false });
    };
 
@@ -975,7 +1151,7 @@ function AdjudicationReviewContent({
             !identifiersMatch(canonicalDetail?.id, operation.caseId) ||
             !identifiersMatch(canonicalDetail?.organization?.id, operation.organizationId)
          ) {
-            throw new Error("The canonical case response did not match the submitted decision identity.");
+            throw new Error("The refreshed case details did not match the submitted decision.");
          }
 
          const selectedCaseIsSubmittedCase =
@@ -997,23 +1173,40 @@ function AdjudicationReviewContent({
             focusDetailAfterMutationRef.current = true;
          }
 
-         requestQueueRefresh();
+         if (!guidedMode) {
+            requestQueueRefresh();
+         }
 
          if (outcome === "success") {
             setActionError("");
-            setActionNotice({
-               kind: "success",
+            if (selectedCaseIsSubmittedCase) {
+               setActionNotice(null);
+               showWorkspaceSuccess(addToast, {
+                  title: "Decision recorded",
+                  message: "The authoritative adjudication decision has been recorded.",
+                  duration: WORKSPACE_LONG_TOAST_DURATION,
+               });
+               focusActionMessageRef.current = false;
+            } else {
+               setActionNotice({
+                  kind: "success",
+                  caseId: operation.caseId,
+                  message: "The authoritative decision was recorded for the submitted case. Your current selection was not changed.",
+                  inspectable: true,
+               });
+               focusActionMessageRef.current = true;
+            }
+            onWorkflowChanged?.({
+               stage: "ADJUDICATION",
                caseId: operation.caseId,
-               message: selectedCaseIsSubmittedCase
-                  ? "The authoritative decision was recorded and the canonical case detail is current."
-                  : "The authoritative decision was recorded for the submitted case. Your current selection was not changed.",
-               inspectable: !selectedCaseIsSubmittedCase,
+               detail: canonicalDetail,
             });
          } else if (outcome === "conflict") {
             setActionNotice(null);
             setActionError(
                `Case ${formatCaseReference(operation.caseId)} changed before the decision was submitted. ${serverMessage || "Review its current state before continuing."}`,
             );
+            focusActionMessageRef.current = true;
          } else {
             const recordedDecisionExists = Boolean(canonicalDetail?.current_decision) || canonicalDetail?.status === "RESOLVED";
             if (recordedDecisionExists) {
@@ -1021,17 +1214,24 @@ function AdjudicationReviewContent({
                setActionNotice({
                   kind: "reconciled",
                   caseId: operation.caseId,
-                  message: "The request outcome was initially unclear, but the fresh canonical case now contains a recorded decision.",
+                  message: "The request outcome was initially unclear, but the latest case details now contain a recorded decision.",
                   inspectable: !selectedCaseIsSubmittedCase,
+               });
+               focusActionMessageRef.current = true;
+               onWorkflowChanged?.({
+                  stage: "ADJUDICATION",
+                  caseId: operation.caseId,
+                  detail: canonicalDetail,
+                  reconciled: true,
                });
             } else {
                setActionNotice(null);
                setActionError(
-                  `The outcome for case ${formatCaseReference(operation.caseId)} was unclear. Fresh canonical detail shows no recorded decision; review it fully before beginning a new attempt.`,
+                  `The outcome for case ${formatCaseReference(operation.caseId)} was unclear. The latest case details show no recorded decision; review them fully before beginning a new attempt.`,
                );
+               focusActionMessageRef.current = true;
             }
          }
-         focusActionMessageRef.current = !selectedCaseIsSubmittedCase;
       } catch (error) {
          if (
             reconciliationRequestIdRef.current !== reconciliationId ||
@@ -1050,8 +1250,8 @@ function AdjudicationReviewContent({
             detailRequestIdRef.current === selectedDetailRequestId;
          const pendingMessage =
             outcome === "success"
-               ? "The action endpoint recorded the decision, but canonical reconciliation is pending. Do not resubmit the decision."
-               : "The request outcome is not confirmed because canonical reconciliation failed. Do not resubmit until the case is reconciled.";
+               ? "The decision was recorded, but confirmation against the latest case state is still pending. Do not resubmit the decision."
+               : "The request outcome is not confirmed because the latest case state could not be verified. Do not resubmit until the case is confirmed.";
 
          if (selectedCaseIsSubmittedCase) {
             setDetailIdentity(null);
@@ -1060,7 +1260,7 @@ function AdjudicationReviewContent({
             setDetailError(
                error?.status === 404
                   ? "The submitted Adjudication case is no longer available in this organization."
-                  : (error?.message || "Unable to reconcile the submitted case with canonical detail."),
+                  : (error?.message || "Unable to confirm the submitted decision against the latest case details."),
             );
          }
 
@@ -1068,7 +1268,9 @@ function AdjudicationReviewContent({
          setActionNotice(null);
          setActionError(`${pendingMessage} Case ${formatCaseReference(operation.caseId)}.`);
          focusActionMessageRef.current = true;
-         requestQueueRefresh();
+         if (!guidedMode) {
+            requestQueueRefresh();
+         }
       }
    };
 
@@ -1102,7 +1304,7 @@ function AdjudicationReviewContent({
          errors.verdict = "Choose one adjudication verdict.";
       }
       if (!canonicalClaim) {
-         errors.canonicalClaim = "Enter the canonical claim wording to record.";
+         errors.canonicalClaim = "Enter the claim statement for this decision.";
       }
       if (!rationale) {
          errors.rationale = "Enter a nonblank rationale for this adjudication.";
@@ -1244,7 +1446,9 @@ function AdjudicationReviewContent({
                focusActionMessageRef.current = true;
             }
             setActionError(`Case ${formatCaseReference(operation.caseId)} is no longer available.`);
-            requestQueueRefresh();
+            if (!guidedMode) {
+               requestQueueRefresh();
+            }
          } else if (error?.status === 409) {
             await reconcileDecisionOperation(operation, "conflict", error?.message);
          } else {
@@ -1271,7 +1475,7 @@ function AdjudicationReviewContent({
       });
    };
 
-   const replaceQueueScope = ({ status = statusFilter, priority = priorityFilter, nextOffset = 0 }) => {
+   const replaceQueueScope = ({ status = statusFilter, nextOffset = 0 }) => {
       queueRequestIdRef.current += 1;
       detailRequestIdRef.current += 1;
       selectedCaseIdRef.current = null;
@@ -1281,7 +1485,7 @@ function AdjudicationReviewContent({
       focusDetailErrorRef.current = false;
       focusQueueAfterReturnRef.current = false;
       setStatusFilter(status);
-      setPriorityFilter(priority);
+      setCaseDetailsView(null);
       setOffset(nextOffset);
       setQueue({ count: 0, limit: PAGE_SIZE, offset: nextOffset, results: [] });
       setQueueLoading(true);
@@ -1312,6 +1516,7 @@ function AdjudicationReviewContent({
       setDetailError("");
       setDetailUnavailable(false);
       setDetailIdentity(null);
+      setCaseDetailsView(null);
       resetDecisionWorkflow({ clearMessages: false });
    };
 
@@ -1341,9 +1546,47 @@ function AdjudicationReviewContent({
       setDetailRequestVersion((current) => current + 1);
    };
 
+   const handleRefreshAdjudication = () => {
+      if (!guidedMode) {
+         requestQueueRefresh();
+      }
+      if (selectedCaseIdRef.current) {
+         requestDetailRefresh();
+      }
+   };
+
+   const handleOpenCaseDetails = (view, trigger) => {
+      caseDetailsTriggerRef.current = trigger || document.activeElement;
+      setCaseDetailsView(view);
+   };
+
    const handleAuthorityRetry = () => {
       authorityGenerationRef.current += 1;
       authorityRevokedRef.current = false;
+
+      if (guidedMode && initialCaseKey) {
+         queueRequestIdRef.current += 1;
+         detailRequestIdRef.current += 1;
+         reconciliationRequestIdRef.current += 1;
+         selectedCaseIdRef.current = initialCaseKey;
+         originatingQueueCaseIdRef.current = initialCaseKey;
+         returnFocusCaseIdRef.current = null;
+         focusSelectedCaseRef.current = true;
+         focusDetailErrorRef.current = false;
+         focusQueueAfterAuthorityRetryRef.current = false;
+         setAuthorityError("");
+         setQueueLoading(false);
+         setQueueError("");
+         setSelectedCaseId(initialCaseKey);
+         setDetail(null);
+         setDetailLoading(true);
+         setDetailError("");
+         setDetailUnavailable(false);
+         setDetailIdentity(null);
+         resetDecisionWorkflow();
+         setDetailRequestVersion((current) => current + 1);
+         return;
+      }
       queueRequestIdRef.current += 1;
       detailRequestIdRef.current += 1;
       reconciliationRequestIdRef.current += 1;
@@ -1378,7 +1621,11 @@ function AdjudicationReviewContent({
    const hasPreviousPage = offset > 0;
    const hasNextPage = offset + (queue.limit || PAGE_SIZE) < queue.count;
    const emptyCopy = EMPTY_QUEUE_COPY[statusFilter] || EMPTY_QUEUE_COPY.default;
-   const activeStatusLabel = STATUS_OPTIONS.find((option) => option.value === statusFilter)?.label || "Active work";
+   const activeStatusLabel = QUEUE_VIEW_OPTIONS.find((option) => option.value === statusFilter)?.label || "Current work";
+   const selectedActionNotice =
+      actionNotice && detail?.id && identifiersMatch(actionNotice.caseId, detail.id)
+         ? actionNotice
+         : null;
    const detailClaim = detail?.claim || {};
    const evidenceReview = detail?.evidence_review || {};
    const evidenceItems = Array.isArray(evidenceReview.items) ? evidenceReview.items : [];
@@ -1397,14 +1644,32 @@ function AdjudicationReviewContent({
       detailIdentity.requestId === detailRequestIdRef.current;
    const readyForFirstDecision = firstDecisionContract.ready && Boolean(detailIdentityIsCurrent);
    const actionBlockers = Array.isArray(actionState.blockers) ? actionState.blockers : [];
+   const primaryBlocker = actionBlockers[0] || null;
+   const additionalBlockers = actionBlockers.slice(1);
    const isResolvedCase = detail?.status === "RESOLVED";
+   const currentDecision = detail?.current_decision || null;
+   const evidenceTotal = normalizeNonnegativeNumber(evidenceReview.total);
+   const evidenceVerified = normalizeNonnegativeNumber(evidenceReview.verified);
+   const evidenceRejected = normalizeNonnegativeNumber(evidenceReview.rejected);
+   const evidenceUnreviewed = normalizeNonnegativeNumber(evidenceReview.unreviewed);
+   const reviewedEvidenceCount = evidenceVerified + evidenceRejected;
+   const isUrlClaim = String(detailClaim.claim_type || "").toUpperCase() === "URL";
+   const originalClaimUrl = isUrlClaim ? getSafeHttpUrl(detailClaim.url_link) : null;
+   const draftingHandoff = detail?.drafting_handoff || null;
+   const draftingPath =
+      draftingHandoff?.action === "CREATE_DRAFT" &&
+      draftingHandoff?.resource_type === "ELIGIBLE_CLAIM" &&
+      draftingHandoff?.resource_id &&
+      organizationId
+         ? `/workspace?section=drafting&organization_id=${encodeURIComponent(organizationId)}&resource_type=${encodeURIComponent(draftingHandoff.resource_type)}&resource_id=${encodeURIComponent(draftingHandoff.resource_id)}`
+         : null;
    const viewingOutsideCurrentQueue = Boolean(
       selectedCaseId && detail && !queueLoading && !queueError && !selectedCase,
    );
 
    if (!canAdjudicate || !organizationId) {
       return (
-         <div className="adjudication-review-panel" ref={panelRef}>
+         <div className={`adjudication-review-panel ${guidedMode ? "is-guided" : ""}`} ref={panelRef}>
             <div className="adjudication-contained-error" role="alert">
                <strong>Adjudication unavailable</strong>
                <span>The selected organization does not grant Adjudication access.</span>
@@ -1414,18 +1679,22 @@ function AdjudicationReviewContent({
    }
 
    return (
-      <div className="adjudication-review-panel" ref={panelRef}>
-         <div className="adjudication-panel-intro">
+      <div className={`adjudication-review-panel ${guidedMode ? "is-guided" : ""}`} ref={panelRef}>
+         <div className={`adjudication-panel-intro ${guidedMode ? "is-guided-redundant" : ""}`}>
             <div>
-               <h3>Adjudication review</h3>
-               <p>Select a case from the filtered queue, examine its evidence and provenance, then record an authorized human conclusion when the backend permits it.</p>
+               <h3>{guidedMode ? "Adjudicate this investigation" : "Adjudication review"}</h3>
+               <p>
+                  {guidedMode
+                     ? "Review the evidence and record the authorized human conclusion for this investigation."
+                     : "Select a case from the queue, examine its evidence and provenance, then record an authorized human conclusion when all requirements are satisfied."}
+               </p>
             </div>
             <span className="adjudication-organization-context">
                Organization: {organizationName || "Unavailable"}
             </span>
          </div>
 
-         <div className="adjudication-boundary-note">
+         <div className={`adjudication-boundary-note ${guidedMode ? "is-guided-redundant" : ""}`}>
             <Icons name="info" size={17} aria-hidden="true" />
             <div className="adjudication-boundary-copy">
                <strong>Where Adjudication fits</strong>
@@ -1437,6 +1706,25 @@ function AdjudicationReviewContent({
                </p>
             </div>
          </div>
+
+         {!guidedMode && (
+            <div className="adjudication-guided-cue">
+               <div>
+                  <strong>Organization-wide queue</strong>
+                  <span>
+                     For a guided case flow with persistent investigation identity and continuation, open the case from
+                     Investigations.
+                  </span>
+               </div>
+               <Link
+                  to={`/workspace/investigations?organization_id=${encodeURIComponent(organizationId)}`}
+                  className="adjudication-guided-cue-link"
+               >
+                  Open investigations
+                  <Icons name="arrow-right" size={13} aria-hidden="true" />
+               </Link>
+            </div>
+         )}
 
          {authorityError ? (
             <div
@@ -1453,65 +1741,52 @@ function AdjudicationReviewContent({
             </div>
          ) : (
             <>
-               <div className="adjudication-toolbar">
-                  <div className="adjudication-filter-grid">
-                     <label htmlFor="adjudication-status-filter">
-                        <span>Case status</span>
-                        <Select
-                           density="standard"
-                           id="adjudication-status-filter"
-                           value={statusFilter}
-                           onChange={(event) =>
-                              replaceQueueScope({ status: event.target.value, nextOffset: 0 })
-                           }
-                        >
-                           {STATUS_OPTIONS.map((option) => (
-                              <option key={option.value || "ACTIVE"} value={option.value}>
-                                 {option.label}
-                              </option>
-                           ))}
-                        </Select>
-                     </label>
+               {!guidedMode && !selectedCaseId && (
+                  <>
+                                    <div className="adjudication-toolbar">
+                                       <div
+                                          className="adjudication-queue-view-switch"
+                                          role="group"
+                                          aria-label="Adjudication queue view"
+                                       >
+                                          {QUEUE_VIEW_OPTIONS.map((option) => (
+                                             <button
+                                                key={option.value || "CURRENT"}
+                                                type="button"
+                                                className={`adjudication-queue-view-option ${statusFilter === option.value ? "is-active" : ""}`}
+                                                aria-pressed={statusFilter === option.value}
+                                                disabled={queueLoading}
+                                                onClick={() => replaceQueueScope({ status: option.value, nextOffset: 0 })}
+                                             >
+                                                {option.label}
+                                             </button>
+                                          ))}
+                                       </div>
 
-                     <label htmlFor="adjudication-priority-filter">
-                        <span>Priority</span>
-                        <Select
-                           density="standard"
-                           id="adjudication-priority-filter"
-                           value={priorityFilter}
-                           onChange={(event) =>
-                              replaceQueueScope({ priority: event.target.value, nextOffset: 0 })
-                           }
-                        >
-                           {PRIORITY_OPTIONS.map((option) => (
-                              <option key={option.value || "ALL"} value={option.value}>
-                                 {option.label}
-                              </option>
-                           ))}
-                        </Select>
-                     </label>
-                  </div>
+                                       <div className="adjudication-toolbar-actions">
+                                          <span aria-live="polite">
+                                             {queueLoading && queue.results.length === 0
+                                                ? "Loading cases…"
+                                                : `${queue.count} ${queue.count === 1 ? "case" : "cases"}`}
+                                          </span>
+                                          <Button
+                                             type="button"
+                                             variant="secondary"
+                                             density="compact"
+                                             leadingIcon={<Icons name="refresh-cw" size={15} aria-hidden="true" />}
+                                             disabled={queueLoading || detailLoading}
+                                             onClick={handleRefreshAdjudication}
+                                          >
+                                             {queueLoading || detailLoading ? "Refreshing…" : "Refresh"}
+                                          </Button>
+                                       </div>
+                                    </div>
+                     
+                     
+                  </>
+               )}
 
-                  <div className="adjudication-toolbar-actions">
-                     <span aria-live="polite">
-                        {queueLoading && queue.results.length === 0
-                           ? "Loading cases…"
-                           : `${queue.count} ${queue.count === 1 ? "case" : "cases"}`}
-                     </span>
-                     <Button
-                        type="button"
-                        variant="secondary"
-                        density="compact"
-                        leadingIcon={<Icons name="refresh-cw" size={15} aria-hidden="true" />}
-                        disabled={queueLoading}
-                        onClick={() => requestQueueRefresh()}
-                     >
-                        {queueLoading && queue.results.length > 0 ? "Refreshing…" : "Refresh"}
-                     </Button>
-                  </div>
-               </div>
-
-               {actionNotice && (
+               {!guidedMode && actionNotice && !selectedActionNotice && (
                   <div
                       className="adjudication-action-message success"
                       ref={actionMessageRef}
@@ -1536,7 +1811,7 @@ function AdjudicationReviewContent({
                   </div>
                )}
 
-               {actionError && (
+               {!guidedMode && actionError && (
                   <div
                       className="adjudication-action-message error"
                       ref={actionMessageRef}
@@ -1555,14 +1830,14 @@ function AdjudicationReviewContent({
                               disabled={Boolean(mutation)}
                               onClick={handleRetryReconciliation}
                            >
-                              {mutation ? "Reconciling…" : "Retry canonical reconciliation"}
+                              {mutation ? "Reconciling…" : "Retry confirmation"}
                            </Button>
                         )}
                      </div>
                   </div>
                )}
 
-               {mutation && (
+               {!guidedMode && mutation && (
                   <div className="adjudication-action-message pending" role="status">
                      <Icons name="loader" size={18} className="adjudication-spinner" aria-hidden="true" />
                      <div>
@@ -1574,153 +1849,154 @@ function AdjudicationReviewContent({
                   </div>
                )}
 
-               <div className={`adjudication-workspace-grid ${selectedCaseId ? "has-selection" : ""}`}>
-                  <section
-                     className="adjudication-queue"
-                     aria-labelledby="adjudication-queue-heading"
-                     aria-busy={queueLoading}
-                  >
-                     <div className="adjudication-section-heading">
-                        <div>
-                           <h4 id="adjudication-queue-heading" ref={queueHeadingRef} tabIndex="-1">
-                              Filtered case queue
-                           </h4>
-                           <p>{activeStatusLabel} · Scoped to {organizationName || "the selected organization"}.</p>
-                        </div>
-                     </div>
-
-                     {queueError && (
-                        <div className="adjudication-contained-error" role="alert">
-                           <strong>Adjudication queue unavailable</strong>
-                           <span>{queueError}</span>
-                           {queue.results.length > 0 && <span>Previously loaded results remain visible below.</span>}
-                           <Button
-                              type="button"
-                              variant="secondary"
-                              density="compact"
-                              onClick={() => requestQueueRefresh({ preserveRows: false })}
-                           >
-                              Retry
-                           </Button>
-                        </div>
-                     )}
-
-                     {queueLoading && queue.results.length === 0 ? (
-                        <div className="adjudication-state">
-                           <Icons name="loader" size={21} className="adjudication-spinner" aria-hidden="true" />
-                           <p>Loading Adjudication cases…</p>
-                        </div>
-                     ) : queueError && queue.results.length === 0 ? null : queue.results.length === 0 ? (
-                        <div className="adjudication-state">
-                           <Icons name="list-checks" size={24} aria-hidden="true" />
-                           <h5>{emptyCopy.heading}</h5>
-                           <p>{emptyCopy.body}</p>
-                        </div>
-                     ) : (
-                        <div className="adjudication-case-list">
-                           {queue.results.map((caseItem) => {
-                              const selected = String(selectedCaseId) === String(caseItem.id);
-                              const evidence = caseItem.evidence_review || {};
-
-                              return (
-                                 <button
-                                    key={caseItem.id}
-                                    ref={(node) => {
-                                       const caseKey = String(caseItem.id);
-                                       if (node) {
-                                          queueRowRefs.current.set(caseKey, node);
-                                       } else {
-                                          queueRowRefs.current.delete(caseKey);
-                                       }
-                                    }}
-                                    type="button"
-                                    className={`adjudication-case-row ${selected ? "selected" : ""}`}
-                                    aria-pressed={selected}
-                                    onClick={() => handleSelectCase(caseItem.id)}
-                                 >
-                                    <span className="adjudication-case-row-top">
-                                       <span className="adjudication-case-status">
-                                          {caseItem.status_label || formatLabel(caseItem.status)}
-                                       </span>
-                                       <span className="adjudication-priority">
-                                          Priority: {caseItem.priority_label || formatLabel(caseItem.priority)}
-                                       </span>
-                                       {selected && <span className="adjudication-selected-label">Selected</span>}
-                                    </span>
-
-                                    <strong>{getClaimContext(caseItem)}</strong>
-                                    <span className="adjudication-claim-type">
-                                       Claim type: {formatLabel(caseItem.claim?.claim_type)}
-                                    </span>
-
-                                    <span className="adjudication-evidence-summary">
-                                       <span>Total evidence: {normalizeNonnegativeNumber(evidence.total)}</span>
-                                       <span>Verified: {normalizeNonnegativeNumber(evidence.verified)}</span>
-                                       <span>Rejected: {normalizeNonnegativeNumber(evidence.rejected)}</span>
-                                       <span>Unreviewed: {normalizeNonnegativeNumber(evidence.unreviewed)}</span>
-                                       <span>
-                                          Active Evidence cases: {normalizeNonnegativeNumber(evidence.active_evidence_cases)}
-                                       </span>
-                                    </span>
-
-                                    <span className="adjudication-case-row-meta">
-                                       <span>Source: {formatLabel(caseItem.source)}</span>
-                                       <span>
-                                          Created <FormattedDateTime value={caseItem.created_at} />
-                                       </span>
-                                       <span>
-                                          Updated <FormattedDateTime value={caseItem.updated_at} />
-                                       </span>
-                                       {caseItem.resolved_at && (
-                                          <span>
-                                             Resolved <FormattedDateTime value={caseItem.resolved_at} />
-                                          </span>
-                                       )}
-                                       <span>Case {formatCaseReference(caseItem.id)}</span>
-                                    </span>
-
-                                    {caseItem.adjudication_blocked && (
-                                       <span className="adjudication-history-indicator">
-                                          <Icons name="clock" size={13} aria-hidden="true" />
-                                          Decision history exists
-                                       </span>
-                                    )}
-                                 </button>
-                              );
-                           })}
-                        </div>
-                     )}
-
-                     <nav className="adjudication-pagination" aria-label="Adjudication queue pagination">
-                        <Button
-                           type="button"
-                           variant="secondary"
-                           density="compact"
-                           leadingIcon={<Icons name="chevron-left" size={15} aria-hidden="true" />}
-                           disabled={!hasPreviousPage || queueLoading}
-                           onClick={() =>
-                              replaceQueueScope({ nextOffset: Math.max(0, offset - (queue.limit || PAGE_SIZE)) })
-                           }
-                        >
-                           Previous
-                        </Button>
-                        <span>
-                           Page {currentPage} of {totalPages}
-                        </span>
-                        <Button
-                           type="button"
-                           variant="secondary"
-                           density="compact"
-                           trailingIcon={<Icons name="chevron-right" size={15} aria-hidden="true" />}
-                           disabled={!hasNextPage || queueLoading}
-                           onClick={() =>
-                              replaceQueueScope({ nextOffset: offset + (queue.limit || PAGE_SIZE) })
-                           }
-                        >
-                           Next
-                        </Button>
-                     </nav>
-                  </section>
+               <div className={`adjudication-workspace-grid ${selectedCaseId ? "has-selection" : ""} ${guidedMode ? "is-guided" : ""}`}>
+                  {!guidedMode && (
+                                       <section
+                                          className="adjudication-queue"
+                                          aria-labelledby="adjudication-queue-heading"
+                                          aria-busy={queueLoading}
+                                       >
+                                          <div className="adjudication-section-heading">
+                                             <div>
+                                                <h4 id="adjudication-queue-heading" ref={queueHeadingRef} tabIndex="-1">
+                                                   Adjudication queue
+                                                </h4>
+                                                <p>{activeStatusLabel} · Scoped to {organizationName || "the selected organization"}.</p>
+                                             </div>
+                                          </div>
+                     
+                                          {queueError && (
+                                             <div className="adjudication-contained-error" role="alert">
+                                                <strong>Adjudication queue unavailable</strong>
+                                                <span>{queueError}</span>
+                                                {queue.results.length > 0 && <span>Previously loaded results remain visible below.</span>}
+                                                <Button
+                                                   type="button"
+                                                   variant="secondary"
+                                                   density="compact"
+                                                   onClick={() => requestQueueRefresh({ preserveRows: false })}
+                                                >
+                                                   Retry
+                                                </Button>
+                                             </div>
+                                          )}
+                     
+                                          {queueLoading && queue.results.length === 0 ? (
+                                             <div className="adjudication-state">
+                                                <Icons name="loader" size={21} className="adjudication-spinner" aria-hidden="true" />
+                                                <p>Loading Adjudication cases…</p>
+                                             </div>
+                                          ) : queueError && queue.results.length === 0 ? null : queue.results.length === 0 ? (
+                                             <div className="adjudication-state">
+                                                <Icons name="list-checks" size={24} aria-hidden="true" />
+                                                <h5>{emptyCopy.heading}</h5>
+                                                <p>{emptyCopy.body}</p>
+                                             </div>
+                                          ) : (
+                                             <div className="adjudication-case-list">
+                                                {queue.results.map((caseItem) => {
+                                                   const selected = String(selectedCaseId) === String(caseItem.id);
+                                                   const evidence = caseItem.evidence_review || {};
+                     
+                                                   return (
+                                                      <button
+                                                         key={caseItem.id}
+                                                         ref={(node) => {
+                                                            const caseKey = String(caseItem.id);
+                                                            if (node) {
+                                                               queueRowRefs.current.set(caseKey, node);
+                                                            } else {
+                                                               queueRowRefs.current.delete(caseKey);
+                                                            }
+                                                         }}
+                                                         type="button"
+                                                         className={`adjudication-case-row ${selected ? "selected" : ""}`}
+                                                         aria-pressed={selected}
+                                                         onClick={() => handleSelectCase(caseItem.id)}
+                                                      >
+                                                         <span className="adjudication-case-row-top">
+                                                            <span className="adjudication-case-status">
+                                                               {caseItem.status_label || formatLabel(caseItem.status)}
+                                                            </span>
+                                                            {selected && <span className="adjudication-selected-label">Selected</span>}
+                                                         </span>
+                     
+                                                         <strong>{getClaimContext(caseItem)}</strong>
+                                                         <span className="adjudication-claim-type">
+                                                            Claim type: {formatLabel(caseItem.claim?.claim_type)}
+                                                         </span>
+                     
+                                                         <span className="adjudication-evidence-summary">
+                                                            <span>Total evidence: {normalizeNonnegativeNumber(evidence.total)}</span>
+                                                            <span>Verified: {normalizeNonnegativeNumber(evidence.verified)}</span>
+                                                            <span>Rejected: {normalizeNonnegativeNumber(evidence.rejected)}</span>
+                                                            <span>Unreviewed: {normalizeNonnegativeNumber(evidence.unreviewed)}</span>
+                                                            <span>
+                                                               Active Evidence cases: {normalizeNonnegativeNumber(evidence.active_evidence_cases)}
+                                                            </span>
+                                                         </span>
+                     
+                                                         <span className="adjudication-case-row-meta">
+                                                            <span>Source: {formatLabel(caseItem.source)}</span>
+                                                            <span>
+                                                               Created <FormattedDateTime value={caseItem.created_at} />
+                                                            </span>
+                                                            <span>
+                                                               Updated <FormattedDateTime value={caseItem.updated_at} />
+                                                            </span>
+                                                            {caseItem.resolved_at && (
+                                                               <span>
+                                                                  Resolved <FormattedDateTime value={caseItem.resolved_at} />
+                                                               </span>
+                                                            )}
+                                                            <span>Case {formatCaseReference(caseItem.id)}</span>
+                                                         </span>
+                     
+                                                         {caseItem.adjudication_blocked && (
+                                                            <span className="adjudication-history-indicator">
+                                                               <Icons name="clock" size={13} aria-hidden="true" />
+                                                               Decision history exists
+                                                            </span>
+                                                         )}
+                                                      </button>
+                                                   );
+                                                })}
+                                             </div>
+                                          )}
+                     
+                                          <nav className="adjudication-pagination" aria-label="Adjudication queue pagination">
+                                             <Button
+                                                type="button"
+                                                variant="secondary"
+                                                density="compact"
+                                                leadingIcon={<Icons name="chevron-left" size={15} aria-hidden="true" />}
+                                                disabled={!hasPreviousPage || queueLoading}
+                                                onClick={() =>
+                                                   replaceQueueScope({ nextOffset: Math.max(0, offset - (queue.limit || PAGE_SIZE)) })
+                                                }
+                                             >
+                                                Previous
+                                             </Button>
+                                             <span>
+                                                Page {currentPage} of {totalPages}
+                                             </span>
+                                             <Button
+                                                type="button"
+                                                variant="secondary"
+                                                density="compact"
+                                                trailingIcon={<Icons name="chevron-right" size={15} aria-hidden="true" />}
+                                                disabled={!hasNextPage || queueLoading}
+                                                onClick={() =>
+                                                   replaceQueueScope({ nextOffset: offset + (queue.limit || PAGE_SIZE) })
+                                                }
+                                             >
+                                                Next
+                                             </Button>
+                                          </nav>
+                                       </section>
+                     
+                     
+                  )}
 
                   <section
                      className="adjudication-selection"
@@ -1730,26 +2006,30 @@ function AdjudicationReviewContent({
                      {selectedCaseId ? (
                         <div className="adjudication-selection-content">
                            <div className="adjudication-detail-actions">
+                              {!guidedMode && (
                               <Button
                                  type="button"
-                                 variant="secondary"
+                                 variant="ghost"
                                  density="compact"
                                  leadingIcon={<Icons name="arrow-left" size={15} aria-hidden="true" />}
                                  className="adjudication-return-to-queue"
                                  onClick={() => clearSelection({ restoreQueueFocus: true })}
                               >
-                                 Return to queue
+                                 Back to Adjudication
                               </Button>
-                              <Button
-                                 type="button"
-                                 variant="secondary"
-                                 density="compact"
-                                 leadingIcon={<Icons name="refresh-cw" size={14} aria-hidden="true" />}
-                                 disabled={detailLoading}
-                                 onClick={requestDetailRefresh}
-                              >
-                                 {detailLoading && detail ? "Refreshing case…" : "Refresh case"}
-                              </Button>
+                              )}
+                              {guidedMode && (
+                                 <Button
+                                    type="button"
+                                    variant="secondary"
+                                    density="compact"
+                                    leadingIcon={<Icons name="refresh-cw" size={14} aria-hidden="true" />}
+                                    disabled={detailLoading}
+                                    onClick={requestDetailRefresh}
+                                 >
+                                    {detailLoading && detail ? "Refreshing case…" : "Refresh case"}
+                                 </Button>
+                              )}
                            </div>
 
                            <header className="adjudication-detail-header">
@@ -1766,17 +2046,94 @@ function AdjudicationReviewContent({
                               {(detail || selectedCase) && (
                                  <div className="adjudication-selection-facts">
                                     <span>{detail?.status_label || selectedCase?.status_label || formatLabel(detail?.status || selectedCase?.status)}</span>
-                                    <span>
-                                       Priority: {detail?.priority_label || selectedCase?.priority_label || formatLabel(detail?.priority || selectedCase?.priority)}
-                                    </span>
                                  </div>
                               )}
                            </header>
 
-                           {viewingOutsideCurrentQueue && (
+                           {detail && (
+                              <section className="adjudication-decision-summary-bar" aria-label="Adjudication decision summary">
+                                 <div className="adjudication-summary-item">
+                                    <span className="adjudication-summary-label">
+                                       {currentDecision ? "Current verdict" : "Decision state"}
+                                    </span>
+                                    {currentDecision ? (
+                                       <span
+                                          className={`adjudication-decision-verdict adjudication-decision-verdict--${getVerdictTone(currentDecision.verdict)}`}
+                                       >
+                                          {currentDecision.verdict_label || formatLabel(currentDecision.verdict, "Verdict unavailable")}
+                                       </span>
+                                    ) : (
+                                       <span
+                                          className={`adjudication-summary-state adjudication-summary-state--${
+                                             isResolvedCase ? "recorded" : readyForFirstDecision ? "ready" : "blocked"
+                                          }`}
+                                       >
+                                          <Icons
+                                             name={isResolvedCase || readyForFirstDecision ? "check-circle" : "alert-circle"}
+                                             size={14}
+                                             aria-hidden="true"
+                                          />
+                                          {isResolvedCase ? "Completed" : readyForFirstDecision ? "Ready" : "Blocked"}
+                                       </span>
+                                    )}
+                                    <span className="adjudication-summary-meta">
+                                       {currentDecision
+                                          ? "Authoritative human adjudication recorded"
+                                          : isResolvedCase
+                                            ? "This case is resolved in the authorized view."
+                                            : readyForFirstDecision
+                                              ? "All requirements for adjudication are currently satisfied."
+                                              : "A first decision is not currently available."}
+                                    </span>
+                                 </div>
+
+                                 <div className="adjudication-summary-item">
+                                    <span className="adjudication-summary-label">Evidence reviewed</span>
+                                    <strong className="adjudication-summary-value">
+                                       {reviewedEvidenceCount}/{evidenceTotal}
+                                    </strong>
+                                    <span className="adjudication-summary-meta">
+                                       {evidenceReview.all_reviewed
+                                          ? "All submitted evidence has a review disposition."
+                                          : `${evidenceUnreviewed} evidence ${evidenceUnreviewed === 1 ? "item remains" : "items remain"} unreviewed.`}
+                                    </span>
+                                 </div>
+
+                                 <div className="adjudication-summary-item">
+                                    <span className="adjudication-summary-label">
+                                       {currentDecision ? "Recorded by" : "Primary requirement"}
+                                    </span>
+                                    <strong className="adjudication-summary-value">
+                                       {currentDecision ? (
+                                          <MinimalUser user={currentDecision.decided_by} fallback="Actor not recorded" />
+                                       ) : isResolvedCase ? (
+                                          "No active decision action"
+                                       ) : readyForFirstDecision ? (
+                                          "No blocking requirement"
+                                       ) : primaryBlocker ? (
+                                          formatLabel(primaryBlocker.code, "Decision blocker")
+                                       ) : (
+                                          "Refresh required"
+                                       )}
+                                    </strong>
+                                    <span className="adjudication-summary-meta">
+                                       {currentDecision
+                                          ? currentDecision.organization?.name || "Organization not recorded"
+                                          : isResolvedCase
+                                            ? "Review the recorded decision and history if needed."
+                                            : readyForFirstDecision
+                                              ? "You can prepare the first adjudication decision."
+                                              : primaryBlocker?.message || "Refresh this case to revalidate its decision preconditions."}
+                                    </span>
+                                 </div>
+
+                              </section>
+                           )}
+
+                           {!guidedMode && viewingOutsideCurrentQueue && (
                               <p className="adjudication-outside-queue-note">
                                  <Icons name="info" size={15} aria-hidden="true" />
-                                 Viewing a selected case outside the current queue results. Use the case-status filters to find active or resolved history when applicable.
+                                 Viewing a selected case outside the current queue results. Use Current work or Resolved history to switch queue views.
                               </p>
                            )}
 
@@ -1798,14 +2155,25 @@ function AdjudicationReviewContent({
                                     <Button type="button" variant="secondary" density="compact" onClick={requestDetailRefresh}>
                                        Retry detail
                                     </Button>
-                                    <Button
-                                       type="button"
-                                       variant="secondary"
-                                       density="compact"
-                                       onClick={() => clearSelection({ restoreQueueFocus: true })}
-                                    >
-                                       Return to queue
-                                    </Button>
+                                    {guidedMode && onReturnToInvestigation ? (
+                                       <Button
+                                          type="button"
+                                          variant="secondary"
+                                          density="compact"
+                                          onClick={onReturnToInvestigation}
+                                       >
+                                          Back to investigation
+                                       </Button>
+                                    ) : (
+                                       <Button
+                                          type="button"
+                                          variant="secondary"
+                                          density="compact"
+                                          onClick={() => clearSelection({ restoreQueueFocus: true })}
+                                       >
+                                          Return to queue
+                                       </Button>
+                                    )}
                                  </div>
                               </div>
                            ) : detail ? (
@@ -1831,58 +2199,122 @@ function AdjudicationReviewContent({
                                     </div>
                                  )}
 
-                                 <div className="adjudication-detail-layout">
-                                    <div className="adjudication-primary-surface">
-                                       <section className="adjudication-detail-section" aria-labelledby="adjudication-case-context-heading">
-                                          <div className="adjudication-subheading-row">
-                                             <div>
-                                                <h5 id="adjudication-case-context-heading">Case and claim context</h5>
-                                                <p>Review the full claim context before interpreting evidence or decision history.</p>
-                                             </div>
-                                          </div>
+                                 {guidedMode && mutation && (
+                                    <div className="adjudication-action-message pending adjudication-guided-message" role="status">
+                                       <Icons name="loader" size={18} className="adjudication-spinner" aria-hidden="true" />
+                                       <div>
+                                          <strong>Recording adjudication</strong>
+                                          <span>The authoritative decision is being recorded and confirmed against the latest case state.</span>
+                                       </div>
+                                    </div>
+                                 )}
 
-                                          <div className="adjudication-reading-block prominent">
-                                             <strong>Claim text</strong>
-                                             <p>{detailClaim.context_text || "Claim text unavailable."}</p>
-                                          </div>
-
-                                          <div className="adjudication-context-links">
-                                             <SafeExternalLink value={detailClaim.url_link}>Open original claim</SafeExternalLink>
-                                             <SafeExternalLink value={detailClaim.source_link}>Open claim source</SafeExternalLink>
-                                             <SafeExternalLink value={detailClaim.media_url}>Open claim media</SafeExternalLink>
-                                          </div>
-                                          {[detailClaim.url_link, detailClaim.source_link, detailClaim.media_url].some(
-                                             (value) => value && !getSafeHttpUrl(value),
-                                          ) && (
-                                             <p className="adjudication-inline-warning">
-                                                One or more recorded claim links cannot be opened because they are not supported HTTP(S) addresses.
-                                             </p>
+                                 {guidedMode && actionError && (
+                                    <div
+                                       className="adjudication-action-message error adjudication-guided-message"
+                                       ref={actionMessageRef}
+                                       tabIndex="-1"
+                                       role="alert"
+                                    >
+                                       <Icons name="alert-circle" size={18} aria-hidden="true" />
+                                       <div>
+                                          <strong>Decision workflow needs attention</strong>
+                                          <span>{actionError}</span>
+                                          {reconciliationPending && (
+                                             <Button
+                                                type="button"
+                                                variant="secondary"
+                                                density="compact"
+                                                disabled={Boolean(mutation)}
+                                                onClick={handleRetryReconciliation}
+                                             >
+                                                {mutation ? "Reconciling…" : "Retry confirmation"}
+                                             </Button>
                                           )}
+                                       </div>
+                                    </div>
+                                 )}
 
-                                          <div className="adjudication-thread-context">
-                                             <h6>Related threads</h6>
-                                             {Array.isArray(detailClaim.threads) && detailClaim.threads.length > 0 ? (
-                                                <ul>
-                                                   {detailClaim.threads.map((thread) => (
-                                                      <li key={thread.id}>
-                                                         <Link to={`/thread/detail/${encodeURIComponent(thread.id)}`}>
-                                                            {thread.caption || `Thread ${formatCaseReference(thread.id)}`}
-                                                         </Link>
-                                                         <span><FormattedDateTime value={thread.created_at} /></span>
-                                                      </li>
-                                                   ))}
-                                                </ul>
+                                 {selectedActionNotice && !isResolvedCase && (
+                                    <div
+                                       className="adjudication-local-outcome"
+                                       ref={actionMessageRef}
+                                       tabIndex="-1"
+                                       role="status"
+                                       aria-live="polite"
+                                    >
+                                       <Icons name="check-circle" size={18} aria-hidden="true" />
+                                       <div>
+                                          <strong>Adjudication recorded</strong>
+                                          <span>{selectedActionNotice.message}</span>
+                                       </div>
+                                    </div>
+                                 )}
+
+                                 {isResolvedCase && (
+                                    <section
+                                       className="adjudication-completion-state"
+                                       ref={selectedActionNotice ? actionMessageRef : undefined}
+                                       tabIndex={selectedActionNotice ? "-1" : undefined}
+                                       role={selectedActionNotice ? "status" : undefined}
+                                       aria-live={selectedActionNotice ? "polite" : undefined}
+                                       aria-labelledby="adjudication-completion-heading"
+                                    >
+                                       <Icons name="check-circle" size={20} aria-hidden="true" />
+                                       <div className="adjudication-completion-copy">
+                                          <span className="adjudication-completion-eyebrow">Decision recorded</span>
+                                          <strong id="adjudication-completion-heading">Adjudication complete</strong>
+                                          <p>
+                                             The authoritative decision has been recorded. Any publication work for this claim is handled in the separate Drafting and Publishing workflows.
+                                          </p>
+                                          <div className="adjudication-completion-actions">
+                                             {guidedMode && onReturnToInvestigation ? (
+                                                <Button
+                                                   type="button"
+                                                   variant="primary"
+                                                   density="compact"
+                                                   trailingIcon={<Icons name="arrow-right" size={13} aria-hidden="true" />}
+                                                   onClick={onReturnToInvestigation}
+                                                >
+                                                   Continue investigation
+                                                </Button>
+                                             ) : returnToInvestigationPath ? (
+                                                <Link
+                                                   to={returnToInvestigationPath}
+                                                   className="adjudication-completion-link adjudication-completion-link--primary"
+                                                >
+                                                   Return to investigation
+                                                   <Icons name="arrow-right" size={13} aria-hidden="true" />
+                                                </Link>
                                              ) : (
-                                                <p>No related thread reference is available.</p>
+                                                <>
+                                                   {draftingPath && (
+                                                      <Link
+                                                         to={draftingPath}
+                                                         className="adjudication-completion-link adjudication-completion-link--primary"
+                                                      >
+                                                         Continue to Drafting
+                                                         <Icons name="arrow-right" size={13} aria-hidden="true" />
+                                                      </Link>
+                                                   )}
+                                                </>
                                              )}
                                           </div>
-                                       </section>
+                                          {!guidedMode && !returnToInvestigationPath && !draftingPath && (
+                                             <span className="adjudication-completion-permission-note">
+                                                No new drafting action is currently available for this adjudication.
+                                             </span>
+                                          )}
+                                       </div>
+                                    </section>
+                                 )}
 
-                                 <section className="adjudication-detail-section" aria-labelledby="adjudication-evidence-heading">
+                                 <div className="adjudication-primary-surface">
+<section className="adjudication-detail-section" aria-labelledby="adjudication-evidence-heading">
                                     <div className="adjudication-subheading-row">
                                        <div>
                                           <h5 id="adjudication-evidence-heading">Evidence review</h5>
-                                          <p>These are current evidence records, not an immutable decision-time snapshot.</p>
+                                          <p>These are current evidence records and may include evidence added after the human decision.</p>
                                        </div>
                                        <span className="adjudication-basis-label">
                                           Basis: {formatLabel(evidenceReview.basis, "Unavailable")}
@@ -1915,16 +2347,55 @@ function AdjudicationReviewContent({
                                        Evidence verification assesses source suitability. It does not establish whether the claim is true or false.
                                     </p>
 
+                                    {evidenceItems.length > 0 && (
+                                       <div className="adjudication-evidence-disclosure-control">
+                                          <Button
+                                             type="button"
+                                             variant="secondary"
+                                             density="compact"
+                                             trailingIcon={
+                                                <Icons
+                                                   name={guidedEvidenceOpen ? "chevron-up" : "chevron-down"}
+                                                   size={13}
+                                                   aria-hidden="true"
+                                                />
+                                             }
+                                             aria-expanded={guidedEvidenceOpen}
+                                             aria-controls={guidedEvidenceOpen ? "adjudication-evidence-records" : undefined}
+                                             onClick={() => setGuidedEvidenceOpen((open) => !open)}
+                                          >
+                                             {guidedEvidenceOpen
+                                                ? "Hide evidence items"
+                                                : `Review ${evidenceItems.length} evidence ${evidenceItems.length === 1 ? "item" : "items"}`}
+                                          </Button>
+                                       </div>
+                                    )}
+
                                     {evidenceItems.length > 0 ? (
-                                       <ol className="adjudication-evidence-list">
-                                          {evidenceItems.map((evidence) => <EvidenceRecord key={evidence.id} evidence={evidence} />)}
-                                       </ol>
+                                       guidedEvidenceOpen ? (
+                                          <ol
+                                             id="adjudication-evidence-records"
+                                             className="adjudication-evidence-list"
+                                          >
+                                             {evidenceItems.map((evidence) => (
+                                                <EvidenceRecord
+                                                   key={evidence.id}
+                                                   evidence={evidence}
+                                                   organizationId={organizationId}
+                                                   adjudicationCaseId={detail.id}
+                                                   canReviewEvidence={canReviewEvidence}
+                                                />
+                                             ))}
+                                          </ol>
+                                       ) : null
                                     ) : (
                                        <p className="adjudication-inline-empty">No evidence submissions are attached to this claim.</p>
                                     )}
                                  </section>
 
-                                 <section className="adjudication-detail-section" aria-labelledby="adjudication-readiness-heading">
+                                 
+{!isResolvedCase && (
+<section className="adjudication-detail-section" aria-labelledby="adjudication-readiness-heading">
                                     <div className="adjudication-subheading-row">
                                        <div>
                                           <h5 id="adjudication-readiness-heading">Assignment and readiness</h5>
@@ -1938,53 +2409,60 @@ function AdjudicationReviewContent({
                                           <strong>{readyForFirstDecision ? "Ready for a first decision" : "First decision unavailable"}</strong>
                                           <span>
                                              {readyForFirstDecision
-                                                ? "The backend reports valid selected-case, organization, and revision preconditions. Refreshing the case will revalidate them."
-                                                : "Review the authoritative blockers below. Refresh before relying on this advisory state."}
+                                                ? "This case is ready for adjudication. Review the evidence and record your decision when ready."
+                                                : "Review the requirements below before recording a decision."}
                                           </span>
                                        </div>
                                     </div>
 
                                     {!actionPreconditionsAreValid && actionState.can_issue_first_decision === true && (
                                        <p className="adjudication-inline-warning">
-                                          The server marked this case ready, but its returned action preconditions are incomplete or do not match the selected case.
+                                          This case appears ready, but some decision checks could not be confirmed. Refresh the case before proceeding.
                                        </p>
                                     )}
 
-                                    {isResolvedCase && (
-                                       <div className="adjudication-read-only-state">
-                                          <Icons name="check-circle" size={18} aria-hidden="true" />
-                                          <div>
-                                             <strong>Review completed · Read-only</strong>
-                                             <span>
-                                                What happens next: the decision remains recorded for this case. Fact-check drafting and publication are separate processes; this workbench does not correct, revise, or reopen it.
-                                             </span>
-                                          </div>
-                                       </div>
-                                    )}
-
-                                    {actionBlockers.length > 0 && (
+                                    {primaryBlocker && !isResolvedCase && (
                                        <div className="adjudication-blocker-group">
-                                          <h6>Decision blockers</h6>
+                                          <h6>Primary blocker</h6>
                                           <ul className="adjudication-blocker-list">
-                                             {actionBlockers.map((blocker, index) => (
-                                                <li key={`${blocker.code || "BLOCKER"}-${index}`}>
-                                                   <strong>{formatLabel(blocker.code, "Decision blocker")}</strong>
-                                                   <span>{blocker.message || "This case is not currently eligible for a first decision."}</span>
-                                                </li>
-                                             ))}
+                                             <li>
+                                                <strong>{formatLabel(primaryBlocker.code, "Decision blocker")}</strong>
+                                                <span>{primaryBlocker.message || "This case is not currently eligible for a first decision."}</span>
+                                             </li>
                                           </ul>
+                                          {additionalBlockers.length > 0 && (
+                                             <details className="adjudication-other-blockers">
+                                                <summary>
+                                                   Other requirements ({additionalBlockers.length})
+                                                </summary>
+                                                <ul className="adjudication-blocker-list">
+                                                   {additionalBlockers.map((blocker, index) => (
+                                                      <li key={`${blocker.code || "BLOCKER"}-${index + 1}`}>
+                                                         <strong>{formatLabel(blocker.code, "Decision blocker")}</strong>
+                                                         <span>{blocker.message || "This case has another unmet decision requirement."}</span>
+                                                      </li>
+                                                   ))}
+                                                </ul>
+                                             </details>
+                                          )}
                                        </div>
                                     )}
 
                                     <dl className="adjudication-detail-facts compact adjudication-readiness-meta">
                                        <div><dt>Assignment status</dt><dd>{detail.assignment?.status ? formatLabel(detail.assignment.status) : "No active assignment"}</dd></div>
                                        <div><dt>Claimed by</dt><dd><MinimalUser user={detail.assignment?.claimed_by} fallback="Not assigned" /></dd></div>
-                                       <div><dt>Expected revision</dt><dd>{actionState.expected_revision ?? "Unavailable"}</dd></div>
-                                       <div><dt>Selected case precondition</dt><dd>{actionPreconditionsAreValid ? "Confirmed" : "Unavailable"}</dd></div>
                                     </dl>
 
+                                    <details className="adjudication-record-disclosure adjudication-technical-preconditions">
+                                       <summary>Decision checks</summary>
+                                       <dl className="adjudication-detail-facts compact adjudication-record-disclosure-body">
+                                          <div><dt>Expected revision</dt><dd>{actionState.expected_revision ?? "Unavailable"}</dd></div>
+                                          <div><dt>Case identity check</dt><dd>{actionPreconditionsAreValid ? "Confirmed" : "Unavailable"}</dd></div>
+                                       </dl>
+                                    </details>
+
                                     {readyForFirstDecision && !decisionFormOpen && !confirmation && !confirmationChecking && (
-                                       <div className="adjudication-decision-entry">
+                                       <div className="adjudication-readiness-action">
                                           <Button
                                              type="button"
                                              variant="primary"
@@ -1995,21 +2473,277 @@ function AdjudicationReviewContent({
                                           >
                                              Begin decision
                                           </Button>
-                                          <p>
-                                             This begins a deliberate first-decision review. It does not draft or publish a fact-check.
-                                          </p>
+                                          <span>Prepare the authoritative human decision in a focused review dialog.</span>
                                        </div>
                                     )}
+
+                                 </section>
+                                 )}
+
+                                 <section className="adjudication-case-details-launcher" aria-labelledby="adjudication-case-details-heading">
+                                    <div>
+                                       <h5 id="adjudication-case-details-heading">Additional case information</h5>
+                                       <p>Open only the context you need without changing the main decision workspace.</p>
+                                    </div>
+                                    <Button
+                                       type="button"
+                                       variant="secondary"
+                                       density="compact"
+                                       trailingIcon={<Icons name="arrow-right" size={13} aria-hidden="true" />}
+                                       onClick={(event) => handleOpenCaseDetails("context", event.currentTarget)}
+                                    >
+                                       Case details
+                                    </Button>
+                                 </section>
+
+                                 <AdjudicationModal
+                                    open={Boolean(caseDetailsView)}
+                                    title="Case details"
+                                    description="Claim context, supplementary review support, and history are separated so you can inspect one kind of information at a time."
+                                    onClose={() => setCaseDetailsView(null)}
+                                    returnFocusRef={caseDetailsTriggerRef}
+                                    className="adjudication-dialog--details"
+                                 >
+                                    <nav className="adjudication-case-details-tabs" aria-label="Case detail sections">
+                                       {[
+                                          ["context", "Claim context"],
+                                          ["support", "Review support"],
+                                          ["history", "History"],
+                                       ].map(([value, label]) => (
+                                          <button
+                                             key={value}
+                                             type="button"
+                                             className={`adjudication-case-details-tab ${caseDetailsView === value ? "is-active" : ""}`}
+                                             aria-pressed={caseDetailsView === value}
+                                             onClick={() => setCaseDetailsView(value)}
+                                          >
+                                             {label}
+                                          </button>
+                                       ))}
+                                    </nav>
+
+                                    <div className="adjudication-case-details-view">
+                                       {caseDetailsView === "context" && (
+                                          <>
+<section
+                                          id="adjudication-case-context"
+                                          className="adjudication-detail-section adjudication-case-details-section"
+                                          aria-labelledby="adjudication-case-context-heading"
+                                       >
+                                          <div className="adjudication-subheading-row">
+                                             <div>
+                                                <h5 id="adjudication-case-context-heading">Case and claim context</h5>
+                                                <p>Review the full claim context before interpreting evidence or decision history.</p>
+                                             </div>
+                                          </div>
+
+                                          <div className="adjudication-reading-block prominent">
+                                             <strong>Claim text</strong>
+                                             <p>{detailClaim.context_text || "Claim text unavailable."}</p>
+                                          </div>
+
+                                          {originalClaimUrl && (
+                                             <div className="adjudication-context-links">
+                                                <SafeExternalLink value={originalClaimUrl}>Open original claim URL</SafeExternalLink>
+                                             </div>
+                                          )}
+                                          {isUrlClaim && detailClaim.url_link && !originalClaimUrl && (
+                                             <p className="adjudication-inline-warning">
+                                                The submitted claim URL cannot be opened because it is not a supported HTTP(S) address.
+                                             </p>
+                                          )}
+
+                                          <div className="adjudication-thread-context">
+                                             <h6>Related threads</h6>
+                                             {Array.isArray(detailClaim.threads) && detailClaim.threads.length > 0 ? (
+                                                <ul>
+                                                   {detailClaim.threads.map((thread) => (
+                                                      <li key={thread.id}>
+                                                         <Link to={`/thread/detail/${encodeURIComponent(thread.id)}`}>
+                                                            {thread.caption || `Thread ${formatCaseReference(thread.id)}`}
+                                                         </Link>
+                                                         <span><FormattedDateTime value={thread.created_at} /></span>
+                                                      </li>
+                                                   ))}
+                                                </ul>
+                                             ) : (
+                                                <p>No related thread reference is available.</p>
+                                             )}
+                                          </div>
+                                       </section>
+
+                                 
+                                             <section className="adjudication-detail-section adjudication-case-details-section" aria-labelledby="adjudication-case-metadata-heading">
+                                                <div className="adjudication-subheading-row">
+                                                   <div>
+                                                      <h5 id="adjudication-case-metadata-heading">Case metadata</h5>
+                                                      <p>Operational identity and lifecycle information for the selected case.</p>
+                                                   </div>
+                                                </div>
+                                                <dl className="adjudication-detail-facts">
+                                                   <div><dt>Organization</dt><dd>{detail.organization?.name || "Unavailable"}</dd></div>
+                                                   <div><dt>Claim type</dt><dd>{formatLabel(detailClaim.claim_type)}</dd></div>
+                                                   <div><dt>Workflow state</dt><dd>{formatLabel(detail.workflow_state)}</dd></div>
+                                                   <div><dt>Case status</dt><dd>{detail.status_label || formatLabel(detail.status)}</dd></div>
+                                                   <div><dt>Source</dt><dd>{detail.source_label || formatLabel(detail.source)}</dd></div>
+                                                   <div><dt>Created</dt><dd><FormattedDateTime value={detail.created_at} /></dd></div>
+                                                   <div><dt>Updated</dt><dd><FormattedDateTime value={detail.updated_at} /></dd></div>
+                                                   <div><dt>Resolved</dt><dd><FormattedDateTime value={detail.resolved_at} fallback="Not resolved" /></dd></div>
+                                                </dl>
+                                                <details className="adjudication-full-id">
+                                                   <summary>Technical identifiers</summary>
+                                                   <span>Case: {detail.id}</span>
+                                                   <span>Claim: {detailClaim.id || "Unavailable"}</span>
+                                                </details>
+                                             </section>
+                                          </>
+                                       )}
+
+                                       {caseDetailsView === "support" && detailClaim.id && organizationId && (
+                                          <VerificationIntelligencePanel
+                                             key={`${organizationId}:${detailClaim.id}:compact`}
+                                             organizationId={organizationId}
+                                             claimId={detailClaim.id}
+                                             compact
+                                          />
+                                       )}
+
+                                       {caseDetailsView === "history" && (
+                                          <>
+<section
+                                    id="adjudication-decision-support"
+                                    className="adjudication-detail-section adjudication-case-details-section"
+                                    aria-labelledby="adjudication-decisions-heading"
+                                 >
+                                    <div className="adjudication-subheading-row">
+                                       <div>
+                                          <h5 id="adjudication-decisions-heading">Decision record</h5>
+                                          <p>Only decision records authorized for the selected organization are shown.</p>
+                                       </div>
+                                    </div>
+
+                                    {detail.current_decision ? (
+                                       <DecisionRecord decision={detail.current_decision} current />
+                                    ) : (
+                                       <p className="adjudication-inline-empty">No current decision record is visible for this case.</p>
+                                    )}
+
+                                    <div className="adjudication-history-heading">
+                                       <h6>Decision history</h6>
+                                       <span>{normalizeNonnegativeNumber(decisionHistory.count)} historical {decisionHistory.count === 1 ? "record" : "records"}</span>
+                                    </div>
+                                    {decisionHistory.has_restricted_records && (
+                                       <p className="adjudication-private-history-notice">
+                                          Additional decision history exists but is not available within this organization&apos;s authorized view.
+                                       </p>
+                                    )}
+                                    {decisionHistoryItems.length > 0 ? (
+                                       <div className="adjudication-decision-history">
+                                          {decisionHistoryItems.map((decision) => <DecisionRecord key={decision.id} decision={decision} />)}
+                                       </div>
+                                    ) : (
+                                       <p className="adjudication-inline-empty">No authorized historical decision records are available.</p>
+                                    )}
+                                    {decisionHistory.truncated && (
+                                       <p className="adjudication-truncation-note">Only the most recent authorized decision records are shown.</p>
+                                    )}
+                                 </section>
+
+                                       <section
+                                          id="adjudication-history-support"
+                                          className="adjudication-detail-section adjudication-case-details-section"
+                                          aria-labelledby="adjudication-resolution-heading"
+                                       >
+                                    <div className="adjudication-subheading-row">
+                                       <div>
+                                          <h5 id="adjudication-resolution-heading">Resolution and case history</h5>
+                                          <p>Resolution and append-only case events belong to this selected case.</p>
+                                       </div>
+                                    </div>
+
+                                    {detail.resolution ? (
+                                       <div className="adjudication-resolution">
+                                          <dl className="adjudication-detail-facts compact">
+                                             <div><dt>Resolution</dt><dd>{formatLabel(detail.resolution.code, "Not recorded")}</dd></div>
+                                             <div><dt>Resolved by</dt><dd><MinimalUser user={detail.resolution.resolved_by} fallback="Actor not recorded" /></dd></div>
+                                             <div><dt>Resolved at</dt><dd><FormattedDateTime value={detail.resolution.resolved_at} /></dd></div>
+                                          </dl>
+                                          <div className="adjudication-reading-block">
+                                             <strong>Resolution summary</strong>
+                                             <p>{detail.resolution.summary || "No resolution summary was recorded."}</p>
+                                          </div>
+                                       </div>
+                                    ) : (
+                                       <p className="adjudication-inline-empty">This case has no recorded resolution.</p>
+                                    )}
+
+                                    <details className="adjudication-history-disclosure">
+                                       <summary>
+                                          <h6>
+                                             <span>Case events</span>
+                                             <span>{normalizeNonnegativeNumber(detailEvents.count)} {detailEvents.count === 1 ? "event" : "events"}</span>
+                                          </h6>
+                                       </summary>
+                                       {eventItems.length > 0 ? (
+                                          <ol className="adjudication-event-list">
+                                             {eventItems.map((event, index) => (
+                                                <EventRecord key={`${event.event_type}-${event.created_at}-${index}`} event={event} />
+                                             ))}
+                                          </ol>
+                                       ) : (
+                                          <p className="adjudication-inline-empty">No case events are available.</p>
+                                       )}
+                                       {detailEvents.truncated && (
+                                          <p className="adjudication-truncation-note">Showing the most recent 50 events, in chronological order.</p>
+                                       )}
+                                    </details>
+                                       </section>
+                                          </>
+                                       )}
+                                    </div>
+                                 </AdjudicationModal>
+
+                                 <AdjudicationModal
+                                    open={decisionFormOpen || confirmationChecking || Boolean(confirmation) || Boolean(mutation && identifiersMatch(mutation.caseId, detail.id))}
+                                    title={
+                                       confirmation
+                                          ? "Confirm adjudication"
+                                          : mutation && identifiersMatch(mutation.caseId, detail.id)
+                                            ? "Recording adjudication"
+                                            : "Prepare adjudication"
+                                    }
+                                    description="Review the exact claim, evidence readiness, verdict, claim statement, and rationale before recording an authoritative human decision."
+                                    onClose={handleCancelDecision}
+                                    busy={confirmationChecking || Boolean(mutation && identifiersMatch(mutation.caseId, detail.id))}
+                                    returnFocusRef={decisionTriggerRef}
+                                    className="adjudication-dialog--decision"
+                                 >
+                                    <div className="adjudication-dialog-decision-context">
+                                       <span>Claim being adjudicated</span>
+                                       <strong>{detailClaim.context_text || "Claim text unavailable."}</strong>
+                                       <p>
+                                          Evidence reviewed: {reviewedEvidenceCount}/{evidenceTotal}
+                                          {evidenceReview.all_reviewed ? " · All evidence reviewed" : ` · ${evidenceUnreviewed} unreviewed`}
+                                       </p>
+                                    </div>
 
                                     {confirmationChecking && (
                                        <div className="adjudication-decision-checking" role="status">
                                           <Icons name="loader" size={17} className="adjudication-spinner" aria-hidden="true" />
-                                          <span>Refreshing canonical detail before confirmation…</span>
+                                          <span>Refreshing latest case details before confirmation…</span>
                                        </div>
                                     )}
 
-                                    {decisionFormOpen && (
-                                       <form className="adjudication-decision-form" onSubmit={handleDecisionReview} noValidate>
+                                    {mutation && identifiersMatch(mutation.caseId, detail.id) ? (
+                                       <div className="adjudication-dialog-recording" role="status">
+                                          <Icons name="loader" size={20} className="adjudication-spinner" aria-hidden="true" />
+                                          <div>
+                                             <strong>Recording authoritative adjudication</strong>
+                                             <span>The recorded decision is being confirmed against the latest case state. Do not resubmit it.</span>
+                                          </div>
+                                       </div>
+                                    ) : decisionFormOpen ? (
+<form className="adjudication-decision-form" onSubmit={handleDecisionReview} noValidate>
                                           <div className="adjudication-form-heading">
                                              <div>
                                                 <h6>Prepare first decision</h6>
@@ -2058,7 +2792,7 @@ function AdjudicationReviewContent({
                                           )}
 
                                           <label className="adjudication-decision-field" htmlFor="adjudication-canonical-claim">
-                                             <span>Canonical claim wording <span aria-hidden="true">*</span></span>
+                                             <span>Claim statement for decision <span aria-hidden="true">*</span></span>
                                              <Textarea
                                                 density="standard"
                                                 id="adjudication-canonical-claim"
@@ -2076,7 +2810,7 @@ function AdjudicationReviewContent({
                                                 required
                                              />
                                              <small id="adjudication-canonical-claim-help">
-                                                The precise, neutral statement this decision formally evaluates. It starts blank by design.
+                                                Write the precise, neutral statement this adjudication evaluates.
                                              </small>
                                           </label>
                                           {decisionErrors.canonicalClaim && (
@@ -2122,10 +2856,8 @@ function AdjudicationReviewContent({
                                              </Button>
                                           </div>
                                        </form>
-                                    )}
-
-                                    {confirmation && (
-                                       <div className="adjudication-decision-confirmation">
+                                    ) : confirmation ? (
+<div className="adjudication-decision-confirmation">
                                           <div
                                              className="adjudication-form-heading"
                                              ref={confirmationHeadingRef}
@@ -2153,7 +2885,7 @@ function AdjudicationReviewContent({
                                                 </dd>
                                              </div>
                                              <div>
-                                                <dt>Canonical wording</dt>
+                                                <dt>Claim statement</dt>
                                                 <dd>{confirmation.payload.canonical_claim}</dd>
                                              </div>
                                              <div>
@@ -2183,122 +2915,8 @@ function AdjudicationReviewContent({
                                              </Button>
                                           </div>
                                        </div>
-                                    )}
-
-                                 </section>
-
-                                 <section className="adjudication-detail-section" aria-labelledby="adjudication-decisions-heading">
-                                    <div className="adjudication-subheading-row">
-                                       <div>
-                                          <h5 id="adjudication-decisions-heading">Decision record</h5>
-                                          <p>Only decision records authorized for the selected organization are shown.</p>
-                                       </div>
-                                    </div>
-
-                                    {detail.current_decision ? (
-                                       <DecisionRecord decision={detail.current_decision} current />
-                                    ) : (
-                                       <p className="adjudication-inline-empty">No current decision record is visible for this case.</p>
-                                    )}
-
-                                    <div className="adjudication-history-heading">
-                                       <h6>Decision history</h6>
-                                       <span>{normalizeNonnegativeNumber(decisionHistory.count)} historical {decisionHistory.count === 1 ? "record" : "records"}</span>
-                                    </div>
-                                    {decisionHistory.has_restricted_records && (
-                                       <p className="adjudication-private-history-notice">
-                                          Additional decision history exists but is not available within this organization&apos;s authorized view.
-                                       </p>
-                                    )}
-                                    {decisionHistoryItems.length > 0 ? (
-                                       <div className="adjudication-decision-history">
-                                          {decisionHistoryItems.map((decision) => <DecisionRecord key={decision.id} decision={decision} />)}
-                                       </div>
-                                    ) : (
-                                       <p className="adjudication-inline-empty">No authorized historical decision records are available.</p>
-                                    )}
-                                    {decisionHistory.truncated && (
-                                       <p className="adjudication-truncation-note">Only the most recent authorized decision records are shown.</p>
-                                    )}
-                                 </section>
-
-                                       <section className="adjudication-detail-section" aria-labelledby="adjudication-resolution-heading">
-                                    <div className="adjudication-subheading-row">
-                                       <div>
-                                          <h5 id="adjudication-resolution-heading">Resolution and case history</h5>
-                                          <p>Resolution and append-only case events belong to this selected case.</p>
-                                       </div>
-                                    </div>
-
-                                    {detail.resolution ? (
-                                       <div className="adjudication-resolution">
-                                          <dl className="adjudication-detail-facts compact">
-                                             <div><dt>Resolution</dt><dd>{formatLabel(detail.resolution.code, "Not recorded")}</dd></div>
-                                             <div><dt>Resolved by</dt><dd><MinimalUser user={detail.resolution.resolved_by} fallback="Actor not recorded" /></dd></div>
-                                             <div><dt>Resolved at</dt><dd><FormattedDateTime value={detail.resolution.resolved_at} /></dd></div>
-                                          </dl>
-                                          <div className="adjudication-reading-block">
-                                             <strong>Resolution summary</strong>
-                                             <p>{detail.resolution.summary || "No resolution summary was recorded."}</p>
-                                          </div>
-                                       </div>
-                                    ) : (
-                                       <p className="adjudication-inline-empty">This case has no recorded resolution.</p>
-                                    )}
-
-                                    <details className="adjudication-history-disclosure">
-                                       <summary>
-                                          <h6>
-                                             <span>Case events</span>
-                                             <span>{normalizeNonnegativeNumber(detailEvents.count)} {detailEvents.count === 1 ? "event" : "events"}</span>
-                                          </h6>
-                                       </summary>
-                                       {eventItems.length > 0 ? (
-                                          <ol className="adjudication-event-list">
-                                             {eventItems.map((event, index) => (
-                                                <EventRecord key={`${event.event_type}-${event.created_at}-${index}`} event={event} />
-                                             ))}
-                                          </ol>
-                                       ) : (
-                                          <p className="adjudication-inline-empty">No case events are available.</p>
-                                       )}
-                                       {detailEvents.truncated && (
-                                          <p className="adjudication-truncation-note">Showing the most recent 50 events, in chronological order.</p>
-                                       )}
-                                    </details>
-                                       </section>
-                                    </div>
-
-                                    <aside
-                                       className="adjudication-context-rail"
-                                       aria-label="Selected case context"
-                                    >
-                                       {detailClaim.id && organizationId && (
-                                          <VerificationIntelligencePanel
-                                             key={`${organizationId}:${detailClaim.id}`}
-                                             organizationId={organizationId}
-                                             claimId={detailClaim.id}
-                                          />
-                                       )}
-
-                                       <h5>Case context</h5>
-                                       <dl className="adjudication-detail-facts">
-                                          <div><dt>Organization</dt><dd>{detail.organization?.name || "Unavailable"}</dd></div>
-                                          <div><dt>Claim ID</dt><dd>{detailClaim.id || "Unavailable"}</dd></div>
-                                          <div><dt>Claim type</dt><dd>{formatLabel(detailClaim.claim_type)}</dd></div>
-                                          <div><dt>Workflow state</dt><dd>{formatLabel(detail.workflow_state)}</dd></div>
-                                          <div><dt>Case status</dt><dd>{detail.status_label || formatLabel(detail.status)}</dd></div>
-                                          <div><dt>Priority</dt><dd>{detail.priority_label || formatLabel(detail.priority)}</dd></div>
-                                          <div><dt>Source</dt><dd>{detail.source_label || formatLabel(detail.source)}</dd></div>
-                                          <div><dt>Created</dt><dd><FormattedDateTime value={detail.created_at} /></dd></div>
-                                          <div><dt>Updated</dt><dd><FormattedDateTime value={detail.updated_at} /></dd></div>
-                                          <div><dt>Resolved</dt><dd><FormattedDateTime value={detail.resolved_at} fallback="Not resolved" /></dd></div>
-                                       </dl>
-                                       <details className="adjudication-full-id">
-                                          <summary>Full case ID</summary>
-                                          <span>{detail.id}</span>
-                                       </details>
-                                    </aside>
+                                    ) : null}
+                                 </AdjudicationModal>
                                  </div>
                               </div>
                            ) : null}

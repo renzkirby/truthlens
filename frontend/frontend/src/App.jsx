@@ -10,6 +10,7 @@ import UserProfile from "./Pages/UserProfile.jsx";
 import ThreadDetailPage from "./Pages/ThreadDetailPage";
 import VerifyPage from "./Pages/VerifyPage.jsx";
 import WorkspacePage from "./Pages/WorkspacePage.jsx";
+import InvestigationWorkspacePage from "./Pages/InvestigationWorkspacePage.jsx";
 import VerifyEmailPage from "./Pages/VerifyEmailPage.jsx";
 import Toast from "./components/Toast";
 import UserHub from "./Pages/UserHub.jsx";
@@ -140,6 +141,9 @@ function App() {
                      <Route element={<PrivateRoute requireWorkspace />}>
                         <Route element={<WorkspaceShell />}>
                            <Route path="/workspace" element={<WorkspacePage />} />
+                           <Route path="/workspace/intake" element={<WorkspacePage />} />
+                           <Route path="/workspace/investigations" element={<WorkspacePage />} />
+                           <Route path="/workspace/investigations/:assignmentId" element={<InvestigationWorkspacePage />} />
                            <Route path="/workspace/factual-corrections" element={<WorkspacePage />} />
                            <Route path="/workspace/factual-corrections/:requestId" element={<WorkspacePage />} />
                         </Route>

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../../hooks/useAuth";
+import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
+import { showWorkspaceSuccess, WORKSPACE_LONG_TOAST_DURATION } from "../../utils/workspaceToast";
 import Icons from "../Icons.jsx";
 import Badge from "../ui/Badge.jsx";
 import Button from "../ui/Button.jsx";
@@ -33,6 +35,14 @@ const ACTION_LABELS = {
    PREPARE_CORRECTION_PROPOSAL: "Prepare proposal",
    PUBLISH_FACTUAL_CORRECTION: "Publish factual correction",
    CANCEL_FACTUAL_CORRECTION: "Cancel factual correction",
+};
+
+const STAGE_LABELS = {
+   EVIDENCE_REVIEW: "Evidence review",
+   PROPOSAL_DRAFT: "Proposal drafting",
+   PREPARED: "Prepared for publication",
+   COMPLETED: "Completed",
+   CANCELLED: "Cancelled",
 };
 
 const EMPTY_EDITOR = Object.freeze({
@@ -126,6 +136,373 @@ function safeExternalUrl(value) {
    }
 }
 
+function comparableSourceUrl(value) {
+   return safeExternalUrl(value) || "";
+}
+
+function correctionEvidenceSourceModel(detail) {
+   const items = Array.isArray(detail?.evidence_review?.items) ? detail.evidence_review.items : [];
+   const verified = new Map();
+   const rejectedKeys = new Set();
+
+   items.forEach((item) => {
+      if (!item?.has_qualifying_correction_review) {
+         return;
+      }
+
+      const url = safeExternalUrl(item?.evidence_url);
+      const key = comparableSourceUrl(url);
+      if (!url || !key) {
+         return;
+      }
+
+      const reviewedStatus = item?.correction_review?.new_evidence_status || item?.evidence_status;
+      if (reviewedStatus === "REJECTED") {
+         rejectedKeys.add(key);
+         return;
+      }
+      if (reviewedStatus !== "VERIFIED") {
+         return;
+      }
+
+      const existing = verified.get(key);
+      if (existing) {
+         existing.recordCount += 1;
+         if (!existing.caption && item?.evidence_caption) {
+            existing.caption = item.evidence_caption;
+         }
+         return;
+      }
+
+      verified.set(key, {
+         key,
+         url,
+         caption: item?.evidence_caption || "",
+         evidenceType: item?.evidence_type || "",
+         reviewedBy: item?.correction_review?.reviewed_by || null,
+         reviewedAt: item?.correction_review?.reviewed_at || null,
+         recordCount: 1,
+      });
+   });
+
+   return {
+      verifiedOptions: Array.from(verified.values()).sort((left, right) =>
+         (left.caption || left.url).localeCompare(right.caption || right.url),
+      ),
+      rejectedKeys: new Set(Array.from(rejectedKeys).filter((key) => !verified.has(key))),
+   };
+}
+
+function sourceRowIssue(value, rows, index, rejectedKeys = new Set()) {
+   const trimmed = String(value || "").trim();
+   if (!trimmed) {
+      return "";
+   }
+
+   const key = comparableSourceUrl(trimmed);
+   if (!key) {
+      return "Enter a complete http:// or https:// URL.";
+   }
+   if (rejectedKeys.has(key)) {
+      return "This source was rejected during correction evidence review and cannot be used.";
+   }
+
+   const firstMatch = rows.findIndex((row) => comparableSourceUrl(row) === key);
+   if (firstMatch !== index) {
+      return "This source has already been added.";
+   }
+
+   return "";
+}
+
+function CorrectionSourceEditor({
+   value,
+   disabled,
+   verifiedOptions,
+   rejectedKeys,
+   error,
+   inputRef,
+   onChange,
+}) {
+   const rows = useMemo(
+      () => (Array.isArray(value) && value.length > 0 ? value : [""]),
+      [value],
+   );
+   const [pickerOpen, setPickerOpen] = useState(false);
+   const [pendingVerifiedKeys, setPendingVerifiedKeys] = useState(() => new Set());
+   const optionByKey = useMemo(
+      () => new Map(verifiedOptions.map((option) => [option.key, option])),
+      [verifiedOptions],
+   );
+   const selectedVerifiedKeys = useMemo(
+      () =>
+         new Set(
+            rows
+               .map((row) => comparableSourceUrl(row))
+               .filter((key) => key && optionByKey.has(key)),
+         ),
+      [optionByKey, rows],
+   );
+
+   const updateRow = (index, nextValue) => {
+      onChange(rows.map((row, rowIndex) => (rowIndex === index ? nextValue : row)));
+   };
+
+   const addRow = () => {
+      const next = [...rows, ""];
+      onChange(next);
+      requestAnimationFrame(() => document.getElementById(`correction-source-${next.length - 1}`)?.focus());
+   };
+
+   const removeRow = (index) => {
+      const next = rows.filter((_, rowIndex) => rowIndex !== index);
+      onChange(next.length > 0 ? next : [""]);
+   };
+
+   const openPicker = () => {
+      setPendingVerifiedKeys(new Set(selectedVerifiedKeys));
+      setPickerOpen(true);
+   };
+
+   const toggleVerified = (key) => {
+      setPendingVerifiedKeys((current) => {
+         const next = new Set(current);
+         if (next.has(key)) next.delete(key);
+         else next.add(key);
+         return next;
+      });
+   };
+
+   const applySelection = () => {
+      const manualRows = rows.filter((row) => {
+         const key = comparableSourceUrl(row);
+         return !key || !optionByKey.has(key);
+      }).filter((row) => String(row).trim());
+
+      const selectedEvidenceUrls = verifiedOptions
+         .filter((option) => pendingVerifiedKeys.has(option.key))
+         .map((option) => option.url);
+
+      const combined = [...selectedEvidenceUrls, ...manualRows];
+      const seen = new Set();
+      const deduplicated = combined.filter((row) => {
+         const key = comparableSourceUrl(row) || `raw:${String(row).trim()}`;
+         if (seen.has(key)) return false;
+         seen.add(key);
+         return true;
+      });
+
+      onChange(deduplicated.length > 0 ? deduplicated : [""]);
+      setPickerOpen(false);
+   };
+
+   const canAddAnother =
+      !disabled &&
+      rows.every((row, index) => String(row).trim() && !sourceRowIssue(row, rows, index, rejectedKeys));
+
+   return (
+      <div className="correction-source-picker" role="group" aria-labelledby="correction-sources-heading">
+         <div className="correction-source-picker-header">
+            <div>
+               <strong id="correction-sources-heading">Sources for this correction</strong>
+               <p>
+                  Select sources already verified during this correction review, or add another source your organization
+                  used. Selected evidence keeps its correction-review provenance.
+               </p>
+            </div>
+         </div>
+
+         <div className="correction-source-picker-actions">
+            <Button
+               type="button"
+               variant="secondary"
+               density="compact"
+               leadingIcon={<Icons name="shield-check" size={15} />}
+               disabled={disabled || verifiedOptions.length === 0}
+               onClick={openPicker}
+            >
+               Add from reviewed evidence
+            </Button>
+            <Button
+               type="button"
+               variant="ghost"
+               density="compact"
+               leadingIcon={<Icons name="circle-plus" size={15} />}
+               disabled={!canAddAnother}
+               onClick={addRow}
+            >
+               Add another source
+            </Button>
+         </div>
+
+         {pickerOpen ? (
+            <section className="correction-source-evidence-picker" aria-labelledby="correction-source-evidence-heading">
+               <div className="correction-source-evidence-picker-heading">
+                  <div>
+                     <strong id="correction-source-evidence-heading">Choose reviewed evidence</strong>
+                     <p>
+                        These sources completed dedicated correction review with a Verified outcome. Select the ones
+                        you want to cite in the correction article.
+                     </p>
+                  </div>
+                  <span>{verifiedOptions.length} available</span>
+               </div>
+
+               <div className="correction-source-evidence-options">
+                  {verifiedOptions.map((option) => {
+                     const checked = pendingVerifiedKeys.has(option.key);
+                     return (
+                        <label
+                           key={option.key}
+                           className={`correction-source-evidence-option ${checked ? "is-selected" : ""}`}
+                        >
+                           <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={disabled}
+                              onChange={() => toggleVerified(option.key)}
+                           />
+                           <span className="correction-source-evidence-check" aria-hidden="true">
+                              {checked ? <Icons name="check" size={13} /> : null}
+                           </span>
+                           <span className="correction-source-evidence-copy">
+                              <span className="correction-source-evidence-title-row">
+                                 <strong>{option.caption || "Reviewed evidence source"}</strong>
+                                 <span>Verified</span>
+                              </span>
+                              <small>
+                                 {formatLabel(option.evidenceType, "Evidence")}
+                                 {option.recordCount > 1
+                                    ? ` · ${option.recordCount} reviewed records share this source`
+                                    : ""}
+                              </small>
+                              <a
+                                 href={option.url}
+                                 target="_blank"
+                                 rel="noopener noreferrer"
+                                 onClick={(event) => event.stopPropagation()}
+                              >
+                                 {option.url}
+                                 <Icons name="external-link" size={12} aria-hidden="true" />
+                              </a>
+                           </span>
+                        </label>
+                     );
+                  })}
+               </div>
+
+               <div className="correction-source-evidence-picker-actions">
+                  <Button type="button" variant="ghost" density="compact" disabled={disabled} onClick={() => setPickerOpen(false)}>
+                     Cancel
+                  </Button>
+                  <Button type="button" variant="primary" density="compact" disabled={disabled} onClick={applySelection}>
+                     Apply selection
+                  </Button>
+               </div>
+            </section>
+         ) : null}
+
+         {verifiedOptions.length === 0 ? (
+            <p className="correction-source-availability-note">
+               No Verified correction evidence with a usable source URL is available yet.
+            </p>
+         ) : null}
+
+         <div className="correction-source-input-list">
+            {rows.map((row, index) => {
+               const key = comparableSourceUrl(row);
+               const verifiedOption = optionByKey.get(key);
+               const issue = sourceRowIssue(row, rows, index, rejectedKeys);
+               const inputId = `correction-source-${index}`;
+
+               if (verifiedOption && String(row).trim()) {
+                  return (
+                     <div key={inputId} className="correction-selected-source correction-selected-source--evidence">
+                        <div>
+                           <span className="correction-selected-source-origin">Reviewed evidence</span>
+                           <strong>{verifiedOption.caption || "Reviewed evidence source"}</strong>
+                           <a href={verifiedOption.url} target="_blank" rel="noopener noreferrer">
+                              {verifiedOption.url}
+                              <Icons name="external-link" size={12} aria-hidden="true" />
+                           </a>
+                           <small>
+                              Verified during this factual correction review. Its provenance will remain linked when the
+                              correction is prepared.
+                           </small>
+                        </div>
+                        <Button
+                           type="button"
+                           variant="ghost"
+                           density="compact"
+                           disabled={disabled}
+                           onClick={() => removeRow(index)}
+                           aria-label={`Remove reviewed evidence source ${index + 1}`}
+                        >
+                           Remove
+                        </Button>
+                     </div>
+                  );
+               }
+
+               return (
+                  <div className="correction-source-input-item" key={inputId}>
+                     <div className="correction-source-input-label-row">
+                        <label htmlFor={inputId}>Editorial source {index + 1}</label>
+                        <span>Organization-added source</span>
+                     </div>
+                     <div className="correction-source-input-row">
+                        <Input
+                           ref={index === 0 ? inputRef : undefined}
+                           id={inputId}
+                           type="url"
+                           inputMode="url"
+                           value={row}
+                           placeholder="https://example.com/source"
+                           autoCapitalize="none"
+                           autoCorrect="off"
+                           spellCheck={false}
+                           disabled={disabled}
+                           invalid={Boolean(issue || error)}
+                           aria-describedby={issue ? `${inputId}-error` : error ? "correction-source-error" : undefined}
+                           onChange={(event) => updateRow(index, event.target.value)}
+                        />
+                        <Button
+                           type="button"
+                           variant="ghost"
+                           density="compact"
+                           disabled={disabled}
+                           onClick={() => removeRow(index)}
+                           aria-label={`Remove editorial source ${index + 1}`}
+                        >
+                           Remove
+                        </Button>
+                     </div>
+                     {issue ? (
+                        <span id={`${inputId}-error`} className="correction-source-input-error">
+                           {issue}
+                        </span>
+                     ) : null}
+                  </div>
+               );
+            })}
+         </div>
+
+         {error ? (
+            <span id="correction-source-error" className="correction-field-error">
+               {error}
+            </span>
+         ) : null}
+
+         <div className="correction-source-picker-footer">
+            <span>
+               At least one source is required to save the correction proposal. A source rejected during correction
+               review cannot be selected.
+            </span>
+         </div>
+      </div>
+   );
+}
+
 function proposalToEditor(proposal) {
    if (!proposal) {
       return { ...EMPTY_EDITOR, source_urls: [""] };
@@ -170,7 +547,7 @@ function StageBadge({ stage }) {
            : stage === "PREPARED"
              ? "warning"
              : "info";
-   return <Badge tone={tone}>{stage || "Unavailable"}</Badge>;
+   return <Badge tone={tone}>{STAGE_LABELS[stage] || formatLabel(stage)}</Badge>;
 }
 
 export function CorrectionDialog({
@@ -312,7 +689,7 @@ function DecisionCard({ title, decision, current = false, emptyMessage }) {
          </div>
          <dl className="correction-metadata-grid">
             <div className="correction-metadata-wide">
-               <dt>Canonical claim</dt>
+               <dt>Claim reviewed</dt>
                <dd>{decision?.canonical_claim || "Not recorded"}</dd>
             </div>
             <div className="correction-metadata-wide">
@@ -366,7 +743,7 @@ function hasMeaningfulReplacementDecision(detail) {
 function Blockers({ blockers }) {
    const groups = Object.entries(blockers || {}).filter(([, values]) => Array.isArray(values) && values.length > 0);
    if (groups.length === 0) {
-      return <p className="correction-inline-empty">The server has not reported any current action blockers.</p>;
+      return <p className="correction-inline-empty">No current action blockers are reported.</p>;
    }
 
    return (
@@ -419,7 +796,7 @@ function ProposalSummary({ proposal, eligibleVerificationRuns }) {
          </div>
          <dl className="correction-metadata-grid">
             <div className="correction-metadata-wide">
-               <dt>Proposed canonical claim</dt>
+               <dt>Proposed corrected claim</dt>
                <dd>{proposal.proposed_canonical_claim}</dd>
             </div>
             <div className="correction-metadata-wide">
@@ -478,6 +855,33 @@ function ProposalSummary({ proposal, eligibleVerificationRuns }) {
    );
 }
 
+function blockersForActions(blockers, actions) {
+   const allowed = new Set(actions);
+   return Object.fromEntries(
+      Object.entries(blockers || {}).filter(
+         ([action, values]) => allowed.has(action) && Array.isArray(values) && values.length > 0,
+      ),
+   );
+}
+
+function CorrectionWorkDisclosure({ title, description, meta, children }) {
+   return (
+      <details className="correction-work-disclosure">
+         <summary>
+            <span>
+               <strong>{title}</strong>
+               <small>{description}</small>
+            </span>
+            <span className="correction-work-disclosure-meta">
+               {meta ? <small>{meta}</small> : null}
+               <Icons name="chevron-down" size={16} aria-hidden="true" />
+            </span>
+         </summary>
+         <div className="correction-work-disclosure-content">{children}</div>
+      </details>
+   );
+}
+
 function FactualCorrectionContent({
    authFetch,
    authIdentity,
@@ -490,6 +894,7 @@ function FactualCorrectionContent({
    onDirtyChange,
    onOpenPublication,
 }) {
+   const { addToast } = useNotification();
    const dirtySnapshotKey = proposalSnapshotKey(authIdentity, organizationId, requestId);
    const initialDirtySnapshotRef = useRef(dirtySnapshotKey ? dirtyProposalSnapshots.get(dirtySnapshotKey) : null);
    const [queue, setQueue] = useState({ count: 0, limit: PAGE_SIZE, offset: 0, results: [] });
@@ -502,7 +907,6 @@ function FactualCorrectionContent({
    const [detailError, setDetailError] = useState("");
    const [detailRequestVersion, setDetailRequestVersion] = useState(0);
    const [authorityError, setAuthorityError] = useState("");
-   const [notice, setNotice] = useState(() => initialDirtySnapshotRef.current?.notice || "");
    const [actionError, setActionError] = useState(() => initialDirtySnapshotRef.current?.actionError || "");
    const [fieldErrors, setFieldErrors] = useState(() => initialDirtySnapshotRef.current?.fieldErrors || {});
    const [conflict, setConflict] = useState(() => initialDirtySnapshotRef.current?.conflict || null);
@@ -561,6 +965,7 @@ function FactualCorrectionContent({
       eligibleVerificationRuns,
       selectedVerificationRunId,
    );
+   const correctionSourceModel = useMemo(() => correctionEvidenceSourceModel(detail), [detail]);
    const hasUnresolvedLinkedVerificationRun = Boolean(selectedVerificationRunId && !selectedVerificationRun);
    const showVerificationRunSelect = Boolean(
       eligibleVerificationRuns && (eligibleVerificationRuns.length > 0 || selectedVerificationRunId),
@@ -618,7 +1023,6 @@ function FactualCorrectionContent({
       setDetailLoading(false);
       setMutation(null);
       setDialog(null);
-      setNotice("");
       setActionError("");
       setConflict(null);
       setEditor(proposalToEditor(null));
@@ -664,7 +1068,6 @@ function FactualCorrectionContent({
             conflict,
             fieldErrors,
             actionError,
-            notice,
          });
          return;
       }
@@ -674,7 +1077,7 @@ function FactualCorrectionContent({
       if (dirtyOwnerKeyRef.current === dirtySnapshotKey) {
          dirtyOwnerKeyRef.current = null;
       }
-   }, [actionError, conflict, dirtySnapshotKey, editor, editorBase, fieldErrors, isDirty, notice, requestId]);
+   }, [actionError, conflict, dirtySnapshotKey, editor, editorBase, fieldErrors, isDirty, requestId]);
 
    useEffect(() => {
       onDirtyChange?.(isDirty, isDirty ? discardDirtyDraft : null);
@@ -694,10 +1097,10 @@ function FactualCorrectionContent({
    }, [isDirty]);
 
    useEffect(() => {
-      if (notice || actionError || authorityError || conflict) {
+      if (actionError || authorityError || conflict) {
          requestAnimationFrame(() => messageRef.current?.focus());
       }
-   }, [actionError, authorityError, conflict, notice]);
+   }, [actionError, authorityError, conflict]);
 
    useEffect(() => {
       let cancelled = false;
@@ -796,14 +1199,12 @@ function FactualCorrectionContent({
             setFieldErrors(restoredSnapshot.fieldErrors || {});
             setConflict(restoredSnapshot.conflict || null);
             setActionError(restoredSnapshot.actionError || "");
-            setNotice(restoredSnapshot.notice || "");
          } else {
             setEditor(proposalToEditor(null));
             setEditorBase(proposalToEditor(null));
             setFieldErrors({});
             setConflict(null);
             setActionError("");
-            setNotice("");
          }
          setEvidenceDrafts({});
          setDialog(null);
@@ -816,7 +1217,6 @@ function FactualCorrectionContent({
          setFieldErrors(restoredSnapshot.fieldErrors || {});
          setConflict(restoredSnapshot.conflict || null);
          setActionError(restoredSnapshot.actionError || "");
-         setNotice(restoredSnapshot.notice || "");
       }
 
       let cancelled = false;
@@ -940,7 +1340,6 @@ function FactualCorrectionContent({
       mutationRequestIdRef.current = operation.sequence;
       setMutation(kind);
       setActionError("");
-      setNotice("");
       setFieldErrors({});
       setConflict(null);
 
@@ -1036,11 +1435,15 @@ function FactualCorrectionContent({
       if (editor.headline.trim().length > 300) {
          errors.headline = "Headline must be 300 characters or fewer.";
       }
-      const sources = editor.source_urls.map((value) => value.trim()).filter(Boolean);
+      const sourceRows = editor.source_urls.map((value) => String(value || ""));
+      const sources = sourceRows.map((value) => value.trim()).filter(Boolean);
+      const sourceIssues = sourceRows
+         .map((value, index) => sourceRowIssue(value, sourceRows, index, correctionSourceModel.rejectedKeys))
+         .filter(Boolean);
       if (sources.length === 0) {
-         errors.source_urls = "Add at least one HTTP or HTTPS source URL.";
-      } else if (sources.some((value) => !safeExternalUrl(value))) {
-         errors.source_urls = "Each source must be a valid HTTP or HTTPS URL.";
+         errors.source_urls = "Add at least one source for this correction.";
+      } else if (sourceIssues.length > 0) {
+         errors.source_urls = sourceIssues[0];
       }
       setFieldErrors(errors);
       const firstInvalid = Object.keys(errors)[0];
@@ -1082,7 +1485,10 @@ function FactualCorrectionContent({
          },
          onSuccess: async (response) => {
             applyCanonicalDetail(response);
-            setNotice("Correction proposal saved. It remains non-authoritative until final publication succeeds.");
+            showWorkspaceSuccess(addToast, {
+               title: "Correction proposal saved",
+               message: "It remains non-authoritative until final publication succeeds.",
+            });
             refreshQueue();
          },
       });
@@ -1108,7 +1514,10 @@ function FactualCorrectionContent({
          onSuccess: async (response) => {
             applyCanonicalDetail(response);
             setDialog(null);
-            setNotice("Proposal prepared and frozen. It has not been published and is not authoritative.");
+            showWorkspaceSuccess(addToast, {
+               title: "Correction proposal prepared",
+               message: "The proposal is prepared and remains non-authoritative until it is published.",
+            });
             refreshQueue();
          },
       });
@@ -1128,11 +1537,13 @@ function FactualCorrectionContent({
             applyCanonicalDetail(response?.correction);
             setPublishedPublication(response?.publication || null);
             setDialog(null);
-            setNotice(
-               hasMeaningfulReplacementDecision(response?.correction)
-                  ? "Factual correction published. The returned replacement decision and publication are now the current institutional authority."
-                  : "Factual correction published. The returned decision payload does not distinguish replacement factual authority; review the neutral authority comparison.",
-            );
+            showWorkspaceSuccess(addToast, {
+               title: "Factual correction published",
+               message: hasMeaningfulReplacementDecision(response?.correction)
+                  ? "The replacement decision and publication are now the current institutional authority."
+                  : "Review the authority comparison because the returned decision does not distinguish replacement factual authority.",
+               duration: WORKSPACE_LONG_TOAST_DURATION,
+            });
             refreshQueue();
          },
       });
@@ -1159,9 +1570,10 @@ function FactualCorrectionContent({
             applyCanonicalDetail(response);
             setCancellationReason("");
             setDialog(null);
-            setNotice(
-               "Factual correction cancelled. Its historical evidence and proposal remain available for inspection.",
-            );
+            showWorkspaceSuccess(addToast, {
+               title: "Factual correction cancelled",
+               message: "Its historical evidence and proposal remain available for inspection.",
+            });
             refreshQueue();
          },
       });
@@ -1197,7 +1609,10 @@ function FactualCorrectionContent({
                delete next[item.evidence_id];
                return next;
             });
-            setNotice("Correction evidence review recorded with its human reviewer provenance.");
+            showWorkspaceSuccess(addToast, {
+               title: "Correction evidence review recorded",
+               message: "The human reviewer provenance has been preserved.",
+            });
             refreshQueue();
          },
       });
@@ -1225,7 +1640,7 @@ function FactualCorrectionContent({
             </Badge>
          </div>
          {evidenceItems.length === 0 ? (
-            <p className="correction-inline-empty">No correction evidence is currently returned by the server.</p>
+            <p className="correction-inline-empty">No correction evidence is currently available.</p>
          ) : (
             <ol className="correction-evidence-list">
                {evidenceItems.map((item, index) => {
@@ -1415,7 +1830,7 @@ function FactualCorrectionContent({
                ) : null}
             </div>
             <div className="correction-field correction-field--wide">
-               <label htmlFor="correction-proposed-claim">Proposed canonical claim</label>
+               <label htmlFor="correction-proposed-claim">Proposed corrected claim</label>
                <Textarea
                   ref={proposalRefs.proposed_canonical_claim}
                   id="correction-proposed-claim"
@@ -1518,67 +1933,17 @@ function FactualCorrectionContent({
                   </span>
                ) : null}
             </div>
-            <fieldset className="correction-source-editor correction-field--wide">
-               <legend>Source URLs</legend>
-               <p>Only HTTP and HTTPS URLs can be submitted. Server validation remains authoritative.</p>
-               {editor.source_urls.map((url, index) => (
-                  <div key={index} className="correction-source-row">
-                     <label className="sr-only" htmlFor={`correction-source-${index}`}>
-                        Source URL {index + 1}
-                     </label>
-                     <Input
-                        ref={index === 0 ? proposalRefs.source_urls : undefined}
-                        id={`correction-source-${index}`}
-                        type="url"
-                        maxLength={2000}
-                        value={url}
-                        disabled={!canEditProposal || Boolean(mutation)}
-                        invalid={Boolean(fieldError(fieldErrors, "source_urls"))}
-                        aria-describedby={
-                           fieldError(fieldErrors, "source_urls") ? "correction-source-error" : undefined
-                        }
-                        onChange={(event) => {
-                           setEditor((current) => ({
-                              ...current,
-                              source_urls: current.source_urls.map((item, itemIndex) =>
-                                 itemIndex === index ? event.target.value : item,
-                              ),
-                           }));
-                           setFieldErrors((current) => ({ ...current, source_urls: undefined }));
-                        }}
-                     />
-                     <Button
-                        type="button"
-                        variant="ghost"
-                        density="compact"
-                        aria-label={`Remove source URL ${index + 1}`}
-                        disabled={!canEditProposal || Boolean(mutation) || editor.source_urls.length === 1}
-                        onClick={() =>
-                           setEditor((current) => ({
-                              ...current,
-                              source_urls: current.source_urls.filter((_, itemIndex) => itemIndex !== index),
-                           }))
-                        }
-                     >
-                        Remove
-                     </Button>
-                  </div>
-               ))}
-               {fieldError(fieldErrors, "source_urls") ? (
-                  <span id="correction-source-error" className="correction-field-error">
-                     {fieldError(fieldErrors, "source_urls")}
-                  </span>
-               ) : null}
-               <Button
-                  type="button"
-                  variant="secondary"
-                  density="compact"
+            <div className="correction-field correction-field--wide">
+               <CorrectionSourceEditor
+                  value={editor.source_urls}
                   disabled={!canEditProposal || Boolean(mutation)}
-                  onClick={() => setEditor((current) => ({ ...current, source_urls: [...current.source_urls, ""] }))}
-               >
-                  Add source
-               </Button>
-            </fieldset>
+                  verifiedOptions={correctionSourceModel.verifiedOptions}
+                  rejectedKeys={correctionSourceModel.rejectedKeys}
+                  error={fieldError(fieldErrors, "source_urls")}
+                  inputRef={proposalRefs.source_urls}
+                  onChange={(nextSources) => updateEditor("source_urls", nextSources)}
+               />
+            </div>
             <div className="correction-field correction-field--wide">
                <label htmlFor={showVerificationRunSelect ? "correction-verification-run" : undefined}>
                   Supporting verification run <span>(optional)</span>
@@ -1632,7 +1997,7 @@ function FactualCorrectionContent({
                className={isDirty ? "correction-dirty-indicator is-dirty" : "correction-dirty-indicator"}
                role="status"
             >
-               {isDirty ? "Unsaved proposal changes" : "Proposal matches the saved server version"}
+               {isDirty ? "Unsaved proposal changes" : "Proposal matches the latest saved version"}
             </span>
             <div className="correction-action-row">
                {allowedActions.includes("SAVE_CORRECTION_PROPOSAL") ? (
@@ -1674,8 +2039,8 @@ function FactualCorrectionContent({
          </div>
          {conflict && detail.proposal ? (
             <div className="correction-canonical-proposal">
-               <h5>Current saved server proposal after conflict</h5>
-               <p>Compare this canonical version with the preserved local editor before explicitly submitting again.</p>
+               <h5>Current saved proposal after conflict</h5>
+               <p>Compare the latest saved proposal with your preserved local edits before submitting again.</p>
                <ProposalSummary
                   proposal={detail.proposal}
                   eligibleVerificationRuns={eligibleVerificationRuns}
@@ -1695,21 +2060,45 @@ function FactualCorrectionContent({
 
    const renderStageWork = () => {
       if (detail.stage === "EVIDENCE_REVIEW") {
+         const reviewBlockers = blockersForActions(detail.blockers, ["REVIEW_CORRECTION_EVIDENCE"]);
          return (
             <>
                {renderEvidence()}
-               {detail.proposal || canEditProposal ? renderProposalSection() : null}
+               {Object.keys(reviewBlockers).length > 0 ? <Blockers blockers={reviewBlockers} /> : null}
+               {!allowedActions.includes("REVIEW_CORRECTION_EVIDENCE") &&
+               Object.keys(reviewBlockers).length === 0 ? (
+                  <p className="correction-permission-note">
+                     Correction evidence is read-only with your current permissions.
+                  </p>
+               ) : null}
+               {detail.proposal || canEditProposal ? (
+                  <CorrectionWorkDisclosure
+                     title="Correction proposal"
+                     description="You can start drafting while evidence review is still in progress. A completed proposal is required before the correction can be prepared for publication."
+                     meta={isDirty ? "Unsaved changes" : detail.proposal ? `Proposal v${detail.proposal.version}` : null}
+                  >
+                     {renderProposalSection()}
+                  </CorrectionWorkDisclosure>
+               ) : null}
             </>
          );
       }
+
       if (detail.stage === "PROPOSAL_DRAFT") {
          return (
             <>
                {renderProposalSection()}
-               {renderEvidence()}
+               <CorrectionWorkDisclosure
+                  title="Reviewed correction evidence"
+                  description="Evidence review is complete. Reopen it here for reference while drafting the correction proposal."
+                  meta={`${detail.evidence_review?.reviewed_count ?? 0} reviewed`}
+               >
+                  {renderEvidence()}
+               </CorrectionWorkDisclosure>
             </>
          );
       }
+
       if (detail.stage === "PREPARED") {
          return (
             <>
@@ -1724,74 +2113,171 @@ function FactualCorrectionContent({
                            Prepared for publication — not yet published or authoritative.
                         </h4>
                         <p>
-                           The proposal is frozen. Only successful final publication creates the new current decision
-                           and article authority.
+                           The proposal is locked for final review. Only successful final publication creates the new
+                           current decision and article authority.
                         </p>
                      </div>
                   </div>
                </section>
                {renderProposalSection()}
+               <CorrectionWorkDisclosure
+                  title="Reviewed correction evidence"
+                  description="Evidence review is complete and retained for reference before publication."
+                  meta={`${detail.evidence_review?.reviewed_count ?? 0} reviewed`}
+               >
+                  {renderEvidence()}
+               </CorrectionWorkDisclosure>
             </>
          );
       }
+
       if (detail.stage === "COMPLETED") {
          const publication = publishedPublication || detail.completed_publication;
          const publicationArticle = publication?.article || publication;
          const publicationTime = publication?.published_at || publicationArticle?.published_at;
          return (
+            <>
+               <section
+                  className="correction-section correction-terminal correction-terminal--completed"
+                  aria-labelledby="correction-completed-heading"
+               >
+                  <div className="correction-terminal-heading">
+                     <Icons name="check-circle" size={22} />
+                     <div>
+                        <h4 id="correction-completed-heading">Factual correction completed</h4>
+                        <p>
+                           {completedHasReplacementDecision
+                              ? "Final publication succeeded. The replacement human decision and institutional article are now current authority."
+                              : "Final publication succeeded, but this response does not distinguish a replacement human decision. The authority comparison remains neutral."}
+                        </p>
+                     </div>
+                  </div>
+                  {publication ? (
+                     <div className="correction-completed-publication">
+                        <div>
+                           <strong>{publicationArticle?.headline || "Completed factual correction"}</strong>
+                           <span>
+                              Article v{publicationArticle?.version ?? "–"} · {formatDateTime(publicationTime)}
+                           </span>
+                        </div>
+                        <Button type="button" variant="secondary" onClick={() => onOpenPublication?.(publication)}>
+                           Open completed publication
+                        </Button>
+                     </div>
+                  ) : (
+                     <p className="correction-inline-empty">
+                        The completed publication record is not available in this response.
+                     </p>
+                  )}
+               </section>
+               <CorrectionWorkDisclosure
+                  title="Historical correction work"
+                  description="Review the evidence and proposal that led to this completed correction."
+                  meta="Read-only"
+               >
+                  {renderEvidence()}
+                  {renderProposalSection({ preserved: true })}
+               </CorrectionWorkDisclosure>
+            </>
+         );
+      }
+
+      return (
+         <>
             <section
-               className="correction-section correction-terminal correction-terminal--completed"
-               aria-labelledby="correction-completed-heading"
+               className="correction-section correction-terminal correction-terminal--cancelled"
+               aria-labelledby="correction-cancelled-heading"
             >
                <div className="correction-terminal-heading">
-                  <Icons name="check-circle" size={22} />
+                  <Icons name="alert-circle" size={22} />
                   <div>
-                     <h4 id="correction-completed-heading">Factual correction completed</h4>
+                     <h4 id="correction-cancelled-heading">Factual correction cancelled</h4>
                      <p>
-                        {completedHasReplacementDecision
-                           ? "Final publication succeeded. The returned replacement human decision and institutional article are now current authority."
-                           : "Final publication succeeded, but this response does not distinguish a replacement human decision. The authority comparison below remains neutral."}
+                        This request is terminal and read-only. Cancellation created no replacement factual authority;
+                        the existing human decision remains current.
                      </p>
                   </div>
                </div>
-               {publication ? (
-                  <div className="correction-completed-publication">
-                     <div>
-                        <strong>{publicationArticle?.headline || "Completed factual correction"}</strong>
-                        <span>
-                           Article v{publicationArticle?.version ?? "–"} · {formatDateTime(publicationTime)}
-                        </span>
-                     </div>
-                     <Button type="button" variant="secondary" onClick={() => onOpenPublication?.(publication)}>
-                        Open completed publication
+            </section>
+            <CorrectionWorkDisclosure
+               title="Historical correction work"
+               description="Review the evidence and proposal preserved from this cancelled correction request."
+               meta="Read-only"
+            >
+               {renderEvidence()}
+               {renderProposalSection({ preserved: true })}
+            </CorrectionWorkDisclosure>
+         </>
+      );
+   };
+
+   const renderPrimaryTransition = () => {
+      if (detail.stage === "PROPOSAL_DRAFT") {
+         const prepareBlockers = blockersForActions(detail.blockers, ["PREPARE_CORRECTION_PROPOSAL"]);
+         return (
+            <section className="correction-section correction-next-step" aria-labelledby="correction-next-step-heading">
+               <div className="correction-section-heading">
+                  <div>
+                     <h4 id="correction-next-step-heading">Prepare for publication</h4>
+                     <p>Lock the saved proposal for final publication review once the correction is ready.</p>
+                  </div>
+               </div>
+               {Object.keys(prepareBlockers).length > 0 ? <Blockers blockers={prepareBlockers} /> : null}
+               {allowedActions.includes("PREPARE_CORRECTION_PROPOSAL") ? (
+                  <div className="correction-action-row">
+                     <Button
+                        type="button"
+                        variant="primary"
+                        disabled={isDirty || Boolean(mutation)}
+                        onClick={prepareProposal}
+                     >
+                        Prepare correction proposal
                      </Button>
                   </div>
-               ) : (
-                  <p className="correction-inline-empty">
-                     The completed publication record is not available in this response.
+               ) : Object.keys(prepareBlockers).length === 0 ? (
+                  <p className="correction-permission-note">
+                     Preparing the proposal is not available with your current permissions.
                   </p>
-               )}
+               ) : null}
+               {allowedActions.includes("PREPARE_CORRECTION_PROPOSAL") && isDirty ? (
+                  <p className="correction-action-note">Save the current proposal changes before preparing.</p>
+               ) : null}
             </section>
          );
       }
-      return (
-         <section
-            className="correction-section correction-terminal correction-terminal--cancelled"
-            aria-labelledby="correction-cancelled-heading"
-         >
-            <div className="correction-terminal-heading">
-               <Icons name="alert-circle" size={22} />
-               <div>
-                  <h4 id="correction-cancelled-heading">Factual correction cancelled</h4>
-                  <p>
-                     This request is terminal and read-only. Cancellation created no replacement factual authority; the
-                     existing human decision remains current. Historical evidence and proposal material remain
-                     inspectable below.
-                  </p>
+
+      if (detail.stage === "PREPARED") {
+         const publishBlockers = blockersForActions(detail.blockers, ["PUBLISH_FACTUAL_CORRECTION"]);
+         return (
+            <section className="correction-section correction-next-step" aria-labelledby="correction-publication-heading">
+               <div className="correction-section-heading">
+                  <div>
+                     <h4 id="correction-publication-heading">Publication decision</h4>
+                     <p>Publish the prepared factual correction to create the new current human decision and article.</p>
+                  </div>
                </div>
-            </div>
-         </section>
-      );
+               {Object.keys(publishBlockers).length > 0 ? <Blockers blockers={publishBlockers} /> : null}
+               {allowedActions.includes("PUBLISH_FACTUAL_CORRECTION") ? (
+                  <div className="correction-action-row">
+                     <Button
+                        type="button"
+                        variant="primary"
+                        disabled={Boolean(mutation)}
+                        onClick={() => setDialog({ type: "publish" })}
+                     >
+                        Publish factual correction
+                     </Button>
+                  </div>
+               ) : Object.keys(publishBlockers).length === 0 ? (
+                  <p className="correction-permission-note">
+                     Publishing this correction is not available with your current permissions.
+                  </p>
+               ) : null}
+            </section>
+         );
+      }
+
+      return null;
    };
 
    return (
@@ -1827,15 +2313,6 @@ function FactualCorrectionContent({
                   </div>
                </div>
             ) : null}
-            {notice ? (
-               <div className="correction-message correction-message--success" role="status">
-                  <Icons name="check-circle" size={18} />
-                  <div>
-                     <strong>Correction workspace updated</strong>
-                     <p>{notice}</p>
-                  </div>
-               </div>
-            ) : null}
             {actionError ? (
                <div className="correction-message correction-message--critical" role="alert">
                   <Icons name="alert-circle" size={18} />
@@ -1851,7 +2328,7 @@ function FactualCorrectionContent({
                   <div>
                      <strong>{conflict.code}</strong>
                      <p>
-                        {conflict.detail} Canonical server state has been reloaded; no mutation was repeated. Reconcile
+                        {conflict.detail} The latest saved state has been reloaded; no action was repeated. Reconcile
                         your preserved proposal text before submitting again.
                      </p>
                      {Array.isArray(conflict.blockers) && conflict.blockers.length > 0 ? (
@@ -1859,7 +2336,7 @@ function FactualCorrectionContent({
                            {conflict.blockers.map((blocker, index) => (
                               <li key={`${blocker?.code || "blocker"}-${index}`}>
                                  <strong>{formatLabel(blocker?.code, "Conflict blocker")}</strong>
-                                 {blocker?.detail || "The server rejected this state transition."}
+                                 {blocker?.detail || "This action is not available in the current state."}
                               </li>
                            ))}
                         </ul>
@@ -1905,7 +2382,7 @@ function FactualCorrectionContent({
                      <h3 id="correction-queue-heading" ref={queueHeadingRef} tabIndex={-1}>
                         Correction requests
                      </h3>
-                     <p>{organizationName || "Selected organization"} · server-scoped work</p>
+                     <p>{organizationName || "Selected organization"} · factual correction work</p>
                   </div>
                   <Button
                      type="button"
@@ -1958,7 +2435,7 @@ function FactualCorrectionContent({
                         No {normalizedStatus === "ALL" ? "" : formatLabel(normalizedStatus).toLowerCase()} correction
                         requests
                      </strong>
-                     <p>Requests matching this server status will appear here.</p>
+                     <p>Requests with this status will appear here.</p>
                   </div>
                ) : (
                   <>
@@ -1981,7 +2458,9 @@ function FactualCorrectionContent({
                                     onClick={() => selectRequest(item.request_id)}
                                  >
                                     <span className="correction-queue-top">
-                                       <StatusBadge value={item.request_status} />
+                                       {item.stage !== "COMPLETED" && item.stage !== "CANCELLED" ? (
+                                          <StatusBadge value={item.request_status} />
+                                       ) : null}
                                        <StageBadge stage={item.stage} />
                                     </span>
                                     <strong className="correction-queue-reason">{item.correction_reason}</strong>
@@ -2060,7 +2539,7 @@ function FactualCorrectionContent({
                      <Icons name="file-text" size={25} />
                      <h3 id="correction-detail-heading">Select a factual correction</h3>
                      <p>
-                        Open a request to inspect its server-defined stage, human judgment, correction evidence,
+                        Open a request to inspect its current stage, human judgment, correction evidence,
                         proposal, and provenance.
                      </p>
                   </div>
@@ -2094,7 +2573,7 @@ function FactualCorrectionContent({
                                  Try again
                               </Button>
                               <Button type="button" variant="ghost" onClick={returnToQueue}>
-                                 Return to queue
+                                 Back to corrections
                               </Button>
                            </div>
                         </div>
@@ -2103,7 +2582,9 @@ function FactualCorrectionContent({
                            <header className="correction-detail-header">
                               <div>
                                  <div className="correction-detail-badges">
-                                    <StatusBadge value={detail.request?.status} />
+                                    {detail.stage !== "COMPLETED" && detail.stage !== "CANCELLED" ? (
+                                       <StatusBadge value={detail.request?.status} />
+                                    ) : null}
                                     <StageBadge stage={detail.stage} />
                                  </div>
                                  <h3 id="correction-detail-heading" ref={detailHeadingRef} tabIndex={-1}>
@@ -2217,7 +2698,7 @@ function FactualCorrectionContent({
                                     />
                                  </div>
                               ) : (
-                                 <div className="correction-decision-grid">
+                                 <div className="correction-decision-grid correction-decision-grid--single">
                                     <DecisionCard
                                        title={
                                           detail.stage === "CANCELLED"
@@ -2233,72 +2714,22 @@ function FactualCorrectionContent({
 
                            {renderStageWork()}
 
-                           <section className="correction-section" aria-labelledby="correction-actions-heading">
-                              <div className="correction-section-heading">
-                                 <div>
-                                    <h4 id="correction-actions-heading">Available server actions and blockers</h4>
-                                    <p>
-                                       Action availability and lifecycle conditions are supplied by the correction
-                                       service.
-                                    </p>
-                                 </div>
-                              </div>
-                              <div className="correction-action-row">
-                                 {allowedActions.includes("PREPARE_CORRECTION_PROPOSAL") ? (
-                                    <Button
-                                       type="button"
-                                       variant="secondary"
-                                       disabled={isDirty || Boolean(mutation)}
-                                       onClick={prepareProposal}
-                                    >
-                                       Prepare correction proposal
-                                    </Button>
-                                 ) : null}
-                                 {allowedActions.includes("PUBLISH_FACTUAL_CORRECTION") ? (
-                                    <Button
-                                       type="button"
-                                       variant="primary"
-                                       disabled={Boolean(mutation)}
-                                       onClick={() => setDialog({ type: "publish" })}
-                                    >
-                                       Publish factual correction
-                                    </Button>
-                                 ) : null}
-                                 {allowedActions.includes("CANCEL_FACTUAL_CORRECTION") ? (
-                                    <Button
-                                       type="button"
-                                       variant="destructive"
-                                       disabled={Boolean(mutation)}
-                                       onClick={() => {
-                                          setFieldErrors((current) => ({ ...current, cancellation_reason: undefined }));
-                                          setDialog({ type: "cancel" });
-                                       }}
-                                    >
-                                       Cancel factual correction
-                                    </Button>
-                                 ) : null}
-                              </div>
-                              {allowedActions.length === 0 ? (
-                                 <p className="correction-inline-empty">
-                                    This correction is currently available for read-only inspection.
-                                 </p>
-                              ) : null}
-                              <Blockers blockers={detail.blockers} />
-                           </section>
+                           {renderPrimaryTransition()}
 
-                           {detail.stage !== "EVIDENCE_REVIEW" && detail.stage !== "PROPOSAL_DRAFT"
-                              ? renderEvidence()
-                              : null}
-                           {detail.stage === "COMPLETED" || detail.stage === "CANCELLED"
-                              ? renderProposalSection({ preserved: true })
-                              : null}
-
-                           <section className="correction-section" aria-labelledby="correction-provenance-heading">
+                           <details className="correction-reference-material">
+                              <summary>
+                                 <span>
+                                    <strong>Reference material</strong>
+                                    <small>Request history, correction case details, and evidence used for the previous decision</small>
+                                 </span>
+                                 <Icons name="chevron-down" size={16} aria-hidden="true" />
+                              </summary>
+                              <div className="correction-reference-content">
                               <div className="correction-section-heading">
                                  <div>
                                     <h4 id="correction-provenance-heading">Correction and publication provenance</h4>
                                     <p>
-                                       Request, case, proposal, and sealed predecessor evidence remain distinct
+                                       Request, case, proposal, and evidence preserved for the previous decision remain distinct
                                        historical records.
                                     </p>
                                  </div>
@@ -2338,18 +2769,18 @@ function FactualCorrectionContent({
                                  </div>
                               </dl>
                               <div className="correction-sealed-evidence">
-                                 <strong>Sealed predecessor evidence</strong>
+                                 <strong>Evidence used for the previous decision</strong>
                                  <p>
-                                    This immutable snapshot is historical factual provenance for the predecessor human
-                                    decision.
+                                    This evidence was preserved when the previous human decision was made. Evidence added later does
+                                    not change that historical record.
                                  </p>
                                  <dl className="correction-metadata-grid">
                                     <div>
-                                       <dt>Basis</dt>
-                                       <dd>{formatLabel(detail.sealed_predecessor_evidence?.basis)}</dd>
+                                       <dt>Record type</dt>
+                                       <dd>Evidence used for the previous decision</dd>
                                     </div>
                                     <div>
-                                       <dt>Captured</dt>
+                                       <dt>Preserved</dt>
                                        <dd>{formatDateTime(detail.sealed_predecessor_evidence?.captured_at)}</dd>
                                     </div>
                                     <div>
@@ -2371,7 +2802,7 @@ function FactualCorrectionContent({
                                                 <div className="correction-evidence-title">
                                                    <div>
                                                       <strong>
-                                                         {entry?.evidence_caption || `Sealed evidence ${index + 1}`}
+                                                         {entry?.evidence_caption || `Evidence record ${index + 1}`}
                                                       </strong>
                                                       <span>{formatLabel(entry?.evidence_type)}</span>
                                                    </div>
@@ -2401,7 +2832,37 @@ function FactualCorrectionContent({
                                     </ol>
                                  ) : null}
                               </div>
-                           </section>
+                              </div>
+                           </details>
+
+                           {allowedActions.includes("CANCEL_FACTUAL_CORRECTION") ? (
+                              <section
+                                 className="correction-danger-zone"
+                                 aria-labelledby="correction-cancel-heading"
+                              >
+                                 <div>
+                                    <h4 id="correction-cancel-heading">Cancel factual correction</h4>
+                                    <p>
+                                       Use this only when the correction request should end without creating a replacement
+                                       factual decision or publication.
+                                    </p>
+                                 </div>
+                                 <Button
+                                    type="button"
+                                    variant="destructive"
+                                    disabled={Boolean(mutation)}
+                                    onClick={() => {
+                                       setFieldErrors((current) => ({
+                                          ...current,
+                                          cancellation_reason: undefined,
+                                       }));
+                                       setDialog({ type: "cancel" });
+                                    }}
+                                 >
+                                    Cancel factual correction
+                                 </Button>
+                              </section>
+                           ) : null}
                         </article>
                      ) : null}
                   </>
@@ -2412,7 +2873,7 @@ function FactualCorrectionContent({
          <CorrectionDialog
             open={dialog?.type === "discard"}
             title="Discard unsaved proposal changes?"
-            description="Your saved server proposal will remain, but the unsaved text in this editor will be lost."
+            description="Your saved proposal will remain, but the unsaved text in this editor will be lost."
             confirmLabel="Discard changes"
             confirmVariant="destructive"
             onClose={() => setDialog(null)}
@@ -2427,8 +2888,8 @@ function FactualCorrectionContent({
          </CorrectionDialog>
          <CorrectionDialog
             open={dialog?.type === "prepare"}
-            title="Prepare and freeze this proposal?"
-            description="Preparation makes the proposal immutable and ready for final publication handoff. It does not publish the correction or make it factual authority."
+            title="Prepare this proposal for publication?"
+            description="Preparation locks the proposal for final publication review. It does not publish the correction or make it factual authority."
             confirmLabel="Prepare proposal"
             cancelLabel="Return to proposal"
             processing={mutation === "prepare-proposal"}
@@ -2440,7 +2901,7 @@ function FactualCorrectionContent({
          <CorrectionDialog
             open={dialog?.type === "publish"}
             title="Publish this factual correction?"
-            description="This atomic action creates a new current human decision and institutional publication version. Review the frozen proposal before continuing."
+            description="This action creates a new current human decision and institutional publication version. Review the prepared proposal before continuing."
             confirmLabel="Publish factual correction"
             cancelLabel="Return to review"
             processing={mutation === "publish-correction"}

@@ -284,6 +284,11 @@ from .verification_intelligence_service import (
     VerificationIntelligenceNotFound,
     get_verification_intelligence_context,
 )
+from .investigation_workspace_service import (
+    InvestigationWorkspaceAuthorizationError,
+    InvestigationWorkspaceNotFound,
+    get_investigation_workspace_context,
+)
 from .organization_invitation_service import (
     OrganizationInvitationAuthorizationError,
     OrganizationInvitationConflict,
@@ -371,7 +376,9 @@ from .serializers import (
     FactualCorrectionProposalSaveSerializer,
     FactualCorrectionRequestMutationSerializer,
     VerificationAssignmentClaimSerializer,
+    VerificationIntakeAssignmentSerializer,
     VerificationAssignmentSerializer,
+    VerificationWorkloadAssignmentSerializer,
     OrganizationMembershipAdminSerializer,
     OrganizationInvitationAdminSerializer,
     OrganizationInvitationCreateSerializer,
@@ -1859,6 +1866,7 @@ def publication_work_item_queue(request):
             limit=data["limit"],
             offset=data["offset"],
             workflow_kind=data["workflow_kind"],
+            view=data["view"],
         )
     except PublicationWorkflowAuthorizationError as error:
         raise PermissionDenied(str(error)) from error
@@ -2851,7 +2859,7 @@ def verification_intake(request):
     total_count = len(eligible)
     assignments = eligible[offset : offset + limit]
 
-    serializer = VerificationAssignmentSerializer(
+    serializer = VerificationIntakeAssignmentSerializer(
         assignments,
         many=True,
         context={
@@ -2976,6 +2984,37 @@ def verification_intelligence(request, claim_id):
     return Response(projection, status=status.HTTP_200_OK)
 
 
+@never_cache
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def verification_investigation_detail(request, assignment_id):
+    query = AdjudicationOrganizationQuerySerializer(data=request.query_params)
+    query.is_valid(raise_exception=True)
+    organization = get_object_or_404(
+        Organization,
+        id=query.validated_data["organization_id"],
+    )
+
+    try:
+        projection = get_investigation_workspace_context(
+            actor=request.user,
+            organization=organization,
+            assignment_id=assignment_id,
+        )
+    except InvestigationWorkspaceAuthorizationError as error:
+        return Response({"detail": str(error)}, status=status.HTTP_403_FORBIDDEN)
+    except InvestigationWorkspaceNotFound as error:
+        return Response({"detail": str(error)}, status=status.HTTP_404_NOT_FOUND)
+    except Exception:
+        logger.exception("Investigation workspace projection failed.")
+        return Response(
+            {"detail": "Investigation workspace is temporarily unavailable."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    return Response(projection, status=status.HTTP_200_OK)
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def verification_workload(request):
@@ -3003,13 +3042,43 @@ def verification_workload(request):
 
     limit, offset = _parse_verification_pagination(request)
 
-    queryset = get_organization_verification_workload(organization)
+    search = (request.query_params.get("search") or "").strip()[:120]
+    claim_type = request.query_params.get("claim_type")
+    if claim_type and claim_type not in Claim.ClaimType.values:
+        raise ValidationError(
+            {
+                "claim_type": (
+                    "Select a valid claim type: "
+                    f"{', '.join(Claim.ClaimType.values)}."
+                )
+            }
+        )
+
+    ownership = request.query_params.get("ownership", "all")
+    if ownership not in {"all", "mine"}:
+        raise ValidationError(
+            {"ownership": "Select a valid ownership: all or mine."}
+        )
+
+    sort_order = request.query_params.get("sort", "newest")
+    if sort_order not in {"newest", "oldest"}:
+        raise ValidationError(
+            {"sort": "Select a valid sort: newest or oldest."}
+        )
+
+    queryset = get_organization_verification_workload(
+        organization,
+        search=search,
+        claim_type=claim_type or None,
+        claimed_by=request.user if ownership == "mine" else None,
+        sort=sort_order,
+    )
 
     total_count = queryset.count()
 
     assignments = queryset[offset : offset + limit]
 
-    serializer = VerificationAssignmentSerializer(
+    serializer = VerificationWorkloadAssignmentSerializer(
         assignments,
         many=True,
         context={

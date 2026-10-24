@@ -20,6 +20,7 @@ from api.models import (
     OrganizationMembership,
     VerificationAssignment,
 )
+from api.publication_workflow_query_service import get_initial_drafting_handoff
 from api.publishing_service import (
     PublishingConflict,
     abandon_fact_check_draft,
@@ -343,6 +344,127 @@ class PublicationWorkflowApiTests(PublicationWorkflowFixtures, APITestCase):
         self.assertEqual(paged.data["limit"], 1)
         self.assertEqual(paged.data["offset"], 1)
         self.assertEqual(len(paged.data["results"]), 1)
+
+    def test_archived_drafting_view_returns_abandoned_unpublished_drafts(self):
+        context = self.decided_context(suffix="archive-view")
+        draft = self.create_draft(
+            context,
+            actor=self.researcher,
+            suffix="archive-view",
+        )
+        abandoned = abandon_fact_check_draft(
+            fact_check=draft,
+            actor=self.researcher,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            reason="Keep this abandoned draft available for audit.",
+        )
+
+        published_context = self.decided_context(suffix="archive-published")
+        published = self.publish(
+            published_context,
+            self.submit(
+                published_context,
+                self.create_draft(
+                    published_context,
+                    suffix="archive-published",
+                ),
+            ),
+        )
+        OfficialFactCheck.objects.filter(pk=published.pk).update(
+            publication_status=OfficialFactCheck.PublicationStatus.ARCHIVED,
+            archived_at=timezone.now(),
+        )
+
+        active_response = self.client_for(self.researcher).get(
+            self.queue_url(workflow_kind="ALL")
+        )
+        self.assertEqual(active_response.status_code, status.HTTP_200_OK)
+        self.assertNotIn(
+            str(abandoned.id),
+            {item["resource_id"] for item in active_response.data["results"]},
+        )
+
+        archived_response = self.client_for(self.researcher).get(
+            self.queue_url(view="ARCHIVED", workflow_kind="ALL")
+        )
+        self.assertEqual(archived_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(archived_response.data["count"], 1)
+        item = archived_response.data["results"][0]
+        self.assertEqual(item["resource_id"], str(abandoned.id))
+        self.assertEqual(
+            item["article"]["publication_status"],
+            OfficialFactCheck.PublicationStatus.ARCHIVED,
+        )
+        self.assertEqual(
+            item["abandonment"]["reason"],
+            "Keep this abandoned draft available for audit.",
+        )
+        self.assertEqual(
+            item["abandonment"]["abandoned_by"]["username"],
+            self.researcher.username,
+        )
+        self.assertIsNotNone(item["abandonment"]["abandoned_at"])
+
+        detail_response = self.client_for(self.researcher).get(
+            self.detail_url("FACT_CHECK", abandoned.id)
+        )
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            detail_response.data["abandonment"]["reason"],
+            "Keep this abandoned draft available for audit.",
+        )
+        self.assertEqual(detail_response.data["allowed_actions"], [])
+
+    def test_archived_view_is_not_available_from_review_queue(self):
+        response = self.client_for(self.lead).get(
+            self.queue_url(queue="REVIEW", view="ARCHIVED")
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["code"], "INVALID_INPUT")
+        self.assertIn("view", response.data["errors"])
+
+    def test_initial_drafting_handoff_uses_publication_workflow_eligibility(self):
+        eligible = self.decided_context(suffix="handoff-eligible")
+        self.assertEqual(
+            get_initial_drafting_handoff(
+                actor=self.lead,
+                organization=self.organization,
+                decision=eligible["decision"],
+            ),
+            {
+                "resource_type": "ELIGIBLE_CLAIM",
+                "resource_id": str(eligible["claim"].id),
+                "action": "CREATE_DRAFT",
+            },
+        )
+
+        drafted = self.decided_context(suffix="handoff-drafted")
+        self.create_draft(drafted, suffix="handoff-drafted")
+        self.assertIsNone(
+            get_initial_drafting_handoff(
+                actor=self.lead,
+                organization=self.organization,
+                decision=drafted["decision"],
+            )
+        )
+
+        published = self.decided_context(suffix="handoff-published")
+        published_draft = self.create_draft(
+            published,
+            suffix="handoff-published",
+        )
+        self.publish(
+            published,
+            self.submit(published, published_draft),
+        )
+        self.assertIsNone(
+            get_initial_drafting_handoff(
+                actor=self.lead,
+                organization=self.organization,
+                decision=published["decision"],
+            )
+        )
 
     def test_stale_initial_work_does_not_hide_new_current_decision_eligibility(self):
         context = self.decided_context(suffix="stale-initial")

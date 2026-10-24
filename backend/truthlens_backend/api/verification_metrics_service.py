@@ -1,6 +1,10 @@
+import logging
 from statistics import mean, median
 
 from .models import AccountabilityEvent
+
+
+logger = logging.getLogger(__name__)
 
 
 class VerificationMetricsIntegrityError(Exception):
@@ -10,8 +14,10 @@ class VerificationMetricsIntegrityError(Exception):
 def project_organization_assignment_lifecycles(*, organization):
     """Project assignment attempts exclusively from organization-subject events.
 
-    Shared intake is excluded. Each assignment resource identifies one attempt;
-    incomplete or conflicting lifecycle history fails closed without row repair.
+    Shared intake is excluded. Each assignment resource identifies one attempt.
+    Histories with no observed claim event are excluded as incomplete
+    instrumentation coverage without row repair or timestamp reconstruction.
+    Conflicting observed histories still fail closed.
     """
     actions = AccountabilityEvent.ActionType
     lifecycle_actions = (
@@ -34,6 +40,33 @@ def project_organization_assignment_lifecycles(*, organization):
     attempts = []
     for assignment_id, history in histories.items():
         by_action = {action: [] for action in lifecycle_actions}
+        for event in history:
+            by_action[event["action_type"]].append(event)
+
+        claimed = by_action[actions.VERIFICATION_ASSIGNMENT_CLAIMED]
+        released = by_action[actions.VERIFICATION_ASSIGNMENT_RELEASED]
+        completed = by_action[actions.VERIFICATION_ASSIGNMENT_COMPLETED]
+
+        if len(claimed) > 1:
+            raise VerificationMetricsIntegrityError(
+                f"Assignment {assignment_id} has duplicate claimed events."
+            )
+        if len(released) > 1 or len(completed) > 1:
+            raise VerificationMetricsIntegrityError(
+                f"Assignment {assignment_id} has duplicate terminal events."
+            )
+        if released and completed:
+            raise VerificationMetricsIntegrityError(
+                f"Assignment {assignment_id} has both released and completed events."
+            )
+        if not claimed:
+            logger.warning(
+                "Excluding assignment %s from verification metrics because its "
+                "accountability history has no observed claimed event.",
+                assignment_id,
+            )
+            continue
+
         claim_id = None
         for event in history:
             context = event["context"]
@@ -47,23 +80,6 @@ def project_organization_assignment_lifecycles(*, organization):
                     f"Assignment {assignment_id} has inconsistent claim_id values."
                 )
             claim_id = event_claim_id
-            by_action[event["action_type"]].append(event)
-
-        claimed = by_action[actions.VERIFICATION_ASSIGNMENT_CLAIMED]
-        released = by_action[actions.VERIFICATION_ASSIGNMENT_RELEASED]
-        completed = by_action[actions.VERIFICATION_ASSIGNMENT_COMPLETED]
-        if len(claimed) != 1:
-            raise VerificationMetricsIntegrityError(
-                f"Assignment {assignment_id} must have exactly one claimed event."
-            )
-        if len(released) > 1 or len(completed) > 1:
-            raise VerificationMetricsIntegrityError(
-                f"Assignment {assignment_id} has duplicate terminal events."
-            )
-        if released and completed:
-            raise VerificationMetricsIntegrityError(
-                f"Assignment {assignment_id} has both released and completed events."
-            )
 
         claimed_at = claimed[0]["created_at"]
         terminal = released or completed

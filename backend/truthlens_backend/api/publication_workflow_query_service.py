@@ -10,6 +10,7 @@ from .evidence_snapshot_schema import (
 from .models import (
     AdjudicationDecision,
     FactualCorrectionRequest,
+    ModerationEvent,
     OfficialFactCheck,
     OfficialFactCheckPublicationSnapshot,
     OfficialFactCheckSource,
@@ -35,6 +36,8 @@ RESOURCE_ELIGIBLE_CLAIM = "ELIGIBLE_CLAIM"
 RESOURCE_FACT_CHECK = "FACT_CHECK"
 QUEUE_DRAFTING = "DRAFTING"
 QUEUE_REVIEW = "REVIEW"
+VIEW_ACTIVE = "ACTIVE"
+VIEW_ARCHIVED = "ARCHIVED"
 WORKFLOW_INITIAL = OfficialFactCheck.RevisionKind.INITIAL
 WORKFLOW_EDITORIAL_REVISION = OfficialFactCheck.RevisionKind.EDITORIAL_REVISION
 WORKFLOW_ALL = "ALL"
@@ -326,6 +329,28 @@ def _eligible_claim_actions(actor, organization, blockers):
     return []
 
 
+def get_initial_drafting_handoff(*, actor, organization, decision):
+    """Return an actionable initial-draft handoff for the current decision.
+
+    The absence of a handoff means ordinary initial drafting is not currently
+    actionable for this actor. This deliberately reuses the same eligibility
+    and capability rules as the Drafting queue.
+    """
+    if decision is None:
+        return None
+    blockers = _eligible_claim_blockers(decision)
+    if blockers is None:
+        return None
+    actions = _eligible_claim_actions(actor, organization, blockers)
+    if "CREATE_DRAFT" not in actions:
+        return None
+    return {
+        "resource_type": RESOURCE_ELIGIBLE_CLAIM,
+        "resource_id": str(decision.claim_id),
+        "action": "CREATE_DRAFT",
+    }
+
+
 def _fact_check_actions(actor, organization, fact_check, blockers):
     codes = _blocking_codes(blockers)
     stale_or_reserved = bool(
@@ -425,8 +450,48 @@ def _eligible_claim_list_item(actor, organization, decision, *, blockers=None):
             "archived_at": None,
         },
         "concurrency": _concurrency_payload(None, decision),
+        "abandonment": None,
         "allowed_actions": _eligible_claim_actions(actor, organization, blockers),
         "blockers": blockers,
+    }
+
+
+def _abandonment_payload(fact_check):
+    if (
+        fact_check.publication_status
+        != OfficialFactCheck.PublicationStatus.ARCHIVED
+        or fact_check.published_at is not None
+    ):
+        return None
+
+    decision = fact_check.adjudication_decision
+    if decision is None or decision.moderation_case_id is None:
+        return None
+
+    events = (
+        ModerationEvent.objects.filter(
+            case_id=decision.moderation_case_id,
+            event_type=ModerationEvent.EventType.ARTICLE_ABANDONED,
+        )
+        .select_related("actor")
+        .order_by("-created_at")
+    )
+    event = next(
+        (
+            candidate
+            for candidate in events
+            if str((candidate.metadata or {}).get("fact_check_id"))
+            == str(fact_check.id)
+        ),
+        None,
+    )
+    if event is None:
+        return None
+
+    return {
+        "abandoned_at": event.created_at,
+        "abandoned_by": _actor_payload(event.actor),
+        "reason": event.notes or "",
     }
 
 
@@ -467,6 +532,7 @@ def _fact_check_list_item(actor, organization, fact_check):
             "archived_at": fact_check.archived_at,
         },
         "concurrency": _concurrency_payload(fact_check, decision),
+        "abandonment": _abandonment_payload(fact_check),
         "allowed_actions": _fact_check_actions(
             actor,
             organization,
@@ -612,8 +678,31 @@ def list_publication_work_items(
     limit,
     offset,
     workflow_kind=WORKFLOW_INITIAL,
+    view=VIEW_ACTIVE,
 ):
     _require_queue_capability(actor, organization, queue)
+
+    if view == VIEW_ARCHIVED:
+        archived_fact_checks = list(
+            _fact_check_queryset(organization, workflow_kind)
+            .filter(
+                publication_status=OfficialFactCheck.PublicationStatus.ARCHIVED,
+                published_at__isnull=True,
+            )
+            .order_by("-archived_at", "-updated_at", "id")
+        )
+        items = [
+            _fact_check_list_item(actor, organization, fact_check)
+            for fact_check in archived_fact_checks
+        ]
+        return {
+            "count": len(items),
+            "limit": limit,
+            "offset": offset,
+            "organization": _organization_payload(organization),
+            "results": items[offset : offset + limit],
+        }
+
     active_fact_checks = list(
         _fact_check_queryset(organization, workflow_kind).filter(
             publication_status__in={

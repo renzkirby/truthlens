@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useAuth } from "../../hooks/useAuth";
+import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
+import { showWorkspaceSuccess, WORKSPACE_LONG_TOAST_DURATION } from "../../utils/workspaceToast";
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
 import Select from "../ui/Select.jsx";
@@ -101,6 +103,7 @@ function formatCaseReference(caseId) {
 
 function SafetyReviewPanel() {
    const { authFetch, user, refreshUser } = useAuth();
+   const { addToast } = useNotification();
    const [accessRevoked, setAccessRevoked] = useState(false);
 
    const [filters, setFilters] = useState({
@@ -577,7 +580,10 @@ function SafetyReviewPanel() {
             setDetail(updatedCase);
          }
 
-         setNotice(`Case ${formatCaseReference(caseId)} claimed. It is now assigned to you.`);
+         showWorkspaceSuccess(addToast, {
+            title: "Safety case claimed",
+            message: `Case ${formatCaseReference(caseId)} is now assigned to you.`,
+         });
          requestQueueRefresh();
       } catch (error) {
          if (generation !== safetyGenerationRef.current) {
@@ -624,9 +630,10 @@ function SafetyReviewPanel() {
 
          restoreReleaseFocusRef.current = false;
          setConfirmingRelease(false);
-         setNotice(
-            `Case ${formatCaseReference(caseId)} released. It is available for another Safety moderator to claim.`,
-         );
+         showWorkspaceSuccess(addToast, {
+            title: "Safety case released",
+            message: `Case ${formatCaseReference(caseId)} is available for another Safety moderator to claim.`,
+         });
          requestQueueRefresh();
       } catch (error) {
          if (generation !== safetyGenerationRef.current) {
@@ -692,14 +699,20 @@ function SafetyReviewPanel() {
 
          if (action === "ESCALATE") {
             updateQueueCase(updatedCase);
-            setNotice(`Case ${formatCaseReference(caseId)} escalated for further Platform Safety review.`);
+            showWorkspaceSuccess(addToast, {
+               title: "Safety case escalated",
+               message: `Case ${formatCaseReference(caseId)} remains active for further Platform Safety review.`,
+            });
          } else {
             removeCompletedQueueCase(caseId);
-            setNotice(
-               action === "REMOVE"
-                  ? `Case ${formatCaseReference(caseId)} completed. The reported content was removed from active circulation.`
-                  : `Case ${formatCaseReference(caseId)} completed. No policy violation was found and the thread remains visible.`,
-            );
+            showWorkspaceSuccess(addToast, {
+               title: action === "REMOVE" ? "Content removed" : "Safety case dismissed",
+               message:
+                  action === "REMOVE"
+                     ? `Case ${formatCaseReference(caseId)} is complete and the reported content was removed from active circulation.`
+                     : `Case ${formatCaseReference(caseId)} is complete. No policy violation was found and the thread remains visible.`,
+               duration: WORKSPACE_LONG_TOAST_DURATION,
+            });
          }
 
          requestQueueRefresh();
@@ -741,6 +754,7 @@ function SafetyReviewPanel() {
 
    return (
       <div className="safety-review-panel">
+         {!selectedCaseId && (
          <div className="safety-toolbar">
             <div className="safety-toolbar-summary" role="status" aria-live="polite">
                <strong>
@@ -813,6 +827,7 @@ function SafetyReviewPanel() {
                </Button>
             </div>
          </div>
+         )}
 
          {notice && (
             <div className="safety-notice" role="status" aria-live="polite">
@@ -831,7 +846,7 @@ function SafetyReviewPanel() {
             </div>
          )}
 
-         <div className="safety-workspace-grid">
+         <div className={`safety-workspace-grid ${selectedCaseId ? "has-selection" : ""}`}>
             <section className="safety-queue" aria-labelledby="safety-queue-heading" aria-busy={queueLoading}>
                <div className="safety-section-heading">
                   <div>
@@ -926,6 +941,20 @@ function SafetyReviewPanel() {
                aria-busy={detailLoading}
                tabIndex="-1"
             >
+               {selectedCaseId && (
+                  <Button
+                     type="button"
+                     variant="ghost"
+                     density="compact"
+                     className="safety-return-to-queue"
+                     leadingIcon={<Icons name="arrow-left" size={15} />}
+                     disabled={isBusy}
+                     onClick={handleReturnToQueue}
+                  >
+                     Back to Safety Review
+                  </Button>
+               )}
+
                {detailError ? (
                   <div
                      ref={detailErrorRef}
@@ -938,11 +967,12 @@ function SafetyReviewPanel() {
                      {detailUnavailable ? (
                         <Button
                            type="button"
-                           variant="secondary"
+                           variant="ghost"
                            density="compact"
+                           leadingIcon={<Icons name="arrow-left" size={15} />}
                            onClick={handleReturnToQueue}
                         >
-                           Return to queue
+                           Back to Safety Review
                         </Button>
                      ) : (
                         <Button

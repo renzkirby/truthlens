@@ -479,6 +479,37 @@ class VerificationAssignmentApiTests(APITestCase):
                 str(fixture["claim"].id),
             )
 
+    def test_intake_exposes_submitted_evidence_count(self):
+        fixture = self._create_available_assignment(
+            suffix="evidence-count",
+        )
+
+        EvidenceSubmission.objects.create(
+            thread=fixture["thread"],
+            contributor=self.community_user,
+            evidence_caption="First supporting source",
+            evidence_url="https://example.com/intake-evidence-one",
+            evidence_type=EvidenceSubmission.EvidenceType.SUPPORTS,
+        )
+        EvidenceSubmission.objects.create(
+            thread=fixture["thread"],
+            contributor=self.community_user,
+            evidence_caption="Second contextual source",
+            evidence_url="https://example.com/intake-evidence-two",
+            evidence_type=EvidenceSubmission.EvidenceType.PROVIDES_CONTEXT,
+        )
+
+        response = self.lead_a_client.get(
+            reverse("verification_intake"),
+            {
+                "organization_id": str(self.organization_a.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["evidence_count"], 2)
+
     # =====================================
     # Claim
     # =====================================
@@ -828,6 +859,129 @@ class VerificationAssignmentApiTests(APITestCase):
             response.data["results"][0]["id"],
             str(active["assignment"].id),
         )
+
+
+    def test_workload_exposes_investigation_evidence_count(self):
+        fixture = self._claim_for_a(suffix="evidence-count")
+        EvidenceSubmission.objects.create(
+            thread=fixture["thread"],
+            contributor=self.community_user,
+            evidence_caption="First supporting source",
+            evidence_url="https://example.com/evidence-one",
+            evidence_type=EvidenceSubmission.EvidenceType.SUPPORTS,
+        )
+        EvidenceSubmission.objects.create(
+            thread=fixture["thread"],
+            contributor=self.community_user,
+            evidence_caption="Second contextual source",
+            evidence_url="https://example.com/evidence-two",
+            evidence_type=EvidenceSubmission.EvidenceType.PROVIDES_CONTEXT,
+        )
+
+        response = self.lead_a_client.get(
+            reverse("verification_workload"),
+            {
+                "organization_id": str(self.organization_a.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["evidence_count"], 2)
+
+    def test_workload_search_filters_claim_text(self):
+        matching = self._claim_for_a(suffix="search-target")
+        self._claim_for_a(suffix="other-work")
+
+        response = self.lead_a_client.get(
+            reverse("verification_workload"),
+            {
+                "organization_id": str(self.organization_a.id),
+                "search": "search-target",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(
+            response.data["results"][0]["id"],
+            str(matching["assignment"].id),
+        )
+
+    def test_workload_claim_type_filter_is_server_side(self):
+        text_fixture = self._claim_for_a(suffix="text-filter")
+        image_fixture = self._claim_for_a(suffix="image-filter")
+        image_fixture["claim"].claim_type = Claim.ClaimType.IMAGE
+        image_fixture["claim"].save(update_fields=["claim_type"])
+
+        response = self.lead_a_client.get(
+            reverse("verification_workload"),
+            {
+                "organization_id": str(self.organization_a.id),
+                "claim_type": Claim.ClaimType.IMAGE,
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(
+            response.data["results"][0]["id"],
+            str(image_fixture["assignment"].id),
+        )
+        self.assertNotEqual(
+            response.data["results"][0]["id"],
+            str(text_fixture["assignment"].id),
+        )
+
+    def test_workload_mine_filter_uses_authenticated_actor(self):
+        mine = self._claim_for_a(suffix="mine-filter")
+        other_lead = User.objects.create_user(
+            username="intake-lead-a-secondary",
+            password="test-password",
+        )
+        OrganizationMembership.objects.create(
+            organization=self.organization_a,
+            user=other_lead,
+            role=OrganizationMembership.Role.LEAD_VERIFIER,
+            status=OrganizationMembership.Status.ACTIVE,
+        )
+        other_fixture = self._create_available_assignment(suffix="other-owner")
+        claim_verification_assignment(
+            assignment=other_fixture["assignment"],
+            organization=self.organization_a,
+            actor=other_lead,
+        )
+
+        response = self.lead_a_client.get(
+            reverse("verification_workload"),
+            {
+                "organization_id": str(self.organization_a.id),
+                "ownership": "mine",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(
+            response.data["results"][0]["id"],
+            str(mine["assignment"].id),
+        )
+
+    def test_workload_validates_filter_values(self):
+        for field, value in (
+            ("claim_type", "NOT_A_TYPE"),
+            ("ownership", "someone-else"),
+            ("sort", "random"),
+        ):
+            with self.subTest(field=field):
+                response = self.lead_a_client.get(
+                    reverse("verification_workload"),
+                    {
+                        "organization_id": str(self.organization_a.id),
+                        field: value,
+                    },
+                )
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_partner_cannot_view_other_organization_workload(
         self,
