@@ -534,7 +534,15 @@
    border-block: 1px solid var(--tl-color-border-default);
 }
 
-.institutional-analytics__selected-period > span {
+.institutional-analytics__selected-period-label {
+   display: flex;
+   align-items: center;
+   gap: var(--tl-space-1);
+   width: fit-content;
+   max-width: 100%;
+}
+
+.institutional-analytics__selected-period-label > span {
    color: var(--tl-color-text-muted);
    font-size: var(--tl-text-xs);
    font-weight: 700;
