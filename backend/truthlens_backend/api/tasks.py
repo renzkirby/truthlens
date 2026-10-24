@@ -13,7 +13,6 @@ from .knowledge_reuse_service import (
     find_exact_canonical_published_fact_check,
     record_authoritative_claim_fact_check_reference,
     record_equivalent_claim_fact_check_reference,
-    record_related_claim_fact_check_reference,
 )
 from .ocr_service import OCRProviderUnavailableError, extract_text_from_image
 from .services import (
@@ -35,8 +34,6 @@ from .services import (
 )
 from .models import (
     Claim,
-    ClaimFactCheckReference,
-    KnowledgeReuseEvent,
     OfficialFactCheck,
     UserProfile,
     VerificationEvidence,
@@ -238,86 +235,19 @@ def _resolve_equivalent_published_claim(claim, cleaned_claim, vault_match):
 
 
 def _record_related_published_claim(claim, query_text, vault_match):
-    """Best-effort provenance after the authority gate has declined resolution."""
+    """Schedule optional validated context only after primary analysis is saved."""
     if claim is None or not vault_match:
         return
     try:
-        # Isolate database failures with a savepoint, including failures before
-        # the service is entered, so the eventual AI result can still be saved.
+        from .verification.relatedness import schedule_relatedness
         with transaction.atomic():
-            publication = OfficialFactCheck.objects.filter(
-                pk=vault_match.get("fact_check_id"),
-                publication_status=OfficialFactCheck.PublicationStatus.PUBLISHED,
-            ).first()
-            if publication is None:
-                return
-            method = vault_match.get("match_method")
-            if method == KnowledgeReuseEvent.MatchMethod.EXACT_TEXT:
-                normalized_query = " ".join(query_text.split()).casefold()
-                canonical = " ".join(
-                    (publication.canonical_claim or "").split()
-                ).casefold()
-                headline = " ".join((publication.headline or "").split()).casefold()
-                if normalized_query == canonical:
-                    method = ClaimFactCheckReference.MatchMethod.EXACT_CANONICAL
-                elif normalized_query == headline:
-                    method = ClaimFactCheckReference.MatchMethod.EXACT_HEADLINE
-                else:
-                    return
-            elif method == KnowledgeReuseEvent.MatchMethod.SEMANTIC:
-                method = ClaimFactCheckReference.MatchMethod.SEMANTIC
-            elif method == KnowledgeReuseEvent.MatchMethod.FULL_TEXT:
-                method = ClaimFactCheckReference.MatchMethod.FULL_TEXT
-            else:
-                return
-            record_related_claim_fact_check_reference(
-                target_claim=claim,
-                fact_check=publication,
-                query_text=query_text,
-                match_method=method,
-                similarity_score=vault_match.get("similarity_score"),
+            schedule_relatedness(
+                claim.pk, query_text, vault_match,
+                expected_updated_at=claim.last_updated,
             )
     except Exception:
-        logger.warning(
-            "Failed to record related publication provenance for claim %s.",
-            claim.pk,
-            exc_info=True,
-        )
-
-
-def _record_related_published_claim_if_relevant(
-    claim,
-    query_text,
-    vault_match,
-    *,
-    claim_id,
-    stage,
-):
-    """Record rejected authority candidates only after strict relevance passes."""
-    started_at = time.perf_counter()
-    canonical_claim = vault_match.get("canonical_claim")
-    relevant = False
-    if isinstance(canonical_claim, str) and canonical_claim.strip():
-        try:
-            relevant = bool(is_fact_check_relevant(query_text, canonical_claim))
-        except Exception as exc:
-            logger.warning(
-                "Vault related relevance check failed closed for claim %s "
-                "(error=%s).",
-                claim_id,
-                type(exc).__name__,
-            )
-
-    _log_stage(
-        claim_id,
-        stage,
-        started_at,
-        relevant=relevant,
-    )
-    if relevant:
-        _record_related_published_claim(claim, query_text, vault_match)
-
-    return relevant
+        # Optional context never changes or prevents the primary verdict.
+        logger.warning("RELATED_CONTEXT outcome=scheduling_unavailable")
 
 
 def _reuse_second_chance_ai_analysis(matched_claim, claim_id):
@@ -340,6 +270,14 @@ def _reuse_second_chance_ai_analysis(matched_claim, claim_id):
         current_claim.score_context = (
             "This result was matched from a prior analysis of the same claim."
         )
+        # Cached analysis replaces the primary result too; any earlier
+        # optional relatedness binding must not survive this change.
+        invalidate_related = current_claim.claim_type in {
+            Claim.ClaimType.IMAGE, Claim.ClaimType.URL,
+        }
+        if invalidate_related:
+            current_claim.relatedness_context = {}
+            current_claim.relatedness_decision = None
         current_claim.save(
             update_fields=[
                 "ai_verdict",
@@ -352,7 +290,7 @@ def _reuse_second_chance_ai_analysis(matched_claim, claim_id):
                 "is_ai_generated",
                 "score_context",
                 "last_updated",
-            ]
+            ] + (["relatedness_context", "relatedness_decision"] if invalidate_related else [])
         )
     except Claim.DoesNotExist:
         pass
@@ -1221,6 +1159,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
             # authority before any copied AI cache or automated SATIRE shortcut.
             vault_started_at = None
             vault_match = None
+            related_candidate = None
             if (
                 target_claim is not None
                 and target_claim.claim_type == Claim.ClaimType.IMAGE
@@ -1240,12 +1179,12 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     ):
                         published_resolution = True
                         return
-                    _record_related_published_claim_if_relevant(
-                        target_claim,
-                        cleaned_claim,
-                        vault_match,
-                        claim_id=claim_id,
-                        stage="vault_related_relevance_check",
+                    related_candidate = vault_match
+                    # This stage only records a candidate awaiting optional,
+                    # post-save validation. It MUST NOT claim relevance yet.
+                    _log_stage(
+                        claim_id, "vault_related_validation_deferred",
+                        time.perf_counter(), outcome="awaiting_primary_result",
                     )
                     # IMAGE candidates have completed their only permitted
                     # authority/context gates and must not reach the historical
@@ -1257,6 +1196,13 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         matched_claim,
                         claim_id,
                     )
+                    # Cached result persistence is also a completed primary
+                    # analysis. Schedule optional context only afterwards.
+                    if related_candidate is not None:
+                        target_claim.refresh_from_db(fields=["last_updated"])
+                        _record_related_published_claim(
+                            target_claim, cleaned_claim, related_candidate,
+                        )
                     return
 
             if article_stance == "SATIRE":
@@ -1270,6 +1216,12 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     "Satire Detection",
                     cleaned_claim,
                     [],
+                    **(
+                        {
+                            "related_proposition": cleaned_claim,
+                            "related_candidate": related_candidate,
+                        } if is_image_claim else {}
+                    ),
                 )
                 outcome = "satire_stance_shortcut"
                 selected_verdict = "SATIRE"
@@ -1464,6 +1416,13 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         "Official Fact Check",
                         cleaned_claim,
                         report_sources,
+                        **(
+                            {
+                                "related_proposition": cleaned_claim,
+                                "related_candidate": related_candidate,
+                            }
+                            if is_image_claim else {}
+                        ),
                     )
                     _log_stage(
                         claim_id,
@@ -1625,6 +1584,13 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     "Live Web Search",
                     cleaned_claim,
                     report_sources,
+                    **(
+                        {
+                            "related_proposition": cleaned_claim,
+                            "related_candidate": related_candidate,
+                        }
+                        if is_image_claim else {}
+                    ),
                 )
                 _log_stage(
                     claim_id,
@@ -1849,6 +1815,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
             published_resolution = True
             return
 
+        related_candidate = None
         vault_match = search_official_vault(
             cleaned_claim,
             target_claim=target_claim,
@@ -1860,12 +1827,10 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
             ):
                 published_resolution = True
                 return
-            _record_related_published_claim_if_relevant(
-                target_claim,
-                cleaned_claim,
-                vault_match,
-                claim_id=claim_id,
-                stage="url_vault_related_relevance_check",
+            related_candidate = vault_match
+            _log_stage(
+                claim_id, "url_vault_related_validation_deferred",
+                time.perf_counter(), outcome="awaiting_primary_result",
             )
             # URL candidates that fail authority are context-only candidates;
             # normal GFC/Tavily verification must continue.
@@ -1882,6 +1847,8 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                 "Satire Detection",
                 cleaned_claim,
                 url,
+                related_proposition=cleaned_claim,
+                related_candidate=related_candidate,
             )
             outcome = "satire_stance_shortcut"
             selected_verdict = "SATIRE"
@@ -2027,6 +1994,8 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     "Official Fact Check",
                     cleaned_claim,
                     report_sources,
+                    related_proposition=cleaned_claim,
+                    related_candidate=related_candidate,
                 )
                 _log_stage(
                     claim_id,
@@ -2211,6 +2180,8 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
             _save_claim(
                 claim_id, ai_verdict, "Live Web Search", cleaned_claim,
                 report_sources,
+                related_proposition=cleaned_claim,
+                related_candidate=related_candidate,
             )
             _log_stage(
                 claim_id, "save_claim", save_started_at, source_type="Live Web Search"
@@ -2296,7 +2267,8 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                 )
 
 
-def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
+def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None, *,
+                related_proposition=None, related_candidate=None):
     """Save AI analysis output to the Claim record without setting final moderator verdict."""
     from .claim_matching import compute_fingerprint
 
@@ -2370,6 +2342,10 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
         claim.consensus_score = confidence
         claim.source_type = source_type
         claim.context_text = context_text
+        # A new primary analysis invalidates all earlier optional bindings.
+        if claim.claim_type in {Claim.ClaimType.IMAGE, Claim.ClaimType.URL}:
+            claim.relatedness_context = {}
+            claim.relatedness_decision = None
         claim.source_link = top_url or None
         claim.top_verdict_source = top_url or None
         claim.ai_sources = source_urls
@@ -2415,6 +2391,8 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
                 "claim_fingerprint",
                 "claim_embedding",
                 "last_updated",
+                "relatedness_context",
+                "relatedness_decision",
             ]
         )
         logger.info(
@@ -2426,6 +2404,9 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
         # Separate, asynchronous subject classification for every analyzed
         # claim, whether or not a community thread exists. The hook never
         # queries an LLM or changes the factual-verification result.
+        if (related_proposition is not None
+                and claim.claim_type in {Claim.ClaimType.IMAGE, Claim.ClaimType.URL}):
+            _record_related_published_claim(claim, related_proposition, related_candidate)
         _schedule_subject_classification(claim.pk)
         return claim
     except ClaimPersistenceError:
@@ -2435,6 +2416,13 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None):
         raise ClaimPersistenceError(
             f"Claim persistence failed for claim {claim_id}."
         ) from exc
+
+
+@shared_task(soft_time_limit=30, time_limit=35, max_retries=0)
+def validate_related_fact_check(decision_id):
+    """Optional one-shot classifier; never changes the primary AI result."""
+    from .verification.relatedness import process_decision
+    process_decision(decision_id)
 
 
 @shared_task

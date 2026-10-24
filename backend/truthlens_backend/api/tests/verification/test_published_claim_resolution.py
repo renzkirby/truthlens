@@ -1318,6 +1318,18 @@ class RelatedPublicationSurfacingTests(PublicationResolutionFixture):
                 side_effect=self._public_detail_for,
             )
         )
+        # This class tests presentation behavior after relatedness validation.
+        # The real gate is covered in dedicated decision/integration tests;
+        # only explicitly approved fixtures pass this class-local stub.
+        from api.verification.relatedness import accepted_reference
+        self._real_accepted_reference = accepted_reference
+        self._presentation_approved_refs = set()
+        self.eligibility_stub = self.enterContext(
+            patch(
+                "api.verification.relatedness.accepted_reference",
+                side_effect=lambda ref: ref.pk in self._presentation_approved_refs,
+            )
+        )
 
     def _public_detail_for(self, *, organization, publication_id):
         publication = OfficialFactCheck.objects.get(pk=publication_id)
@@ -1338,13 +1350,34 @@ class RelatedPublicationSurfacingTests(PublicationResolutionFixture):
         }
 
     def related(self, **overrides):
-        return self.raw_reference(
+        reference = self.raw_reference(
             **{
                 "relationship_kind": "RELATED",
                 "match_method": "SEMANTIC",
                 "similarity_score": 0.99,
                 **overrides,
             }
+        )
+        # Emulate a prior accepted decision only for response-format tests.
+        # No production decision/acceptance check is modified or bypassed.
+        self._presentation_approved_refs.add(reference.pk)
+        return reference
+
+    def test_unvalidated_legacy_reference_is_hidden_by_real_gate(self):
+        reference = self.raw_reference(
+            relationship_kind="RELATED", match_method="SEMANTIC"
+        )
+        self.assertFalse(self._real_accepted_reference(reference))
+        # Exercise the real eligibility function, not the presentation stub.
+        with patch(
+            "api.verification.relatedness.accepted_reference",
+            side_effect=self._real_accepted_reference,
+        ):
+            self.assertEqual(get_related_published_fact_check_payloads(self.target), [])
+            self.assertEqual(get_match_result(self.target)["related_fact_checks"], [])
+        self.public_detail_lookup.assert_not_called()
+        self.assertTrue(
+            ClaimFactCheckReference.objects.filter(pk=reference.pk).exists()
         )
 
     def test_public_related_context_preserves_every_existing_ai_result_field(self):
@@ -1801,20 +1834,31 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         )
 
     def assert_related_context(self, method):
-        reference = self.target.fact_check_references.get()
-        self.assertEqual(reference.relationship_kind, "RELATED")
-        self.assertEqual(reference.match_method, method)
-        self.assertEqual(reference.fact_check_id, self.publication.pk)
-        self.assertEqual(
-            reference.query_fingerprint,
-            build_query_fingerprint(self.cleaned["cleaned_claim"]),
-        )
-        self.assertFalse(
-            self.target.fact_check_references.filter(
-                relationship_kind="AUTHORITATIVE"
+        """An unsealed legacy fixture must not gain accepted related authority.
+
+        For successful primary saves, assert that the original Vault candidate
+        reaches the deferred validation boundary. Positive accepted-display
+        coverage uses genuinely sealed publications in the relatedness suite.
+        """
+        self.target.refresh_from_db()
+        self.assertFalse(self.target.fact_check_references.exists())
+        self.assertIsNone(self.target.relatedness_decision_id)
+        self.assertEqual(self.target.relatedness_context or {}, {})
+        self.assertEqual(get_match_result(self.target)["related_fact_checks"], [])
+        self.assertIsNone(get_published_fact_check_resolution_for_claim(self.target))
+        self.assertTrue(
+            OfficialFactCheck.objects.filter(
+                pk=self.publication.pk, publication_snapshot__isnull=True,
             ).exists()
         )
-        self.assertIsNone(get_published_fact_check_resolution_for_claim(self.target))
+        if self.save_claim.called:
+            kwargs = self.save_claim.call_args.kwargs
+            self.assertEqual(kwargs.get("related_proposition"), self.cleaned["cleaned_claim"])
+            candidate = kwargs.get("related_candidate")
+            self.assertIsNotNone(candidate)
+            self.assertEqual(str(candidate.get("fact_check_id")), str(self.publication.pk))
+            expected = "EXACT_TEXT" if method in {"EXACT_CANONICAL", "EXACT_HEADLINE"} else method
+            self.assertEqual(candidate.get("match_method"), expected)
 
     def assert_ai_path(self, evaluator, *, related_method=None):
         evaluator.assert_called_once()
@@ -1955,11 +1999,11 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.target.refresh_from_db()
         self.assertNotEqual(self.target.source_type, "TruthLens Verified Vault")
         stages = [call.args[1] for call in self.log_stage.call_args_list]
-        self.assertIn("vault_related_relevance_check", stages)
+        self.assertIn("vault_related_validation_deferred", stages)
         self.assertNotIn("vault_search_success", stages)
         self.assertEqual(
             self.relevance.call_args_list[0].args,
-            (self.cleaned["cleaned_claim"], self.publication.canonical_claim),
+            (self.cleaned["cleaned_claim"], "External fact-check"),
         )
 
     def test_url_semantic_match_continues_normal_evidence_path(self):
@@ -1971,16 +2015,16 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.target.refresh_from_db()
         self.assertNotEqual(self.target.source_type, "TruthLens Verified Vault")
         stages = [call.args[1] for call in self.log_stage.call_args_list]
-        self.assertIn("url_vault_related_relevance_check", stages)
+        self.assertIn("url_vault_related_validation_deferred", stages)
         self.assertNotIn("url_vault_search_success", stages)
         self.assertEqual(
             self.relevance.call_args_list[0].args,
-            (self.cleaned["cleaned_claim"], self.publication.canonical_claim),
+            (self.cleaned["cleaned_claim"], "External fact-check"),
         )
 
     def test_image_gma_astronomy_candidate_rejects_earthquake_context(self):
         self.astronomy_earthquake_context()
-        self.relevance.side_effect = [False, True]
+        self.relevance.return_value = True
 
         self.image()
 
@@ -1991,24 +2035,21 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.assertNotEqual(self.target.source_type, "TruthLens Verified Vault")
         self.assertEqual(
             self.relevance.call_args_list[0].args,
-            (
-                self.cleaned["cleaned_claim"],
-                self.publication.canonical_claim,
-            ),
+            (self.cleaned["cleaned_claim"], "External fact-check"),
         )
         stages = [call.args[1] for call in self.log_stage.call_args_list]
-        self.assertIn("vault_related_relevance_check", stages)
+        self.assertIn("vault_related_validation_deferred", stages)
         self.assertNotIn("vault_search_success", stages)
         related_stage = next(
             call
             for call in self.log_stage.call_args_list
-            if call.args[1] == "vault_related_relevance_check"
+            if call.args[1] == "vault_related_validation_deferred"
         )
-        self.assertEqual(related_stage.kwargs, {"relevant": False})
+        self.assertEqual(related_stage.kwargs, {"outcome": "awaiting_primary_result"})
 
     def test_url_gma_astronomy_candidate_rejects_earthquake_context(self):
         self.astronomy_earthquake_context()
-        self.relevance.side_effect = [False, True]
+        self.relevance.return_value = True
 
         self.url()
 
@@ -2018,40 +2059,34 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.target.refresh_from_db()
         self.assertNotEqual(self.target.source_type, "TruthLens Verified Vault")
         stages = [call.args[1] for call in self.log_stage.call_args_list]
-        self.assertIn("url_vault_related_relevance_check", stages)
+        self.assertIn("url_vault_related_validation_deferred", stages)
         self.assertNotIn("url_vault_search_success", stages)
         related_stage = next(
             call
             for call in self.log_stage.call_args_list
-            if call.args[1] == "url_vault_related_relevance_check"
+            if call.args[1] == "url_vault_related_validation_deferred"
         )
-        self.assertEqual(related_stage.kwargs, {"relevant": False})
+        self.assertEqual(related_stage.kwargs, {"outcome": "awaiting_primary_result"})
 
-    def test_vault_related_relevance_unavailable_fails_closed_and_continues(self):
+    def test_deferred_relatedness_schedule_unavailable_fails_closed_and_continues(self):
         self.astronomy_earthquake_context()
-        self.relevance.side_effect = [
-            LLMProviderUnavailableError("Related relevance unavailable."),
-            True,
-        ]
-
-        with self.assertLogs("api.tasks", level="WARNING"):
+        with patch(
+            "api.verification.relatedness.schedule_relatedness",
+            side_effect=OperationalError("Optional scheduler unavailable"),
+        ) as scheduler, self.assertLogs("api.tasks", level="WARNING") as logs:
             self.image()
 
+        scheduler.assert_called_once()
+        self.assertIn("RELATED_CONTEXT outcome=scheduling_unavailable", " ".join(logs.output))
         self.assert_ai_path(self.persisted_eval)
         self.image_gfc.assert_not_called()
         self.gfc_retrieval.assert_called_once()
         self.target.refresh_from_db()
         self.assertNotEqual(self.target.source_type, "TruthLens Verified Vault")
-        self.assertEqual(
-            self.target.verification_runs.get().status,
-            VerificationRun.Status.COMPLETED,
-        )
-        related_stage = next(
-            call
-            for call in self.log_stage.call_args_list
-            if call.args[1] == "vault_related_relevance_check"
-        )
-        self.assertEqual(related_stage.kwargs, {"relevant": False})
+        self.assertEqual(self.target.verification_runs.get().status, VerificationRun.Status.COMPLETED)
+        self.assertFalse(self.target.fact_check_references.exists())
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("vault_related_validation_deferred", stages)
 
     def test_image_headline_exact_retains_ai_evaluation(self):
         self.cleaned["cleaned_claim"] = self.publication.headline
@@ -2336,7 +2371,11 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         cached = self.cached_ai_claim(verdict="MISLEADING")
         self.find_matching_claim.return_value = cached
 
-        self.image()
+        with patch("api.tasks._record_related_published_claim", wraps=tasks._record_related_published_claim) as schedule:
+            self.image()
+        schedule.assert_called_once()
+        self.assertEqual(schedule.call_args.args[1], self.cleaned["cleaned_claim"])
+        self.assertEqual(str(schedule.call_args.args[2].get("fact_check_id")), str(self.publication.pk))
 
         self.target.refresh_from_db()
         self.assertEqual(self.target.ai_verdict, cached.ai_verdict)
@@ -2520,13 +2559,15 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.vault.side_effect = services.search_official_vault
 
         def evaluate_after_provenance(*args):
-            # Both records must exist before AI evaluation, with no copied verdict.
+            # Vault retrieval provenance must exist before AI evaluation.
+            # A related recommendation must NOT be accepted before a separate
+            # completed classification. This is not human verdict authority.
             event = KnowledgeReuseEvent.objects.get(target_claim=self.target)
             self.assertEqual(event.fact_check_id, self.publication.pk)
             self.assertEqual(event.reuse_type, "VERIFICATION_CONTEXT")
             self.assertEqual(event.match_method, "SEMANTIC")
             self.assertEqual(event.metadata, {"source": "KNOWLEDGE_VAULT"})
-            self.assert_related_context("SEMANTIC")
+            self.assertFalse(self.target.fact_check_references.exists())
             self.assert_no_target_verdicts()
             self.llm.assert_called_once()
             return self.ai_result
@@ -2537,7 +2578,20 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             return_value=candidate,
         ):
             self.image()
-        self.assert_ai_path(self.persisted_eval, related_method="SEMANTIC")
+        self.assert_ai_path(self.persisted_eval)
+        self.target.refresh_from_db()
+        # This legacy fixture creates a PUBLISHED row directly, without its
+        # sealed publication snapshot. Vault retrieval provenance survives,
+        # but optional relatedness must fail closed for an unsealed publication.
+        self.assertTrue(
+            OfficialFactCheck.objects.filter(
+                pk=self.publication.pk, publication_snapshot__isnull=True
+            ).exists()
+        )
+        self.assertIsNone(self.target.relatedness_decision_id)
+        self.assertEqual(self.target.relatedness_context or {}, {})
+        self.assertFalse(self.target.fact_check_references.exists())
+        self.assertEqual(get_match_result(self.target)["related_fact_checks"], [])
         self.assertEqual(
             KnowledgeReuseEvent.objects.filter(target_claim=self.target).count(), 1
         )
@@ -2547,7 +2601,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.image()
         self.assert_ai_path(self.persisted_eval, related_method="FULL_TEXT")
         self.llm.assert_called_once()
-        self.assertIsNone(self.target.fact_check_references.get().similarity_score)
+        self.assertIsNone(self.save_claim.call_args.kwargs["related_candidate"].get("similarity_score"))
 
     def test_non_equivalent_image_headline_context_creates_related_headline(self):
         self.equivalent_context(method="EXACT_TEXT", equivalent=False)
@@ -2590,46 +2644,43 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
     def assert_related_operational_failure_continues(self, process, evaluator):
         self.equivalent_context(equivalent=False)
         with patch(
-            "api.tasks.record_related_claim_fact_check_reference",
-            side_effect=OperationalError("Provenance storage unavailable"),
-        ) as recorder, self.assertLogs("api.tasks", level="WARNING") as logs:
+            "api.verification.relatedness.schedule_relatedness",
+            side_effect=OperationalError("Relatedness store unavailable"),
+        ) as scheduler, self.assertLogs("api.tasks", level="WARNING") as logs:
             process()
-        recorder.assert_called_once()
-        self.assertIn("related publication provenance", " ".join(logs.output))
+        scheduler.assert_called_once()
+        self.assertIn("RELATED_CONTEXT outcome=scheduling_unavailable", " ".join(logs.output))
         self.assert_ai_path(evaluator)
         self.llm.assert_called_once()
 
     def test_image_related_operational_failure_preserves_ai_result(self):
-        self.assert_related_operational_failure_continues(
-            self.image, self.persisted_eval
-        )
+        self.assert_related_operational_failure_continues(self.image, self.persisted_eval)
 
     def test_url_related_operational_failure_preserves_ai_result(self):
-        self.assert_related_operational_failure_continues(
-            self.url, self.persisted_eval
-        )
+        self.assert_related_operational_failure_continues(self.url, self.persisted_eval)
 
-    def test_related_database_failure_rolls_back_savepoint_and_preserves_ai_result(
-        self,
-    ):
+    def test_related_database_failure_rolls_back_savepoint_and_preserves_ai_result(self):
         self.equivalent_context(equivalent=False)
 
-        def failing_related_storage(**kwargs):
+        def failing_related_storage(*args, **kwargs):
             self.raw_reference(relationship_kind="RELATED", query_fingerprint="invalid")
+            raise OperationalError("Relatedness storage failed")
 
         with transaction.atomic():
             with patch(
-                "api.tasks.record_related_claim_fact_check_reference",
+                "api.verification.relatedness.schedule_relatedness",
                 side_effect=failing_related_storage,
-            ), self.assertLogs("api.tasks", level="WARNING"):
+            ) as scheduler, self.assertLogs("api.tasks", level="WARNING"):
                 self.image()
+            scheduler.assert_called_once()
             self.assert_ai_path(self.persisted_eval)
+            self.assertFalse(self.target.fact_check_references.exists())
 
     def test_provider_exhaustion_never_enters_related_persistence(self):
         self.equivalent_context()
         error = LLMProviderUnavailableError("Equivalence unavailable")
         self.llm.side_effect = error
-        with patch("api.tasks.record_related_claim_fact_check_reference") as recorder:
+        with patch("api.tasks._record_related_published_claim") as recorder:
             with self.assertRaises(LLMProviderUnavailableError):
                 self.image()
         recorder.assert_not_called()
@@ -2637,7 +2688,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
 
     def test_out_of_scope_claim_never_retrieves_or_records_related_context(self):
         self.cleaned["cleaned_claim"] = "OUT_OF_SCOPE"
-        with patch("api.tasks.record_related_claim_fact_check_reference") as recorder:
+        with patch("api.tasks._record_related_published_claim") as recorder:
             self.image()
         recorder.assert_not_called()
         self.vault.assert_not_called()
@@ -2647,7 +2698,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.semantic_context()
         self.target.claim_type = Claim.ClaimType.TEXT
         self.target.save()
-        with patch("api.tasks.record_related_claim_fact_check_reference") as recorder:
+        with patch("api.tasks._record_related_published_claim") as recorder:
             tasks.execute_core_text_pipeline("Submitted text", self.target.pk)
         recorder.assert_not_called()
         self.assert_ai_path(self.image_gfc)
@@ -2854,11 +2905,17 @@ class PublishedResolutionPollingTests(PublicationResolutionFixture):
             "api.knowledge_reuse_service.get_public_partner_fact_check_detail",
             return_value=public_detail,
         ):
-            self.assertEqual(
-                len(get_related_published_fact_check_payloads(self.target)),
-                1,
-            )
-            self.assertEqual(
-                self.poll(),
-                {"verdict": "PENDING"},
-            )
+            # A raw legacy relationship must be invisible without validation.
+            self.assertEqual(get_related_published_fact_check_payloads(self.target), [])
+            self.assertEqual(self.poll(), {"verdict": "PENDING"})
+            # Isolate the polling contract: even an accepted RELATED reading
+            # must never make a claim with no verdict appear completed.
+            with patch(
+                "api.verification.relatedness.accepted_reference",
+                return_value=True,
+            ):
+                self.assertEqual(
+                    len(get_related_published_fact_check_payloads(self.target)),
+                    1,
+                )
+                self.assertEqual(self.poll(), {"verdict": "PENDING"})

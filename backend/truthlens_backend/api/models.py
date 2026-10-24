@@ -742,6 +742,15 @@ class Claim(models.Model):
     media_hash = models.CharField(max_length=64, blank=True, null=True)
     url_link = models.URLField(max_length=2000, blank=True, null=True)
     context_text = models.TextField(blank=True, null=True)
+    # Contextual recommendations only: never an AI evidence source or human verdict.
+    # Older development rows can be NULL following the legacy 0086 repair.
+    relatedness_context = models.JSONField(
+        default=dict, blank=True, null=True, editable=False,
+    )
+    relatedness_decision = models.ForeignKey(
+        "RelatedFactCheckDecision", null=True, blank=True, editable=False,
+        on_delete=models.SET_NULL, related_name="bound_claims",
+    )
 
     ai_summary = models.TextField(blank=True, null=True)
     ai_reasoning = models.TextField(blank=True, null=True)
@@ -4742,6 +4751,43 @@ class FactualCorrectionProposal(models.Model):
             f"Factual correction proposal {self.id} "
             f"for request {self.correction_request_id}"
         )
+
+
+class RelatedFactCheckDecision(models.Model):
+    """Reusable optional-context decision, independent of institutional authority."""
+
+    class State(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        PROCESSING = "PROCESSING", "Processing"
+        COMPLETED = "COMPLETED", "Completed"
+        FAILED = "FAILED", "Failed"
+
+    class Classification(models.TextChoices):
+        EQUIVALENT = "EQUIVALENT", "Equivalent"
+        RELATED = "RELATED", "Related"
+        UNRELATED = "UNRELATED", "Unrelated"
+        UNCERTAIN = "UNCERTAIN", "Uncertain"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    identity = models.CharField(max_length=64, unique=True)
+    proposition_fingerprint = models.CharField(max_length=64)
+    publication = models.ForeignKey(OfficialFactCheck, on_delete=models.PROTECT)
+    publication_version = models.PositiveIntegerField()
+    publication_snapshot = models.ForeignKey(
+        OfficialFactCheckPublicationSnapshot, on_delete=models.PROTECT,
+    )
+    publication_digest = models.CharField(max_length=64)
+    representation_digest = models.CharField(max_length=64)
+    contract_version = models.CharField(max_length=32)
+    state = models.CharField(max_length=16, choices=State.choices, default=State.PENDING)
+    classification = models.CharField(
+        max_length=16, choices=Classification.choices, default=Classification.UNCERTAIN,
+    )
+    connection_category = models.CharField(max_length=32, default="NONE")
+    attempts = models.PositiveSmallIntegerField(default=0)
+    failure_code = models.CharField(max_length=32, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
 
 class ClaimFactCheckReference(models.Model):

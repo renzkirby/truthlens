@@ -504,6 +504,11 @@ def build_related_published_fact_check_payload(reference):
     ):
         return None
 
+    # Legacy RELATED references are not proof of validated relatedness.
+    from .verification.relatedness import accepted_reference
+    if not accepted_reference(reference):
+        return None
+
     fact_check = reference.fact_check
     partner = fact_check.organization
     if (
@@ -542,6 +547,16 @@ def build_related_published_fact_check_payload(reference):
 
 
 def get_related_published_fact_check_payloads(claim, *, limit=3):
+    """Optional recommendations must fail closed if relatedness storage fails."""
+    try:
+        with transaction.atomic():
+            return _get_related_published_fact_check_payloads(claim, limit=limit)
+    except Exception:
+        logger.warning("RELATED_CONTEXT outcome=serialization_unavailable")
+        return []
+
+
+def _get_related_published_fact_check_payloads(claim, *, limit=3):
     """Read durable IMAGE/URL provenance in chronology, without reuse or search."""
     if not isinstance(limit, int) or limit < 1:
         return []
