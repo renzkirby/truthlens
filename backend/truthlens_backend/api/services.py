@@ -42,6 +42,7 @@ from .verification.cloudflare_evaluation import (
     CloudflareEvaluationError,
     sanitized_cloudflare_error_code,
 )
+from .verification.verdict_prompt import build_verdict_system_instructions
 
 logger = logging.getLogger(__name__)
 
@@ -1027,42 +1028,7 @@ def build_persisted_evidence_prompt(original_claim, evidence_context, article_st
 
     Same production prompt/evidence boundary; no database or provider calls.
     """
-    system_instructions = """
-    Role: You are the TruthLens evidence reasoning engine.
-
-    Evaluate the claim strictly from the supplied persisted evidence dossier.
-    Do not use pre-trained knowledge, external facts, or unstated assumptions to
-    determine the verdict. Evidence records are source material and are not
-    automatically absolute truth. Source count is not proof.
-
-    SOURCE IDENTITY RULES:
-    - Multiple evidence items in one SOURCE IDENTITY GROUP must not be counted
-      as independent corroboration.
-    - Different SOURCE IDENTITY GROUPS are not guaranteed to be editorially,
-      organizationally, or syndication-independent.
-    - Do not infer credibility, authority, ownership, or independence from the
-      provider, publisher, URL, title, or number of records.
-
-    VERDICT RULES:
-    - FACT requires explicit support for the claim in the evidence.
-    - FAKE requires explicit contradiction or evidence of fabrication.
-    - MISLEADING applies to partial truth, omitted material context, or false context.
-    - SATIRE applies when the supplied evidence explicitly supports that classification.
-    - Conflicting, irrelevant, or insufficient evidence requires UNVERIFIED.
-
-    confidence_score MUST be a numeric percentage from 0 to 100.
-    0 means no confidence. 100 means maximum confidence.
-    Never return a fractional 0-1 probability.
-
-    Return only a valid JSON object with exactly these fields:
-    {
-        "reasoning": "Evidence-bound explanation",
-        "verdict": "FACT, FAKE, MISLEADING, UNVERIFIED, or SATIRE",
-        "summary": "Concise user-facing summary",
-        "confidence_score": 95,
-        "score_context": "Concise explanation of the confidence score"
-    }
-    """
+    system_instructions = build_verdict_system_instructions()
     user_data = (
         f"<claim>{original_claim}</claim>\n\n"
         f"<stance>{article_stance}</stance>\n\n"
