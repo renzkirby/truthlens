@@ -882,7 +882,6 @@ function ActivityTrendsSection({ authFetch, authIdentity, organizationId, reques
                      <div key={label}>
                         <dt>{label}</dt>
                         <dd>{formatCount(value)}</dd>
-                        <dd className="institutional-analytics__trend-summary-note">Observed during the selected period.</dd>
                      </div>
                   ))}
                </dl>
@@ -942,8 +941,11 @@ function ActivityTrendsSection({ authFetch, authIdentity, organizationId, reques
                </details>
 
                <p className="institutional-analytics__trend-coverage">
-                  Counts are eligible accountability events observed during this UTC period. Coverage is limited to the
-                  instrumentation era; historical activity has not been backfilled.
+                  Selected-period counts use recorded UTC activity only.
+                  <ContextHelp label="About activity coverage">
+                     Counts are eligible accountability events observed during this UTC period. Coverage is limited to
+                     the instrumentation era; historical activity has not been backfilled.
+                  </ContextHelp>
                </p>
             </div>
          )}
@@ -956,9 +958,11 @@ function ObservationMetricCards({ items }) {
       <dl className="institutional-analytics__observation-metrics">
          {items.map(({ label, value, description }) => (
             <div key={label}>
-               <dt>{label}</dt>
+               <dt>
+                  <span>{label}</span>
+                  {description ? <ContextHelp label={`About ${label}`}>{description}</ContextHelp> : null}
+               </dt>
                <dd className="institutional-analytics__observation-value">{formatCount(value)}</dd>
-               <dd className="institutional-analytics__observation-description">{description}</dd>
             </div>
          ))}
       </dl>
@@ -972,8 +976,11 @@ function PublicationReachPanel({ reach }) {
    return (
       <section className="institutional-analytics__observation-panel">
          <header>
-            <h5>Publication reach</h5>
-            <p>Recorded interactions with your organization&apos;s public profile and fact-check publications.</p>
+            <HeadingWithHelp
+               help="Recorded interactions with your organization’s public profile and fact-check publications. These are tracked events, not unique people."
+            >
+               Publication reach
+            </HeadingWithHelp>
          </header>
 
          {!reach ? (
@@ -1003,7 +1010,12 @@ function PublicationReachPanel({ reach }) {
                      </p>
 
                      <section className="institutional-analytics__measurement-support">
-                        <h6>Browser extension activity</h6>
+                        <HeadingWithHelp
+                           as="h6"
+                           help="An impression is a recorded presentation of a publication result through the extension; it does not prove the publication was read. A click does not establish that its verdict was accepted."
+                        >
+                           Browser extension activity
+                        </HeadingWithHelp>
                         <MetricList
                            compact
                            items={[
@@ -1011,11 +1023,6 @@ function PublicationReachPanel({ reach }) {
                               ["Publication clicks", formatCount(extension.clicks.total)],
                            ]}
                         />
-                        <p className="institutional-analytics__supporting-copy">
-                           An impression is a recorded presentation of a publication result through the extension; it
-                           does not prove the publication was read. A click is recorded for an extension publication
-                           result and does not establish that its verdict was accepted.
-                        </p>
                      </section>
 
                      <details className="institutional-analytics__measurement-details">
@@ -1068,8 +1075,11 @@ function KnowledgeReusePanel({ reuse }) {
    return (
       <section className="institutional-analytics__observation-panel">
          <header>
-            <h5>Knowledge reuse</h5>
-            <p>Recorded reuse of your organization&apos;s previously published knowledge within TruthLens.</p>
+            <HeadingWithHelp
+               help="Recorded reuse of your organization’s previously published knowledge within TruthLens. Reuse does not automatically transfer an earlier verdict to another claim."
+            >
+               Knowledge reuse
+            </HeadingWithHelp>
          </header>
 
          {!reuse ? (
@@ -1104,19 +1114,18 @@ function KnowledgeReusePanel({ reuse }) {
                      </p>
 
                      <section className="institutional-analytics__measurement-support">
-                        <h6>Previously published knowledge served from cache</h6>
+                        <HeadingWithHelp
+                           as="h6"
+                           help="Recorded occasions when a user-facing response reused previously published knowledge through the claim cache. This is not a measure of all cache hits, unique users served, automatically verified claims, work avoided, or time saved."
+                        >
+                           Previously published knowledge served from cache
+                        </HeadingWithHelp>
                         <dl className="institutional-analytics__cache-metric">
                            <div>
                               <dt>Cached published-response events</dt>
                               <dd>{formatCount(repeat.cached_published_responses)}</dd>
                            </div>
                         </dl>
-                        <p className="institutional-analytics__supporting-copy">
-                           Recorded occasions when a user-facing response reused previously published knowledge through
-                           the claim cache. The same target claim may contribute more than one event; this is not a
-                           measure of all cache hits, unique users served, automatically verified claims, work avoided,
-                           or time saved.
-                        </p>
                      </section>
 
                      <details className="institutional-analytics__measurement-details">
@@ -1252,11 +1261,15 @@ function InstitutionalAnalyticsPanel({ organizationId, organizationName }) {
    return (
       <section className="institutional-analytics" aria-labelledby={headingId}>
          <header className="institutional-analytics__header">
-            <h3 id={headingId}>Institutional overview</h3>
-            <p>
-               Current work{organizationName ? ` at ${organizationName}` : ""}, selected-period activity, and recorded
-               institutional outcomes presented with their measurement scope kept explicit.
-            </p>
+            <div className="institutional-analytics__section-title-row">
+               <h3 id={headingId}>Institutional overview</h3>
+               <ContextHelp label="About Institutional overview">
+                  Current-state records, selected-period activity, cumulative observations, and historical event
+                  measurements use different scopes. Their scope is kept explicit so unlike measurements are not
+                  treated as directly interchangeable.
+               </ContextHelp>
+            </div>
+            <p>Current work{organizationName ? ` at ${organizationName}` : ""} and recorded institutional activity.</p>
          </header>
 
          {!requestUrl ? (
@@ -1285,45 +1298,59 @@ function InstitutionalAnalyticsPanel({ organizationId, organizationName }) {
                      <span className="institutional-analytics__coverage-label institutional-analytics__coverage-label--current">
                         Current snapshot
                      </span>
-                     <h4>Current organization snapshot</h4>
+                     <div className="institutional-analytics__section-title-row">
+                        <h4>Current organization snapshot</h4>
+                        <ContextHelp label="About the current organization snapshot">
+                           These categories describe different types of current work and may overlap. They should not be
+                           added together as a single workload total.
+                        </ContextHelp>
+                     </div>
                      <p>Publication and verification work in your organization right now.</p>
                   </header>
 
                   <dl className="institutional-analytics__current-grid">
                      <div className="institutional-analytics__current-card">
-                        <dt>Published fact-checks</dt>
+                        <dt>
+                           <span>Published fact-checks</span>
+                           <ContextHelp label="About published fact-checks">
+                              Current published fact-check records for distinct claims.
+                           </ContextHelp>
+                        </dt>
                         <dd className="institutional-analytics__current-value">
                            {formatCount(currentState.published_fact_checks.distinct_claims)}
                         </dd>
-                        <dd className="institutional-analytics__current-description">
-                           Current published fact-check records for distinct claims.
-                        </dd>
                      </div>
                      <div className="institutional-analytics__current-card">
-                        <dt>Active factual corrections</dt>
+                        <dt>
+                           <span>Active factual corrections</span>
+                           <ContextHelp label="About active factual corrections">
+                              Correction requests currently in progress.
+                           </ContextHelp>
+                        </dt>
                         <dd className="institutional-analytics__current-value">
                            {formatCount(currentState.factual_corrections.active_requests)}
                         </dd>
-                        <dd className="institutional-analytics__current-description">
-                           Correction requests currently in progress.
-                        </dd>
                      </div>
                      <div className="institutional-analytics__current-card">
-                        <dt>Active investigations</dt>
+                        <dt>
+                           <span>Active investigations</span>
+                           <ContextHelp label="About active investigations">
+                              Currently active organization-assigned verification work.
+                           </ContextHelp>
+                        </dt>
                         <dd className="institutional-analytics__current-value">
                            {formatCount(currentState.investigations.active_assignments)}
                         </dd>
-                        <dd className="institutional-analytics__current-description">
-                           Currently active organization-assigned verification work.
-                        </dd>
                      </div>
                      <div className="institutional-analytics__current-card">
-                        <dt>Open publication work</dt>
+                        <dt>
+                           <span>Open publication work</span>
+                           <ContextHelp label="About open publication work">
+                              Claims with initial or editorial publication drafts or reviews in progress.
+                           </ContextHelp>
+                        </dt>
                         <dd className="institutional-analytics__current-value">
                            {formatCount(currentState.publication_work.distinct_claims)}
-                        </dd>
-                        <dd className="institutional-analytics__current-description">
-                           Claims with initial or editorial publication drafts or reviews in progress.
                         </dd>
                      </div>
                   </dl>
@@ -1331,9 +1358,6 @@ function InstitutionalAnalyticsPanel({ organizationId, organizationName }) {
                   {currentStateIsEmpty && (
                      <EmptyMessage>No current verification or publication work is recorded for this organization.</EmptyMessage>
                   )}
-                  <p className="institutional-analytics__overlap-note">
-                     These categories describe different types of work and may overlap.
-                  </p>
                </section>
 
                <ActivityTrendsSection
@@ -1346,8 +1370,14 @@ function InstitutionalAnalyticsPanel({ organizationId, organizationName }) {
                <div className="institutional-analytics__support-grid">
                   <section className="institutional-analytics__section institutional-analytics__support-panel">
                      <header className="institutional-analytics__section-header">
-                        <h4>Investigation workflow</h4>
-                        <p>Recorded investigation assignment outcomes and turnaround, separate from the current queue.</p>
+                        <div className="institutional-analytics__section-title-row">
+                           <h4>Investigation workflow</h4>
+                           <ContextHelp label="About investigation workflow measurements">
+                              These are recorded assignment outcomes and turnaround measurements. They describe observed
+                              workflow history and can differ from the current investigation queue.
+                           </ContextHelp>
+                        </div>
+                        <p>Recorded assignment outcomes and turnaround.</p>
                      </header>
 
                      <dl className="institutional-analytics__workflow-summary">
