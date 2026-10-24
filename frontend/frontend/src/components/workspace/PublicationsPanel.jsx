@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../../hooks/useAuth";
+import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
+import { showWorkspaceSuccess, WORKSPACE_LONG_TOAST_DURATION } from "../../utils/workspaceToast";
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
 import Input from "../ui/Input.jsx";
@@ -392,6 +394,7 @@ function PublicationsContent({
    onRevisionCreated,
    onCorrectionOpened,
 }) {
+   const { addToast } = useNotification();
    const [searchInput, setSearchInput] = useState("");
    const [search, setSearch] = useState("");
    const [offset, setOffset] = useState(0);
@@ -410,7 +413,6 @@ function PublicationsContent({
    const [detailRequestVersion, setDetailRequestVersion] = useState(0);
 
    const [authorityError, setAuthorityError] = useState("");
-   const [notice, setNotice] = useState("");
    const [actionError, setActionError] = useState("");
    const [revisionOpen, setRevisionOpen] = useState(false);
    const [revisionReason, setRevisionReason] = useState("");
@@ -472,7 +474,6 @@ function PublicationsContent({
       setCorrectionReason("");
       setCorrectionReasonError("");
       setCorrectionConflict(null);
-      setNotice("");
       setActionError("");
       setAuthorityError("Your publication library access for this organization is no longer available.");
    }, []);
@@ -709,7 +710,6 @@ function PublicationsContent({
       setCorrectionReasonError("");
       setCorrectionConflict(null);
       setActionError("");
-      setNotice("");
       focusDetailAfterLoadRef.current = true;
    };
 
@@ -784,7 +784,6 @@ function PublicationsContent({
       setCorrectionReasonError("");
       setCorrectionConflict(null);
       setActionError("");
-      setNotice("");
 
       const isOperationCurrent = () =>
          mountedRef.current &&
@@ -895,7 +894,6 @@ function PublicationsContent({
       mutationRequestIdRef.current = operation.requestId;
       setMutation("create-revision");
       setActionError("");
-      setNotice("");
 
       const isOperationCurrent = () =>
          mountedRef.current &&
@@ -925,7 +923,10 @@ function PublicationsContent({
 
          setRevisionOpen(false);
          setRevisionReason("");
-         setNotice("Editorial revision created. Opening it in Drafting…");
+         showWorkspaceSuccess(addToast, {
+            title: "Editorial revision created",
+            message: "Opening the revision in Drafting.",
+         });
          refreshLibrary();
          onRevisionCreated?.(created);
       } catch (error) {
@@ -997,12 +998,6 @@ function PublicationsContent({
                         Retry access
                      </Button>
                   </div>
-               </div>
-            ) : null}
-            {notice ? (
-               <div className="publications-message publications-message--success" role="status">
-                  <Icons name="check-circle" size={18} />
-                  <p>{notice}</p>
                </div>
             ) : null}
             {actionError ? (

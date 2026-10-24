@@ -3,8 +3,10 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 
 import { useAuth } from "../../hooks/useAuth";
+import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
+import { showWorkspaceSuccess, WORKSPACE_LONG_TOAST_DURATION } from "../../utils/workspaceToast";
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
 import Textarea from "../ui/Textarea.jsx";
@@ -595,6 +597,7 @@ function AdjudicationReviewContent({
    onWorkflowChanged,
    onReturnToInvestigation,
 }) {
+   const { addToast } = useNotification();
    const initialCaseKey = initialCaseId ? String(initialCaseId) : null;
    const [statusFilter, setStatusFilter] = useState("");
    const [offset, setOffset] = useState(0);
@@ -1176,14 +1179,23 @@ function AdjudicationReviewContent({
 
          if (outcome === "success") {
             setActionError("");
-            setActionNotice({
-               kind: "success",
-               caseId: operation.caseId,
-               message: selectedCaseIsSubmittedCase
-                  ? "The authoritative decision was recorded and the canonical case detail is current."
-                  : "The authoritative decision was recorded for the submitted case. Your current selection was not changed.",
-               inspectable: !selectedCaseIsSubmittedCase,
-            });
+            if (selectedCaseIsSubmittedCase) {
+               setActionNotice(null);
+               showWorkspaceSuccess(addToast, {
+                  title: "Decision recorded",
+                  message: "The authoritative adjudication decision has been recorded.",
+                  duration: WORKSPACE_LONG_TOAST_DURATION,
+               });
+               focusActionMessageRef.current = false;
+            } else {
+               setActionNotice({
+                  kind: "success",
+                  caseId: operation.caseId,
+                  message: "The authoritative decision was recorded for the submitted case. Your current selection was not changed.",
+                  inspectable: true,
+               });
+               focusActionMessageRef.current = true;
+            }
             onWorkflowChanged?.({
                stage: "ADJUDICATION",
                caseId: operation.caseId,
@@ -1194,6 +1206,7 @@ function AdjudicationReviewContent({
             setActionError(
                `Case ${formatCaseReference(operation.caseId)} changed before the decision was submitted. ${serverMessage || "Review its current state before continuing."}`,
             );
+            focusActionMessageRef.current = true;
          } else {
             const recordedDecisionExists = Boolean(canonicalDetail?.current_decision) || canonicalDetail?.status === "RESOLVED";
             if (recordedDecisionExists) {
@@ -1204,6 +1217,7 @@ function AdjudicationReviewContent({
                   message: "The request outcome was initially unclear, but the fresh canonical case now contains a recorded decision.",
                   inspectable: !selectedCaseIsSubmittedCase,
                });
+               focusActionMessageRef.current = true;
                onWorkflowChanged?.({
                   stage: "ADJUDICATION",
                   caseId: operation.caseId,
@@ -1215,9 +1229,9 @@ function AdjudicationReviewContent({
                setActionError(
                   `The outcome for case ${formatCaseReference(operation.caseId)} was unclear. Fresh canonical detail shows no recorded decision; review it fully before beginning a new attempt.`,
                );
+               focusActionMessageRef.current = true;
             }
          }
-         focusActionMessageRef.current = true;
       } catch (error) {
          if (
             reconciliationRequestIdRef.current !== reconciliationId ||

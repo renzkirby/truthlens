@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../../hooks/useAuth";
+import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
+import { showWorkspaceSuccess, WORKSPACE_LONG_TOAST_DURATION } from "../../utils/workspaceToast";
 import Icons from "../Icons.jsx";
 import Badge from "../ui/Badge.jsx";
 import Button from "../ui/Button.jsx";
@@ -490,6 +492,7 @@ function FactualCorrectionContent({
    onDirtyChange,
    onOpenPublication,
 }) {
+   const { addToast } = useNotification();
    const dirtySnapshotKey = proposalSnapshotKey(authIdentity, organizationId, requestId);
    const initialDirtySnapshotRef = useRef(dirtySnapshotKey ? dirtyProposalSnapshots.get(dirtySnapshotKey) : null);
    const [queue, setQueue] = useState({ count: 0, limit: PAGE_SIZE, offset: 0, results: [] });
@@ -1082,7 +1085,10 @@ function FactualCorrectionContent({
          },
          onSuccess: async (response) => {
             applyCanonicalDetail(response);
-            setNotice("Correction proposal saved. It remains non-authoritative until final publication succeeds.");
+            showWorkspaceSuccess(addToast, {
+               title: "Correction proposal saved",
+               message: "It remains non-authoritative until final publication succeeds.",
+            });
             refreshQueue();
          },
       });
@@ -1108,7 +1114,10 @@ function FactualCorrectionContent({
          onSuccess: async (response) => {
             applyCanonicalDetail(response);
             setDialog(null);
-            setNotice("Proposal prepared and frozen. It has not been published and is not authoritative.");
+            showWorkspaceSuccess(addToast, {
+               title: "Correction proposal prepared",
+               message: "The proposal is frozen and remains non-authoritative until it is published.",
+            });
             refreshQueue();
          },
       });
@@ -1128,11 +1137,13 @@ function FactualCorrectionContent({
             applyCanonicalDetail(response?.correction);
             setPublishedPublication(response?.publication || null);
             setDialog(null);
-            setNotice(
-               hasMeaningfulReplacementDecision(response?.correction)
-                  ? "Factual correction published. The returned replacement decision and publication are now the current institutional authority."
-                  : "Factual correction published. The returned decision payload does not distinguish replacement factual authority; review the neutral authority comparison.",
-            );
+            showWorkspaceSuccess(addToast, {
+               title: "Factual correction published",
+               message: hasMeaningfulReplacementDecision(response?.correction)
+                  ? "The replacement decision and publication are now the current institutional authority."
+                  : "Review the authority comparison because the returned decision does not distinguish replacement factual authority.",
+               duration: WORKSPACE_LONG_TOAST_DURATION,
+            });
             refreshQueue();
          },
       });
@@ -1159,9 +1170,10 @@ function FactualCorrectionContent({
             applyCanonicalDetail(response);
             setCancellationReason("");
             setDialog(null);
-            setNotice(
-               "Factual correction cancelled. Its historical evidence and proposal remain available for inspection.",
-            );
+            showWorkspaceSuccess(addToast, {
+               title: "Factual correction cancelled",
+               message: "Its historical evidence and proposal remain available for inspection.",
+            });
             refreshQueue();
          },
       });
@@ -1197,7 +1209,10 @@ function FactualCorrectionContent({
                delete next[item.evidence_id];
                return next;
             });
-            setNotice("Correction evidence review recorded with its human reviewer provenance.");
+            showWorkspaceSuccess(addToast, {
+               title: "Correction evidence review recorded",
+               message: "The human reviewer provenance has been preserved.",
+            });
             refreshQueue();
          },
       });
