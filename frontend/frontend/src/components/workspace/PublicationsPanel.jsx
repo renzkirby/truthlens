@@ -680,10 +680,10 @@ function PublicationsContent({
    }, [correctionOpen, correctionReason]);
 
    useEffect(() => {
-      if (actionError || authorityError) {
+      if ((actionError || authorityError) && !revisionOpen && !correctionOpen) {
          requestAnimationFrame(() => messageRef.current?.focus());
       }
-   }, [actionError, authorityError]);
+   }, [actionError, authorityError, correctionOpen, revisionOpen]);
 
    useEffect(() => {
       let cancelled = false;
@@ -1168,7 +1168,9 @@ function PublicationsContent({
                         <h3 id="publications-library-heading" ref={libraryHeadingRef} tabIndex={-1}>
                            Current publications
                         </h3>
-                        <p>{library.count} institutional publications</p>
+                        <p>
+                           {library.count} institutional publication{library.count === 1 ? "" : "s"}
+                        </p>
                      </div>
                      <Button
                         type="button"
@@ -1552,6 +1554,161 @@ function PublicationsContent({
                </section>
             </div>
          )}
+
+         <PublicationActionDialog
+            open={revisionOpen && Boolean(detail)}
+            processing={mutation === "create-revision"}
+            title="Create an editorial revision?"
+            description="Start a new draft for non-factual editorial changes. The current publication remains live and authoritative while the revision is drafted and reviewed."
+            onClose={closeRevisionForm}
+         >
+            {actionError ? (
+               <div className="publications-dialog-error" role="alert">
+                  <Icons name="alert-circle" size={18} />
+                  <p>{actionError}</p>
+               </div>
+            ) : null}
+            <form className="publications-revision-form publications-dialog-form" onSubmit={handleCreateRevision}>
+               <div>
+                  <label htmlFor="publications-revision-reason">Revision reason</label>
+                  <Textarea
+                     ref={revisionReasonRef}
+                     id="publications-revision-reason"
+                     rows={5}
+                     maxLength={2000}
+                     required
+                     value={revisionReason}
+                     disabled={Boolean(mutation)}
+                     aria-describedby="publications-revision-help publications-revision-count"
+                     onChange={(event) => setRevisionReason(event.target.value)}
+                  />
+                  <div className="publications-revision-field-meta">
+                     <span id="publications-revision-help">
+                        Describe the editorial clarification. A factual judgment change belongs in the separate
+                        factual-correction workflow.
+                     </span>
+                     <span id="publications-revision-count">{revisionReason.length}/2000</span>
+                  </div>
+               </div>
+               <div className="publications-revision-confirmation">
+                  <strong>Create a draft from Article v{detail?.article?.version ?? "–"}?</strong>
+                  <p>The current publication stays live while the inherited revision draft is edited and reviewed.</p>
+               </div>
+               <div className="publications-action-row">
+                  <Button
+                     type="button"
+                     variant="secondary"
+                     density="standard"
+                     disabled={Boolean(mutation)}
+                     onClick={closeRevisionForm}
+                  >
+                     Cancel
+                  </Button>
+                  <Button
+                     type="submit"
+                     variant="primary"
+                     density="standard"
+                     loading={mutation === "create-revision"}
+                     loadingLabel="Creating revision…"
+                     disabled={!revisionReason.trim() || Boolean(mutation)}
+                  >
+                     Create revision and open Drafting
+                  </Button>
+               </div>
+            </form>
+         </PublicationActionDialog>
+
+         <PublicationActionDialog
+            open={correctionOpen && Boolean(detail)}
+            processing={mutation === "request-correction"}
+            title="Request a factual correction?"
+            description="Open dedicated correction work only when the published factual judgment may need to change. The current decision and publication remain authoritative during review."
+            onClose={closeCorrectionForm}
+         >
+            {actionError ? (
+               <div className="publications-dialog-error" role="alert">
+                  <Icons name="alert-circle" size={18} />
+                  <p>{actionError}</p>
+               </div>
+            ) : null}
+            {correctionConflict ? (
+               <div className="publications-correction-conflict" role="alert">
+                  <strong>{correctionConflict.code}</strong>
+                  <p>
+                     {correctionConflict.detail} No mutation was repeated. The server record was refreshed for explicit
+                     reconciliation.
+                  </p>
+                  {Array.isArray(correctionConflict.blockers) && correctionConflict.blockers.length > 0 ? (
+                     <ul>
+                        {correctionConflict.blockers.map((blocker, index) => (
+                           <li key={`${blocker?.code || "blocker"}-${index}`}>
+                              <strong>{formatLabel(blocker?.code, "Conflict blocker")}</strong>
+                              {blocker?.detail || "The server rejected the stale request."}
+                           </li>
+                        ))}
+                     </ul>
+                  ) : null}
+               </div>
+            ) : null}
+            <form className="publications-correction-form publications-dialog-form" onSubmit={handleRequestCorrection}>
+               <div>
+                  <label htmlFor="publications-correction-reason">Correction reason</label>
+                  <Textarea
+                     ref={correctionReasonRef}
+                     id="publications-correction-reason"
+                     rows={5}
+                     maxLength={2000}
+                     required
+                     value={correctionReason}
+                     disabled={Boolean(mutation)}
+                     invalid={Boolean(correctionReasonError)}
+                     aria-describedby="publications-correction-help publications-correction-count publications-correction-error"
+                     onChange={(event) => {
+                        setCorrectionReason(event.target.value);
+                        setCorrectionReasonError("");
+                     }}
+                  />
+                  <div className="publications-revision-field-meta">
+                     <span id="publications-correction-help">
+                        Explain why the published factual judgment should enter dedicated correction review.
+                     </span>
+                     <span id="publications-correction-count">{correctionReason.length}/2000</span>
+                  </div>
+                  <span
+                     id="publications-correction-error"
+                     className="publications-correction-field-error"
+                     role={correctionReasonError ? "alert" : undefined}
+                  >
+                     {correctionReasonError}
+                  </span>
+               </div>
+               <div className="publications-correction-confirmation">
+                  <strong>Request dedicated factual-correction work?</strong>
+                  <p>The current human decision and publication remain authoritative while the correction is reviewed.</p>
+               </div>
+               <div className="publications-action-row">
+                  <Button
+                     type="button"
+                     variant="secondary"
+                     density="standard"
+                     disabled={Boolean(mutation)}
+                     onClick={closeCorrectionForm}
+                  >
+                     Cancel
+                  </Button>
+                  <Button
+                     type="submit"
+                     variant="primary"
+                     density="standard"
+                     loading={mutation === "request-correction"}
+                     loadingLabel="Requesting correction…"
+                     disabled={!correctionReason.trim() || Boolean(mutation)}
+                  >
+                     Request and open correction
+                  </Button>
+               </div>
+            </form>
+         </PublicationActionDialog>
       </div>
    );
 }
