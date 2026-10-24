@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { resolveApiEndpoint } from "../../utils/api";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
+import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
 
 import "./InstitutionalAnalyticsPanel.css";
@@ -361,6 +362,63 @@ function MetricList({ items, compact = false }) {
    );
 }
 
+function ContextHelp({ label = "More information", children }) {
+   const id = useId();
+   const rootRef = useRef(null);
+   const [pinned, setPinned] = useState(false);
+
+   useEffect(() => {
+      if (!pinned) {
+         return undefined;
+      }
+
+      const closeIfOutside = (event) => {
+         if (!rootRef.current?.contains(event.target)) {
+            setPinned(false);
+         }
+      };
+      const closeOnEscape = (event) => {
+         if (event.key === "Escape") {
+            setPinned(false);
+         }
+      };
+
+      document.addEventListener("pointerdown", closeIfOutside);
+      document.addEventListener("keydown", closeOnEscape);
+      return () => {
+         document.removeEventListener("pointerdown", closeIfOutside);
+         document.removeEventListener("keydown", closeOnEscape);
+      };
+   }, [pinned]);
+
+   return (
+      <span ref={rootRef} className={`institutional-analytics__context-help${pinned ? " is-pinned" : ""}`}>
+         <button
+            type="button"
+            className="institutional-analytics__context-help-trigger"
+            aria-label={label}
+            aria-describedby={id}
+            aria-expanded={pinned}
+            onClick={() => setPinned((current) => !current)}
+         >
+            <Icons name="info" size={14} aria-hidden="true" />
+         </button>
+         <span id={id} className="institutional-analytics__context-help-popover" role="tooltip">
+            {children}
+         </span>
+      </span>
+   );
+}
+
+function HeadingWithHelp({ as: Heading = "h5", children, help, helpLabel }) {
+   return (
+      <span className="institutional-analytics__heading-with-help">
+         <Heading>{children}</Heading>
+         {help ? <ContextHelp label={helpLabel || `About ${children}`}>{help}</ContextHelp> : null}
+      </span>
+   );
+}
+
 function EmptyMessage({ children }) {
    return <p className="institutional-analytics__empty-message">{children}</p>;
 }
@@ -452,7 +510,7 @@ function DailyActivityChart({ daily, startDate, endDate, includesCurrentUtcDay }
    const maximum = Math.max(...values);
    const midpoint = maximum > 1 ? maximum / 2 : null;
    const labelStep = getTrendAxisLabelStep(daily.length);
-   const chartDescription = [
+   const chartHelp = [
       `${selectedMetric.label} from ${startDate} through ${endDate} UTC.`,
       "Each bar represents the recorded count for one returned UTC calendar date.",
       `The selected series ranges from 0 to ${countFormatter.format(maximum)} events per date.`,
@@ -466,8 +524,11 @@ function DailyActivityChart({ daily, startDate, endDate, includesCurrentUtcDay }
    return (
       <section className="institutional-analytics__trend-chart" aria-labelledby={chartTitleId} aria-describedby={chartDescriptionId}>
          <header className="institutional-analytics__chart-header">
-            <h5 id={chartTitleId}>{selectedMetric.label} by UTC date</h5>
-            <p id={chartDescriptionId}>{chartDescription}</p>
+            <div className="institutional-analytics__chart-title-row">
+               <h5 id={chartTitleId}>{selectedMetric.label} by UTC date</h5>
+               <ContextHelp label={`About ${selectedMetric.label} by UTC date`}>{chartHelp}</ContextHelp>
+            </div>
+            <p id={chartDescriptionId}>Daily {selectedMetric.label.toLowerCase()} during the selected reporting period.</p>
          </header>
 
          <fieldset className="institutional-analytics__chart-selector">
@@ -698,15 +759,24 @@ function ActivityTrendsSection({ authFetch, authIdentity, organizationId, reques
    return (
       <section className="institutional-analytics__section institutional-analytics__trends" aria-labelledby={sectionHeadingId}>
          <header className="institutional-analytics__section-header">
-            <h4 id={sectionHeadingId}>Activity over time</h4>
-            <p>Explore eligible verification activity recorded during a selected UTC reporting period.</p>
+            <div className="institutional-analytics__section-title-row">
+               <h4 id={sectionHeadingId}>Activity over time</h4>
+               <ContextHelp label="About activity over time">
+                  Counts represent eligible verification events recorded during the selected UTC reporting period.
+                  Historical activity outside instrumentation coverage is not reconstructed.
+               </ContextHelp>
+            </div>
+            <p>Selected-period verification activity.</p>
          </header>
 
          <fieldset className="institutional-analytics__period-controls">
-            <legend>Reporting period</legend>
-            <p className="institutional-analytics__period-help">
-               Presets use UTC calendar days, including the current partial UTC day—not rolling hour intervals.
-            </p>
+            <legend>
+               <span>Reporting period</span>
+               <ContextHelp label="About reporting periods">
+                  Presets use UTC calendar days, including the current partial UTC day. They are not rolling-hour
+                  intervals. Custom ranges may include up to 90 UTC calendar dates.
+               </ContextHelp>
+            </legend>
             <div className="institutional-analytics__period-options">
                {[
                   ["last-7", "Last 7 days"],
@@ -1295,15 +1365,18 @@ function InstitutionalAnalyticsPanel({ organizationId, organizationName }) {
                         </div>
                      </dl>
 
-                     <dl className="institutional-analytics__supporting-row">
+                     <dl className="institutional-analytics__supporting-row institutional-analytics__supporting-row--prominent">
                         <div>
-                           <dt>Observed investigations without a recorded completion or release</dt>
+                           <dt>
+                              <span>No recorded outcome yet</span>
+                              <ContextHelp label="About investigations with no recorded outcome">
+                                 Observed investigation assignments without a recorded completion or release. This
+                                 recorded-history count can differ from the current active-investigation count.
+                              </ContextHelp>
+                           </dt>
                            <dd>{formatCount(attempts?.active)}</dd>
                         </div>
                      </dl>
-                     <p className="institutional-analytics__supporting-copy">
-                        This recorded-history count can differ from the current active-investigation count.
-                     </p>
 
                      <div className="institutional-analytics__workflow-details">
                         <section className="institutional-analytics__workflow-group">
@@ -1331,11 +1404,11 @@ function InstitutionalAnalyticsPanel({ organizationId, organizationName }) {
                         </section>
 
                         <section className="institutional-analytics__workflow-group">
-                           <h5>Completed-investigation turnaround</h5>
-                           <p className="institutional-analytics__supporting-copy">
-                              Measured from assignment claim to assignment completion, not from original claim creation to
-                              publication.
-                           </p>
+                           <HeadingWithHelp
+                              help="Turnaround is measured from assignment claim to assignment completion, not from original claim creation to publication."
+                           >
+                              Completed-investigation turnaround
+                           </HeadingWithHelp>
                            {turnaround?.count === 0 ? (
                               <EmptyMessage>
                                  Turnaround measurements will appear after a completed investigation is recorded.
@@ -1370,8 +1443,14 @@ function InstitutionalAnalyticsPanel({ organizationId, organizationName }) {
 
                   <section className="institutional-analytics__section institutional-analytics__support-panel">
                      <header className="institutional-analytics__section-header">
-                        <h4>Recorded decision outcomes</h4>
-                        <p>Latest observed authoritative decisions, not a measure of organizational performance.</p>
+                        <div className="institutional-analytics__section-title-row">
+                           <h4>Recorded decision outcomes</h4>
+                           <ContextHelp label="About recorded decision outcomes">
+                              These are the latest observed authoritative decisions within measurement coverage. They are
+                              not a measure of organizational performance or factual quality.
+                           </ContextHelp>
+                        </div>
+                        <p>Latest observed human verdicts.</p>
                      </header>
 
                      {resolution?.count === 0 ? (
@@ -1480,11 +1559,14 @@ function InstitutionalAnalyticsPanel({ organizationId, organizationName }) {
                <section className="institutional-analytics__section institutional-analytics__observations">
                   <header className="institutional-analytics__section-header">
                      <span className="institutional-analytics__coverage-label">Cumulative recorded observations</span>
-                     <h4>Institutional reach and knowledge reuse</h4>
-                     <p>
-                        Recorded public interactions and knowledge reuse since their respective tracking began. Activity
-                        Trends reporting periods do not filter these measurements.
-                     </p>
+                     <div className="institutional-analytics__section-title-row">
+                        <h4>Institutional reach and knowledge reuse</h4>
+                        <ContextHelp label="About reach and knowledge reuse">
+                           These measurements are cumulative since their respective tracking began. The reporting-period
+                           controls above do not filter them.
+                        </ContextHelp>
+                     </div>
+                     <p>How published institutional knowledge is reached and reused within tracked surfaces.</p>
                   </header>
                   <div className="institutional-analytics__observation-grid">
                      <PublicationReachPanel reach={publicReach} />
