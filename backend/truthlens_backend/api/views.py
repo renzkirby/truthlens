@@ -1866,6 +1866,7 @@ def publication_work_item_queue(request):
             limit=data["limit"],
             offset=data["offset"],
             workflow_kind=data["workflow_kind"],
+            view=data["view"],
         )
     except PublicationWorkflowAuthorizationError as error:
         raise PermissionDenied(str(error)) from error
