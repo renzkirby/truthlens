@@ -730,8 +730,8 @@ function EditorialSourceEditor({
                   <div>
                      <strong id={`${idPrefix}-verified-heading`}>Choose verified evidence</strong>
                      <p>
-                        These sources were verified during Evidence Review and captured in this adjudication's
-                        evidence preserved for the human decision. Select the ones you want to cite in the article.
+                        These sources were verified during Evidence Review and preserved as evidence for this adjudication.
+                        Select the ones you want to cite in the article.
                      </p>
                   </div>
                   <span>{verifiedEvidenceOptions.length} available</span>
