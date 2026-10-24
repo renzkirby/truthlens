@@ -556,7 +556,6 @@ function DailyActivityChart({ daily, startDate, endDate, includesCurrentUtcDay }
    const labelStep = getTrendAxisLabelStep(daily.length);
    const chartHelp = [
       `${selectedMetric.label} from ${startDate} through ${endDate}.`,
-      "Analytics groups reporting days using Coordinated Universal Time (UTC) internally so recorded activity is measured consistently across organizations.",
       "Each bar represents the recorded count for one reporting date.",
       `The selected series ranges from 0 to ${countFormatter.format(maximum)} events per date.`,
       includesCurrentUtcDay ? "The final reporting date is still in progress and may be partial." : null,
@@ -808,8 +807,7 @@ function ActivityTrendsSection({ authFetch, authIdentity, organizationId, reques
                <h4 id={sectionHeadingId}>Activity over time</h4>
                <ContextHelp label="About activity over time">
                   Counts represent eligible verification events recorded during the selected reporting period.
-                  Analytics groups reporting days using Coordinated Universal Time (UTC) internally for consistency
-                  across organizations. Historical activity outside instrumentation coverage is not reconstructed.
+                  Historical activity outside instrumentation coverage is not reconstructed.
                </ContextHelp>
             </div>
             <p>Selected-period verification activity.</p>
@@ -890,17 +888,17 @@ function ActivityTrendsSection({ authFetch, authIdentity, organizationId, reques
             <div className="institutional-analytics__selected-period-label">
                <span>Reporting period</span>
                <ContextHelp label="About reporting period dates">
-                  Reporting dates are grouped using Coordinated Universal Time (UTC) internally. This keeps Analytics
-                  consistent across organizations, but a reporting-day boundary can differ from your local calendar day.
+                  Reporting-day boundaries follow the same system-wide calendar used by the reporting controls above.
+                  Your local calendar day can begin or end at a different time.
                </ContextHelp>
             </div>
             <p>
                <time dateTime={appliedPeriod.startDate}>
-                  {formatUtcDate(appliedPeriod.startDate)} ({appliedPeriod.startDate})
+                  {formatUtcDate(appliedPeriod.startDate)}
                </time>{" "}
                to{" "}
                <time dateTime={appliedPeriod.endDate}>
-                  {formatUtcDate(appliedPeriod.endDate)} ({appliedPeriod.endDate})
+                  {formatUtcDate(appliedPeriod.endDate)}
                </time>
             </p>
             {includesCurrentUtcDay && <p>The current reporting day is still in progress.</p>}
@@ -996,9 +994,8 @@ function ActivityTrendsSection({ authFetch, authIdentity, organizationId, reques
                <p className="institutional-analytics__trend-coverage">
                   Selected-period counts use recorded activity only.
                   <ContextHelp label="About activity coverage">
-                     Counts are eligible accountability events observed during the selected reporting period. Reporting
-                     days use Coordinated Universal Time (UTC) internally. Coverage is limited to the instrumentation
-                     era; historical activity has not been backfilled.
+                     Counts are eligible accountability events observed during the selected reporting period. Coverage
+                     is limited to the instrumentation era; historical activity has not been backfilled.
                   </ContextHelp>
                </p>
             </div>
