@@ -2455,7 +2455,9 @@ function FactualCorrectionContent({
                                     onClick={() => selectRequest(item.request_id)}
                                  >
                                     <span className="correction-queue-top">
-                                       <StatusBadge value={item.request_status} />
+                                       {item.stage !== "COMPLETED" && item.stage !== "CANCELLED" ? (
+                                          <StatusBadge value={item.request_status} />
+                                       ) : null}
                                        <StageBadge stage={item.stage} />
                                     </span>
                                     <strong className="correction-queue-reason">{item.correction_reason}</strong>
@@ -2577,7 +2579,9 @@ function FactualCorrectionContent({
                            <header className="correction-detail-header">
                               <div>
                                  <div className="correction-detail-badges">
-                                    <StatusBadge value={detail.request?.status} />
+                                    {detail.stage !== "COMPLETED" && detail.stage !== "CANCELLED" ? (
+                                       <StatusBadge value={detail.request?.status} />
+                                    ) : null}
                                     <StageBadge stage={detail.stage} />
                                  </div>
                                  <h3 id="correction-detail-heading" ref={detailHeadingRef} tabIndex={-1}>
