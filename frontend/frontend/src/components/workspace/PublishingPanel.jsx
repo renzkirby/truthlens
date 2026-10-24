@@ -329,14 +329,13 @@ function SealedEvidence({ sealedEvidence }) {
 
 function Readiness({ detail }) {
    const blockers = Array.isArray(detail?.blockers) ? detail.blockers : [];
-   const actions = Array.isArray(detail?.allowed_actions) ? detail.allowed_actions : [];
 
    return (
-      <section className="publishing-review-section" aria-labelledby="publishing-readiness-heading">
+      <section className="publishing-review-section publishing-readiness" aria-labelledby="publishing-readiness-heading">
          <div className="publishing-section-heading">
             <div>
-               <h4 id="publishing-readiness-heading">Publication readiness</h4>
-               <p>The server determines which review actions are currently available.</p>
+               <h4 id="publishing-readiness-heading">Decision readiness</h4>
+               <p>Server-defined workflow conditions determine which publication actions are available.</p>
             </div>
          </div>
 
@@ -353,24 +352,180 @@ function Readiness({ detail }) {
                ))}
             </ul>
          ) : (
-            <p className="publishing-inline-ready">No publication blockers are reported.</p>
+            <div className="publishing-ready-state" role="status">
+               <Icons name="check-circle" size={18} />
+               <div>
+                  <strong>Ready for a publication decision</strong>
+                  <p>No publication blockers are reported by the workflow.</p>
+               </div>
+            </div>
          )}
-
-         <dl className="publishing-readiness-metadata">
-            <div>
-               <dt>Allowed review actions</dt>
-               <dd>{actions.length > 0 ? actions.map((action) => formatLabel(action)).join(", ") : "None"}</dd>
-            </div>
-            <div>
-               <dt>Edit generation</dt>
-               <dd>{detail?.concurrency?.edit_generation ?? detail?.edit_generation ?? "Not recorded"}</dd>
-            </div>
-            <div>
-               <dt>Decision revision</dt>
-               <dd>{detail?.concurrency?.decision_revision ?? detail?.decision?.revision_number ?? "Not recorded"}</dd>
-            </div>
-         </dl>
       </section>
+   );
+}
+
+function PublishingReferenceMaterial({ detail, isEditorialReview }) {
+   const decision = detail?.decision || {};
+   const sealedEvidence = detail?.sealed_evidence || null;
+   const actions = Array.isArray(detail?.allowed_actions) ? detail.allowed_actions : [];
+
+   return (
+      <details className="publishing-reference-material">
+         <summary>
+            <span>
+               <strong>Reference material</strong>
+               <small>Revision context, publication sources, decision evidence, and technical details</small>
+            </span>
+            <Icons name="chevron-down" size={16} aria-hidden="true" />
+         </summary>
+
+         <div className="publishing-reference-content">
+            {isEditorialReview ? <EditorialRevisionContext revision={detail?.revision} /> : null}
+            <PublicationSources sourceItems={detail?.source_items} />
+            <SealedEvidence sealedEvidence={sealedEvidence} />
+
+            <details className="publishing-technical-details">
+               <summary>Technical details</summary>
+               <dl className="publishing-compact-metadata">
+                  <div>
+                     <dt>Allowed review actions</dt>
+                     <dd>{actions.length > 0 ? actions.map((action) => formatLabel(action)).join(", ") : "None"}</dd>
+                  </div>
+                  <div>
+                     <dt>Edit generation</dt>
+                     <dd>{detail?.concurrency?.edit_generation ?? detail?.edit_generation ?? "Not recorded"}</dd>
+                  </div>
+                  <div>
+                     <dt>Decision revision</dt>
+                     <dd>{detail?.concurrency?.decision_revision ?? decision.revision_number ?? "Not recorded"}</dd>
+                  </div>
+                  {isEditorialReview ? (
+                     <div>
+                        <dt>Predecessor version</dt>
+                        <dd>{detail?.concurrency?.predecessor_version ?? "Not recorded"}</dd>
+                     </div>
+                  ) : null}
+                  {sealedEvidence ? (
+                     <>
+                        <div>
+                           <dt>Evidence snapshot</dt>
+                           <dd>{String(sealedEvidence.decision_snapshot_id || "Not recorded")}</dd>
+                        </div>
+                        <div>
+                           <dt>Snapshot schema</dt>
+                           <dd>{sealedEvidence.schema_version ?? "Not recorded"}</dd>
+                        </div>
+                     </>
+                  ) : null}
+               </dl>
+            </details>
+         </div>
+      </details>
+   );
+}
+
+function PublishingDecisionDialog({
+   open,
+   processing,
+   title,
+   description,
+   onClose,
+   children,
+}) {
+   const dialogRef = useRef(null);
+   const triggerRef = useRef(null);
+   const processingRef = useRef(processing);
+   const closeRef = useRef(onClose);
+
+   useEffect(() => {
+      processingRef.current = processing;
+   }, [processing]);
+
+   useEffect(() => {
+      closeRef.current = onClose;
+   }, [onClose]);
+
+   useEffect(() => {
+      if (!open) {
+         return undefined;
+      }
+
+      triggerRef.current = document.activeElement;
+      const previousOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+
+      requestAnimationFrame(() => {
+         dialogRef.current
+            ?.querySelector('button:not([disabled]), textarea:not([disabled]), input:not([disabled])')
+            ?.focus();
+      });
+
+      const handleKeyDown = (event) => {
+         if (event.key === "Escape" && !processingRef.current) {
+            event.preventDefault();
+            closeRef.current?.();
+            return;
+         }
+
+         if (event.key !== "Tab") {
+            return;
+         }
+
+         const focusable = dialogRef.current?.querySelectorAll(
+            'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href]:not([aria-disabled="true"]), [tabindex]:not([tabindex="-1"])',
+         );
+         if (!focusable?.length) {
+            return;
+         }
+
+         const first = focusable[0];
+         const last = focusable[focusable.length - 1];
+         if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+         } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+         }
+      };
+
+      document.addEventListener("keydown", handleKeyDown);
+      return () => {
+         document.removeEventListener("keydown", handleKeyDown);
+         document.body.style.overflow = previousOverflow;
+         requestAnimationFrame(() => triggerRef.current?.focus?.());
+      };
+   }, [open]);
+
+   if (!open) {
+      return null;
+   }
+
+   return (
+      <div
+         className="publishing-dialog-backdrop"
+         onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !processing) {
+               onClose();
+            }
+         }}
+      >
+         <section
+            ref={dialogRef}
+            className="publishing-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="publishing-dialog-title"
+            aria-describedby="publishing-dialog-description"
+            aria-busy={processing || undefined}
+         >
+            <div className="publishing-dialog-copy">
+               <h3 id="publishing-dialog-title">{title}</h3>
+               <p id="publishing-dialog-description">{description}</p>
+            </div>
+            {children}
+         </section>
+      </div>
    );
 }
 
