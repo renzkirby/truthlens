@@ -106,7 +106,7 @@ function validateCustomPeriod(startDate, endDate, instant = new Date()) {
    if (start > end) return "Start date must be on or before end date.";
    if (endDate > getUtcDateString(instant)) return "End date cannot be in the future.";
    if ((end - start) / UTC_DAY_MS + 1 > 90) {
-      return "The reporting period cannot include more than 90 UTC calendar dates.";
+      return "The reporting period cannot include more than 90 dates.";
    }
    return "";
 }
@@ -555,11 +555,12 @@ function DailyActivityChart({ daily, startDate, endDate, includesCurrentUtcDay }
    const midpoint = maximum > 1 ? maximum / 2 : null;
    const labelStep = getTrendAxisLabelStep(daily.length);
    const chartHelp = [
-      `${selectedMetric.label} from ${startDate} through ${endDate} UTC.`,
-      "Each bar represents the recorded count for one returned UTC calendar date.",
+      `${selectedMetric.label} from ${startDate} through ${endDate}.`,
+      "Analytics groups reporting days using Coordinated Universal Time (UTC) internally so recorded activity is measured consistently across organizations.",
+      "Each bar represents the recorded count for one reporting date.",
       `The selected series ranges from 0 to ${countFormatter.format(maximum)} events per date.`,
-      includesCurrentUtcDay ? "The final UTC date is a partial-day observation." : null,
-      "Hover over a date column to see its exact count and UTC date.",
+      includesCurrentUtcDay ? "The final reporting date is still in progress and may be partial." : null,
+      "Hover over a date column to see its exact count and date.",
       "Exact daily counts for every date are available in the Daily activity breakdown table below.",
    ]
       .filter(Boolean)
@@ -569,8 +570,8 @@ function DailyActivityChart({ daily, startDate, endDate, includesCurrentUtcDay }
       <section className="institutional-analytics__trend-chart" aria-labelledby={chartTitleId} aria-describedby={chartDescriptionId}>
          <header className="institutional-analytics__chart-header">
             <div className="institutional-analytics__chart-title-row">
-               <h5 id={chartTitleId}>{selectedMetric.label} by UTC date</h5>
-               <ContextHelp label={`About ${selectedMetric.label} by UTC date`}>{chartHelp}</ContextHelp>
+               <h5 id={chartTitleId}>{selectedMetric.label} by date</h5>
+               <ContextHelp label={`About ${selectedMetric.label} by date`}>{chartHelp}</ContextHelp>
             </div>
             <p id={chartDescriptionId}>Daily {selectedMetric.label.toLowerCase()} during the selected reporting period.</p>
          </header>
@@ -601,7 +602,7 @@ function DailyActivityChart({ daily, startDate, endDate, includesCurrentUtcDay }
          ) : (
             <>
                <p className="institutional-analytics__chart-scale-note">
-                  Scale: 0 to {formatCount(maximum)} events per UTC date for {selectedMetric.label.toLowerCase()}.
+                  Scale: 0 to {formatCount(maximum)} events per date for {selectedMetric.label.toLowerCase()}.
                </p>
                <div className="institutional-analytics__chart-layout">
                   <div className="institutional-analytics__chart-scale" aria-hidden="true">
@@ -631,7 +632,7 @@ function DailyActivityChart({ daily, startDate, endDate, includesCurrentUtcDay }
                                  <div
                                     key={bucket.date}
                                     className={`institutional-analytics__chart-bar-slot${hoveredDate === bucket.date ? " institutional-analytics__chart-bar-slot--hovered" : ""}`}
-                                    data-tooltip={`${bucket.date} UTC · ${formatCount(values[index])} ${values[index] === 1 ? "event" : "events"}`}
+                                    data-tooltip={`${bucket.date} · ${formatCount(values[index])} ${values[index] === 1 ? "event" : "events"}`}
                                     onMouseEnter={() => setHoveredDate(bucket.date)}
                                     onMouseLeave={() => setHoveredDate(null)}
                                  >
@@ -806,8 +807,9 @@ function ActivityTrendsSection({ authFetch, authIdentity, organizationId, reques
             <div className="institutional-analytics__section-title-row">
                <h4 id={sectionHeadingId}>Activity over time</h4>
                <ContextHelp label="About activity over time">
-                  Counts represent eligible verification events recorded during the selected UTC reporting period.
-                  Historical activity outside instrumentation coverage is not reconstructed.
+                  Counts represent eligible verification events recorded during the selected reporting period.
+                  Analytics groups reporting days using Coordinated Universal Time (UTC) internally for consistency
+                  across organizations. Historical activity outside instrumentation coverage is not reconstructed.
                </ContextHelp>
             </div>
             <p>Selected-period verification activity.</p>
@@ -817,8 +819,9 @@ function ActivityTrendsSection({ authFetch, authIdentity, organizationId, reques
             <legend>
                <span>Reporting period</span>
                <ContextHelp label="About reporting periods">
-                  Presets use UTC calendar days, including the current partial UTC day. They are not rolling-hour
-                  intervals. Custom ranges may include up to 90 UTC calendar dates.
+                  Presets use calendar-day reporting periods rather than rolling-hour intervals. Analytics groups these
+                  reporting days using Coordinated Universal Time (UTC) internally for consistency across organizations.
+                  The current reporting day may therefore be partial. Custom ranges may include up to 90 dates.
                </ContextHelp>
             </legend>
             <div className="institutional-analytics__period-options">
@@ -873,7 +876,7 @@ function ActivityTrendsSection({ authFetch, authIdentity, organizationId, reques
                   Apply period
                </Button>
                <p id={customHelpId} className="institutional-analytics__custom-help">
-                  Dates are inclusive UTC calendar dates; the maximum period is 90 dates.
+                  Dates are inclusive; the maximum reporting period is 90 dates.
                </p>
                {validationMessage && (
                   <p id={customErrorId} className="institutional-analytics__validation-error" role="alert">
@@ -884,7 +887,13 @@ function ActivityTrendsSection({ authFetch, authIdentity, organizationId, reques
          )}
 
          <div className="institutional-analytics__selected-period">
-            <span>UTC reporting period</span>
+            <div className="institutional-analytics__selected-period-label">
+               <span>Reporting period</span>
+               <ContextHelp label="About reporting period dates">
+                  Reporting dates are grouped using Coordinated Universal Time (UTC) internally. This keeps Analytics
+                  consistent across organizations, but a reporting-day boundary can differ from your local calendar day.
+               </ContextHelp>
+            </div>
             <p>
                <time dateTime={appliedPeriod.startDate}>
                   {formatUtcDate(appliedPeriod.startDate)} ({appliedPeriod.startDate})
@@ -894,7 +903,7 @@ function ActivityTrendsSection({ authFetch, authIdentity, organizationId, reques
                   {formatUtcDate(appliedPeriod.endDate)} ({appliedPeriod.endDate})
                </time>
             </p>
-            {includesCurrentUtcDay && <p>The current UTC day is still in progress.</p>}
+            {includesCurrentUtcDay && <p>The current reporting day is still in progress.</p>}
          </div>
 
          {status === "loading" ? (
@@ -947,8 +956,8 @@ function ActivityTrendsSection({ authFetch, authIdentity, organizationId, reques
                )}
 
                <details className="institutional-analytics__daily-details">
-                  <summary>Daily activity breakdown ({countFormatter.format(expectedDateCount)} UTC dates)</summary>
-                  <p>Each row preserves the backend&apos;s UTC calendar-day bucket, including zero-activity dates.</p>
+                  <summary>Daily activity breakdown ({countFormatter.format(expectedDateCount)} dates)</summary>
+                  <p>Each row shows one reporting date, including dates with no recorded activity.</p>
                   <div
                      className="institutional-analytics__daily-table-region"
                      role="region"
@@ -956,10 +965,10 @@ function ActivityTrendsSection({ authFetch, authIdentity, organizationId, reques
                      aria-label="Scrollable daily activity table"
                   >
                      <table className="institutional-analytics__daily-table">
-                        <caption>Eligible event counts by UTC calendar date</caption>
+                        <caption>Eligible event counts by reporting date</caption>
                         <thead>
                            <tr>
-                              <th scope="col">UTC date</th>
+                              <th scope="col">Date</th>
                               <th scope="col">Investigations taken</th>
                               <th scope="col">Evidence review decisions</th>
                               <th scope="col">Verdicts issued</th>
@@ -985,10 +994,11 @@ function ActivityTrendsSection({ authFetch, authIdentity, organizationId, reques
                </details>
 
                <p className="institutional-analytics__trend-coverage">
-                  Selected-period counts use recorded UTC activity only.
+                  Selected-period counts use recorded activity only.
                   <ContextHelp label="About activity coverage">
-                     Counts are eligible accountability events observed during this UTC period. Coverage is limited to
-                     the instrumentation era; historical activity has not been backfilled.
+                     Counts are eligible accountability events observed during the selected reporting period. Reporting
+                     days use Coordinated Universal Time (UTC) internally. Coverage is limited to the instrumentation
+                     era; historical activity has not been backfilled.
                   </ContextHelp>
                </p>
             </div>
