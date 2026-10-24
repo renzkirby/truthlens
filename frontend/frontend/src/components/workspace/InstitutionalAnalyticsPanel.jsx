@@ -397,7 +397,7 @@ function ContextHelp({ label = "More information", children }) {
             type="button"
             className="institutional-analytics__context-help-trigger"
             aria-label={label}
-            aria-describedby={id}
+            aria-controls={id}
             aria-expanded={pinned}
             onClick={() => setPinned((current) => !current)}
          >
