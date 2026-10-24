@@ -154,13 +154,39 @@
       visibility var(--tl-duration-fast) ease;
 }
 
+.institutional-analytics__context-help--left .institutional-analytics__context-help-popover {
+   left: 0;
+   right: auto;
+   transform: translate(0, -0.25rem);
+}
+
+.institutional-analytics__context-help--right .institutional-analytics__context-help-popover {
+   left: auto;
+   right: 0;
+   transform: translate(0, -0.25rem);
+}
+
 .institutional-analytics__context-help:hover .institutional-analytics__context-help-popover,
 .institutional-analytics__context-help:focus-within .institutional-analytics__context-help-popover,
 .institutional-analytics__context-help.is-pinned .institutional-analytics__context-help-popover {
    opacity: 1;
    visibility: visible;
    pointer-events: auto;
+}
+
+.institutional-analytics__context-help--center:hover .institutional-analytics__context-help-popover,
+.institutional-analytics__context-help--center:focus-within .institutional-analytics__context-help-popover,
+.institutional-analytics__context-help--center.is-pinned .institutional-analytics__context-help-popover {
    transform: translate(-50%, 0);
+}
+
+.institutional-analytics__context-help--left:hover .institutional-analytics__context-help-popover,
+.institutional-analytics__context-help--left:focus-within .institutional-analytics__context-help-popover,
+.institutional-analytics__context-help--left.is-pinned .institutional-analytics__context-help-popover,
+.institutional-analytics__context-help--right:hover .institutional-analytics__context-help-popover,
+.institutional-analytics__context-help--right:focus-within .institutional-analytics__context-help-popover,
+.institutional-analytics__context-help--right.is-pinned .institutional-analytics__context-help-popover {
+   transform: translate(0, 0);
 }
 
 .institutional-analytics__period-controls legend {
@@ -1646,19 +1672,6 @@
 }
 
 @container institutional-analytics (max-width: 660px) {
-   .institutional-analytics__context-help-popover {
-      left: auto;
-      right: 0;
-      transform: translateY(-0.25rem);
-   }
-
-   .institutional-analytics__context-help:hover .institutional-analytics__context-help-popover,
-   .institutional-analytics__context-help:focus-within .institutional-analytics__context-help-popover,
-   .institutional-analytics__context-help.is-pinned .institutional-analytics__context-help-popover {
-      transform: translateY(0);
-   }
-
-
    .institutional-analytics__history > summary {
       align-items: flex-start;
       flex-direction: column;
