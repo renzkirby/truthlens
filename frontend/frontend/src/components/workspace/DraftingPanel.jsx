@@ -292,16 +292,16 @@ function SealedEvidence({ sealedEvidence }) {
       <section className="drafting-provenance-section" aria-labelledby="drafting-sealed-evidence-heading">
          <div className="drafting-section-heading">
             <div>
-               <h4 id="drafting-sealed-evidence-heading">Decision-time evidence</h4>
-               <p>Immutable provenance captured for the human adjudication decision.</p>
+               <h4 id="drafting-sealed-evidence-heading">Evidence used for this decision</h4>
+               <p>Evidence preserved from when the human decision was made. Evidence added later does not change this historical record.</p>
             </div>
             <span className="drafting-count-label">{sealedEvidence?.count ?? entries.length} records</span>
          </div>
 
          {!sealedEvidence ? (
-            <p className="drafting-inline-empty">No valid sealed evidence snapshot is available.</p>
+            <p className="drafting-inline-empty">No preserved evidence record is available for this decision.</p>
          ) : entries.length === 0 ? (
-            <p className="drafting-inline-empty">The sealed decision snapshot contains no evidence records.</p>
+            <p className="drafting-inline-empty">No evidence records were preserved for this decision.</p>
          ) : (
             <ol className="drafting-evidence-list">
                {entries.map((entry, index) => {
@@ -373,7 +373,7 @@ function PublicationSources({ sourceItems }) {
                <h4 id="drafting-publication-sources-heading">Publication sources</h4>
                <p>
                   Publication sources show where each source entered the publication record. Citing a source in the
-                  article does not change the sealed decision evidence.
+                  article does not change the evidence preserved for the human decision.
                </p>
             </div>
             <span className="drafting-count-label">{sources.length} sources</span>
@@ -406,7 +406,7 @@ function PublicationSources({ sourceItems }) {
                         </div>
                         <div className="drafting-source-flags">
                            <span>{sourceOriginLabel(source?.source_origin)}</span>
-                           {isDecisionEvidence ? <span>Sealed evidence</span> : null}
+                           {isDecisionEvidence ? <span>Decision evidence</span> : null}
                            {isOrganizationEditorial ? <span>Editorial source</span> : null}
                            {addedBy ? <span>{addedBy}</span> : null}
                            <span>{sourceSelectionLabel(source?.is_editorially_selected)}</span>
@@ -494,15 +494,15 @@ function DraftingReferenceMaterial({ detail, isEditorialRevision }) {
                   {sealedEvidence ? (
                      <>
                         <div>
-                           <dt>Evidence snapshot</dt>
+                           <dt>Preserved evidence record</dt>
                            <dd>{String(sealedEvidence.decision_snapshot_id || "Not recorded")}</dd>
                         </div>
                         <div>
-                           <dt>Snapshot schema</dt>
+                           <dt>Record schema</dt>
                            <dd>{sealedEvidence.schema_version ?? "Not recorded"}</dd>
                         </div>
                         <div>
-                           <dt>Snapshot captured</dt>
+                           <dt>Preserved at</dt>
                            <dd><FormattedDateTime value={sealedEvidence.captured_at} /></dd>
                         </div>
                      </>
@@ -696,7 +696,7 @@ function EditorialSourceEditor({
                <p>
                   Use verified evidence captured for this adjudication or add other sources your organization used
                   to support or explain the article. Selecting a source does not change the adjudicated verdict or
-                  decision-time evidence.
+                  evidence preserved for the human decision.
                </p>
             </div>
          </div>
@@ -731,7 +731,7 @@ function EditorialSourceEditor({
                      <strong id={`${idPrefix}-verified-heading`}>Choose verified evidence</strong>
                      <p>
                         These sources were verified during Evidence Review and captured in this adjudication's
-                        decision-time evidence. Select the ones you want to cite in the article.
+                        evidence preserved for the human decision. Select the ones you want to cite in the article.
                      </p>
                   </div>
                   <span>{verifiedEvidenceOptions.length} available</span>
@@ -785,7 +785,7 @@ function EditorialSourceEditor({
 
          {verifiedEvidenceOptions.length === 0 ? (
             <p className="drafting-source-availability-note">
-               No verified decision-time evidence with a usable source URL is available for this adjudication.
+               No verified evidence preserved for this decision has a usable source URL.
             </p>
          ) : null}
 
@@ -805,7 +805,7 @@ function EditorialSourceEditor({
                               {verifiedOption.url}
                               <Icons name="external-link" size={12} aria-hidden="true" />
                            </a>
-                           <small>Preserves Evidence Review provenance and the sealed decision-evidence lineage.</small>
+                           <small>Preserves Evidence Review provenance and its link to the evidence used for the human decision.</small>
                         </div>
                         <Button
                            type="button"
@@ -1978,7 +1978,7 @@ function DraftingContent({
             <Icons name="shield-check" size={18} />
             <p>
                Drafts interpret an existing human adjudication. Editing article content never changes the factual
-               verdict or its sealed evidence basis.
+               verdict or the evidence used for that decision.
             </p>
          </div>
 
