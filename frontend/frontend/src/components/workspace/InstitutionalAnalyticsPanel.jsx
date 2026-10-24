@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { useAuth } from "../../hooks/useAuth";
 import { resolveApiEndpoint } from "../../utils/api";
@@ -369,7 +369,7 @@ function ContextHelp({ label = "More information", children }) {
    const [pinned, setPinned] = useState(false);
    const [alignment, setAlignment] = useState("center");
 
-   const updateAlignment = () => {
+   const updateAlignment = useCallback(() => {
       const root = rootRef.current;
       const popover = popoverRef.current;
       if (!root || !popover || typeof window === "undefined") {
@@ -389,7 +389,7 @@ function ContextHelp({ label = "More information", children }) {
       } else {
          setAlignment("center");
       }
-   };
+   }, []);
 
    useEffect(() => {
       if (!pinned) {
@@ -420,7 +420,7 @@ function ContextHelp({ label = "More information", children }) {
          window.removeEventListener("resize", keepAligned);
          window.removeEventListener("scroll", keepAligned, true);
       };
-   }, [pinned]);
+   }, [pinned, updateAlignment]);
 
    return (
       <span
