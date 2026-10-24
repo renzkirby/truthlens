@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useAuth } from "../../hooks/useAuth";
+import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
+import { showWorkspaceSuccess, WORKSPACE_LONG_TOAST_DURATION } from "../../utils/workspaceToast";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
@@ -180,6 +182,7 @@ function EvidenceReviewContent({
    onWorkflowChanged,
    onReturnToInvestigation,
 }) {
+   const { addToast } = useNotification();
    const initialCaseKey = initialCaseId ? String(initialCaseId) : null;
 
    const [disposition, setDisposition] = useState("UNVERIFIED");
@@ -722,12 +725,10 @@ function EvidenceReviewContent({
             setRejectionReason("");
          }
 
-         setNotice(
-            `Case ${formatCaseReference(operation.caseId)} was ${
-               operation.decision === "VERIFIED" ? "verified" : "rejected"
-            }. Claim-level adjudication remains a separate decision.`,
-         );
-         setNoticeCaseId(operation.caseId);
+         showWorkspaceSuccess(addToast, {
+            title: operation.decision === "VERIFIED" ? "Evidence verified" : "Evidence rejected",
+            message: "The evidence review was recorded. Claim-level adjudication remains a separate decision.",
+         });
          onWorkflowChanged?.({
             stage: "EVIDENCE_REVIEW",
             caseId: operation.caseId,

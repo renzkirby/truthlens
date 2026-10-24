@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../../hooks/useAuth";
+import { useNotification } from "../../hooks/useNotification";
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
 
 import { resolveApiEndpoint } from "../../utils/api";
+import { showWorkspaceSuccess, WORKSPACE_LONG_TOAST_DURATION } from "../../utils/workspaceToast";
 
 import { VERDICT_CONFIG } from "../../utils/constants";
 
@@ -73,6 +75,7 @@ function formatAvailableInvestigations(count) {
 
 function VerificationIntakePanel({ organizationId, organizationName, onInvestigationClaimed }) {
    const { authFetch } = useAuth();
+   const { addToast } = useNotification();
 
    const [offset, setOffset] = useState(0);
 
@@ -267,11 +270,10 @@ function VerificationIntakePanel({ organizationId, organizationName, onInvestiga
 
          removeClaimedAssignmentFromIntake(assignmentId);
 
-         setNotice(
-            `Investigation claimed for ${
-               organizationName || "your organization"
-            }. Opening the investigation workspace.`,
-         );
+         showWorkspaceSuccess(addToast, {
+            title: "Investigation claimed",
+            message: `Assigned to ${organizationName || "your organization"}. Opening the investigation workspace.`,
+         });
          onInvestigationClaimed?.(claimedAssignment);
       } catch (error) {
          if (error?.status === 409) {

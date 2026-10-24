@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../../hooks/useAuth";
+import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
+import { showWorkspaceSuccess, WORKSPACE_LONG_TOAST_DURATION } from "../../utils/workspaceToast";
 
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
@@ -57,6 +59,7 @@ function OrganizationWorkloadPanel({
    onOpenInvestigation,
 }) {
    const { authFetch } = useAuth();
+   const { addToast } = useNotification();
 
    const [offset, setOffset] = useState(0);
    const [requestVersion, setRequestVersion] = useState(0);
@@ -74,7 +77,6 @@ function OrganizationWorkloadPanel({
    });
    const [loading, setLoading] = useState(true);
    const [errorMessage, setErrorMessage] = useState("");
-   const [notice, setNotice] = useState("");
    const [actionError, setActionError] = useState("");
    const [confirmingReleaseId, setConfirmingReleaseId] = useState(null);
    const [releasingId, setReleasingId] = useState(null);
@@ -152,7 +154,6 @@ function OrganizationWorkloadPanel({
 
    const resetTransientState = () => {
       setErrorMessage("");
-      setNotice("");
       setActionError("");
       setConfirmingReleaseId(null);
    };
@@ -238,7 +239,6 @@ function OrganizationWorkloadPanel({
 
       setReleasingId(assignmentId);
       setActionError("");
-      setNotice("");
 
       try {
          await authFetch(resolveApiEndpoint("VERIFICATION_ASSIGNMENT_RELEASE", assignmentId), {
@@ -247,9 +247,10 @@ function OrganizationWorkloadPanel({
 
          setConfirmingReleaseId(null);
          removeReleasedAssignmentFromWorkload(assignmentId);
-         setNotice(
-            `Investigation released by ${organizationName || "your organization"}. It has returned to shared Verification Intake.`,
-         );
+         showWorkspaceSuccess(addToast, {
+            title: "Investigation released",
+            message: "It has returned to shared Verification Intake.",
+         });
       } catch (error) {
          setConfirmingReleaseId(null);
 
@@ -365,13 +366,6 @@ function OrganizationWorkloadPanel({
                ) : null}
             </div>
          </section>
-
-         {notice && (
-            <div className="workload-notice" role="status" aria-live="polite">
-               <Icons name="info" size={17} />
-               <span>{notice}</span>
-            </div>
-         )}
 
          {actionError && (
             <div className="workload-action-error" role="alert">
