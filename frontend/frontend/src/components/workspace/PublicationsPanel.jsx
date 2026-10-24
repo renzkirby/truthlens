@@ -23,7 +23,7 @@ const VERDICT_CLASSES = {
 };
 
 const RECORD_STATE_LABELS = {
-   SEALED: "Sealed publication record",
+   SEALED: "Preserved publication record",
    LEGACY_UNSEALED: "Legacy publication record",
    INVALID_SEAL: "Publication record needs review",
 };
@@ -229,7 +229,7 @@ function PublicationSources({ sourceItems }) {
                <h4 id="publications-sources-heading">Publication sources</h4>
                <p>
                   Publication sources show where each source entered the publication record. Citing a source in the
-                  article does not change the sealed decision evidence.
+                  article does not change the evidence preserved for the human decision.
                </p>
             </div>
             <span className="publications-count-label">{sources.length} sources</span>
@@ -259,7 +259,7 @@ function PublicationSources({ sourceItems }) {
                         </div>
                         <div className="publications-source-flags">
                            <span>{sourceOriginLabel(source?.source_origin)}</span>
-                           {isDecisionEvidence ? <span>Sealed evidence</span> : null}
+                           {isDecisionEvidence ? <span>Decision evidence</span> : null}
                            {isOrganizationEditorial ? <span>Editorial source</span> : null}
                            {isOrganizationEditorial && source?.added_by?.username ? (
                               <span>Added by @{source.added_by.username}</span>
@@ -282,16 +282,16 @@ function SealedEvidence({ sealedEvidence }) {
       <section className="publications-section" aria-labelledby="publications-evidence-heading">
          <div className="publications-section-heading">
             <div>
-               <h4 id="publications-evidence-heading">Sealed decision-time evidence</h4>
-               <p>This immutable evidence basis belongs to the human decision, not to editable article citations.</p>
+               <h4 id="publications-evidence-heading">Evidence used for this decision</h4>
+               <p>Evidence preserved from when the human decision was made. Evidence added later does not change this historical record.</p>
             </div>
             <span className="publications-count-label">{sealedEvidence?.count ?? entries.length} records</span>
          </div>
 
          {!sealedEvidence ? (
-            <p className="publications-inline-empty">No valid sealed evidence snapshot is available.</p>
+            <p className="publications-inline-empty">No preserved evidence record is available for this decision.</p>
          ) : entries.length === 0 ? (
-            <p className="publications-inline-empty">The sealed decision snapshot contains no evidence records.</p>
+            <p className="publications-inline-empty">No evidence records were preserved for this decision.</p>
          ) : (
             <ol className="publications-evidence-list">
                {entries.map((entry, index) => {
@@ -392,7 +392,7 @@ function PublicationReferenceMaterial({ detail }) {
          <summary>
             <span>
                <strong>Reference material</strong>
-               <small>Publication sources, sealed decision evidence, and technical record details</small>
+               <small>Publication sources, evidence used for the human decision, and technical record details</small>
             </span>
             <Icons name="chevron-down" size={16} aria-hidden="true" />
          </summary>
@@ -1134,7 +1134,7 @@ function PublicationsContent({
             <Icons name="book-open" size={18} />
             <p>
                This is {organizationName ? `${organizationName}'s` : "the selected organization's"} internal
-               publication library. Human decisions, sealed evidence, and published article versions remain distinct
+               publication library. Human decisions, the evidence used for those decisions, and published article versions remain distinct
                and historically inspectable.
             </p>
          </div>
