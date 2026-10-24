@@ -195,7 +195,7 @@ function PublicationSources({ sourceItems }) {
                <h4 id="publishing-sources-heading">Publication sources</h4>
                <p>
                   Publication sources show where each source entered the publication record. Citing a source in the
-                  article does not change the sealed decision evidence.
+                  article does not change the evidence preserved for the human decision.
                </p>
             </div>
             <span className="publishing-count-label">{sources.length} sources</span>
@@ -228,7 +228,7 @@ function PublicationSources({ sourceItems }) {
                         </div>
                         <div className="publishing-source-flags">
                            <span>{sourceOriginLabel(source?.source_origin)}</span>
-                           {isDecisionEvidence ? <span>Sealed evidence</span> : null}
+                           {isDecisionEvidence ? <span>Decision evidence</span> : null}
                            {isOrganizationEditorial ? <span>Editorial source</span> : null}
                            {addedBy ? <span>{addedBy}</span> : null}
                            <span>{sourceSelectionLabel(source?.is_editorially_selected)}</span>
@@ -249,16 +249,16 @@ function SealedEvidence({ sealedEvidence }) {
       <section className="publishing-review-section" aria-labelledby="publishing-sealed-evidence-heading">
          <div className="publishing-section-heading">
             <div>
-               <h4 id="publishing-sealed-evidence-heading">Decision-time evidence</h4>
-               <p>Immutable historical provenance captured for the adjudication decision.</p>
+               <h4 id="publishing-sealed-evidence-heading">Evidence used for this decision</h4>
+               <p>Evidence preserved from when the human decision was made. Evidence added later does not change this historical record.</p>
             </div>
             <span className="publishing-count-label">{sealedEvidence?.count ?? entries.length} records</span>
          </div>
 
          {!sealedEvidence ? (
-            <p className="publishing-inline-empty">No valid sealed evidence snapshot is available.</p>
+            <p className="publishing-inline-empty">No preserved evidence record is available for this decision.</p>
          ) : entries.length === 0 ? (
-            <p className="publishing-inline-empty">The sealed decision snapshot contains no evidence records.</p>
+            <p className="publishing-inline-empty">No evidence records were preserved for this decision.</p>
          ) : (
             <ol className="publishing-evidence-list">
                {entries.map((entry, index) => {
@@ -318,8 +318,8 @@ function SealedEvidence({ sealedEvidence }) {
 
          {sealedEvidence ? (
             <p className="publishing-snapshot-note">
-               Snapshot {String(sealedEvidence.decision_snapshot_id || "unavailable").slice(0, 8)} · Schema version{" "}
-               {sealedEvidence.schema_version ?? "unavailable"} · Captured{" "}
+               Record {String(sealedEvidence.decision_snapshot_id || "unavailable").slice(0, 8)} · Schema version{" "}
+               {sealedEvidence.schema_version ?? "unavailable"} · Preserved{" "}
                <FormattedDateTime value={sealedEvidence.captured_at} />
             </p>
          ) : null}
@@ -408,11 +408,11 @@ function PublishingReferenceMaterial({ detail, isEditorialReview }) {
                   {sealedEvidence ? (
                      <>
                         <div>
-                           <dt>Evidence snapshot</dt>
+                           <dt>Preserved evidence record</dt>
                            <dd>{String(sealedEvidence.decision_snapshot_id || "Not recorded")}</dd>
                         </div>
                         <div>
-                           <dt>Snapshot schema</dt>
+                           <dt>Record schema</dt>
                            <dd>{sealedEvidence.schema_version ?? "Not recorded"}</dd>
                         </div>
                      </>
