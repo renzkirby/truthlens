@@ -1455,7 +1455,9 @@ function PublicationsContent({
 
                               <PublicationReferenceMaterial detail={detail} />
 
-                              {(correctionWorkflow || canCreateRevision) ? (
+                              {(correctionWorkflow ||
+                              canCreateRevision ||
+                              (Array.isArray(detail.blockers) && detail.blockers.length > 0)) ? (
                                  <section
                                     className="publications-maintenance"
                                     aria-labelledby="publications-maintenance-heading"
@@ -1517,7 +1519,8 @@ function PublicationsContent({
                                        </div>
                                     ) : null}
 
-                                    {canCreateRevision ? (
+                                    {canCreateRevision ||
+                                    (Array.isArray(detail.blockers) && detail.blockers.length > 0) ? (
                                        <div className="publications-maintenance-option">
                                           <div>
                                              <strong>Editorial revision</strong>
@@ -1526,22 +1529,24 @@ function PublicationsContent({
                                                 editorial citations. The current publication stays live during review.
                                              </p>
                                           </div>
-                                          <div className="publications-maintenance-actions">
-                                             <Button
-                                                ref={createRevisionButtonRef}
-                                                type="button"
-                                                variant="secondary"
-                                                density="standard"
-                                                leadingIcon={<Icons name="file-text" size={16} />}
-                                                disabled={Boolean(mutation)}
-                                                onClick={() => {
-                                                   setRevisionOpen(true);
-                                                   setActionError("");
-                                                }}
-                                             >
-                                                Create editorial revision
-                                             </Button>
-                                          </div>
+                                          {canCreateRevision ? (
+                                             <div className="publications-maintenance-actions">
+                                                <Button
+                                                   ref={createRevisionButtonRef}
+                                                   type="button"
+                                                   variant="secondary"
+                                                   density="standard"
+                                                   leadingIcon={<Icons name="file-text" size={16} />}
+                                                   disabled={Boolean(mutation)}
+                                                   onClick={() => {
+                                                      setRevisionOpen(true);
+                                                      setActionError("");
+                                                   }}
+                                                >
+                                                   Create editorial revision
+                                                </Button>
+                                             </div>
+                                          ) : null}
                                           <Blockers blockers={detail.blockers} />
                                        </div>
                                     ) : null}
