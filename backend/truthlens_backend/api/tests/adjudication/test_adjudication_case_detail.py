@@ -427,8 +427,10 @@ class AdjudicationCaseDetailApiTests(APITestCase):
                 "decision_history",
                 "events",
                 "action_state",
+                "drafting_handoff",
             },
         )
+        self.assertIsNone(response.data["drafting_handoff"])
         self.assertEqual(
             set(response.data["claim"]),
             {
