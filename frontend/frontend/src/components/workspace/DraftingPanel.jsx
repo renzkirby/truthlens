@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../../hooks/useAuth";
+import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
+import { showWorkspaceSuccess, WORKSPACE_LONG_TOAST_DURATION } from "../../utils/workspaceToast";
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
 import Input from "../ui/Input.jsx";
@@ -979,6 +981,7 @@ function DraftingContent({
    initialSelection,
    onInitialSelectionConsumed,
 }) {
+   const { addToast } = useNotification();
    const [offset, setOffset] = useState(0);
    const [queue, setQueue] = useState({ count: 0, limit: PAGE_SIZE, offset: 0, results: [] });
    const [queueLoading, setQueueLoading] = useState(true);
@@ -1005,7 +1008,6 @@ function DraftingContent({
    const [forceDirty, setForceDirty] = useState(false);
    const [validationError, setValidationError] = useState("");
    const [mutation, setMutation] = useState(null);
-   const [notice, setNotice] = useState("");
    const [actionError, setActionError] = useState("");
    const [authorityError, setAuthorityError] = useState("");
    const [authorityRetrying, setAuthorityRetrying] = useState(false);
@@ -1122,7 +1124,6 @@ function DraftingContent({
       setQueueLoading(false);
       setQueueRefreshing(false);
       setDetailLoading(false);
-      setNotice("");
       setActionError("");
       setValidationError("");
       setConflict(null);
@@ -1193,11 +1194,11 @@ function DraftingContent({
    }, [isDirty]);
 
    useEffect(() => {
-      if (focusActionMessageRef.current && (notice || actionError || validationError || authorityError)) {
+      if (focusActionMessageRef.current && (actionError || validationError || authorityError)) {
          focusActionMessageRef.current = false;
          actionMessageRef.current?.focus();
       }
-   }, [actionError, authorityError, notice, validationError]);
+   }, [actionError, authorityError, validationError]);
 
    useEffect(() => {
       if (conflict) {
@@ -1609,7 +1610,6 @@ function DraftingContent({
       setMutation("create");
       setValidationError("");
       setActionError("");
-      setNotice("");
 
       try {
          const created = await authFetch(resolveApiEndpoint("FACT_CHECK_DRAFT_CREATE", operation.resourceId), {
@@ -1642,8 +1642,11 @@ function DraftingContent({
          setDetailUnavailable(false);
          setDetailError("");
          applyEditorFromDetail(created);
-         setNotice("Draft created from the current human adjudication decision.");
-         focusActionMessageRef.current = true;
+         showWorkspaceSuccess(addToast, {
+            title: "Draft created",
+            message: "Your draft is ready. Continue editing or submit it for publication review when complete.",
+            duration: WORKSPACE_LONG_TOAST_DURATION,
+         });
       } catch (error) {
          if (isMutationContextCurrent(operation)) {
             handleMutationError(error, operation, "Unable to create this fact-check draft.");
@@ -1673,7 +1676,6 @@ function DraftingContent({
       setMutation("save");
       setValidationError("");
       setActionError("");
-      setNotice("");
 
       try {
          const endpoint =
@@ -1704,8 +1706,10 @@ function DraftingContent({
 
          setDetail(updated);
          applyEditorFromDetail(updated);
-         setNotice(operation.workflowKind === "EDITORIAL_REVISION" ? "Editorial revision saved." : "Draft saved.");
-         focusActionMessageRef.current = true;
+         showWorkspaceSuccess(addToast, {
+            title: operation.workflowKind === "EDITORIAL_REVISION" ? "Editorial revision saved" : "Draft saved",
+            message: "Your latest changes have been saved.",
+         });
       } catch (error) {
          if (isMutationContextCurrent(operation)) {
             handleMutationError(error, operation, "Unable to save this draft.");
@@ -1726,7 +1730,6 @@ function DraftingContent({
       mutationRequestIdRef.current = operation.requestId;
       setMutation("submit");
       setActionError("");
-      setNotice("");
 
       try {
          const endpoint =
@@ -1751,8 +1754,11 @@ function DraftingContent({
 
          setDetail(submitted);
          applyEditorFromDetail(submitted);
-         setNotice("Submitted for publication review.");
-         focusActionMessageRef.current = true;
+         showWorkspaceSuccess(addToast, {
+            title: "Submitted for review",
+            message: "This fact-check is now awaiting publication review.",
+            duration: WORKSPACE_LONG_TOAST_DURATION,
+         });
       } catch (error) {
          if (isMutationContextCurrent(operation)) {
             handleMutationError(error, operation, "Unable to submit this draft for publication review.");
@@ -1786,7 +1792,6 @@ function DraftingContent({
       setMutation("abandon");
       setValidationError("");
       setActionError("");
-      setNotice("");
 
       try {
          const endpoint =
@@ -1815,12 +1820,14 @@ function DraftingContent({
          applyEditorFromDetail(null);
          setAbandonOpen(false);
          setAbandonReason("");
-         setNotice(
-            operation.workflowKind === "EDITORIAL_REVISION"
-               ? "Editorial revision abandoned. It was not added to publication history."
-               : "Draft abandoned. The claim remains available for future publication work.",
-         );
-         focusActionMessageRef.current = true;
+         showWorkspaceSuccess(addToast, {
+            title: operation.workflowKind === "EDITORIAL_REVISION" ? "Editorial revision abandoned" : "Draft abandoned",
+            message:
+               operation.workflowKind === "EDITORIAL_REVISION"
+                  ? "The revision was archived and was not added to publication history."
+                  : "The draft was archived. The claim remains available for future publication work.",
+            duration: WORKSPACE_LONG_TOAST_DURATION,
+         });
          focusQueueAfterReturnRef.current = true;
       } catch (error) {
          if (isMutationContextCurrent(operation)) {
@@ -1855,7 +1862,6 @@ function DraftingContent({
       setConflict(null);
       setActionError("");
       setValidationError("");
-      setNotice("");
       setAbandonOpen(false);
       setAbandonReason("");
       setEditor(EMPTY_EDITOR);
@@ -1968,12 +1974,6 @@ function DraftingContent({
                         Retry access
                      </Button>
                   </div>
-               </div>
-            ) : null}
-            {notice ? (
-               <div className="drafting-message drafting-message--success" role="status">
-                  <Icons name="check-circle" size={18} />
-                  <p>{notice}</p>
                </div>
             ) : null}
             {actionError || validationError ? (

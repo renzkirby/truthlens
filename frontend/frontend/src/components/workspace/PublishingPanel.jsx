@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../../hooks/useAuth";
+import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
+import { showWorkspaceSuccess, WORKSPACE_LONG_TOAST_DURATION } from "../../utils/workspaceToast";
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
 import Textarea from "../ui/Textarea.jsx";
@@ -380,6 +382,7 @@ function PublishingContent({
    onPublicationPublished,
    initialFactCheckId,
 }) {
+   const { addToast } = useNotification();
    const initialFactCheckKey = initialFactCheckId ? String(initialFactCheckId) : null;
    const [offset, setOffset] = useState(0);
    const [queue, setQueue] = useState({ count: 0, limit: PAGE_SIZE, offset: 0, results: [] });
@@ -397,7 +400,6 @@ function PublishingContent({
 
    const [authorityError, setAuthorityError] = useState("");
    const [authorityRetrying, setAuthorityRetrying] = useState(false);
-   const [notice, setNotice] = useState("");
    const [actionError, setActionError] = useState("");
    const [conflict, setConflict] = useState(null);
    const [mutation, setMutation] = useState(null);
@@ -468,7 +470,6 @@ function PublishingContent({
       setQueueLoading(false);
       setQueueRefreshing(false);
       setDetailLoading(false);
-      setNotice("");
       setActionError("");
       setConflict(null);
       setAuthorityError("Your publication access for this organization is no longer available.");
@@ -491,11 +492,11 @@ function PublishingContent({
    }, [selectedId]);
 
    useEffect(() => {
-      if (focusActionMessageRef.current && (notice || actionError || authorityError)) {
+      if (focusActionMessageRef.current && (actionError || authorityError)) {
          focusActionMessageRef.current = false;
          actionMessageRef.current?.focus();
       }
-   }, [actionError, authorityError, notice]);
+   }, [actionError, authorityError]);
 
    useEffect(() => {
       if (conflict) {
@@ -817,7 +818,6 @@ function PublishingContent({
       mutationRequestIdRef.current = operation.requestId;
       setMutation("publish");
       setActionError("");
-      setNotice("");
 
       try {
          const endpoint =
@@ -858,12 +858,11 @@ function PublishingContent({
          setSelectedId(null);
          setDetail(null);
          setConfirmation(null);
-         setNotice(
-            `${headline}${version ? ` · article v${version}` : ""} was ${
-               operation.workflowKind === "EDITORIAL_REVISION" ? "published as the current replacement" : "published"
-            }.`,
-         );
-         focusActionMessageRef.current = true;
+         showWorkspaceSuccess(addToast, {
+            title: operation.workflowKind === "EDITORIAL_REVISION" ? "Replacement published" : "Fact-check published",
+            message: `${headline}${version ? ` · article v${version}` : ""} is now published.`,
+            duration: WORKSPACE_LONG_TOAST_DURATION,
+         });
          focusQueueAfterMutationRef.current = true;
          if (operation.workflowKind === "EDITORIAL_REVISION") {
             onPublicationPublished?.(published);
@@ -906,7 +905,6 @@ function PublishingContent({
       mutationRequestIdRef.current = operation.requestId;
       setMutation("return");
       setActionError("");
-      setNotice("");
 
       try {
          const endpoint =
@@ -936,8 +934,10 @@ function PublishingContent({
          setDetail(null);
          setConfirmation(null);
          setReworkReason("");
-         setNotice("Returned to Drafting for rework.");
-         focusActionMessageRef.current = true;
+         showWorkspaceSuccess(addToast, {
+            title: "Returned for rework",
+            message: "The article has been returned to Drafting for revision.",
+         });
          focusQueueAfterMutationRef.current = true;
       } catch (error) {
          if (isMutationContextCurrent(operation)) {
@@ -968,7 +968,6 @@ function PublishingContent({
       setDetailUnavailable(false);
       setConflict(null);
       setActionError("");
-      setNotice("");
       setConfirmation(null);
       setReworkReason("");
       focusDetailAfterLoadRef.current = true;
@@ -1042,12 +1041,6 @@ function PublishingContent({
                         Retry access
                      </Button>
                   </div>
-               </div>
-            ) : null}
-            {notice ? (
-               <div className="publishing-message publishing-message--success" role="status">
-                  <Icons name="check-circle" size={18} />
-                  <p>{notice}</p>
                </div>
             ) : null}
             {actionError ? (
