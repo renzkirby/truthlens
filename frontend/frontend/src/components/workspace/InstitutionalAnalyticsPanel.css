@@ -38,8 +38,9 @@
 
 .institutional-analytics__header {
    display: grid;
-   gap: var(--tl-space-1);
-   max-width: 76ch;
+   gap: var(--tl-space-2);
+   width: 100%;
+   max-width: none;
 }
 
 .institutional-analytics__header p,
@@ -59,10 +60,16 @@
 }
 
 .institutional-analytics__section--current {
+   position: relative;
    padding: var(--tl-space-6);
-   background: var(--tl-color-bg-subtle);
-   border: 1px solid var(--tl-color-border-default);
+   background: linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--tl-color-brand-primary) 7%, var(--tl-color-bg-surface)),
+      var(--tl-color-bg-subtle)
+   );
+   border: 1px solid color-mix(in srgb, var(--tl-color-brand-primary) 18%, var(--tl-color-border-default));
    border-radius: var(--tl-radius-lg);
+   box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
 }
 
 .institutional-analytics__section-header {
@@ -73,8 +80,99 @@
    margin-bottom: var(--tl-space-5);
 }
 
+.institutional-analytics__section-title-row,
+.institutional-analytics__chart-title-row,
+.institutional-analytics__heading-with-help {
+   display: flex;
+   align-items: center;
+   flex-wrap: wrap;
+   gap: var(--tl-space-2);
+   min-width: 0;
+}
+
+.institutional-analytics__heading-with-help {
+   width: fit-content;
+   max-width: 100%;
+}
+
+.institutional-analytics__context-help {
+   position: relative;
+   display: inline-flex;
+   flex: 0 0 auto;
+   align-items: center;
+}
+
+.institutional-analytics__context-help-trigger {
+   width: 2rem;
+   height: 2rem;
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   padding: 0;
+   border: 0;
+   border-radius: 999px;
+   background: transparent;
+   color: var(--tl-color-text-muted);
+   cursor: help;
+}
+
+.institutional-analytics__context-help-trigger:hover {
+   color: var(--tl-color-brand-primary);
+   background: color-mix(in srgb, var(--tl-color-brand-primary) 8%, transparent);
+}
+
+.institutional-analytics__context-help-trigger:focus-visible {
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: var(--tl-focus-offset);
+}
+
+.institutional-analytics__context-help-popover {
+   position: absolute;
+   z-index: 20;
+   top: calc(100% + var(--tl-space-2));
+   left: 50%;
+   width: min(22rem, calc(100vw - 2rem));
+   padding: var(--tl-space-3) var(--tl-space-4);
+   border: 1px solid var(--tl-color-border-default);
+   border-radius: var(--tl-radius-md);
+   background: var(--tl-color-bg-surface);
+   box-shadow: 0 12px 28px rgb(15 23 42 / 16%);
+   color: var(--tl-color-text-body);
+   font-size: var(--tl-text-xs);
+   font-weight: 400;
+   line-height: 1.55;
+   text-align: start;
+   text-transform: none;
+   letter-spacing: normal;
+   opacity: 0;
+   visibility: hidden;
+   pointer-events: none;
+   transform: translate(-50%, -0.25rem);
+   transition:
+      opacity var(--tl-duration-fast) ease,
+      transform var(--tl-duration-fast) ease,
+      visibility var(--tl-duration-fast) ease;
+}
+
+.institutional-analytics__context-help:hover .institutional-analytics__context-help-popover,
+.institutional-analytics__context-help:focus-within .institutional-analytics__context-help-popover,
+.institutional-analytics__context-help.is-pinned .institutional-analytics__context-help-popover {
+   opacity: 1;
+   visibility: visible;
+   pointer-events: auto;
+   transform: translate(-50%, 0);
+}
+
+.institutional-analytics__period-controls legend {
+   display: flex;
+   align-items: center;
+   gap: var(--tl-space-2);
+}
+
+
 .institutional-analytics__section-header p {
-   max-width: 68ch;
+   width: 100%;
+   max-width: none;
    font-size: var(--tl-text-sm);
 }
 
@@ -109,17 +207,23 @@
 
 .institutional-analytics__current-card {
    display: grid;
-   grid-template-rows: auto 1fr auto;
-   gap: var(--tl-space-3);
+   grid-template-rows: auto 1fr;
+   gap: var(--tl-space-4);
    min-width: 0;
-   min-height: 11rem;
+   min-height: 8rem;
    padding: var(--tl-space-5);
-   background: var(--tl-color-bg-surface);
-   border: 1px solid var(--tl-color-border-default);
+   background: color-mix(in srgb, var(--tl-color-bg-surface) 94%, var(--tl-color-brand-primary));
+   border: 1px solid color-mix(in srgb, var(--tl-color-brand-primary) 13%, var(--tl-color-border-default));
    border-radius: var(--tl-radius-lg);
+   box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
 }
 
 .institutional-analytics__current-card dt {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: var(--tl-space-2);
+   min-width: 0;
    color: var(--tl-color-text-body);
    font-weight: 650;
    line-height: 1.35;
@@ -454,13 +558,15 @@
 
 .institutional-analytics__trend-summary > div {
    display: grid;
-   grid-template-rows: auto 1fr auto;
-   gap: var(--tl-space-2);
+   grid-template-rows: auto 1fr;
+   gap: var(--tl-space-3);
    min-width: 0;
+   min-height: 7.5rem;
    padding: var(--tl-space-4);
    background: var(--tl-color-bg-surface);
    border: 1px solid var(--tl-color-border-default);
    border-radius: var(--tl-radius-md);
+   box-shadow: 0 1px 2px rgb(15 23 42 / 3%);
 }
 
 .institutional-analytics__trend-summary dt {
@@ -516,7 +622,8 @@
 }
 
 .institutional-analytics__chart-header p {
-   max-width: 78ch;
+   width: 100%;
+   max-width: none;
    color: var(--tl-color-text-muted);
    font-size: var(--tl-text-sm);
 }
@@ -831,7 +938,12 @@
 }
 
 .institutional-analytics__trend-coverage {
-   max-width: 78ch;
+   width: 100%;
+   max-width: none;
+   display: flex;
+   align-items: center;
+   flex-wrap: wrap;
+   gap: var(--tl-space-2);
 }
 
 .institutional-analytics__history {
@@ -919,7 +1031,8 @@
    padding: var(--tl-space-5);
    border: 1px solid var(--tl-color-border-default);
    border-radius: var(--tl-radius-lg);
-   background: var(--tl-color-bg-surface);
+   background: color-mix(in srgb, var(--tl-color-bg-surface) 97%, var(--tl-color-bg-subtle));
+   box-shadow: 0 1px 2px rgb(15 23 42 / 3%);
 }
 
 .institutional-analytics__support-panel .institutional-analytics__section-header {
@@ -964,18 +1077,31 @@
 }
 
 .institutional-analytics__supporting-row > div {
-   display: flex;
-   justify-content: space-between;
-   align-items: baseline;
-   flex-wrap: wrap;
-   gap: var(--tl-space-2);
+   display: grid;
+   grid-template-columns: minmax(0, 1fr) auto;
+   align-items: center;
+   gap: var(--tl-space-4);
    min-width: 0;
-   padding-bottom: var(--tl-space-2);
+   width: 100%;
+   padding: var(--tl-space-3) 0;
    border-bottom: 1px solid var(--tl-color-border-light);
 }
 
 .institutional-analytics__supporting-row dt {
+   display: flex;
+   align-items: center;
+   gap: var(--tl-space-2);
+   min-width: 0;
    font-size: var(--tl-text-sm);
+}
+
+.institutional-analytics__supporting-row--prominent {
+   margin-top: var(--tl-space-3);
+}
+
+.institutional-analytics__supporting-row--prominent dd {
+   font-size: var(--tl-text-lg);
+   font-weight: 750;
 }
 
 .institutional-analytics__supporting-row dd {
@@ -1141,6 +1267,14 @@
    font-size: var(--tl-text-sm);
    font-weight: 650;
    line-height: 1.35;
+}
+
+.institutional-analytics__observation-metrics dt {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: var(--tl-space-2);
+   min-width: 0;
 }
 
 .institutional-analytics__observation-value {
@@ -1456,6 +1590,19 @@
 }
 
 @container institutional-analytics (max-width: 660px) {
+   .institutional-analytics__context-help-popover {
+      left: auto;
+      right: 0;
+      transform: translateY(-0.25rem);
+   }
+
+   .institutional-analytics__context-help:hover .institutional-analytics__context-help-popover,
+   .institutional-analytics__context-help:focus-within .institutional-analytics__context-help-popover,
+   .institutional-analytics__context-help.is-pinned .institutional-analytics__context-help-popover {
+      transform: translateY(0);
+   }
+
+
    .institutional-analytics__history > summary {
       align-items: flex-start;
       flex-direction: column;
@@ -1546,5 +1693,9 @@
 @media (prefers-reduced-motion: reduce) {
    .institutional-analytics * {
       scroll-behavior: auto;
+   }
+
+   .institutional-analytics__context-help-popover {
+      transition: none;
    }
 }
