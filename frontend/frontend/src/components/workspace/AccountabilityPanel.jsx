@@ -458,7 +458,7 @@ function AccountabilityPanel({ scope, organizationId, organizationName }) {
                <strong>Read-only accountability record</strong>
                <p>
                   Review attributable actions recorded for <strong>{scopeLabel}</strong>. This history supports
-                  organizational accountability; it is not a general user-surveillance view.
+                  accountable review of authorized operations; it is not a general user-surveillance view.
                </p>
             </div>
          </section>
