@@ -2362,7 +2362,7 @@ function FactualCorrectionContent({
                                     />
                                  </div>
                               ) : (
-                                 <div className="correction-decision-grid">
+                                 <div className="correction-decision-grid correction-decision-grid--single">
                                     <DecisionCard
                                        title={
                                           detail.stage === "CANCELLED"
@@ -2378,64 +2378,7 @@ function FactualCorrectionContent({
 
                            {renderStageWork()}
 
-                           <section className="correction-section" aria-labelledby="correction-actions-heading">
-                              <div className="correction-section-heading">
-                                 <div>
-                                    <h4 id="correction-actions-heading">Correction actions</h4>
-                                    <p>
-                                       Available actions reflect the correction request’s current workflow state.
-                                    </p>
-                                 </div>
-                              </div>
-                              <div className="correction-action-row">
-                                 {allowedActions.includes("PREPARE_CORRECTION_PROPOSAL") ? (
-                                    <Button
-                                       type="button"
-                                       variant="secondary"
-                                       disabled={isDirty || Boolean(mutation)}
-                                       onClick={prepareProposal}
-                                    >
-                                       Prepare correction proposal
-                                    </Button>
-                                 ) : null}
-                                 {allowedActions.includes("PUBLISH_FACTUAL_CORRECTION") ? (
-                                    <Button
-                                       type="button"
-                                       variant="primary"
-                                       disabled={Boolean(mutation)}
-                                       onClick={() => setDialog({ type: "publish" })}
-                                    >
-                                       Publish factual correction
-                                    </Button>
-                                 ) : null}
-                                 {allowedActions.includes("CANCEL_FACTUAL_CORRECTION") ? (
-                                    <Button
-                                       type="button"
-                                       variant="destructive"
-                                       disabled={Boolean(mutation)}
-                                       onClick={() => {
-                                          setFieldErrors((current) => ({ ...current, cancellation_reason: undefined }));
-                                          setDialog({ type: "cancel" });
-                                       }}
-                                    >
-                                       Cancel factual correction
-                                    </Button>
-                                 ) : null}
-                              </div>
-                              {allowedActions.length === 0 ? (
-                                 <p className="correction-inline-empty">
-                                    This correction is currently available for read-only inspection.
-                                 </p>
-                              ) : null}
-                              <Blockers blockers={detail.blockers} />
-                           </section>
-
-                           {detail.stage !== "EVIDENCE_REVIEW" && detail.stage !== "PROPOSAL_DRAFT"
-                              ? renderEvidence()
-                              : null}
-                           {detail.stage === "COMPLETED" || detail.stage === "CANCELLED"
-                              ? renderProposalSection({ preserved: true })
-                              : null}
+                           {renderPrimaryTransition()}
 
                            <details className="correction-reference-material">
                               <summary>
@@ -2555,6 +2498,35 @@ function FactualCorrectionContent({
                               </div>
                               </div>
                            </details>
+
+                           {allowedActions.includes("CANCEL_FACTUAL_CORRECTION") ? (
+                              <section
+                                 className="correction-danger-zone"
+                                 aria-labelledby="correction-cancel-heading"
+                              >
+                                 <div>
+                                    <h4 id="correction-cancel-heading">Cancel factual correction</h4>
+                                    <p>
+                                       Use this only when the correction request should end without creating a replacement
+                                       factual decision or publication.
+                                    </p>
+                                 </div>
+                                 <Button
+                                    type="button"
+                                    variant="destructive"
+                                    disabled={Boolean(mutation)}
+                                    onClick={() => {
+                                       setFieldErrors((current) => ({
+                                          ...current,
+                                          cancellation_reason: undefined,
+                                       }));
+                                       setDialog({ type: "cancel" });
+                                    }}
+                                 >
+                                    Cancel factual correction
+                                 </Button>
+                              </section>
+                           ) : null}
                         </article>
                      ) : null}
                   </>
