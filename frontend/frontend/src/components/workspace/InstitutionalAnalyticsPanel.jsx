@@ -365,12 +365,38 @@ function MetricList({ items, compact = false }) {
 function ContextHelp({ label = "More information", children }) {
    const id = useId();
    const rootRef = useRef(null);
+   const popoverRef = useRef(null);
    const [pinned, setPinned] = useState(false);
+   const [alignment, setAlignment] = useState("center");
+
+   const updateAlignment = () => {
+      const root = rootRef.current;
+      const popover = popoverRef.current;
+      if (!root || !popover || typeof window === "undefined") {
+         return;
+      }
+
+      const rootRect = root.getBoundingClientRect();
+      const popoverWidth = popover.getBoundingClientRect().width || Math.min(352, window.innerWidth - 32);
+      const viewportPadding = 16;
+      const centeredLeft = rootRect.left + rootRect.width / 2 - popoverWidth / 2;
+      const centeredRight = centeredLeft + popoverWidth;
+
+      if (centeredRight > window.innerWidth - viewportPadding) {
+         setAlignment("right");
+      } else if (centeredLeft < viewportPadding) {
+         setAlignment("left");
+      } else {
+         setAlignment("center");
+      }
+   };
 
    useEffect(() => {
       if (!pinned) {
          return undefined;
       }
+
+      updateAlignment();
 
       const closeIfOutside = (event) => {
          if (!rootRef.current?.contains(event.target)) {
@@ -382,28 +408,46 @@ function ContextHelp({ label = "More information", children }) {
             setPinned(false);
          }
       };
+      const keepAligned = () => updateAlignment();
 
       document.addEventListener("pointerdown", closeIfOutside);
       document.addEventListener("keydown", closeOnEscape);
+      window.addEventListener("resize", keepAligned);
+      window.addEventListener("scroll", keepAligned, true);
       return () => {
          document.removeEventListener("pointerdown", closeIfOutside);
          document.removeEventListener("keydown", closeOnEscape);
+         window.removeEventListener("resize", keepAligned);
+         window.removeEventListener("scroll", keepAligned, true);
       };
    }, [pinned]);
 
    return (
-      <span ref={rootRef} className={`institutional-analytics__context-help${pinned ? " is-pinned" : ""}`}>
+      <span
+         ref={rootRef}
+         className={`institutional-analytics__context-help institutional-analytics__context-help--${alignment}${pinned ? " is-pinned" : ""}`}
+         onPointerEnter={updateAlignment}
+         onFocus={updateAlignment}
+      >
          <button
             type="button"
             className="institutional-analytics__context-help-trigger"
             aria-label={label}
             aria-controls={id}
             aria-expanded={pinned}
-            onClick={() => setPinned((current) => !current)}
+            onClick={() => {
+               updateAlignment();
+               setPinned((current) => !current);
+            }}
          >
             <Icons name="info" size={14} aria-hidden="true" />
          </button>
-         <span id={id} className="institutional-analytics__context-help-popover" role="tooltip">
+         <span
+            ref={popoverRef}
+            id={id}
+            className="institutional-analytics__context-help-popover"
+            role="tooltip"
+         >
             {children}
          </span>
       </span>
