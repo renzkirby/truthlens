@@ -169,6 +169,10 @@ function getItemState(item) {
       return "Ready to draft";
    }
 
+   if (item?.article?.publication_status === "ARCHIVED") {
+      return "Archived draft";
+   }
+
    if (item?.article?.publication_status === "IN_REVIEW") {
       return "In review";
    }
@@ -982,6 +986,7 @@ function DraftingContent({
    onInitialSelectionConsumed,
 }) {
    const { addToast } = useNotification();
+   const [queueView, setQueueView] = useState("ACTIVE");
    const [offset, setOffset] = useState(0);
    const [queue, setQueue] = useState({ count: 0, limit: PAGE_SIZE, offset: 0, results: [] });
    const [queueLoading, setQueueLoading] = useState(true);
@@ -1046,6 +1051,11 @@ function DraftingContent({
    const isSupportedWork = isInitialWork || isEditorialRevision;
    const isDraft = detail?.resource_type === "FACT_CHECK" && detail?.publication_status === "DRAFT";
    const isInReview = detail?.resource_type === "FACT_CHECK" && detail?.publication_status === "IN_REVIEW";
+   const isArchivedDraft =
+      detail?.resource_type === "FACT_CHECK" &&
+      detail?.publication_status === "ARCHIVED" &&
+      !detail?.published_at;
+   const isArchivedView = queueView === "ARCHIVED";
    const verifiedEvidenceOptions = useMemo(
       () => verifiedEvidenceOptionsFromDetail(detail),
       [detail],
@@ -1057,13 +1067,14 @@ function DraftingContent({
       const query = new URLSearchParams({
          organization_id: organizationId,
          queue: "DRAFTING",
+         view: queueView,
          workflow_kind: "ALL",
          limit: String(PAGE_SIZE),
          offset: String(offset),
       });
 
       return `${resolveApiEndpoint("PUBLICATION_WORK_ITEMS")}?${query.toString()}`;
-   }, [offset, organizationId]);
+   }, [offset, organizationId, queueView]);
 
    const isOperationContextCurrent = useCallback(
       (operation) =>
@@ -1825,7 +1836,7 @@ function DraftingContent({
             message:
                operation.workflowKind === "EDITORIAL_REVISION"
                   ? "The revision was archived and was not added to publication history."
-                  : "The draft was archived. The claim remains available for future publication work.",
+                  : "The draft was archived. You can review it later under Archived drafts; the claim remains available for future publication work.",
             duration: WORKSPACE_LONG_TOAST_DURATION,
          });
          focusQueueAfterReturnRef.current = true;
@@ -1894,6 +1905,21 @@ function DraftingContent({
       setEditorBase(EMPTY_EDITOR);
       setForceDirty(false);
       focusQueueAfterReturnRef.current = true;
+   };
+
+   const handleQueueViewChange = (nextView) => {
+      if (nextView === queueView || mutation || selectedWork) {
+         return;
+      }
+
+      queueRequestIdRef.current += 1;
+      hasLoadedQueueRef.current = false;
+      setQueueView(nextView);
+      setOffset(0);
+      setQueue({ count: 0, limit: PAGE_SIZE, offset: 0, results: [] });
+      setQueueError("");
+      setQueueLoading(true);
+      setQueueRefreshing(false);
    };
 
    const handleRefresh = () => {
@@ -1990,9 +2016,11 @@ function DraftingContent({
                   <div className="drafting-queue-header">
                      <div>
                         <h3 id="drafting-queue-heading" ref={queueHeadingRef} tabIndex={-1}>
-                           Drafting queue
+                           Drafting
                         </h3>
-                        <p>{queue.count} publication work items</p>
+                        <p>
+                           {queue.count} {isArchivedView ? "archived drafts" : "active publication work items"}
+                        </p>
                      </div>
                      <Button
                         type="button"
@@ -2007,6 +2035,27 @@ function DraftingContent({
                      </Button>
                   </div>
 
+                  <div className="drafting-view-switcher" role="group" aria-label="Drafting views">
+                     <button
+                        type="button"
+                        className={!isArchivedView ? "is-active" : ""}
+                        aria-pressed={!isArchivedView}
+                        disabled={Boolean(mutation)}
+                        onClick={() => handleQueueViewChange("ACTIVE")}
+                     >
+                        Active work
+                     </button>
+                     <button
+                        type="button"
+                        className={isArchivedView ? "is-active" : ""}
+                        aria-pressed={isArchivedView}
+                        disabled={Boolean(mutation)}
+                        onClick={() => handleQueueViewChange("ARCHIVED")}
+                     >
+                        Archived drafts
+                     </button>
+                  </div>
+
                   {queueLoading ? (
                      <div className="drafting-state" role="status">
                         <Icons name="loader" size={22} className="drafting-spinner" />
@@ -2015,7 +2064,7 @@ function DraftingContent({
                   ) : queueError && queue.results.length === 0 ? (
                      <div className="drafting-state drafting-state--error" role="alert">
                         <Icons name="alert-circle" size={22} />
-                        <strong>Drafting queue unavailable</strong>
+                        <strong>{isArchivedView ? "Archived drafts unavailable" : "Drafting queue unavailable"}</strong>
                         <p>{queueError}</p>
                         <Button type="button" variant="secondary" density="compact" onClick={requestQueueRefresh}>
                            Try again
@@ -2023,9 +2072,13 @@ function DraftingContent({
                      </div>
                   ) : queue.results.length === 0 ? (
                      <div className="drafting-state">
-                        <Icons name="file-text" size={24} />
-                        <strong>No drafting work</strong>
-                        <p>No publication drafting work is available for this organization.</p>
+                        <Icons name={isArchivedView ? "clock" : "file-text"} size={24} />
+                        <strong>{isArchivedView ? "No archived drafts" : "No drafting work"}</strong>
+                        <p>
+                           {isArchivedView
+                              ? "Abandoned unpublished drafts will appear here for read-only reference."
+                              : "No publication drafting work is available for this organization."}
+                        </p>
                      </div>
                   ) : (
                      <>
@@ -2061,12 +2114,21 @@ function DraftingContent({
                                        <span className="drafting-row-metadata">
                                           {item?.resource_type === "ELIGIBLE_CLAIM"
                                              ? `Decision revision ${item?.decision?.revision_number ?? "unavailable"}`
-                                             : `Article v${item?.article?.version ?? "–"} · ${formatDateTime(
-                                                  item?.article?.publication_status === "IN_REVIEW"
-                                                     ? item?.lifecycle?.submitted_for_review_at
-                                                     : item?.lifecycle?.actionable_at,
-                                               )}`}
+                                             : item?.article?.publication_status === "ARCHIVED"
+                                               ? `Article v${item?.article?.version ?? "–"} · Archived ${formatDateTime(
+                                                    item?.abandonment?.abandoned_at || item?.lifecycle?.archived_at,
+                                                 )}`
+                                               : `Article v${item?.article?.version ?? "–"} · ${formatDateTime(
+                                                    item?.article?.publication_status === "IN_REVIEW"
+                                                       ? item?.lifecycle?.submitted_for_review_at
+                                                       : item?.lifecycle?.actionable_at,
+                                                 )}`}
                                        </span>
+                                       {item?.article?.publication_status === "ARCHIVED" ? (
+                                          <span className="drafting-row-metadata">
+                                             Abandoned by {actorName(item?.abandonment?.abandoned_by, "Unknown actor")}
+                                          </span>
+                                       ) : null}
                                        {isRevisionItem ? (
                                           <>
                                              <span className="drafting-row-metadata">
@@ -2181,7 +2243,9 @@ function DraftingContent({
                                     <span className="drafting-status-label">
                                        {detail.resource_type === "ELIGIBLE_CLAIM"
                                           ? "Ready to draft"
-                                          : formatLabel(detail.publication_status)}
+                                          : isArchivedDraft
+                                            ? "Archived draft"
+                                            : formatLabel(detail.publication_status)}
                                     </span>
                                     <h3 id="drafting-detail-heading" ref={detailHeadingRef} tabIndex={-1}>
                                        {detail.headline || detail.decision?.canonical_claim || "Publication work item"}
@@ -2225,7 +2289,7 @@ function DraftingContent({
                                  />
                               ) : null}
 
-                              <BlockerList blockers={detail.blockers} />
+                              {!isArchivedDraft ? <BlockerList blockers={detail.blockers} /> : null}
                               <DecisionContext detail={detail} />
 
                               {detail.resource_type === "ELIGIBLE_CLAIM" &&
@@ -2434,6 +2498,71 @@ function DraftingContent({
                                        </p>
                                     ) : null}
                                  </form>
+                              ) : null}
+
+                              {isArchivedDraft ? (
+                                 <>
+                                    <section
+                                       className="drafting-archive-summary"
+                                       aria-labelledby="drafting-archive-heading"
+                                    >
+                                       <div className="drafting-section-heading">
+                                          <div>
+                                             <h4 id="drafting-archive-heading">Archive details</h4>
+                                             <p>
+                                                This unpublished draft is retained for audit and reference. It cannot
+                                                be edited, submitted, or published from the archive.
+                                             </p>
+                                          </div>
+                                       </div>
+                                       <dl className="drafting-metadata-grid">
+                                          <div>
+                                             <dt>Archived</dt>
+                                             <dd>
+                                                <FormattedDateTime
+                                                   value={
+                                                      detail?.abandonment?.abandoned_at || detail?.archived_at
+                                                   }
+                                                   fallback="Archive time not recorded"
+                                                />
+                                             </dd>
+                                          </div>
+                                          <div>
+                                             <dt>Abandoned by</dt>
+                                             <dd>{actorName(detail?.abandonment?.abandoned_by, "Not recorded")}</dd>
+                                          </div>
+                                          <div className="drafting-metadata-wide">
+                                             <dt>Abandonment reason</dt>
+                                             <dd>
+                                                {detail?.abandonment?.reason ||
+                                                   "No abandonment reason is available for this archived draft."}
+                                             </dd>
+                                          </div>
+                                       </dl>
+                                    </section>
+
+                                    <section
+                                       className="drafting-readonly-article"
+                                       aria-labelledby="drafting-archived-article-heading"
+                                    >
+                                       <div className="drafting-section-heading">
+                                          <div>
+                                             <h4 id="drafting-archived-article-heading">Archived draft content</h4>
+                                             <p>
+                                                This is the last saved unpublished content preserved when the draft
+                                                was abandoned.
+                                             </p>
+                                          </div>
+                                       </div>
+                                       <h5>{detail.headline || "Untitled fact check"}</h5>
+                                       <p className="drafting-readonly-summary">
+                                          {detail.summary || "No summary recorded."}
+                                       </p>
+                                       <div className="drafting-article-body">
+                                          {detail.article_body || "No article body was saved before abandonment."}
+                                       </div>
+                                    </section>
+                                 </>
                               ) : null}
 
                               {isInReview ? (
