@@ -216,7 +216,7 @@
    opacity: 0.6;
 }
 
-.adjudication-detail-actions > .tl-button:last-child {
+.adjudication-detail-actions > .tl-button:last-child:not(.adjudication-return-to-queue) {
    margin-left: auto;
 }
 
@@ -497,22 +497,26 @@
 }
 
 .adjudication-pagination {
-   display: grid;
-   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-   gap: 10px;
+   display: flex;
    align-items: center;
+   justify-content: center;
+   flex-wrap: wrap;
+   gap: 10px;
    margin-top: 16px;
 }
 
-.adjudication-pagination .tl-button:last-child {
-   justify-self: end;
+.adjudication-pagination .tl-button {
+   flex: 0 0 auto;
+   width: auto;
 }
 
 .adjudication-pagination > span {
+   flex: 0 0 auto;
    color: var(--text-muted);
    font-size: 0.72rem;
    font-variant-numeric: tabular-nums;
    text-align: center;
+   white-space: nowrap;
 }
 
 .adjudication-selection {
