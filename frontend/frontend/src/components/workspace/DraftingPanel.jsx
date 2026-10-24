@@ -508,6 +508,52 @@ function DraftingReferenceMaterial({ detail, isEditorialRevision }) {
    );
 }
 
+function comparableSourceUrl(value) {
+   const safeUrl = safeExternalUrl(value);
+   return safeUrl || "";
+}
+
+function verifiedEvidenceOptionsFromDetail(detail) {
+   const entries = Array.isArray(detail?.sealed_evidence?.entries)
+      ? detail.sealed_evidence.entries
+      : [];
+   const grouped = new Map();
+
+   entries.forEach((entry) => {
+      if (entry?.evidence_status !== "VERIFIED") {
+         return;
+      }
+
+      const url = safeExternalUrl(entry?.evidence_url);
+      const key = comparableSourceUrl(url);
+
+      if (!url || !key) {
+         return;
+      }
+
+      const existing = grouped.get(key);
+      if (existing) {
+         existing.recordCount += 1;
+         if (!existing.caption && entry?.evidence_caption) {
+            existing.caption = entry.evidence_caption;
+         }
+         return;
+      }
+
+      grouped.set(key, {
+         key,
+         url,
+         caption: entry?.evidence_caption || "",
+         evidenceType: entry?.evidence_type || "",
+         recordCount: 1,
+      });
+   });
+
+   return Array.from(grouped.values()).sort((left, right) =>
+      (left.caption || left.url).localeCompare(right.caption || right.url),
+   );
+}
+
 function sourceRowsFromValue(value) {
    const rows = String(value ?? "").split(/\r?\n/);
    return rows.length > 0 ? rows : [""];
@@ -541,8 +587,30 @@ function getSourceRowIssue(value, rows, index) {
    return "";
 }
 
-function EditorialSourceEditor({ idPrefix, value, disabled, onChange }) {
+function EditorialSourceEditor({
+   idPrefix,
+   value,
+   disabled,
+   verifiedEvidenceOptions = [],
+   onChange,
+}) {
    const rows = sourceRowsFromValue(value);
+   const [pickerOpen, setPickerOpen] = useState(false);
+   const [pendingVerifiedKeys, setPendingVerifiedKeys] = useState(() => new Set());
+
+   const optionByKey = useMemo(
+      () => new Map(verifiedEvidenceOptions.map((option) => [option.key, option])),
+      [verifiedEvidenceOptions],
+   );
+   const selectedVerifiedKeys = useMemo(
+      () =>
+         new Set(
+            rows
+               .map((row) => comparableSourceUrl(row))
+               .filter((key) => key && optionByKey.has(key)),
+         ),
+      [optionByKey, rows],
+   );
 
    const updateRow = (index, nextValue) => {
       const nextRows = [...rows];
@@ -561,11 +629,58 @@ function EditorialSourceEditor({ idPrefix, value, disabled, onChange }) {
 
    const removeRow = (index) => {
       const nextRows = rows.filter((_, rowIndex) => rowIndex !== index);
-
       onChange((nextRows.length > 0 ? nextRows : [""]).join("\n"));
    };
 
-   const canAddAnother = !disabled && rows.every((row, index) => row.trim() && !getSourceRowIssue(row, rows, index));
+   const openVerifiedEvidencePicker = () => {
+      setPendingVerifiedKeys(new Set(selectedVerifiedKeys));
+      setPickerOpen(true);
+   };
+
+   const toggleVerifiedEvidence = (key) => {
+      setPendingVerifiedKeys((current) => {
+         const next = new Set(current);
+         if (next.has(key)) {
+            next.delete(key);
+         } else {
+            next.add(key);
+         }
+         return next;
+      });
+   };
+
+   const applyVerifiedEvidenceSelection = () => {
+      const manualRows = rows.filter((row) => {
+         const key = comparableSourceUrl(row);
+         return !key || !optionByKey.has(key);
+      });
+      const nonblankManualRows = manualRows.filter((row) => row.trim());
+      const selectedEvidenceUrls = verifiedEvidenceOptions
+         .filter((option) => pendingVerifiedKeys.has(option.key))
+         .map((option) => option.url);
+      const combinedRows = [...selectedEvidenceUrls, ...nonblankManualRows];
+      const nextRows = combinedRows.length > 0 ? combinedRows : [""];
+      const seen = new Set();
+      const deduplicated = nextRows.filter((row) => {
+         const trimmed = row.trim();
+         if (!trimmed) {
+            return true;
+         }
+         const key = comparableSourceUrl(trimmed) || `raw:${trimmed}`;
+         if (seen.has(key)) {
+            return false;
+         }
+         seen.add(key);
+         return true;
+      });
+
+      onChange(deduplicated.join("\n"));
+      setPickerOpen(false);
+   };
+
+   const canAddAnother =
+      !disabled &&
+      rows.every((row, index) => row.trim() && !getSourceRowIssue(row, rows, index));
 
    return (
       <div className="drafting-source-editor" role="group" aria-labelledby={`${idPrefix}-heading`}>
@@ -573,21 +688,139 @@ function EditorialSourceEditor({ idPrefix, value, disabled, onChange }) {
             <div>
                <strong id={`${idPrefix}-heading`}>Sources for this article</strong>
                <p>
-                  Add sources your organization used to support or explain this article. These do not change the
-                  verified claim, verdict, or decision-time evidence.
+                  Use verified evidence captured for this adjudication or add other sources your organization used
+                  to support or explain the article. Selecting a source does not change the adjudicated verdict or
+                  decision-time evidence.
                </p>
             </div>
          </div>
+
+         <div className="drafting-source-editor-actions">
+            <Button
+               type="button"
+               variant="secondary"
+               density="compact"
+               disabled={disabled || verifiedEvidenceOptions.length === 0}
+               leadingIcon={<Icons name="shield-check" size={15} />}
+               onClick={openVerifiedEvidencePicker}
+            >
+               Add from verified evidence
+            </Button>
+            <Button
+               type="button"
+               variant="ghost"
+               density="compact"
+               disabled={!canAddAnother}
+               leadingIcon={<Icons name="circle-plus" size={15} />}
+               onClick={addRow}
+            >
+               Add another source
+            </Button>
+         </div>
+
+         {pickerOpen ? (
+            <section className="drafting-verified-evidence-picker" aria-labelledby={`${idPrefix}-verified-heading`}>
+               <div className="drafting-verified-evidence-picker-heading">
+                  <div>
+                     <strong id={`${idPrefix}-verified-heading`}>Choose verified evidence</strong>
+                     <p>
+                        These sources were verified during Evidence Review and captured in this adjudication's
+                        decision-time evidence. Select the ones you want to cite in the article.
+                     </p>
+                  </div>
+                  <span>{verifiedEvidenceOptions.length} available</span>
+               </div>
+
+               <div className="drafting-verified-evidence-options">
+                  {verifiedEvidenceOptions.map((option) => {
+                     const checked = pendingVerifiedKeys.has(option.key);
+                     return (
+                        <label key={option.key} className={`drafting-verified-evidence-option ${checked ? "is-selected" : ""}`}>
+                           <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={disabled}
+                              onChange={() => toggleVerifiedEvidence(option.key)}
+                           />
+                           <span className="drafting-verified-evidence-check" aria-hidden="true">
+                              {checked ? <Icons name="check" size={13} /> : null}
+                           </span>
+                           <span className="drafting-verified-evidence-copy">
+                              <span className="drafting-verified-evidence-title-row">
+                                 <strong>{option.caption || "Verified evidence source"}</strong>
+                                 <span>Verified evidence</span>
+                              </span>
+                              <small>
+                                 {formatLabel(option.evidenceType, "Evidence")}
+                                 {option.recordCount > 1
+                                    ? ` · ${option.recordCount} verified records share this source`
+                                    : ""}
+                              </small>
+                              <a href={option.url} target="_blank" rel="noopener noreferrer" onClick={(event) => event.stopPropagation()}>
+                                 {option.url}
+                                 <Icons name="external-link" size={12} aria-hidden="true" />
+                              </a>
+                           </span>
+                        </label>
+                     );
+                  })}
+               </div>
+
+               <div className="drafting-verified-evidence-picker-actions">
+                  <Button type="button" variant="ghost" density="compact" disabled={disabled} onClick={() => setPickerOpen(false)}>
+                     Cancel
+                  </Button>
+                  <Button type="button" variant="primary" density="compact" disabled={disabled} onClick={applyVerifiedEvidenceSelection}>
+                     Apply selection
+                  </Button>
+               </div>
+            </section>
+         ) : null}
+
+         {verifiedEvidenceOptions.length === 0 ? (
+            <p className="drafting-source-availability-note">
+               No verified decision-time evidence with a usable source URL is available for this adjudication.
+            </p>
+         ) : null}
 
          <div className="drafting-source-input-list">
             {rows.map((row, index) => {
                const issue = getSourceRowIssue(row, rows, index);
                const inputId = `${idPrefix}-${index}`;
+               const verifiedOption = optionByKey.get(comparableSourceUrl(row));
+
+               if (verifiedOption && row.trim()) {
+                  return (
+                     <div className="drafting-selected-source drafting-selected-source--verified" key={inputId}>
+                        <div>
+                           <span className="drafting-selected-source-origin">Verified evidence</span>
+                           <strong>{verifiedOption.caption || "Verified evidence source"}</strong>
+                           <a href={verifiedOption.url} target="_blank" rel="noopener noreferrer">
+                              {verifiedOption.url}
+                              <Icons name="external-link" size={12} aria-hidden="true" />
+                           </a>
+                           <small>Preserves Evidence Review provenance and the sealed decision-evidence lineage.</small>
+                        </div>
+                        <Button
+                           type="button"
+                           variant="ghost"
+                           density="compact"
+                           disabled={disabled}
+                           onClick={() => removeRow(index)}
+                           aria-label={`Remove verified evidence source ${index + 1}`}
+                        >
+                           Remove
+                        </Button>
+                     </div>
+                  );
+               }
 
                return (
                   <div className="drafting-source-input-item" key={inputId}>
-                     <label htmlFor={inputId}>Source {index + 1}</label>
-
+                     <div className="drafting-source-input-label-row">
+                        <label htmlFor={inputId}>Editorial source {index + 1}</label>
+                        <span>Organization-added source</span>
+                     </div>
                      <div className="drafting-source-input-row">
                         <Input
                            id={inputId}
@@ -603,19 +836,17 @@ function EditorialSourceEditor({ idPrefix, value, disabled, onChange }) {
                            aria-describedby={issue ? `${inputId}-error` : undefined}
                            onChange={(event) => updateRow(index, event.target.value)}
                         />
-
                         <Button
                            type="button"
                            variant="ghost"
                            density="compact"
                            disabled={disabled}
                            onClick={() => removeRow(index)}
-                           aria-label={`Remove source ${index + 1}`}
+                           aria-label={`Remove editorial source ${index + 1}`}
                         >
                            Remove
                         </Button>
                      </div>
-
                      {issue ? (
                         <span id={`${inputId}-error`} className="drafting-source-input-error">
                            {issue}
@@ -627,18 +858,10 @@ function EditorialSourceEditor({ idPrefix, value, disabled, onChange }) {
          </div>
 
          <div className="drafting-source-editor-footer">
-            <Button
-               type="button"
-               variant="secondary"
-               density="compact"
-               disabled={!canAddAnother}
-               leadingIcon={<Icons name="circle-plus" size={15} />}
-               onClick={addRow}
-            >
-               Add another source
-            </Button>
-
-            <span>Sources are optional. Each source must use a complete http:// or https:// URL.</span>
+            <span>
+               You can create the draft without sources, but at least one source is required before submitting for
+               publication review. Manually added sources must use a complete http:// or https:// URL.
+            </span>
          </div>
       </div>
    );
@@ -691,7 +914,7 @@ function ServerConflict({ conflict, editor, focusRef, onUseLatest, onContinue })
                         <dd>{editor.articleBody || "Blank"}</dd>
                      </div>
                      <div>
-                        <dt>Editorial source selection</dt>
+                        <dt>Article source selection</dt>
                         <dd>{editor.sourceUrls || "No URLs selected"}</dd>
                      </div>
                   </dl>
@@ -716,7 +939,7 @@ function ServerConflict({ conflict, editor, focusRef, onUseLatest, onContinue })
                         <dd>{latestEditor.articleBody || "Blank"}</dd>
                      </div>
                      <div>
-                        <dt>Editorial source selection</dt>
+                        <dt>Article source selection</dt>
                         <dd>{latestEditor.sourceUrls || "No URLs selected"}</dd>
                      </div>
                   </dl>
@@ -821,6 +1044,10 @@ function DraftingContent({
    const isSupportedWork = isInitialWork || isEditorialRevision;
    const isDraft = detail?.resource_type === "FACT_CHECK" && detail?.publication_status === "DRAFT";
    const isInReview = detail?.resource_type === "FACT_CHECK" && detail?.publication_status === "IN_REVIEW";
+   const verifiedEvidenceOptions = useMemo(
+      () => verifiedEvidenceOptionsFromDetail(detail),
+      [detail],
+   );
 
    isDirtyRef.current = isDirty;
 
@@ -2057,6 +2284,7 @@ function DraftingContent({
                                           idPrefix="drafting-create-source"
                                           value={editor.sourceUrls}
                                           disabled={Boolean(mutation) || authorityBlocked}
+                                          verifiedEvidenceOptions={verifiedEvidenceOptions}
                                           onChange={(sourceUrls) =>
                                              setEditor((current) => ({
                                                 ...current,
@@ -2158,6 +2386,7 @@ function DraftingContent({
                                              Boolean(conflict) ||
                                              !allowedActions.includes("UPDATE_DRAFT")
                                           }
+                                          verifiedEvidenceOptions={verifiedEvidenceOptions}
                                           onChange={(sourceUrls) =>
                                              setEditor((current) => ({
                                                 ...current,
