@@ -2094,7 +2094,7 @@ function FactualCorrectionContent({
                                  Try again
                               </Button>
                               <Button type="button" variant="ghost" onClick={returnToQueue}>
-                                 Return to queue
+                                 Back to corrections
                               </Button>
                            </div>
                         </div>
