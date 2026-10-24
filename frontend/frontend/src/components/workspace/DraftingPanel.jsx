@@ -1839,7 +1839,7 @@ function DraftingContent({
                            disabled={Boolean(mutation)}
                            onClick={handleReturnToQueue}
                         >
-                           Back to queue
+                           Back to Drafting
                         </Button>
 
                         {detailLoading && !detail ? (

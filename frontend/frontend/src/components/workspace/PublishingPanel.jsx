@@ -1202,7 +1202,7 @@ function PublishingContent({
                            disabled={Boolean(mutation)}
                            onClick={returnToQueue}
                         >
-                           Back to review queue
+                           Back to Publishing
                         </Button>
 
                         {detailLoading && !detail ? (

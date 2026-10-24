@@ -94,9 +94,17 @@
 .drafting-workbench {
    min-width: 0;
    display: grid;
-   grid-template-columns: minmax(17.5rem, 20rem) minmax(0, 1fr);
+   grid-template-columns: minmax(0, 1fr);
    gap: var(--tl-space-6);
    align-items: start;
+}
+
+.drafting-workbench.has-selection .drafting-queue {
+   display: none;
+}
+
+.drafting-workbench:not(.has-selection) .drafting-detail {
+   display: none;
 }
 
 .drafting-queue,
@@ -106,8 +114,8 @@
 }
 
 .drafting-queue {
-   padding-right: var(--tl-space-6);
-   border-right: 1px solid var(--tl-color-border-default);
+   padding-right: 0;
+   border-right: 0;
 }
 
 .drafting-queue-header,
@@ -422,7 +430,7 @@
 }
 
 .drafting-return-to-queue {
-   display: none;
+   display: inline-flex;
    margin-bottom: var(--tl-space-3);
 }
 
@@ -931,17 +939,6 @@
       border-right: 0;
    }
 
-   .drafting-workbench.has-selection .drafting-queue {
-      display: none;
-   }
-
-   .drafting-workbench:not(.has-selection) .drafting-detail {
-      display: none;
-   }
-
-   .drafting-return-to-queue {
-      display: inline-flex;
-   }
 }
 
 @container drafting-panel (max-width: 650px) {
