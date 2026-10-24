@@ -179,15 +179,14 @@ class AssignmentLifecycleProjectionTests(TestCase):
                                     at=self.terminal_at, context=context)
                         self.project()
 
-    def test_terminal_without_claimed_event_fails_closed(self):
+    def test_terminal_without_claimed_event_is_excluded_as_incomplete_coverage(self):
         actions = AccountabilityEvent.ActionType
         for action in (actions.VERIFICATION_ASSIGNMENT_RELEASED,
                        actions.VERIFICATION_ASSIGNMENT_COMPLETED):
             with self.subTest(action=action):
-                with self.assertRaises(VerificationMetricsIntegrityError):
-                    with transaction.atomic():
-                        self.record(action, at=self.terminal_at)
-                        self.project()
+                with transaction.atomic():
+                    self.record(action, at=self.terminal_at)
+                    self.assertEqual(self.project(), [])
 
     def test_duplicate_claimed_or_terminal_events_fail_closed(self):
         actions = AccountabilityEvent.ActionType
