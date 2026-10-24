@@ -75,6 +75,9 @@ function Toast() {
             <div
                key={toast.id}
                className={`toast toast-${toast.type} ${removingToasts.has(toast.id) ? "removing" : ""}`}
+               role={toast.type === "error" ? "alert" : "status"}
+               aria-live={toast.type === "error" ? "assertive" : "polite"}
+               aria-atomic="true"
             >
                <div className="toast-icon">
                   <Icons name={getIcon(toast.type)} size={18} color={getColor(toast.type)} />
