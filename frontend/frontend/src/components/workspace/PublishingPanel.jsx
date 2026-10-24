@@ -119,7 +119,7 @@ function HumanJudgment({ detail }) {
 
          <dl className="publishing-metadata-grid">
             <div className="publishing-metadata-wide">
-               <dt>Canonical claim</dt>
+               <dt>Claim reviewed</dt>
                <dd>{decision.canonical_claim || detail?.canonical_claim || "Not recorded"}</dd>
             </div>
             <div className="publishing-metadata-wide">
