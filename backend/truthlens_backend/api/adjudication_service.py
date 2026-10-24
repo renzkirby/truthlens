@@ -45,6 +45,7 @@ from .organization_service import (
     get_membership_capabilities,
     has_capability,
 )
+from .publication_workflow_query_service import get_initial_drafting_handoff
 from .verification_assignment_service import get_active_verification_assignment
 
 logger = logging.getLogger(__name__)
@@ -464,6 +465,11 @@ def get_adjudication_case_detail(
     case.adjudication_visible_history_count = visible_history_count
     case.adjudication_visible_decision_ids = visible_decision_ids
     case.adjudication_current_decision = visible_current_decision
+    case.adjudication_drafting_handoff = get_initial_drafting_handoff(
+        actor=actor,
+        organization=organization,
+        decision=visible_current_decision,
+    )
     case.adjudication_has_restricted_history = has_restricted_decision_history
     case.adjudication_events = recent_events
     case.adjudication_event_count = event_count

@@ -307,9 +307,17 @@
 .adjudication-workspace-grid {
    min-width: 0;
    display: grid;
-   grid-template-columns: minmax(300px, 340px) minmax(0, 1fr);
+   grid-template-columns: minmax(0, 1fr);
    gap: 24px;
    align-items: start;
+}
+
+.adjudication-workspace-grid.has-selection .adjudication-queue {
+   display: none;
+}
+
+.adjudication-workspace-grid:not(.has-selection) .adjudication-selection {
+   display: none;
 }
 
 .adjudication-queue,
@@ -318,8 +326,8 @@
 }
 
 .adjudication-queue {
-   padding-right: 24px;
-   border-right: 1px solid var(--border-default);
+   padding-right: 0;
+   border-right: 0;
 }
 
 .adjudication-section-heading {
@@ -519,7 +527,7 @@
 }
 
 .adjudication-return-to-queue {
-   display: none;
+   display: inline-flex;
    align-self: flex-start;
 }
 
@@ -1714,18 +1722,6 @@
    .adjudication-queue {
       padding-right: 0;
       border-right: 0;
-   }
-
-   .adjudication-workspace-grid.has-selection .adjudication-queue {
-      display: none;
-   }
-
-   .adjudication-workspace-grid:not(.has-selection) .adjudication-selection {
-      display: none;
-   }
-
-   .adjudication-return-to-queue {
-      display: inline-flex;
    }
 
 }

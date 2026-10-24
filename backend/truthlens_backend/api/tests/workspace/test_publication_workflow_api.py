@@ -20,6 +20,7 @@ from api.models import (
     OrganizationMembership,
     VerificationAssignment,
 )
+from api.publication_workflow_query_service import get_initial_drafting_handoff
 from api.publishing_service import (
     PublishingConflict,
     abandon_fact_check_draft,
@@ -343,6 +344,48 @@ class PublicationWorkflowApiTests(PublicationWorkflowFixtures, APITestCase):
         self.assertEqual(paged.data["limit"], 1)
         self.assertEqual(paged.data["offset"], 1)
         self.assertEqual(len(paged.data["results"]), 1)
+
+    def test_initial_drafting_handoff_uses_publication_workflow_eligibility(self):
+        eligible = self.decided_context(suffix="handoff-eligible")
+        self.assertEqual(
+            get_initial_drafting_handoff(
+                actor=self.lead,
+                organization=self.organization,
+                decision=eligible["decision"],
+            ),
+            {
+                "resource_type": "ELIGIBLE_CLAIM",
+                "resource_id": str(eligible["claim"].id),
+                "action": "CREATE_DRAFT",
+            },
+        )
+
+        drafted = self.decided_context(suffix="handoff-drafted")
+        self.create_draft(drafted, suffix="handoff-drafted")
+        self.assertIsNone(
+            get_initial_drafting_handoff(
+                actor=self.lead,
+                organization=self.organization,
+                decision=drafted["decision"],
+            )
+        )
+
+        published = self.decided_context(suffix="handoff-published")
+        published_draft = self.create_draft(
+            published,
+            suffix="handoff-published",
+        )
+        self.publish(
+            published,
+            self.submit(published, published_draft),
+        )
+        self.assertIsNone(
+            get_initial_drafting_handoff(
+                actor=self.lead,
+                organization=self.organization,
+                decision=published["decision"],
+            )
+        )
 
     def test_stale_initial_work_does_not_hide_new_current_decision_eligibility(self):
         context = self.decided_context(suffix="stale-initial")

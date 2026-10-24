@@ -326,6 +326,28 @@ def _eligible_claim_actions(actor, organization, blockers):
     return []
 
 
+def get_initial_drafting_handoff(*, actor, organization, decision):
+    """Return an actionable initial-draft handoff for the current decision.
+
+    The absence of a handoff means ordinary initial drafting is not currently
+    actionable for this actor. This deliberately reuses the same eligibility
+    and capability rules as the Drafting queue.
+    """
+    if decision is None:
+        return None
+    blockers = _eligible_claim_blockers(decision)
+    if blockers is None:
+        return None
+    actions = _eligible_claim_actions(actor, organization, blockers)
+    if "CREATE_DRAFT" not in actions:
+        return None
+    return {
+        "resource_type": RESOURCE_ELIGIBLE_CLAIM,
+        "resource_id": str(decision.claim_id),
+        "action": "CREATE_DRAFT",
+    }
+
+
 def _fact_check_actions(actor, organization, fact_check, blockers):
     codes = _blocking_codes(blockers)
     stale_or_reserved = bool(

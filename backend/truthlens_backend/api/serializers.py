@@ -3052,6 +3052,7 @@ class AdjudicationCaseDetailSerializer(serializers.ModelSerializer):
     decision_history = serializers.SerializerMethodField()
     events = serializers.SerializerMethodField()
     action_state = serializers.SerializerMethodField()
+    drafting_handoff = serializers.SerializerMethodField()
 
     def get_workflow_state(self, obj):
         if obj.status == ModerationCase.Status.RESOLVED:
@@ -3182,6 +3183,9 @@ class AdjudicationCaseDetailSerializer(serializers.ModelSerializer):
             ).data,
         }
 
+    def get_drafting_handoff(self, obj):
+        return obj.adjudication_drafting_handoff
+
     def get_action_state(self, obj):
         state = obj.adjudication_action_state
         return {
@@ -3222,6 +3226,7 @@ class AdjudicationCaseDetailSerializer(serializers.ModelSerializer):
             "decision_history",
             "events",
             "action_state",
+            "drafting_handoff",
         ]
         read_only_fields = fields
 

@@ -589,7 +589,6 @@ function AdjudicationReviewContent({
    organizationName,
    canAdjudicate,
    canReviewEvidence = false,
-   canDraftFactCheck = false,
    initialCaseId,
    returnToInvestigationPath,
    guidedMode = false,
@@ -1642,9 +1641,13 @@ function AdjudicationReviewContent({
    const reviewedEvidenceCount = evidenceVerified + evidenceRejected;
    const isUrlClaim = String(detailClaim.claim_type || "").toUpperCase() === "URL";
    const originalClaimUrl = isUrlClaim ? getSafeHttpUrl(detailClaim.url_link) : null;
+   const draftingHandoff = detail?.drafting_handoff || null;
    const draftingPath =
-      canDraftFactCheck && detailClaim.id && organizationId
-         ? `/workspace?section=drafting&organization_id=${encodeURIComponent(organizationId)}&resource_type=ELIGIBLE_CLAIM&resource_id=${encodeURIComponent(detailClaim.id)}`
+      draftingHandoff?.action === "CREATE_DRAFT" &&
+      draftingHandoff?.resource_type === "ELIGIBLE_CLAIM" &&
+      draftingHandoff?.resource_id &&
+      organizationId
+         ? `/workspace?section=drafting&organization_id=${encodeURIComponent(organizationId)}&resource_type=${encodeURIComponent(draftingHandoff.resource_type)}&resource_id=${encodeURIComponent(draftingHandoff.resource_id)}`
          : null;
    const viewingOutsideCurrentQueue = Boolean(
       selectedCaseId && detail && !queueLoading && !queueError && !selectedCase,
@@ -1724,7 +1727,7 @@ function AdjudicationReviewContent({
             </div>
          ) : (
             <>
-               {!guidedMode && (
+               {!guidedMode && !selectedCaseId && (
                   <>
                                     <div className="adjudication-toolbar">
                                        <div
@@ -1998,7 +2001,7 @@ function AdjudicationReviewContent({
                                  className="adjudication-return-to-queue"
                                  onClick={() => clearSelection({ restoreQueueFocus: true })}
                               >
-                                 Return to queue
+                                 Back to Adjudication
                               </Button>
                               )}
                               {guidedMode && (
@@ -2248,7 +2251,7 @@ function AdjudicationReviewContent({
                                           <span className="adjudication-completion-eyebrow">Decision recorded</span>
                                           <strong id="adjudication-completion-heading">Adjudication complete</strong>
                                           <p>
-                                             The authoritative decision has been recorded. Fact-check drafting is the next publication workflow for this claim.
+                                             The authoritative decision has been recorded. Any publication work for this claim is handled in the separate Drafting and Publishing workflows.
                                           </p>
                                           <div className="adjudication-completion-actions">
                                              {guidedMode && onReturnToInvestigation ? (
@@ -2280,20 +2283,12 @@ function AdjudicationReviewContent({
                                                          <Icons name="arrow-right" size={13} aria-hidden="true" />
                                                       </Link>
                                                    )}
-                                                   <Button
-                                                      type="button"
-                                                      variant="secondary"
-                                                      density="compact"
-                                                      onClick={() => clearSelection({ restoreQueueFocus: true })}
-                                                   >
-                                                      Return to Adjudication queue
-                                                   </Button>
                                                 </>
                                              )}
                                           </div>
                                           {!guidedMode && !returnToInvestigationPath && !draftingPath && (
                                              <span className="adjudication-completion-permission-note">
-                                                Drafting is available to organization members with the appropriate permission.
+                                                No new drafting action is currently available for this adjudication.
                                              </span>
                                           )}
                                        </div>
