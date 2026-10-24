@@ -741,6 +741,7 @@ function SafetyReviewPanel() {
 
    return (
       <div className="safety-review-panel">
+         {!selectedCaseId && (
          <div className="safety-toolbar">
             <div className="safety-toolbar-summary" role="status" aria-live="polite">
                <strong>
@@ -813,6 +814,7 @@ function SafetyReviewPanel() {
                </Button>
             </div>
          </div>
+         )}
 
          {notice && (
             <div className="safety-notice" role="status" aria-live="polite">
@@ -831,7 +833,7 @@ function SafetyReviewPanel() {
             </div>
          )}
 
-         <div className="safety-workspace-grid">
+         <div className={`safety-workspace-grid ${selectedCaseId ? "has-selection" : ""}`}>
             <section className="safety-queue" aria-labelledby="safety-queue-heading" aria-busy={queueLoading}>
                <div className="safety-section-heading">
                   <div>
@@ -926,6 +928,20 @@ function SafetyReviewPanel() {
                aria-busy={detailLoading}
                tabIndex="-1"
             >
+               {selectedCaseId && (
+                  <Button
+                     type="button"
+                     variant="ghost"
+                     density="compact"
+                     className="safety-return-to-queue"
+                     leadingIcon={<Icons name="arrow-left" size={15} />}
+                     disabled={isBusy}
+                     onClick={handleReturnToQueue}
+                  >
+                     Back to Safety Review
+                  </Button>
+               )}
+
                {detailError ? (
                   <div
                      ref={detailErrorRef}
@@ -942,7 +958,7 @@ function SafetyReviewPanel() {
                            density="compact"
                            onClick={handleReturnToQueue}
                         >
-                           Return to queue
+                           Back to Safety Review
                         </Button>
                      ) : (
                         <Button
