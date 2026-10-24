@@ -2299,7 +2299,15 @@ function FactualCorrectionContent({
                               ? renderProposalSection({ preserved: true })
                               : null}
 
-                           <section className="correction-section" aria-labelledby="correction-provenance-heading">
+                           <details className="correction-reference-material">
+                              <summary>
+                                 <span>
+                                    <strong>Reference material</strong>
+                                    <small>Request history, correction case details, and evidence used for the previous decision</small>
+                                 </span>
+                                 <Icons name="chevron-down" size={16} aria-hidden="true" />
+                              </summary>
+                              <div className="correction-reference-content">
                               <div className="correction-section-heading">
                                  <div>
                                     <h4 id="correction-provenance-heading">Correction and publication provenance</h4>
@@ -2407,7 +2415,8 @@ function FactualCorrectionContent({
                                     </ol>
                                  ) : null}
                               </div>
-                           </section>
+                              </div>
+                           </details>
                         </article>
                      ) : null}
                   </>
@@ -2418,7 +2427,7 @@ function FactualCorrectionContent({
          <CorrectionDialog
             open={dialog?.type === "discard"}
             title="Discard unsaved proposal changes?"
-            description="Your saved server proposal will remain, but the unsaved text in this editor will be lost."
+            description="Your saved proposal will remain, but the unsaved text in this editor will be lost."
             confirmLabel="Discard changes"
             confirmVariant="destructive"
             onClose={() => setDialog(null)}
