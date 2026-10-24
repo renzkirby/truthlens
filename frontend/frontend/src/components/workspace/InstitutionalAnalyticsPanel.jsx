@@ -410,10 +410,12 @@ function ContextHelp({ label = "More information", children }) {
    );
 }
 
-function HeadingWithHelp({ as: Heading = "h5", children, help, helpLabel }) {
+function HeadingWithHelp({ as = "h5", children, help, helpLabel }) {
+   const heading = as === "h6" ? <h6>{children}</h6> : <h5>{children}</h5>;
+
    return (
       <div className="institutional-analytics__heading-with-help">
-         <Heading>{children}</Heading>
+         {heading}
          {help ? <ContextHelp label={helpLabel || `About ${children}`}>{help}</ContextHelp> : null}
       </div>
    );
