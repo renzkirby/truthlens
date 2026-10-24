@@ -307,6 +307,15 @@ function isKnowledgeReuseContract(value) {
    );
 }
 
+function formatLabel(value) {
+   if (!value) return "Unavailable";
+   return String(value)
+      .toLowerCase()
+      .split("_")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+}
+
 function formatCount(value) {
    return isMeasurement(value) ? countFormatter.format(value) : "Not available";
 }
