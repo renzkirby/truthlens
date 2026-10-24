@@ -1,4 +1,4 @@
-"""Offline-only tests for draft semantic stance benchmark; no Django DB."""
+"""Offline-only tests for semantic stance benchmark; no Django DB."""
 
 from contextlib import redirect_stdout, redirect_stderr
 from copy import deepcopy
@@ -40,13 +40,15 @@ class SemanticBenchmarkTests(unittest.TestCase):
             stance_fn(k, v) if stance_fn else v["reference_stance"]
         )} for k, v in self.reference.items()}
 
-    def test_gold_set_has_48_balanced_draft_cases(self):
+    def test_gold_set_has_48_user_approved_ai_proposed_cases(self):
         self.assertEqual(len(self.reference), 48)
         self.assertEqual({x["review_status"] for x in self.reference.values()},
-                         {"DRAFT_UNREVIEWED"})
+                         {"USER_APPROVED_AI_PROPOSED"})
         self.assertEqual({s: sum(v["reference_stance"] == s for v in
                              self.reference.values()) for s in STANCES},
-                         {s: 12 for s in STANCES})
+                         {"SUPPORTS": 11, "REFUTES": 12,
+                          "CONTEXT": 13, "UNKNOWN": 12})
+        self.assertEqual(self.reference["intent_01"]["reference_stance"], "CONTEXT")
         self.assertIn("dart_01", self.reference)
         self.assertIn("filipino_01", self.reference)
         self.assertIn("prompt_injection_04", self.reference)
@@ -110,7 +112,7 @@ class SemanticBenchmarkTests(unittest.TestCase):
         self.assertEqual(result["candidate_fixes"], ["dart_03"])
         self.assertEqual(result["candidate_regressions"], ["date_01"])
         self.assertEqual(result["review_status"],
-                         "PROVISIONAL_DRAFT_REFERENCES_NOT_HUMAN_VERIFIED")
+                         "USER_APPROVED_AI_PROPOSED_NOT_INDEPENDENTLY_ADJUDICATED")
         self.assertEqual(result["delta_all_case_accuracy"], 0)
 
     def test_duplicate_reference_ids_rejected(self):
@@ -166,7 +168,7 @@ class SemanticBenchmarkTests(unittest.TestCase):
 
     def test_unreviewed_case_cannot_claim_reviewer(self):
         bad=deepcopy(self.reference["dart_01"])
-        bad["reviewer_id"]="reviewer01"
+        bad["review_status"] = "DRAFT_UNREVIEWED"
         file=self._write("bad.jsonl",[bad])
         with self.assertRaises(BenchmarkInputError):
             read_reference(file)
@@ -174,9 +176,36 @@ class SemanticBenchmarkTests(unittest.TestCase):
     def test_adjudicated_case_requires_review_metadata(self):
         bad=deepcopy(self.reference["dart_01"])
         bad["review_status"]="INDEPENDENTLY_ADJUDICATED"
+        bad["reviewer_id"] = None
+        bad["reviewed_on"] = None
         file=self._write("bad.jsonl",[bad])
         with self.assertRaises(BenchmarkInputError):
             read_reference(file)
+
+    def test_user_approval_requires_review_metadata(self):
+        bad = deepcopy(self.reference["dart_01"])
+        bad["reviewer_id"] = None
+        file = self._write("user_approval_missing_metadata.jsonl", [bad])
+        with self.assertRaisesRegex(BenchmarkInputError,
+                                    "User approval metadata missing"):
+            read_reference(file)
+
+    def test_user_approved_not_misreported_as_independent(self):
+        result = compare(self.reference, self._predictions(), self._predictions())
+        self.assertEqual(result["review_status"],
+                         "USER_APPROVED_AI_PROPOSED_NOT_INDEPENDENTLY_ADJUDICATED")
+        self.assertEqual(result["reference_review_counts"],
+                         {"USER_APPROVED_AI_PROPOSED": 48})
+
+    def test_draft_fixture_still_reported_as_draft(self):
+        reference = deepcopy(self.reference)
+        for row in reference.values():
+            row["review_status"] = "DRAFT_UNREVIEWED"
+            row["reviewer_id"] = None
+            row["reviewed_on"] = None
+        result = compare(reference, self._predictions(), self._predictions())
+        self.assertEqual(result["review_status"],
+                         "PROVISIONAL_DRAFT_REFERENCES_NOT_HUMAN_VERIFIED")
 
     def test_source_derived_case_requires_url(self):
         bad=deepcopy(self.reference["dart_01"])

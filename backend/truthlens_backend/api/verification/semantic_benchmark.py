@@ -97,6 +97,12 @@ def read_reference(path):
         if status == "DRAFT_UNREVIEWED":
             if obj["reviewer_id"] is not None or obj["reviewed_on"] is not None:
                 raise BenchmarkInputError(f"Draft must not claim review: {case_id}")
+        elif status == "USER_APPROVED_AI_PROPOSED":
+            # The user approved labels originally proposed by AI; this is NOT
+            # independent blind assessment or adjudication.
+            if not (_nonempty_short(obj["reviewer_id"], limit=120)
+                    and _nonempty_short(obj["reviewed_on"], limit=40)):
+                raise BenchmarkInputError(f"User approval metadata missing: {case_id}")
         elif status == "INDEPENDENTLY_ADJUDICATED":
             if not (_nonempty_short(obj["reviewer_id"], limit=120)
                     and _nonempty_short(obj["reviewed_on"], limit=40)):
@@ -232,8 +238,11 @@ def compare(reference, baseline, candidate):
     return {
         "benchmark_kind": "OFFLINE_EVIDENCE_STANCE_COMPARISON",
         "review_status": (
-            "INDEPENDENTLY_ADJUDICATED_REFERENCES" if not counts.get("DRAFT_UNREVIEWED")
-            else "PROVISIONAL_DRAFT_REFERENCES_NOT_HUMAN_VERIFIED"
+            "PROVISIONAL_DRAFT_REFERENCES_NOT_HUMAN_VERIFIED"
+            if counts.get("DRAFT_UNREVIEWED")
+            else "USER_APPROVED_AI_PROPOSED_NOT_INDEPENDENTLY_ADJUDICATED"
+            if counts.get("USER_APPROVED_AI_PROPOSED")
+            else "INDEPENDENTLY_ADJUDICATED_REFERENCES"
         ),
         "reference_review_counts": dict(sorted(counts.items())),
         "warning": (
@@ -251,7 +260,7 @@ def compare(reference, baseline, candidate):
 def _cli(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    validate = commands.add_parser("validate", help="Validate draft/adjudicated reference JSONL")
+    validate = commands.add_parser("validate", help="Validate draft/user-approved/adjudicated reference JSONL")
     validate.add_argument("--gold", type=Path, required=True)
     run = commands.add_parser("compare", help="Score already collected predictions; no AI calls")
     run.add_argument("--gold", type=Path, required=True)
@@ -265,7 +274,9 @@ def _cli(argv=None):
         if args.command == "validate":
             print(json.dumps({"cases": len(reference),
                               "review_counts": dict(sorted(counts.items())),
-                              "not_ready_for_accuracy_claims": bool(counts.get("DRAFT_UNREVIEWED"))},
+                              "not_ready_for_accuracy_claims": any(
+                                   status != "INDEPENDENTLY_ADJUDICATED"
+                                   for status in counts)},
                              indent=2, sort_keys=True))
             return 0
         baseline = read_predictions(args.baseline, set(reference))
