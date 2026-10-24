@@ -13,9 +13,8 @@
 - **Difference from original draft fixture:** `intent_01` changes from
   `SUPPORTS` to `CONTEXT`. The source describes an administrator performing
   a planned shutdown, without proving the administrator belongs to the named team.
-- **Audit trail:** The initial draft remains in commit `ad20b62`. The updated
-  fixture and validator changes are a separate uncommitted follow-up patch until
-  reviewed and committed locally.
+- **Audit trail:** The initial draft remains in commit `ad20b62`. The revised fixture and validator changes were committed in `2c43da1`
+  and carried into offline integration commit `f066a0c`.
 
 ## Boundaries
 
