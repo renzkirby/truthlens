@@ -473,7 +473,7 @@ function DraftingReferenceMaterial({ detail, isEditorialRevision }) {
                   </div>
                   {detail?.resource_type === "FACT_CHECK" ? (
                      <div>
-                        <dt>Edit generation</dt>
+                        <dt>Draft version marker</dt>
                         <dd>{detail?.concurrency?.edit_generation ?? detail?.edit_generation ?? "Not recorded"}</dd>
                      </div>
                   ) : null}
@@ -672,7 +672,7 @@ function ServerConflict({ conflict, editor, focusRef, onUseLatest, onContinue })
          </div>
 
          {conflict?.loading ? (
-            <p className="drafting-conflict-loading">Loading the latest server version…</p>
+            <p className="drafting-conflict-loading">Loading the latest saved version…</p>
          ) : server ? (
             <div className="drafting-conflict-comparison">
                <section>
@@ -700,7 +700,7 @@ function ServerConflict({ conflict, editor, focusRef, onUseLatest, onContinue })
                   <h5>Latest saved version</h5>
                   <dl>
                      <div>
-                        <dt>Edit generation</dt>
+                        <dt>Draft version marker</dt>
                         <dd>{server?.concurrency?.edit_generation ?? server?.edit_generation ?? "Unavailable"}</dd>
                      </div>
                      <div>
@@ -1139,7 +1139,7 @@ function DraftingContent({
                      detail:
                         freshGeneration !== baseGeneration
                            ? "The draft changed while publication authority was being revalidated."
-                           : "The latest server state no longer allows this draft to be updated.",
+                           : "The latest saved state no longer allows this draft to be updated.",
                      blockers: Array.isArray(data?.blockers) ? data.blockers : [],
                      serverDetail: data,
                      loading: false,
@@ -1268,7 +1268,7 @@ function DraftingContent({
             const unavailable = refreshError?.status === 404;
             setDetailUnavailable(unavailable);
             setDetailError(
-               unavailable ? "This publication work item is no longer available." : "Latest server state unavailable.",
+               unavailable ? "This publication work item is no longer available." : "Latest saved state unavailable.",
             );
             setConflict({
                code: error?.code || "CONFLICT",
@@ -1916,7 +1916,7 @@ function DraftingContent({
                         {detailLoading && !detail ? (
                            <div className="drafting-state" role="status">
                               <Icons name="loader" size={22} className="drafting-spinner" />
-                              <strong>Loading canonical work item…</strong>
+                              <strong>Loading drafting work…</strong>
                            </div>
                         ) : detailError && !detail ? (
                            <div className="drafting-state drafting-state--error" role="alert">
