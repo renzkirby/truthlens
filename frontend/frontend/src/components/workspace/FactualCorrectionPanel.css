@@ -676,6 +676,284 @@
    border-radius: var(--tl-radius-md);
 }
 
+.correction-source-picker {
+   display: flex;
+   flex-direction: column;
+   gap: var(--tl-space-3);
+}
+
+.correction-source-picker-header strong {
+   display: block;
+   color: var(--tl-color-text-main);
+   font-size: var(--tl-text-sm);
+   font-weight: 700;
+}
+
+.correction-source-picker-header p {
+   max-width: 72ch;
+   margin: var(--tl-space-1) 0 0;
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-xs);
+   line-height: 1.5;
+}
+
+.correction-source-picker-actions,
+.correction-source-evidence-picker-actions {
+   display: flex;
+   align-items: center;
+   flex-wrap: wrap;
+   gap: var(--tl-space-2);
+}
+
+.correction-source-availability-note {
+   margin: 0;
+   padding: var(--tl-space-3);
+   border-radius: var(--tl-radius-sm);
+   background: var(--tl-color-bg-subtle);
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-xs);
+   line-height: 1.45;
+}
+
+.correction-source-evidence-picker {
+   padding: var(--tl-space-4);
+   border: 1px solid var(--tl-color-brand-primary);
+   border-radius: var(--tl-radius-md);
+   background: var(--tl-color-bg-subtle);
+}
+
+.correction-source-evidence-picker-heading {
+   display: flex;
+   align-items: flex-start;
+   justify-content: space-between;
+   gap: var(--tl-space-4);
+}
+
+.correction-source-evidence-picker-heading > div {
+   min-width: 0;
+}
+
+.correction-source-evidence-picker-heading strong {
+   color: var(--tl-color-text-main);
+   font-size: var(--tl-text-sm);
+}
+
+.correction-source-evidence-picker-heading p {
+   max-width: 72ch;
+   margin: var(--tl-space-1) 0 0;
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-xs);
+   line-height: 1.5;
+}
+
+.correction-source-evidence-picker-heading > span {
+   flex: 0 0 auto;
+   padding: var(--tl-space-1) var(--tl-space-2);
+   border: 1px solid var(--tl-color-border-default);
+   border-radius: var(--tl-radius-pill);
+   background: var(--tl-color-bg-surface);
+   color: var(--tl-color-text-body);
+   font-size: var(--tl-text-xs);
+   font-weight: 700;
+}
+
+.correction-source-evidence-options,
+.correction-source-input-list {
+   display: flex;
+   flex-direction: column;
+   gap: var(--tl-space-2);
+}
+
+.correction-source-evidence-options {
+   margin-top: var(--tl-space-4);
+}
+
+.correction-source-evidence-option {
+   display: grid;
+   grid-template-columns: auto minmax(0, 1fr);
+   gap: var(--tl-space-3);
+   align-items: flex-start;
+   padding: var(--tl-space-3);
+   border: 1px solid var(--tl-color-border-default);
+   border-radius: var(--tl-radius-sm);
+   background: var(--tl-color-bg-surface);
+   cursor: pointer;
+}
+
+.correction-source-evidence-option.is-selected {
+   border-color: var(--tl-color-status-success-border);
+   background: var(--tl-color-status-success-bg);
+}
+
+.correction-source-evidence-option > input {
+   position: absolute;
+   opacity: 0;
+   pointer-events: none;
+}
+
+.correction-source-evidence-option:focus-within {
+   outline: var(--tl-focus-width) solid var(--tl-focus-color);
+   outline-offset: var(--tl-focus-offset);
+}
+
+.correction-source-evidence-check {
+   width: 20px;
+   height: 20px;
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   border: 1px solid var(--tl-color-border-default);
+   border-radius: 5px;
+   background: var(--tl-color-bg-surface);
+   color: var(--tl-color-status-success-text);
+}
+
+.correction-source-evidence-copy {
+   min-width: 0;
+   display: flex;
+   flex-direction: column;
+   gap: var(--tl-space-1);
+}
+
+.correction-source-evidence-title-row {
+   display: flex;
+   align-items: flex-start;
+   justify-content: space-between;
+   gap: var(--tl-space-3);
+}
+
+.correction-source-evidence-title-row strong {
+   min-width: 0;
+   color: var(--tl-color-text-main);
+   font-size: var(--tl-text-xs);
+   overflow-wrap: anywhere;
+}
+
+.correction-source-evidence-title-row > span,
+.correction-selected-source-origin {
+   flex: 0 0 auto;
+   width: fit-content;
+   padding: 2px 7px;
+   border: 1px solid var(--tl-color-status-success-border);
+   border-radius: var(--tl-radius-pill);
+   background: var(--tl-color-status-success-bg);
+   color: var(--tl-color-status-success-text);
+   font-size: 0.65rem;
+   font-weight: 750;
+   white-space: nowrap;
+}
+
+.correction-source-evidence-copy small,
+.correction-selected-source > div > small {
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-xs);
+   line-height: 1.45;
+}
+
+.correction-source-evidence-copy a,
+.correction-selected-source a {
+   width: fit-content;
+   max-width: 100%;
+   display: inline-flex;
+   align-items: center;
+   gap: var(--tl-space-1);
+   color: var(--tl-color-brand-primary);
+   font-size: var(--tl-text-xs);
+   font-weight: 650;
+   overflow-wrap: anywhere;
+   word-break: break-word;
+}
+
+.correction-source-evidence-picker-actions {
+   justify-content: flex-end;
+   margin-top: var(--tl-space-4);
+}
+
+.correction-selected-source {
+   display: grid;
+   grid-template-columns: minmax(0, 1fr) auto;
+   gap: var(--tl-space-3);
+   align-items: center;
+   padding: var(--tl-space-3);
+   border: 1px solid var(--tl-color-border-default);
+   border-radius: var(--tl-radius-sm);
+   background: var(--tl-color-bg-surface);
+}
+
+.correction-selected-source--evidence {
+   border-left: 3px solid var(--tl-color-status-success-border);
+}
+
+.correction-selected-source > div {
+   min-width: 0;
+   display: flex;
+   flex-direction: column;
+   gap: var(--tl-space-1);
+}
+
+.correction-selected-source > div > strong {
+   color: var(--tl-color-text-main);
+   font-size: var(--tl-text-xs);
+}
+
+.correction-source-input-item {
+   display: flex;
+   flex-direction: column;
+   gap: var(--tl-space-2);
+}
+
+.correction-source-input-label-row {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: var(--tl-space-3);
+}
+
+.correction-source-input-label-row > label {
+   color: var(--tl-color-text-main);
+   font-size: var(--tl-text-xs);
+   font-weight: 700;
+}
+
+.correction-source-input-label-row > span {
+   flex: 0 0 auto;
+   color: var(--tl-color-text-muted);
+   font-size: 0.65rem;
+   font-weight: 650;
+}
+
+.correction-source-input-row {
+   display: grid;
+   grid-template-columns: minmax(0, 1fr) auto;
+   gap: var(--tl-space-2);
+   align-items: center;
+}
+
+.correction-source-input-row .tl-field,
+.correction-source-input-row .tl-input {
+   width: 100%;
+   min-width: 0;
+}
+
+.correction-source-input-error {
+   color: var(--tl-color-status-critical-text);
+   font-size: var(--tl-text-xs);
+   line-height: 1.4;
+}
+
+.correction-source-picker-footer {
+   display: flex;
+   flex-wrap: wrap;
+   align-items: center;
+   gap: var(--tl-space-3);
+}
+
+.correction-source-picker-footer > span {
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-xs);
+   line-height: 1.45;
+}
+
 .correction-source-editor > p {
    margin: 0;
    color: var(--tl-color-text-muted);
@@ -1084,6 +1362,30 @@
 }
 
 @container correction-panel (max-width: 720px) {
+   .correction-source-picker-actions,
+   .correction-source-evidence-picker-actions,
+   .correction-source-evidence-picker-heading,
+   .correction-source-evidence-title-row,
+   .correction-source-input-label-row {
+      align-items: stretch;
+      flex-direction: column;
+   }
+
+   .correction-source-picker-actions .tl-button,
+   .correction-source-evidence-picker-actions .tl-button {
+      width: 100%;
+      min-height: 44px;
+   }
+
+   .correction-selected-source {
+      grid-template-columns: minmax(0, 1fr);
+   }
+
+   .correction-selected-source > .tl-button {
+      justify-self: start;
+   }
+
+
    .correction-reference-material > summary,
    .correction-work-disclosure > summary {
       align-items: flex-start;
@@ -1121,6 +1423,16 @@
 }
 
 @container correction-panel (max-width: 520px) {
+   .correction-source-input-row {
+      grid-template-columns: 1fr;
+   }
+
+   .correction-source-input-row .tl-button {
+      width: 100%;
+      min-height: 44px;
+   }
+
+
    .correction-authority-note,
    .correction-message,
    .correction-evidence-list > li,
