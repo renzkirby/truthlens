@@ -1032,7 +1032,7 @@ function WorkspacePage() {
          <CorrectionDialog
             open={navigationPromptOpen}
             title="Discard unsaved correction proposal changes?"
-            description="This navigation would leave the proposal editor. Your unsaved text will be lost, while the last saved server proposal remains unchanged."
+            description="This navigation would leave the proposal editor. Your unsaved text will be lost, while the last saved proposal remains unchanged."
             confirmLabel="Discard and continue"
             confirmVariant="destructive"
             onClose={() => resolveNavigationConfirmation(false)}
