@@ -1267,8 +1267,8 @@ function InstitutionalAnalyticsPanel({ organizationId, organizationName }) {
                <div className="institutional-analytics__support-grid">
                   <section className="institutional-analytics__section institutional-analytics__support-panel">
                      <header className="institutional-analytics__section-header">
-                        <h4>Verification workflow</h4>
-                        <p>Recorded assignment attempts, not the current investigation inventory.</p>
+                        <h4>Investigation workflow</h4>
+                        <p>Recorded investigation assignment outcomes and turnaround, separate from the current queue.</p>
                      </header>
 
                      <dl className="institutional-analytics__workflow-summary">
@@ -1381,7 +1381,7 @@ function InstitutionalAnalyticsPanel({ organizationId, organizationName }) {
                            <dl className="institutional-analytics__outcome-list">
                               {VERDICTS.map((verdict) => (
                                  <div key={verdict}>
-                                    <dt>{verdict}</dt>
+                                    <dt>{formatLabel(verdict)}</dt>
                                     <dd>{formatCount(resolution?.by_verdict?.[verdict])}</dd>
                                  </div>
                               ))}
@@ -1492,12 +1492,12 @@ function InstitutionalAnalyticsPanel({ organizationId, organizationName }) {
                      </p>
                      <dl className="institutional-analytics__notes-definitions">
                         <div>
-                           <dt>Current operational records</dt>
+                           <dt>Current snapshot</dt>
                            <dd>Published fact-checks, active corrections and assignments, and open publication work.
                               Categories can overlap and should not be added together.</dd>
                         </div>
                         <div>
-                           <dt>Recorded workflow and publication activity</dt>
+                           <dt>Recorded workflow history</dt>
                            <dd>Only eligible observed events. Current publications and investigations can differ from
                               their recorded-history counterparts.</dd>
                         </div>
@@ -1538,7 +1538,7 @@ function InstitutionalAnalyticsPanel({ organizationId, organizationName }) {
                            date for the tracking system.</p>
                         <div className="institutional-analytics__basis-grid">
                            <MeasurementBasis
-                           title="Current operational records"
+                           title="Current snapshot"
                            basis={currentState?.measurement_basis}
                            fields={["source", "coverage"]}
                         />
