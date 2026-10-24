@@ -1268,7 +1268,7 @@ function PublicationsContent({
                                        </span>
                                        <strong>{item.headline || "Untitled publication"}</strong>
                                        <span className="publications-row-claim">
-                                          {item.claim?.canonical_claim || "Canonical claim unavailable"}
+                                          {item.claim?.canonical_claim || "Claim text unavailable"}
                                        </span>
                                        <span className="publications-row-metadata">
                                           {formatLabel(item.revision_kind)} · {formatDateTime(item.published_at)}
@@ -1377,11 +1377,13 @@ function PublicationsContent({
                            <article className="publications-detail-content">
                               <header className="publications-detail-header">
                                  <div>
-                                    <span className="publications-history-label">{detail.history_state}</span>
+                                    <span className="publications-history-label">
+                                       {formatLabel(detail.history_state, "Publication")}
+                                    </span>
                                     <h3 id="publications-detail-heading" ref={detailHeadingRef} tabIndex={-1}>
                                        {detail.article?.headline || "Untitled publication"}
                                     </h3>
-                                    <p>{detail.claim?.canonical_claim || "Canonical claim unavailable"}</p>
+                                    <p>{detail.claim?.canonical_claim || "Claim text unavailable"}</p>
                                  </div>
                                  <div className="publications-detail-badges">
                                     <VerdictBadge verdict={detail.decision?.verdict} />
@@ -1408,35 +1410,28 @@ function PublicationsContent({
                                  </div>
                               ) : null}
 
-                              <section className="publications-section" aria-labelledby="publications-article-heading">
+                              <section
+                                 className="publications-section publications-article-section"
+                                 aria-labelledby="publications-article-heading"
+                              >
                                  <div className="publications-section-heading">
                                     <div>
-                                       <h4 id="publications-article-heading">Publication</h4>
-                                       <p>The selected institutional article version and publication provenance.</p>
+                                       <h4 id="publications-article-heading">Published article</h4>
+                                       <p>The institutional article version currently selected from publication history.</p>
                                     </div>
                                  </div>
-                                 <dl className="publications-metadata-grid">
+                                 <dl className="publications-publication-summary">
                                     <div>
-                                       <dt>Version</dt>
-                                       <dd>Article v{detail.article?.version ?? "–"}</dd>
-                                    </div>
-                                    <div>
-                                       <dt>Revision kind</dt>
-                                       <dd>{formatLabel(detail.article?.revision_kind)}</dd>
-                                    </div>
-                                    <div>
-                                       <dt>Publication status</dt>
-                                       <dd>{formatLabel(detail.article?.publication_status)}</dd>
+                                       <dt>Article version</dt>
+                                       <dd>v{detail.article?.version ?? "–"}</dd>
                                     </div>
                                     <div>
                                        <dt>Published by</dt>
                                        <dd>{actorName(detail.published_by)}</dd>
                                     </div>
                                     <div>
-                                       <dt>Published at</dt>
-                                       <dd>
-                                          <FormattedDateTime value={detail.published_at} />
-                                       </dd>
+                                       <dt>Published</dt>
+                                       <dd><FormattedDateTime value={detail.published_at} /></dd>
                                     </div>
                                  </dl>
                                  <div className="publications-article-copy">
@@ -1448,235 +1443,106 @@ function PublicationsContent({
                               </section>
 
                               <HumanDecision detail={detail} />
-                              <PublicationSources sourceItems={detail.source_items} />
-                              <SealedEvidence sealedEvidence={detail.sealed_evidence} />
+
                               <VersionHistory
                                  lineage={detail.lineage}
                                  selectedPublicationId={detail.selected_publication_id}
                                  disabled={Boolean(mutation)}
                                  onSelect={selectPublication}
                               />
-                              <Blockers blockers={detail.blockers} />
 
-                              {correctionWorkflow ? (
+                              <PublicationReferenceMaterial detail={detail} />
+
+                              {(correctionWorkflow || canCreateRevision) ? (
                                  <section
-                                    className="publications-correction-action"
-                                    aria-labelledby="publications-correction-action-heading"
+                                    className="publications-maintenance"
+                                    aria-labelledby="publications-maintenance-heading"
                                  >
                                     <div className="publications-section-heading">
                                        <div>
-                                          <h4 id="publications-correction-action-heading">Factual correction</h4>
+                                          <h4 id="publications-maintenance-heading">Publication maintenance</h4>
                                           <p>
-                                             Start or open dedicated work when the published factual judgment may need
-                                             correction. This workflow is separate from editorial revision.
+                                             Start dedicated follow-up work without changing the currently published
+                                             record in place.
                                           </p>
                                        </div>
                                     </div>
 
-                                    <div className="publications-correction-authority-note">
-                                       <Icons name="shield" size={17} />
-                                       <p>
-                                          A request or proposal is not factual authority. Only successful final
-                                          publication creates a new current human decision and institutional article.
-                                       </p>
-                                    </div>
-
-                                    {correctionConflict ? (
-                                       <div className="publications-correction-conflict" role="alert">
-                                          <strong>{correctionConflict.code}</strong>
-                                          <p>{correctionConflict.detail} No mutation was repeated. The server record was refreshed for explicit reconciliation.</p>
-                                          {Array.isArray(correctionConflict.blockers) && correctionConflict.blockers.length > 0 ? (
-                                             <ul>
-                                                {correctionConflict.blockers.map((blocker, index) => <li key={`${blocker?.code || "blocker"}-${index}`}><strong>{formatLabel(blocker?.code, "Conflict blocker")}</strong>{blocker?.detail || "The server rejected the stale request."}</li>)}
-                                             </ul>
-                                          ) : null}
-                                          {correctionConflict.current ? <pre>{JSON.stringify(correctionConflict.current, null, 2)}</pre> : null}
-                                       </div>
-                                    ) : null}
-
-                                    {canOpenCorrection && correctionWorkflow.active_request_id ? (
-                                       <Button
-                                          type="button"
-                                          variant="primary"
-                                          density="standard"
-                                          leadingIcon={<Icons name="badge-check" size={16} />}
-                                          disabled={Boolean(mutation)}
-                                          onClick={() =>
-                                             onCorrectionOpened?.(String(correctionWorkflow.active_request_id))
-                                          }
-                                       >
-                                          Open factual correction
-                                       </Button>
-                                    ) : null}
-
-                                    {canRequestCorrection ? (
-                                       !correctionOpen ? (
-                                          <Button
-                                             ref={requestCorrectionButtonRef}
-                                             type="button"
-                                             variant="primary"
-                                             density="standard"
-                                             leadingIcon={<Icons name="badge-check" size={16} />}
-                                             disabled={Boolean(mutation)}
-                                             onClick={() => {
-                                                setCorrectionOpen(true);
-                                                setCorrectionReasonError("");
-                                                setActionError("");
-                                             }}
-                                          >
-                                             Request factual correction
-                                          </Button>
-                                       ) : (
-                                          <form className="publications-correction-form" onSubmit={handleRequestCorrection}>
-                                             <div>
-                                                <label htmlFor="publications-correction-reason">Correction reason</label>
-                                                <Textarea
-                                                   ref={correctionReasonRef}
-                                                   id="publications-correction-reason"
-                                                   rows={5}
-                                                   maxLength={2000}
-                                                   required
-                                                   value={correctionReason}
-                                                   disabled={Boolean(mutation)}
-                                                   invalid={Boolean(correctionReasonError)}
-                                                   aria-describedby="publications-correction-help publications-correction-count publications-correction-error"
-                                                   onChange={(event) => {
-                                                      setCorrectionReason(event.target.value);
-                                                      setCorrectionReasonError("");
-                                                   }}
-                                                />
-                                                <div className="publications-revision-field-meta">
-                                                   <span id="publications-correction-help">
-                                                      Explain why the published factual judgment should enter dedicated
-                                                      correction review.
-                                                   </span>
-                                                   <span id="publications-correction-count">
-                                                      {correctionReason.length}/2000
-                                                   </span>
-                                                </div>
-                                                <span
-                                                   id="publications-correction-error"
-                                                   className="publications-correction-field-error"
-                                                   role={correctionReasonError ? "alert" : undefined}
-                                                >
-                                                   {correctionReasonError}
-                                                </span>
-                                             </div>
-                                             <div className="publications-correction-confirmation">
-                                                <strong>Request dedicated factual-correction work?</strong>
-                                                <p>
-                                                   The current human decision and publication remain authoritative while
-                                                   the correction is reviewed.
-                                                </p>
-                                             </div>
-                                             <div className="publications-action-row">
-                                                <Button
-                                                   type="button"
-                                                   variant="secondary"
-                                                   disabled={Boolean(mutation)}
-                                                   onClick={closeCorrectionForm}
-                                                >
-                                                   Cancel
-                                                </Button>
-                                                <Button
-                                                   type="submit"
-                                                   variant="primary"
-                                                   loading={mutation === "request-correction"}
-                                                   loadingLabel="Requesting correction…"
-                                                   disabled={!correctionReason.trim() || Boolean(mutation)}
-                                                >
-                                                   Request and open correction
-                                                </Button>
-                                             </div>
-                                          </form>
-                                       )
-                                    ) : null}
-
-                                    <CorrectionWorkflowBlockers blockers={correctionWorkflow.blockers} />
-                                 </section>
-                              ) : null}
-
-                              {canCreateRevision ? (
-                                 <section
-                                    className="publications-revision-action"
-                                    aria-labelledby="publications-revision-action-heading"
-                                 >
-                                    <div className="publications-section-heading">
-                                       <div>
-                                          <h4 id="publications-revision-action-heading">Editorial revision</h4>
-                                          <p>
-                                             Start a non-factual update to the headline, summary, article wording, or
-                                             editorial citations.
-                                          </p>
-                                       </div>
-                                    </div>
-                                    {!revisionOpen ? (
-                                       <Button
-                                          ref={createRevisionButtonRef}
-                                          type="button"
-                                          variant="primary"
-                                          density="standard"
-                                          leadingIcon={<Icons name="file-text" size={16} />}
-                                          onClick={() => {
-                                             setRevisionOpen(true);
-                                             setActionError("");
-                                          }}
-                                       >
-                                          Create editorial revision
-                                       </Button>
-                                    ) : (
-                                       <form className="publications-revision-form" onSubmit={handleCreateRevision}>
+                                    {correctionWorkflow ? (
+                                       <div className="publications-maintenance-option">
                                           <div>
-                                             <label htmlFor="publications-revision-reason">Revision reason</label>
-                                             <Textarea
-                                                ref={revisionReasonRef}
-                                                id="publications-revision-reason"
-                                                rows={5}
-                                                maxLength={2000}
-                                                required
-                                                value={revisionReason}
-                                                disabled={Boolean(mutation)}
-                                                aria-describedby="publications-revision-help publications-revision-count"
-                                                onChange={(event) => setRevisionReason(event.target.value)}
-                                             />
-                                             <div className="publications-revision-field-meta">
-                                                <span id="publications-revision-help">
-                                                   Describe the editorial clarification. A factual judgment change needs
-                                                   the separate factual-correction workflow.
-                                                </span>
-                                                <span id="publications-revision-count">{revisionReason.length}/2000</span>
-                                             </div>
-                                          </div>
-                                          <div className="publications-revision-confirmation">
-                                             <strong>Create a draft from Article v{detail.article?.version}?</strong>
+                                             <strong>Factual correction</strong>
                                              <p>
-                                                The current publication stays live while the inherited revision draft is
-                                                edited and reviewed.
+                                                Use this when the published factual judgment itself may need correction.
+                                                Requests and proposals remain non-authoritative until final publication.
                                              </p>
                                           </div>
-                                          <div className="publications-action-row">
+                                          <div className="publications-maintenance-actions">
+                                             {canOpenCorrection && correctionWorkflow.active_request_id ? (
+                                                <Button
+                                                   type="button"
+                                                   variant="primary"
+                                                   density="standard"
+                                                   leadingIcon={<Icons name="badge-check" size={16} />}
+                                                   disabled={Boolean(mutation)}
+                                                   onClick={() =>
+                                                      onCorrectionOpened?.(String(correctionWorkflow.active_request_id))
+                                                   }
+                                                >
+                                                   Open factual correction
+                                                </Button>
+                                             ) : null}
+                                             {canRequestCorrection ? (
+                                                <Button
+                                                   ref={requestCorrectionButtonRef}
+                                                   type="button"
+                                                   variant="secondary"
+                                                   density="standard"
+                                                   leadingIcon={<Icons name="badge-check" size={16} />}
+                                                   disabled={Boolean(mutation)}
+                                                   onClick={() => {
+                                                      setCorrectionOpen(true);
+                                                      setCorrectionReasonError("");
+                                                      setCorrectionConflict(null);
+                                                      setActionError("");
+                                                   }}
+                                                >
+                                                   Request factual correction
+                                                </Button>
+                                             ) : null}
+                                          </div>
+                                          <CorrectionWorkflowBlockers blockers={correctionWorkflow.blockers} />
+                                       </div>
+                                    ) : null}
+
+                                    {canCreateRevision ? (
+                                       <div className="publications-maintenance-option">
+                                          <div>
+                                             <strong>Editorial revision</strong>
+                                             <p>
+                                                Use this for non-factual changes to wording, headline, summary, or
+                                                editorial citations. The current publication stays live during review.
+                                             </p>
+                                          </div>
+                                          <div className="publications-maintenance-actions">
                                              <Button
+                                                ref={createRevisionButtonRef}
                                                 type="button"
                                                 variant="secondary"
                                                 density="standard"
+                                                leadingIcon={<Icons name="file-text" size={16} />}
                                                 disabled={Boolean(mutation)}
-                                                onClick={closeRevisionForm}
+                                                onClick={() => {
+                                                   setRevisionOpen(true);
+                                                   setActionError("");
+                                                }}
                                              >
-                                                Cancel
-                                             </Button>
-                                             <Button
-                                                type="submit"
-                                                variant="primary"
-                                                density="standard"
-                                                loading={mutation === "create-revision"}
-                                                loadingLabel="Creating revision…"
-                                                disabled={!revisionReason.trim() || Boolean(mutation)}
-                                             >
-                                                Create revision and open Drafting
+                                                Create editorial revision
                                              </Button>
                                           </div>
-                                       </form>
-                                    )}
+                                          <Blockers blockers={detail.blockers} />
+                                       </div>
+                                    ) : null}
                                  </section>
                               ) : null}
                            </article>
