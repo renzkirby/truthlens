@@ -468,15 +468,22 @@ def _abandonment_payload(fact_check):
     if decision is None or decision.moderation_case_id is None:
         return None
 
-    event = (
+    events = (
         ModerationEvent.objects.filter(
             case_id=decision.moderation_case_id,
             event_type=ModerationEvent.EventType.ARTICLE_ABANDONED,
-            metadata__fact_check_id=str(fact_check.id),
         )
         .select_related("actor")
         .order_by("-created_at")
-        .first()
+    )
+    event = next(
+        (
+            candidate
+            for candidate in events
+            if str((candidate.metadata or {}).get("fact_check_id"))
+            == str(fact_check.id)
+        ),
+        None,
     )
     if event is None:
         return None
