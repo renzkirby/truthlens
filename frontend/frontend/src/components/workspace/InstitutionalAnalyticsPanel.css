@@ -1139,16 +1139,28 @@
 
 .institutional-analytics__rate-grid {
    display: grid;
-   gap: var(--tl-space-2);
+   grid-template-columns: repeat(2, minmax(0, 1fr));
+   gap: var(--tl-space-3);
+   margin-top: var(--tl-space-3);
 }
 
-.institutional-analytics__rate-grid p + p {
-   padding-top: var(--tl-space-2);
-   border-top: 1px solid var(--tl-color-border-light);
+.institutional-analytics__rate-grid > div {
+   min-width: 0;
+   padding: var(--tl-space-3);
+   border-radius: var(--tl-radius-md);
+   background: var(--tl-color-bg-subtle);
 }
 
-.institutional-analytics__rate-grid strong {
+.institutional-analytics__rate-grid dt {
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-sm);
+}
+
+.institutional-analytics__rate-grid dd {
+   margin-top: var(--tl-space-2);
    color: var(--tl-color-text-main);
+   font-size: var(--tl-text-xl);
+   font-weight: 750;
    font-variant-numeric: tabular-nums;
 }
 
@@ -1227,9 +1239,10 @@
    gap: var(--tl-space-4);
    min-width: 0;
    padding: var(--tl-space-5);
-   background: var(--tl-color-bg-surface);
-   border: 1px solid var(--tl-color-border-default);
+   background: color-mix(in srgb, var(--tl-color-bg-surface) 97%, var(--tl-color-brand-primary));
+   border: 1px solid color-mix(in srgb, var(--tl-color-brand-primary) 12%, var(--tl-color-border-default));
    border-radius: var(--tl-radius-lg);
+   box-shadow: 0 1px 2px rgb(15 23 42 / 3%);
 }
 
 .institutional-analytics__observation-panel > header {
@@ -1253,7 +1266,7 @@
 
 .institutional-analytics__observation-metrics > div {
    display: grid;
-   grid-template-rows: auto auto 1fr;
+   grid-template-rows: auto 1fr;
    align-content: start;
    gap: var(--tl-space-2);
    min-width: 0;
@@ -1652,6 +1665,7 @@
    .institutional-analytics__current-grid,
    .institutional-analytics__trend-summary,
    .institutional-analytics__workflow-summary,
+   .institutional-analytics__rate-grid,
    .institutional-analytics__turnaround-primary,
    .institutional-analytics__observation-metrics,
    .institutional-analytics__match-methods > dl {
