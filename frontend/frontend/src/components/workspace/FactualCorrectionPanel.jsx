@@ -37,6 +37,14 @@ const ACTION_LABELS = {
    CANCEL_FACTUAL_CORRECTION: "Cancel factual correction",
 };
 
+const STAGE_LABELS = {
+   EVIDENCE_REVIEW: "Evidence review",
+   PROPOSAL_DRAFT: "Proposal drafting",
+   PREPARED: "Prepared for publication",
+   COMPLETED: "Completed",
+   CANCELLED: "Cancelled",
+};
+
 const EMPTY_EDITOR = Object.freeze({
    proposed_verdict: "",
    proposed_canonical_claim: "",
@@ -172,7 +180,7 @@ function StageBadge({ stage }) {
            : stage === "PREPARED"
              ? "warning"
              : "info";
-   return <Badge tone={tone}>{stage || "Unavailable"}</Badge>;
+   return <Badge tone={tone}>{STAGE_LABELS[stage] || formatLabel(stage)}</Badge>;
 }
 
 export function CorrectionDialog({
@@ -314,7 +322,7 @@ function DecisionCard({ title, decision, current = false, emptyMessage }) {
          </div>
          <dl className="correction-metadata-grid">
             <div className="correction-metadata-wide">
-               <dt>Canonical claim</dt>
+               <dt>Claim reviewed</dt>
                <dd>{decision?.canonical_claim || "Not recorded"}</dd>
             </div>
             <div className="correction-metadata-wide">
@@ -368,7 +376,7 @@ function hasMeaningfulReplacementDecision(detail) {
 function Blockers({ blockers }) {
    const groups = Object.entries(blockers || {}).filter(([, values]) => Array.isArray(values) && values.length > 0);
    if (groups.length === 0) {
-      return <p className="correction-inline-empty">The server has not reported any current action blockers.</p>;
+      return <p className="correction-inline-empty">No current action blockers are reported.</p>;
    }
 
    return (
@@ -421,7 +429,7 @@ function ProposalSummary({ proposal, eligibleVerificationRuns }) {
          </div>
          <dl className="correction-metadata-grid">
             <div className="correction-metadata-wide">
-               <dt>Proposed canonical claim</dt>
+               <dt>Proposed corrected claim</dt>
                <dd>{proposal.proposed_canonical_claim}</dd>
             </div>
             <div className="correction-metadata-wide">
@@ -1109,7 +1117,7 @@ function FactualCorrectionContent({
             setDialog(null);
             showWorkspaceSuccess(addToast, {
                title: "Correction proposal prepared",
-               message: "The proposal is frozen and remains non-authoritative until it is published.",
+               message: "The proposal is prepared and remains non-authoritative until it is published.",
             });
             refreshQueue();
          },
@@ -1423,7 +1431,7 @@ function FactualCorrectionContent({
                ) : null}
             </div>
             <div className="correction-field correction-field--wide">
-               <label htmlFor="correction-proposed-claim">Proposed canonical claim</label>
+               <label htmlFor="correction-proposed-claim">Proposed corrected claim</label>
                <Textarea
                   ref={proposalRefs.proposed_canonical_claim}
                   id="correction-proposed-claim"
@@ -1682,8 +1690,8 @@ function FactualCorrectionContent({
          </div>
          {conflict && detail.proposal ? (
             <div className="correction-canonical-proposal">
-               <h5>Current saved server proposal after conflict</h5>
-               <p>Compare this canonical version with the preserved local editor before explicitly submitting again.</p>
+               <h5>Current saved proposal after conflict</h5>
+               <p>Compare the latest saved proposal with your preserved local edits before submitting again.</p>
                <ProposalSummary
                   proposal={detail.proposal}
                   eligibleVerificationRuns={eligibleVerificationRuns}
@@ -1732,7 +1740,7 @@ function FactualCorrectionContent({
                            Prepared for publication — not yet published or authoritative.
                         </h4>
                         <p>
-                           The proposal is frozen. Only successful final publication creates the new current decision
+                           The proposal is now locked for final review. Only successful final publication creates the new current decision
                            and article authority.
                         </p>
                      </div>
@@ -1850,7 +1858,7 @@ function FactualCorrectionContent({
                   <div>
                      <strong>{conflict.code}</strong>
                      <p>
-                        {conflict.detail} Canonical server state has been reloaded; no mutation was repeated. Reconcile
+                        {conflict.detail} The latest saved state has been reloaded; no action was repeated. Reconcile
                         your preserved proposal text before submitting again.
                      </p>
                      {Array.isArray(conflict.blockers) && conflict.blockers.length > 0 ? (
@@ -1904,7 +1912,7 @@ function FactualCorrectionContent({
                      <h3 id="correction-queue-heading" ref={queueHeadingRef} tabIndex={-1}>
                         Correction requests
                      </h3>
-                     <p>{organizationName || "Selected organization"} · server-scoped work</p>
+                     <p>{organizationName || "Selected organization"} · factual correction work</p>
                   </div>
                   <Button
                      type="button"
@@ -2059,7 +2067,7 @@ function FactualCorrectionContent({
                      <Icons name="file-text" size={25} />
                      <h3 id="correction-detail-heading">Select a factual correction</h3>
                      <p>
-                        Open a request to inspect its server-defined stage, human judgment, correction evidence,
+                        Open a request to inspect its current stage, human judgment, correction evidence,
                         proposal, and provenance.
                      </p>
                   </div>
@@ -2235,10 +2243,9 @@ function FactualCorrectionContent({
                            <section className="correction-section" aria-labelledby="correction-actions-heading">
                               <div className="correction-section-heading">
                                  <div>
-                                    <h4 id="correction-actions-heading">Available server actions and blockers</h4>
+                                    <h4 id="correction-actions-heading">Correction actions</h4>
                                     <p>
-                                       Action availability and lifecycle conditions are supplied by the correction
-                                       service.
+                                       Available actions reflect the correction request’s current workflow state.
                                     </p>
                                  </div>
                               </div>
@@ -2426,8 +2433,8 @@ function FactualCorrectionContent({
          </CorrectionDialog>
          <CorrectionDialog
             open={dialog?.type === "prepare"}
-            title="Prepare and freeze this proposal?"
-            description="Preparation makes the proposal immutable and ready for final publication handoff. It does not publish the correction or make it factual authority."
+            title="Prepare this proposal for publication?"
+            description="Preparation locks the proposal for final publication review. It does not publish the correction or make it factual authority."
             confirmLabel="Prepare proposal"
             cancelLabel="Return to proposal"
             processing={mutation === "prepare-proposal"}
@@ -2439,7 +2446,7 @@ function FactualCorrectionContent({
          <CorrectionDialog
             open={dialog?.type === "publish"}
             title="Publish this factual correction?"
-            description="This atomic action creates a new current human decision and institutional publication version. Review the frozen proposal before continuing."
+            description="This action creates a new current human decision and institutional publication version. Review the prepared proposal before continuing."
             confirmLabel="Publish factual correction"
             cancelLabel="Return to review"
             processing={mutation === "publish-correction"}
