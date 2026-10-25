@@ -582,7 +582,15 @@ class EvidenceIntelligenceTests(TestCase):
         self.assertEqual(self.get(other).status_code, 403)
         with self.assertRaises(VerificationIntelligenceAuthorizationError):
             self.project(organization=other)
-        OrganizationMembership.objects.create(user=self.actor, organization=other, role="OWNER", status="ACTIVE")
+        OrganizationMembership.objects.filter(pk=self.membership.pk).update(
+            status=OrganizationMembership.Status.LEFT,
+        )
+        OrganizationMembership.objects.create(
+            user=self.actor,
+            organization=other,
+            role=OrganizationMembership.Role.ADMIN,
+            status=OrganizationMembership.Status.ACTIVE,
+        )
         self.assertEqual(self.get(other).status_code, 404)
         with self.assertRaises(VerificationIntelligenceNotFound):
             self.project(organization=other)
@@ -623,7 +631,11 @@ class EvidenceIntelligenceTests(TestCase):
         self.assertEqual(first["schema_version"], "1.0")
         self.assertEqual(state(), before)
         for query in queries:
-            self.assertTrue(query["sql"].lstrip().upper().startswith("SELECT"), query["sql"])
+            sql = query["sql"].lstrip().upper()
+            self.assertTrue(
+                sql.startswith(("SELECT", "SAVEPOINT", "RELEASE SAVEPOINT")),
+                query["sql"],
+            )
         self.assertFalse(ModerationCase.objects.exists())
         self.assertFalse(AdjudicationDecision.objects.exists())
         self.assertFalse(ClaimFactCheckReference.objects.exists())
