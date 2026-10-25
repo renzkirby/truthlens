@@ -248,6 +248,68 @@
    margin-bottom: 20px;
 }
 
+.truthlens-result-provenance {
+   display: flex;
+   align-items: flex-start;
+   gap: 9px;
+   margin: 0 0 16px;
+   padding: 10px 11px;
+   border: 1px solid #dbeafe;
+   border-radius: 8px;
+   background: #eff6ff;
+   color: #374151;
+}
+
+.truthlens-result-provenance-icon {
+   display: inline-flex;
+   flex: 0 0 auto;
+   margin-top: 1px;
+   color: #4f46e5;
+}
+
+.truthlens-result-provenance strong {
+   display: block;
+   margin-bottom: 2px;
+   font-size: 11px;
+   line-height: 1.4;
+}
+
+.truthlens-result-provenance p {
+   margin: 0;
+   color: #6b7280;
+   font-size: 10.5px;
+   line-height: 1.5;
+}
+
+.truthlens-result-source-meta {
+   display: grid;
+   gap: 6px;
+   margin: 0 0 16px;
+   padding-top: 10px;
+   border-top: 1px solid #e5e7eb;
+   color: #6b7280;
+   font-size: 10.5px;
+   line-height: 1.4;
+}
+
+.truthlens-result-source-meta > div {
+   display: flex;
+   align-items: baseline;
+   justify-content: space-between;
+   gap: 12px;
+}
+
+.truthlens-result-source-meta strong {
+   color: #4b5563;
+   font-weight: 700;
+}
+
+.truthlens-result-source-meta span {
+   min-width: 0;
+   text-align: right;
+   overflow-wrap: anywhere;
+}
+
 .truthlens-confidence-na {
    display: flex;
    align-items: flex-start;
