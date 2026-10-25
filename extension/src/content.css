@@ -384,6 +384,12 @@
    color: #1e40af;
 }
 
+.truthlens-media-signal--neutral {
+   border-color: #e5e7eb;
+   background: #f9fafb;
+   color: #4b5563;
+}
+
 .truthlens-media-signal-icon {
    display: inline-flex;
    flex: 0 0 auto;
@@ -442,6 +448,10 @@
 
 .truthlens-media-likelihood-fill--clear {
    background: #4f46e5;
+}
+
+.truthlens-media-likelihood-fill--neutral {
+   background: #9ca3af;
 }
 
 .truthlens-media-explanation {
