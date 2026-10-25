@@ -60,7 +60,7 @@ def _lock_organization(organization):
     )
 
 
-def _get_current_owner(organization):
+def _get_current_admin(organization):
     return (
         OrganizationMembership.objects.select_for_update(
             of=("self",),
@@ -68,7 +68,7 @@ def _get_current_owner(organization):
         .select_related("user")
         .filter(
             organization=organization,
-            role=OrganizationMembership.Role.OWNER,
+            role=OrganizationMembership.Role.ADMIN,
         )
         .exclude(
             status=OrganizationMembership.Status.LEFT,
@@ -77,12 +77,12 @@ def _get_current_owner(organization):
     )
 
 
-def _ensure_no_current_owner(organization):
-    current_owner = _get_current_owner(organization)
+def _ensure_no_current_admin(organization):
+    current_admin = _get_current_admin(organization)
 
-    if current_owner:
+    if current_admin:
         raise OrganizationProvisioningConflict(
-            "This organization already has a current Primary Admin."
+            "This organization already has a current Organization Admin."
         )
 
 
@@ -106,27 +106,20 @@ def _ensure_recipient_has_no_current_membership(
         return
 
     current_membership = (
-        OrganizationMembership.objects.select_for_update(
-            of=("self",),
-        )
-        .filter(
-            organization=organization,
-            user_id__in=existing_user_ids,
-        )
-        .exclude(
-            status=OrganizationMembership.Status.LEFT,
-        )
+        OrganizationMembership.objects.select_for_update(of=("self",))
+        .filter(user_id__in=existing_user_ids)
+        .exclude(status=OrganizationMembership.Status.LEFT)
         .first()
     )
 
     if current_membership:
         raise OrganizationProvisioningConflict(
-            "This account already has a current membership in the organization. "
-            "Primary Admin transfer is not supported by this workflow."
+            "This account already has a current Partner Organization membership. "
+            "A user may belong to only one Partner Organization at a time."
         )
 
 
-def _create_primary_admin_invitation(
+def _create_organization_admin_invitation(
     *,
     organization,
     email,
@@ -140,7 +133,7 @@ def _create_primary_admin_invitation(
     expire_stale_invitations(
         organization=locked_organization,
     )
-    _ensure_no_current_owner(locked_organization)
+    _ensure_no_current_admin(locked_organization)
 
     pending_onboarding = (
         OrganizationInvitation.objects.select_for_update(
@@ -149,7 +142,7 @@ def _create_primary_admin_invitation(
         .filter(
             organization=locked_organization,
             purpose=(
-                OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
+                OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING
             ),
             status=OrganizationInvitation.Status.PENDING,
         )
@@ -158,7 +151,7 @@ def _create_primary_admin_invitation(
 
     if pending_onboarding:
         raise OrganizationProvisioningConflict(
-            "A Primary Admin onboarding invitation is already pending."
+            "A Organization Admin onboarding invitation is already pending."
         )
 
     _ensure_recipient_has_no_current_membership(
@@ -167,7 +160,6 @@ def _create_primary_admin_invitation(
     )
 
     if OrganizationInvitation.objects.filter(
-        organization=locked_organization,
         email=normalized_email,
         status=OrganizationInvitation.Status.PENDING,
     ).exists():
@@ -182,9 +174,9 @@ def _create_primary_admin_invitation(
         invitation = OrganizationInvitation.objects.create(
             organization=locked_organization,
             email=normalized_email,
-            invited_role=OrganizationMembership.Role.OWNER,
+            invited_role=OrganizationMembership.Role.ADMIN,
             purpose=(
-                OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
+                OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING
             ),
             invited_by=actor,
             token_digest=hash_invitation_token(raw_token),
@@ -194,7 +186,7 @@ def _create_primary_admin_invitation(
         )
     except IntegrityError as error:
         raise OrganizationProvisioningConflict(
-            "A Primary Admin onboarding invitation is already pending."
+            "A Organization Admin onboarding invitation is already pending."
         ) from error
 
     record_accountability_event(
@@ -217,13 +209,13 @@ def _create_primary_admin_invitation(
 
 
 @transaction.atomic
-def create_and_send_primary_admin_invitation(
+def create_and_send_organization_admin_invitation(
     *,
     organization,
     email,
     actor,
 ):
-    invitation, raw_token = _create_primary_admin_invitation(
+    invitation, raw_token = _create_organization_admin_invitation(
         organization=organization,
         email=email,
         actor=actor,
@@ -236,14 +228,14 @@ def create_and_send_primary_admin_invitation(
         )
     except OrganizationInvitationDeliveryError as error:
         raise OrganizationProvisioningDeliveryError(
-            "The Primary Admin invitation email could not be delivered."
+            "The Organization Admin invitation email could not be delivered."
         ) from error
 
     return invitation
 
 
 @transaction.atomic
-def resend_primary_admin_invitation(
+def resend_organization_admin_invitation(
     *,
     invitation,
     actor,
@@ -251,7 +243,7 @@ def resend_primary_admin_invitation(
     _require_developer_authority(actor)
 
     locked_organization = _lock_organization(invitation.organization)
-    _ensure_no_current_owner(locked_organization)
+    _ensure_no_current_admin(locked_organization)
 
     locked_invitation = (
         OrganizationInvitation.objects.select_for_update(
@@ -266,11 +258,11 @@ def resend_primary_admin_invitation(
 
     if (
         locked_invitation.purpose
-        != OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
-        or locked_invitation.invited_role != OrganizationMembership.Role.OWNER
+        != OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING
+        or locked_invitation.invited_role != OrganizationMembership.Role.ADMIN
     ):
         raise OrganizationProvisioningConflict(
-            "Only a Primary Admin onboarding invitation can be resent here."
+            "Only a Organization Admin onboarding invitation can be resent here."
         )
 
     if (
@@ -327,14 +319,14 @@ def resend_primary_admin_invitation(
         )
     except OrganizationInvitationDeliveryError as error:
         raise OrganizationProvisioningDeliveryError(
-            "The Primary Admin invitation email could not be delivered."
+            "The Organization Admin invitation email could not be delivered."
         ) from error
 
     return locked_invitation
 
 
 @transaction.atomic
-def cancel_primary_admin_invitation(
+def cancel_organization_admin_invitation(
     *,
     invitation,
     actor,
@@ -342,7 +334,7 @@ def cancel_primary_admin_invitation(
     _require_developer_authority(actor)
 
     locked_organization = _lock_organization(invitation.organization)
-    _ensure_no_current_owner(locked_organization)
+    _ensure_no_current_admin(locked_organization)
 
     try:
         locked_invitation = (
@@ -364,11 +356,11 @@ def cancel_primary_admin_invitation(
 
     if (
         locked_invitation.purpose
-        != OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
-        or locked_invitation.invited_role != OrganizationMembership.Role.OWNER
+        != OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING
+        or locked_invitation.invited_role != OrganizationMembership.Role.ADMIN
     ):
         raise OrganizationProvisioningConflict(
-            "Only a Primary Admin onboarding invitation can be cancelled here."
+            "Only a Organization Admin onboarding invitation can be cancelled here."
         )
 
     if (
@@ -420,3 +412,11 @@ def cancel_primary_admin_invitation(
     )
 
     return locked_invitation
+
+
+# Backward-compatible imports for deployments/tests that still reference the
+# former function names. Product behavior and newly-created records use the
+# Organization Admin terminology above.
+create_and_send_primary_admin_invitation = create_and_send_organization_admin_invitation
+resend_primary_admin_invitation = resend_organization_admin_invitation
+cancel_primary_admin_invitation = cancel_organization_admin_invitation
