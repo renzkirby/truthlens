@@ -63,7 +63,7 @@ class ManagementPlatformTrustUpdateSerializer(StrictFieldsSerializer):
         return attrs
 
 
-class ManagementPrimaryAdminProvisionSerializer(StrictFieldsSerializer):
+class ManagementOrganizationAdminProvisionSerializer(StrictFieldsSerializer):
     email = serializers.EmailField()
 
 
@@ -146,10 +146,15 @@ class ManagementPipelineRunDetailQuerySerializer(StrictFieldsSerializer):
 
 
 def management_role_label(role):
-    if role == OrganizationMembership.Role.OWNER:
-        return "Primary Admin"
-
-    return dict(OrganizationMembership.Role.choices).get(role, role)
+    legacy_labels = {
+        "OWNER": "Administrator",
+        "MODERATOR": "Verification Reviewer",
+        "CONTRIBUTOR": "Former Contributor",
+    }
+    return dict(OrganizationMembership.Role.choices).get(
+        role,
+        legacy_labels.get(role, role),
+    )
 
 
 class ManagementOrganizationIdentitySerializer(serializers.ModelSerializer):
@@ -202,7 +207,7 @@ class ManagementOrganizationListSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class ManagementPrimaryAdminMembershipSerializer(serializers.ModelSerializer):
+class ManagementOrganizationAdminMembershipSerializer(serializers.ModelSerializer):
     user = ManagementUserIdentitySerializer(read_only=True)
     role_label = serializers.SerializerMethodField()
 
@@ -223,7 +228,7 @@ class ManagementPrimaryAdminMembershipSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class ManagementPrimaryAdminInvitationSerializer(serializers.ModelSerializer):
+class ManagementOrganizationAdminInvitationSerializer(serializers.ModelSerializer):
     role_label = serializers.SerializerMethodField()
 
     def get_role_label(self, obj):
@@ -253,19 +258,21 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
     approved_verification_jurisdictions = serializers.ListField(
         child=serializers.CharField(), read_only=True
     )
+    organization_admin = serializers.SerializerMethodField()
+    # Temporary response alias for clients deployed before the role-model cleanup.
     primary_admin = serializers.SerializerMethodField()
 
-    def get_primary_admin(self, obj):
+    def get_organization_admin(self, obj):
         membership = (
             obj.memberships.select_related("user")
-            .filter(role=OrganizationMembership.Role.OWNER)
+            .filter(role=OrganizationMembership.Role.ADMIN)
             .exclude(status=OrganizationMembership.Status.LEFT)
             .first()
         )
         if membership is not None:
             return {
                 "state": "CURRENT",
-                "membership": ManagementPrimaryAdminMembershipSerializer(
+                "membership": ManagementOrganizationAdminMembershipSerializer(
                     membership
                 ).data,
                 "invitation": None,
@@ -274,9 +281,9 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
         invitation = (
             obj.invitations.filter(
                 purpose=(
-                    OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
+                    OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING
                 ),
-                invited_role=OrganizationMembership.Role.OWNER,
+                invited_role=OrganizationMembership.Role.ADMIN,
                 status=OrganizationInvitation.Status.PENDING,
                 expires_at__gt=self.context["now"],
             )
@@ -287,12 +294,15 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
             return {
                 "state": "PENDING",
                 "membership": None,
-                "invitation": ManagementPrimaryAdminInvitationSerializer(
+                "invitation": ManagementOrganizationAdminInvitationSerializer(
                     invitation
                 ).data,
             }
 
         return {"state": "NONE", "membership": None, "invitation": None}
+
+    def get_primary_admin(self, obj):
+        return self.get_organization_admin(obj)
 
     class Meta(ManagementOrganizationListSerializer.Meta):
         fields = ManagementOrganizationListSerializer.Meta.fields + (
@@ -309,6 +319,7 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
             "active_verification_jurisdictions",
             "active_scope_configured",
             "public_logo_enabled",
+            "organization_admin",
             "primary_admin",
             "created_at",
         )
