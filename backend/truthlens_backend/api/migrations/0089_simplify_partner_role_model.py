@@ -113,6 +113,21 @@ class Migration(migrations.Migration):
                 max_length=40,
             ),
         ),
+        migrations.RemoveConstraint(
+            model_name="organizationinvitation",
+            name="unique_pending_primary_admin_invite_org",
+        ),
+        migrations.AddConstraint(
+            model_name="organizationinvitation",
+            constraint=models.UniqueConstraint(
+                condition=Q(
+                    purpose="ORGANIZATION_ADMIN_ONBOARDING",
+                    status="PENDING",
+                ),
+                fields=("organization",),
+                name="unique_pending_org_admin_invite_org",
+            ),
+        ),
         migrations.AddConstraint(
             model_name="organizationmembership",
             constraint=models.UniqueConstraint(
