@@ -295,8 +295,9 @@
 .truthlens-result-source-meta > div {
    display: flex;
    align-items: baseline;
-   justify-content: space-between;
-   gap: 12px;
+   justify-content: center;
+   gap: 8px;
+   text-align: center;
 }
 
 .truthlens-result-source-meta strong {
@@ -306,7 +307,7 @@
 
 .truthlens-result-source-meta span {
    min-width: 0;
-   text-align: right;
+   text-align: center;
    overflow-wrap: anywhere;
 }
 
