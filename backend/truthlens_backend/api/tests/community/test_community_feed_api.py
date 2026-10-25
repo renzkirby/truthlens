@@ -14,6 +14,7 @@ from api.adjudication_service import (
 from api.models import (
     AdjudicationDecision,
     Claim,
+    ClaimInvestigationClassification,
     EvidenceSubmission,
     Organization,
     OrganizationMembership,
@@ -108,6 +109,16 @@ class CommunityFeedApiTests(TestCase):
 
         return result["decision"]
 
+    def _classify_claim(self, claim, *domains):
+        return ClaimInvestigationClassification.objects.create(
+            claim=claim,
+            domains=list(domains),
+            rationale=(
+                "Authoritative subject classification created for "
+                "Community feed API tests."
+            ),
+        )
+
     @staticmethod
     def _result_ids(response):
         return [item["id"] for item in response.data["results"]]
@@ -115,6 +126,12 @@ class CommunityFeedApiTests(TestCase):
     def test_default_ordering_is_newest_first(self):
         _old_claim, old_thread = self._create_thread("older")
         _new_claim, new_thread = self._create_thread("newer")
+        Thread.objects.filter(pk=old_thread.pk).update(
+            created_at=parse_datetime("2026-01-01T00:00:00Z")
+        )
+        Thread.objects.filter(pk=new_thread.pk).update(
+            created_at=parse_datetime("2026-01-01T00:00:01Z")
+        )
 
         response = self.client.get(self.url)
 
@@ -127,6 +144,12 @@ class CommunityFeedApiTests(TestCase):
     def test_oldest_ordering(self):
         _old_claim, old_thread = self._create_thread("older")
         _new_claim, new_thread = self._create_thread("newer")
+        Thread.objects.filter(pk=old_thread.pk).update(
+            created_at=parse_datetime("2026-01-01T00:00:00Z")
+        )
+        Thread.objects.filter(pk=new_thread.pk).update(
+            created_at=parse_datetime("2026-01-01T00:00:01Z")
+        )
 
         response = self.client.get(self.url, {"sort": "oldest"})
 
@@ -324,6 +347,77 @@ class CommunityFeedApiTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIsNone(response.data["results"][0]["claim"]["human_verdict"])
 
+    def test_public_topic_projection_uses_only_single_authoritative_subject(self):
+        education_claim, education_thread = self._create_thread("education topic")
+        self._classify_claim(education_claim, "EDUCATION")
+
+        multi_claim, multi_thread = self._create_thread("multi-domain topic")
+        self._classify_claim(multi_claim, "ELECTIONS", "TECHNOLOGY")
+
+        _unclassified_claim, unclassified_thread = self._create_thread(
+            "unclassified topic"
+        )
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        items = {item["id"]: item for item in response.data["results"]}
+        self.assertEqual(
+            items[str(education_thread.id)]["claim"]["public_topic"],
+            {"code": "EDUCATION", "label": "Education"},
+        )
+        self.assertIsNone(
+            items[str(multi_thread.id)]["claim"]["public_topic"]
+        )
+        self.assertIsNone(
+            items[str(unclassified_thread.id)]["claim"]["public_topic"]
+        )
+
+    def test_topic_filter_groups_single_domain_authoritative_claims(self):
+        expected = set()
+        for domain in ("CIVICS", "ELECTIONS", "LAW"):
+            claim, thread = self._create_thread(f"{domain.lower()} topic")
+            self._classify_claim(claim, domain)
+            expected.add(str(thread.id))
+
+        health_claim, health_thread = self._create_thread("health topic")
+        self._classify_claim(health_claim, "HEALTH")
+        multi_claim, multi_thread = self._create_thread("multi politics topic")
+        self._classify_claim(multi_claim, "ELECTIONS", "TECHNOLOGY")
+
+        response = self.client.get(
+            self.url,
+            {"topic": "POLITICS_GOVERNMENT_LAW"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        result_ids = set(self._result_ids(response))
+        self.assertEqual(result_ids, expected)
+        self.assertNotIn(str(health_thread.id), result_ids)
+        self.assertNotIn(str(multi_thread.id), result_ids)
+
+    def test_invalid_topic_returns_controlled_bad_request(self):
+        response = self.client.get(self.url, {"topic": "CAMPUS_AFFAIRS"})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("topic", response.data)
+
+    def test_assessment_source_ai_requires_actual_ai_analysis(self):
+        _ai_claim, ai_thread = self._create_thread("actual AI analysis")
+        no_ai_claim, no_ai_thread = self._create_thread("no AI analysis")
+        Claim.objects.filter(pk=no_ai_claim.pk).update(
+            ai_verdict=None,
+            ai_summary=None,
+            consensus_score=None,
+        )
+
+        response = self.client.get(self.url, {"assessment_source": "ai"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        result_ids = set(self._result_ids(response))
+        self.assertIn(str(ai_thread.id), result_ids)
+        self.assertNotIn(str(no_ai_thread.id), result_ids)
+
     def test_human_verdict_projection_contains_only_public_safe_fields(self):
         claim, thread = self._create_thread("public-safe projection")
         self._issue_human_decision(claim, thread)
@@ -421,9 +515,16 @@ class CommunityFeedApiTests(TestCase):
             "combined needle",
             claim_type=Claim.ClaimType.URL,
         )
+        self._classify_claim(matching_claim, "EDUCATION")
         self._issue_human_decision(matching_claim, matching_thread)
-        self._create_thread("combined needle", claim_type=Claim.ClaimType.TEXT)
-        self._create_thread("different", claim_type=Claim.ClaimType.URL)
+        text_claim, _text_thread = self._create_thread(
+            "combined needle", claim_type=Claim.ClaimType.TEXT
+        )
+        self._classify_claim(text_claim, "EDUCATION")
+        other_claim, _other_thread = self._create_thread(
+            "different", claim_type=Claim.ClaimType.URL
+        )
+        self._classify_claim(other_claim, "HEALTH")
 
         response = self.client.get(
             self.url,
@@ -432,6 +533,7 @@ class CommunityFeedApiTests(TestCase):
                 "claim_type": Claim.ClaimType.URL,
                 "assessment_source": "human",
                 "sort": "oldest",
+                "topic": "EDUCATION",
             },
         )
 
@@ -440,10 +542,11 @@ class CommunityFeedApiTests(TestCase):
 
     def test_cursor_next_link_preserves_active_query_parameters(self):
         for index in range(21):
-            self._create_thread(
+            claim, _thread = self._create_thread(
                 f"cursor match {index}",
                 claim_type=Claim.ClaimType.VIDEO,
             )
+            self._classify_claim(claim, "TECHNOLOGY")
 
         response = self.client.get(
             self.url,
@@ -452,6 +555,7 @@ class CommunityFeedApiTests(TestCase):
                 "claim_type": Claim.ClaimType.VIDEO,
                 "assessment_source": "ai",
                 "sort": "oldest",
+                "topic": "SCIENCE_TECHNOLOGY",
             },
         )
 
@@ -462,6 +566,7 @@ class CommunityFeedApiTests(TestCase):
         self.assertEqual(next_query["claim_type"], [Claim.ClaimType.VIDEO])
         self.assertEqual(next_query["assessment_source"], ["ai"])
         self.assertEqual(next_query["sort"], ["oldest"])
+        self.assertEqual(next_query["topic"], ["SCIENCE_TECHNOLOGY"])
         self.assertIn("cursor", next_query)
 
     def test_list_serializer_is_minimized_for_feed_use(self):
@@ -509,8 +614,10 @@ class CommunityFeedApiTests(TestCase):
                 "ai_summary",
                 "consensus_score",
                 "human_verdict",
+                "public_topic",
                 "verified_evidence_count",
             },
         )
         self.assertEqual(item["evidence_count"], 1)
         self.assertEqual(item["claim"]["verified_evidence_count"], 0)
+        self.assertIsNone(item["claim"]["public_topic"])

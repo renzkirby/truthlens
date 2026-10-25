@@ -3143,9 +3143,27 @@ class ThreadViewSet(viewsets.ModelViewSet):
                 }
             )
 
+        topic = (
+            self.request.query_params.get("topic")
+            if action == "list"
+            else None
+        )
+        topic_category = None
+        if topic is not None:
+            from .verification.subject_taxonomy import public_category_for_code
+
+            topic_category = public_category_for_code(topic)
+            if topic_category is None:
+                raise ValidationError(
+                    {"topic": "Select a valid community topic."}
+                )
+
         queryset = (
             Thread.objects.exclude(status=Thread.Status.REJECTED)
-            .select_related("claim", "author", "author__profile")
+            .select_related(
+                "claim", "claim__investigation_classification",
+                "author", "author__profile",
+            )
             .order_by(order_field)
         )
         queryset = prefetch_public_partner_affiliations(queryset, "author")
@@ -3171,10 +3189,21 @@ class ThreadViewSet(viewsets.ModelViewSet):
         if claim_type is not None:
             queryset = queryset.filter(claim__claim_type=claim_type)
 
+        if topic_category is not None:
+            topic_filter = Q()
+            for domain in topic_category.domains:
+                topic_filter |= Q(
+                    claim__investigation_classification__domains=[domain]
+                )
+            queryset = queryset.filter(topic_filter)
+
         if assessment_source == "human":
             queryset = queryset.filter(authoritative_final_verdict__isnull=False)
         elif assessment_source == "ai":
-            queryset = queryset.filter(authoritative_final_verdict__isnull=True)
+            queryset = queryset.filter(
+                authoritative_final_verdict__isnull=True,
+                claim__ai_verdict__isnull=False,
+            ).exclude(claim__ai_verdict="")
 
         claim_id = self.request.query_params.get("claim_id")
         if claim_id:

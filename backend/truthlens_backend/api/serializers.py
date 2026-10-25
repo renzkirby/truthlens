@@ -1380,6 +1380,7 @@ class CommunityFeedClaimSerializer(serializers.ModelSerializer):
     canonical_source_url = serializers.SerializerMethodField()
     human_verdict = serializers.SerializerMethodField()
     verified_evidence_count = serializers.SerializerMethodField()
+    public_topic = serializers.SerializerMethodField()
 
     def get_canonical_source_url(self, obj):
         return get_canonical_claim_source_url(obj)
@@ -1389,6 +1390,20 @@ class CommunityFeedClaimSerializer(serializers.ModelSerializer):
 
     def get_verified_evidence_count(self, obj):
         return self.context["verified_evidence_count"]
+
+    def get_public_topic(self, obj):
+        from .verification.subject_taxonomy import public_category_for_domains
+
+        classification = getattr(obj, "investigation_classification", None)
+        category = public_category_for_domains(
+            getattr(classification, "domains", None),
+        )
+        if category is None:
+            return None
+        return {
+            "code": category.code,
+            "label": category.label,
+        }
 
     class Meta:
         model = Claim
@@ -1402,6 +1417,7 @@ class CommunityFeedClaimSerializer(serializers.ModelSerializer):
             "ai_summary",
             "consensus_score",
             "human_verdict",
+            "public_topic",
             "verified_evidence_count",
         ]
         read_only_fields = fields
