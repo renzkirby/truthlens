@@ -578,7 +578,12 @@ class EvidenceIntelligenceTests(TestCase):
         self.assertFalse(any('FROM "api_canonicalsource"' in item["sql"] for item in queries))
 
     def test_authorization_and_cross_organization_scoping_unchanged(self):
-        other = Organization.objects.create(name="Other evidence partner", slug="other-evidence-partner")
+        other = Organization.objects.create(
+            name="Other evidence partner",
+            slug="other-evidence-partner",
+            verification_status=Organization.VerificationStatus.VERIFIED,
+            partner_status=Organization.PartnerStatus.ACTIVE,
+        )
         self.assertEqual(self.get(other).status_code, 403)
         with self.assertRaises(VerificationIntelligenceAuthorizationError):
             self.project(organization=other)
