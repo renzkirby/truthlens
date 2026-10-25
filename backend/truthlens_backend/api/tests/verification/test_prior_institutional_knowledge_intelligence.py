@@ -375,7 +375,12 @@ class PriorInstitutionalKnowledgeTests(TestCase):
         self.assertFalse(PublicReachEvent.objects.exists())
 
     def test_organization_authorization_and_active_scope_preserved(self):
-        other = Organization.objects.create(name="Other intelligence partner", slug="other-intelligence")
+        other = Organization.objects.create(
+            name="Other intelligence partner",
+            slug="other-intelligence",
+            verification_status=Organization.VerificationStatus.VERIFIED,
+            partner_status=Organization.PartnerStatus.ACTIVE,
+        )
         self.assertEqual(self.get(other).status_code, 403)
         with self.assertRaises(VerificationIntelligenceAuthorizationError):
             self.project(organization=other)
