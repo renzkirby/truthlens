@@ -67,6 +67,10 @@ class ManagementOrganizationAdminProvisionSerializer(StrictFieldsSerializer):
     email = serializers.EmailField()
 
 
+# Backward-compatible serializer alias for already-deployed clients/tests.
+ManagementPrimaryAdminProvisionSerializer = ManagementOrganizationAdminProvisionSerializer
+
+
 class ManagementEmptyMutationSerializer(StrictFieldsSerializer):
     pass
 
@@ -388,3 +392,8 @@ class ManagementInvitationSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = fields
+
+
+# Backward-compatible class aliases; current product terminology is Organization Admin.
+ManagementPrimaryAdminMembershipSerializer = ManagementOrganizationAdminMembershipSerializer
+ManagementPrimaryAdminInvitationSerializer = ManagementOrganizationAdminInvitationSerializer
