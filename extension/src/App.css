@@ -19,7 +19,7 @@
   box-sizing: border-box;
 }
 
-.card button, .card input {
+.card button, .card input, .card textarea {
   font-family: inherit;
 }
 
