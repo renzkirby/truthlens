@@ -275,6 +275,7 @@ class ClaimPollingThrottleTests(APITestCase):
             "thread_id": None,
             "resolution_source": "OFFICIAL_FACT_CHECK",
             "score_context": None,
+            "adjudication_review": None,
             "official_fact_check": {"fact_check_id": "published-id"},
             "related_fact_checks": [],
         }
