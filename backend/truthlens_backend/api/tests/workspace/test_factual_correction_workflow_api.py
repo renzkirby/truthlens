@@ -202,6 +202,10 @@ class FactualCorrectionWorkflowApiTests(
                 )
 
         wrong_tenant = self.make_published_context(suffix="api-request-tenant")
+        OrganizationMembership.objects.filter(
+            organization=self.organization,
+            user=self.lead,
+        ).update(status=OrganizationMembership.Status.LEFT)
         OrganizationMembership.objects.create(
             organization=self.other_organization,
             user=self.lead,
