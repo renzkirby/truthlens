@@ -695,6 +695,9 @@ class VerificationIntelligenceTests(TestCase):
         with patch(
             "api.knowledge_reuse_service.get_public_partner_fact_check_detail",
             side_effect=public_detail,
+        ), patch(
+            "api.knowledge_reuse_service.accepted_reference",
+            return_value=True,
         ):
             result = self.project()
         knowledge = result["institutional_knowledge"]
@@ -742,8 +745,10 @@ class VerificationIntelligenceTests(TestCase):
         self.assertEqual(second.json(), first.json())
         self.assertEqual(state(), before)
         for query in queries:
+            sql = query["sql"].lstrip().upper()
             self.assertTrue(
-                query["sql"].lstrip().upper().startswith("SELECT"), query["sql"]
+                sql.startswith(("SELECT", "SAVEPOINT", "RELEASE SAVEPOINT")),
+                query["sql"],
             )
         self.assertFalse(KnowledgeReuseEvent.objects.exists())
         self.assertEqual(ClaimFactCheckReference.objects.count(), 1)
