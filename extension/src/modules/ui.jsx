@@ -614,12 +614,15 @@ export function displayDeepfakeResultCard(data) {
    const percentage = Number.isFinite(probability)
       ? Math.max(0, Math.min(100, Math.round(probability * 100)))
       : null;
-   const detected = Boolean(data?.is_fake);
+   const hasSignalDecision = typeof data?.is_fake === "boolean";
+   const detected = data?.is_fake === true;
    const summary = nonblankText(data?.summary) || "No detailed model explanation is available.";
-   const signalLabel = detected
-      ? "AI-generation signals detected"
-      : "No strong AI-generation signals detected";
-   const signalClass = detected ? "detected" : "clear";
+   const signalLabel = !hasSignalDecision
+      ? "AI-generation signal result unavailable"
+      : detected
+        ? "AI-generation signals detected"
+        : "No strong AI-generation signals detected";
+   const signalClass = !hasSignalDecision ? "neutral" : detected ? "detected" : "clear";
 
    const card = document.createElement("div");
    card.id = "truthlens-result-card";
