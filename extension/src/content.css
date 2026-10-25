@@ -113,6 +113,26 @@
    letter-spacing: 0.5px;
 }
 
+.truthlens-brand-title {
+   display: flex;
+   align-items: center;
+   gap: 8px;
+   min-width: 0;
+   color: #4f46e5;
+   font-size: 14px;
+   font-weight: 800;
+   letter-spacing: -0.1px;
+   line-height: 1.2;
+}
+
+.truthlens-brand-logo {
+   width: 22px;
+   height: 22px;
+   flex: 0 0 22px;
+   object-fit: contain;
+}
+
+
 .truthlens-close-btn {
    border: none;
    background: none;
