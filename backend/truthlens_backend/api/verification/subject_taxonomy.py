@@ -132,13 +132,26 @@ def public_category_for_primary_subject(primary_subject):
 def public_category_for_domains(domains):
     """Return a public topic only when one authoritative subject is present.
 
-    Current authoritative classification rows do not persist an explicit
-    primary subject. Multi-domain rows therefore remain unresolved for public
-    topic display/filtering until primary-subject persistence is introduced.
+    This remains the compatibility path for legacy classifications that do not
+    yet persist an explicit primary subject.
     """
     if not isinstance(domains, (list, tuple)) or len(domains) != 1:
         return None
     return public_category_for_primary_subject(domains[0])
+
+
+def public_category_for_classification(classification):
+    """Project a public category without guessing a multi-domain primary.
+
+    Prefer an explicitly persisted primary subject. Legacy single-domain rows
+    retain their unambiguous compatibility projection.
+    """
+    if classification is None:
+        return None
+    primary_subject = getattr(classification, "primary_subject", None)
+    if primary_subject:
+        return public_category_for_primary_subject(primary_subject)
+    return public_category_for_domains(getattr(classification, "domains", None))
 
 
 def public_category_for_code(code):
