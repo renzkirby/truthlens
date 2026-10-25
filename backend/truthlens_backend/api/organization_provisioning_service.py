@@ -151,7 +151,7 @@ def _create_organization_admin_invitation(
 
     if pending_onboarding:
         raise OrganizationProvisioningConflict(
-            "A Organization Admin onboarding invitation is already pending."
+            "An Organization Admin onboarding invitation is already pending."
         )
 
     _ensure_recipient_has_no_current_membership(
@@ -186,7 +186,7 @@ def _create_organization_admin_invitation(
         )
     except IntegrityError as error:
         raise OrganizationProvisioningConflict(
-            "A Organization Admin onboarding invitation is already pending."
+            "An Organization Admin onboarding invitation is already pending."
         ) from error
 
     record_accountability_event(
@@ -262,7 +262,7 @@ def resend_organization_admin_invitation(
         or locked_invitation.invited_role != OrganizationMembership.Role.ADMIN
     ):
         raise OrganizationProvisioningConflict(
-            "Only a Organization Admin onboarding invitation can be resent here."
+            "Only an Organization Admin onboarding invitation can be resent here."
         )
 
     if (
@@ -360,7 +360,7 @@ def cancel_organization_admin_invitation(
         or locked_invitation.invited_role != OrganizationMembership.Role.ADMIN
     ):
         raise OrganizationProvisioningConflict(
-            "Only a Organization Admin onboarding invitation can be cancelled here."
+            "Only an Organization Admin onboarding invitation can be cancelled here."
         )
 
     if (
