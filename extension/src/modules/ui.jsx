@@ -470,6 +470,8 @@ export function displayResultCard(claim) {
 
    const displayVerdict = final_verdict || verdict;
    const ui = getVerdictUI(displayVerdict);
+   const headerLabel = displayVerdict === "OUT_OF_SCOPE" ? "ANALYSIS COMPLETE" : "CLAIM FLAGGED";
+   const headerIcon = displayVerdict === "OUT_OF_SCOPE" ? iconHelp : iconFlag;
 
    const sourcesHTML =
       displayVerdict === "OUT_OF_SCOPE"
@@ -548,7 +550,7 @@ export function displayResultCard(claim) {
    card.innerHTML = `
       <div class="truthlens-header">
          <div class="truthlens-title" style="color: ${ui.color};">
-            ${iconFlag} CLAIM FLAGGED
+            ${headerIcon} ${headerLabel}
          </div>
          <button id="truthlens-close-btn" class="truthlens-close-btn" aria-label="Close verification result">&times;</button>
       </div>
