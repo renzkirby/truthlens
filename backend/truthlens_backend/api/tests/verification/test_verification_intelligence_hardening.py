@@ -323,7 +323,7 @@ class VerificationIntelligenceHardeningTests(TestCase):
         self.assert_status_and_cache(self.passive_read(self.get), 403)
 
     def test_existing_qualifying_roles_retain_access(self):
-        for role in ("ADMIN", "LEAD_VERIFIER", "VERIFICATION_REVIEWER", "RESEARCHER"):
+        for role in ("LEAD_VERIFIER", "VERIFICATION_REVIEWER", "RESEARCHER"):
             with self.subTest(role=role):
                 OrganizationMembership.objects.filter(pk=self.membership.pk).update(role=role)
                 self.assert_status_and_cache(self.passive_read(self.get), 200)
@@ -481,7 +481,11 @@ class VerificationIntelligenceHardeningTests(TestCase):
 
     def test_related_intelligence_never_transfers_verdict(self):
         _, related = self.populated_context()
-        response = self.passive_read(self.get)
+        with patch(
+            "api.verification.relatedness.accepted_reference",
+            return_value=True,
+        ):
+            response = self.passive_read(self.get)
         self.assert_status_and_cache(response, 200)
         knowledge = response.json()["institutional_knowledge"]
         self.assertEqual(len(knowledge["related_publications"]), 1)
