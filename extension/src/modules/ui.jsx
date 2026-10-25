@@ -471,13 +471,34 @@ export function displayResultCard(claim) {
       return;
    }
 
-   const { verdict, summary, confidence_score, thread_id, final_verdict, sources, source_url } = claim;
+   const {
+      verdict,
+      summary,
+      confidence_score,
+      thread_id,
+      final_verdict,
+      sources,
+      source_url,
+      source_type,
+      resolution_source,
+      score_context,
+      adjudication_review,
+   } = claim;
    const id = pathComponent(claim.claim_id || claim.id);
    const baseUrl = communityBaseUrl();
    const deepAnalysisUrl = baseUrl && id ? `${baseUrl}/analysis/${id}` : null;
 
-   const displayVerdict = final_verdict || verdict;
+   const displayVerdict = final_verdict || verdict || "UNVERIFIED";
    const ui = getVerdictUI(displayVerdict);
+   const isAdjudicated = resolution_source === "ADJUDICATION" && Boolean(final_verdict);
+   const confidenceValue = Number(confidence_score);
+   const hasConfidence = Number.isFinite(confidenceValue);
+   const adjudicationReview = isRecord(adjudication_review) ? adjudication_review : {};
+   const decisionRationale = nonblankText(adjudicationReview.rationale);
+   const reviewOrganization = isRecord(adjudicationReview.organization)
+      ? adjudicationReview.organization
+      : {};
+   const reviewOrganizationName = nonblankText(reviewOrganization.name);
 
    const sourcesHTML =
       displayVerdict === "OUT_OF_SCOPE"
@@ -500,24 +521,56 @@ export function displayResultCard(claim) {
                </div>
             </section>
          `
-         : `
+         : isAdjudicated
+           ? ""
+           : hasConfidence
+             ? `
             <div class="truthlens-confidence-container">
                <div class="truthlens-confidence-header">
                   <div class="truthlens-confidence-title">
                      ${iconActivity} AI CONFIDENCE
                   </div>
-                  <div class="truthlens-confidence-value" style="color: ${ui.color};">${confidence_score || 0}%</div>
+                  <div class="truthlens-confidence-value" style="color: ${ui.color};">${confidenceValue}%</div>
                </div>
                <div class="truthlens-confidence-bar">
-                  <div class="truthlens-confidence-fill" style="width: ${confidence_score || 0}%; background: linear-gradient(90deg, #10b981 0%, ${ui.color} 100%);"></div>
+                  <div class="truthlens-confidence-fill" style="width: ${Math.max(0, Math.min(100, confidenceValue))}%; background: linear-gradient(90deg, #10b981 0%, ${ui.color} 100%);"></div>
                </div>
                <div class="truthlens-score-context">
-                  ${confidence_score < 50 ? "Low confidence — human review recommended" : "High confidence based on available data"}
+                  ${nonblankText(score_context)
+                     ? escapeHtml(score_context)
+                     : confidenceValue < 50
+                       ? "Low confidence — human review recommended"
+                       : "High confidence based on available data"}
                </div>
             </div>
+         `
+             : `
+            <section class="truthlens-confidence-na" aria-label="AI confidence unavailable">
+               <span class="truthlens-confidence-na-icon" aria-hidden="true">${iconHelp}</span>
+               <div>
+                  <strong>AI confidence unavailable</strong>
+                  <p>No automated confidence score is available for this result.</p>
+               </div>
+            </section>
          `;
 
-   // 2. Dynamic Button Logic
+   const sourceTypeText = nonblankText(source_type);
+   const sourceMetadataHTML = isAdjudicated
+      ? `
+         <div class="truthlens-result-source-meta" aria-label="Review provenance">
+            ${reviewOrganizationName
+               ? `<div><strong>Reviewed by</strong><span>${escapeHtml(reviewOrganizationName)}</span></div>`
+               : `<div><strong>Partner Reviewed</strong></div>`}
+         </div>
+      `
+      : sourceTypeText
+        ? `
+         <div class="truthlens-result-source-meta">
+            <div><strong>Source Type</strong><span>${escapeHtml(sourceTypeText)}</span></div>
+         </div>
+      `
+        : "";
+
    let primaryButtonHTML = "";
    let secondaryLinkHTML = "";
 
@@ -531,7 +584,6 @@ export function displayResultCard(claim) {
    const communityText = thread_id ? "View Community Discussion" : "Ask the Community";
 
    if (displayVerdict === "UNVERIFIED") {
-      // UNVERIFIED: Primary CTA is asking the community. Secondary is full report.
       primaryButtonHTML = communityLink
          ? `<a href='${escapeHtml(communityLink)}' target='_blank' rel='noopener noreferrer' class='truthlens-primary-btn'>${iconUsers} ${communityText}</a>`
          : "";
@@ -539,7 +591,6 @@ export function displayResultCard(claim) {
          ? `<a href='${escapeHtml(deepAnalysisUrl)}' target='_blank' rel='noopener noreferrer' class='truthlens-dashboard-link'>View full report ${iconExternal}</a>`
          : "";
    } else {
-      // VERIFIED (Fact/Fake/etc): Primary CTA is the full report. Secondary is community discussion.
       primaryButtonHTML = deepAnalysisUrl
          ? `<a href='${escapeHtml(deepAnalysisUrl)}' target='_blank' rel='noopener noreferrer' class='truthlens-primary-btn'>${iconSearch} View Full Report</a>`
          : "";
@@ -550,7 +601,6 @@ export function displayResultCard(claim) {
 
    const card = document.createElement("div");
    card.id = "truthlens-result-card";
-   // Apply the color-coded border class to the entire card
    card.className = `truthlens-card truthlens-result-card-shell verdict-${ui.class}`;
 
    card.innerHTML = `
@@ -566,14 +616,18 @@ export function displayResultCard(claim) {
 
          <div class="truthlens-summary-box">
             <div class="truthlens-summary-title">
-               ${iconSparkles} AI SUMMARY
+               ${isAdjudicated ? iconShield : iconSparkles} ${isAdjudicated ? "DECISION RATIONALE" : "AI SUMMARY"}
             </div>
-            <div class="truthlens-summary-text">${summary || "No summary available."}</div>
+            <div class="truthlens-summary-text">${escapeHtml(
+               isAdjudicated
+                  ? decisionRationale || "This claim was reviewed by a TruthLens partner organization."
+                  : summary || "No summary available.",
+            )}</div>
          </div>
 
          ${confidenceHTML}
-
          ${sourcesHTML}
+         ${sourceMetadataHTML}
          ${relatedPublicationsHTML(claim)}
 
          ${primaryButtonHTML}
@@ -886,165 +940,4 @@ export function successCard(message) {
    });
 }
 
-/**
- * Display a result card for claims that were resolved by the community (cached verdict).
- * Shows a distinctive "Community Verified" treatment vs the standard AI result.
- */
-export function displayCachedResultCard(match) {
-   if (isPublishedInstitutionalResult(match)) {
-      displayPublishedResultCard(match, match.official_fact_check);
-      return;
-   }
 
-   const {
-      verdict,
-      final_verdict,
-      summary,
-      confidence_score,
-      thread_id,
-      moderator_notes,
-      claim_id,
-      is_ai_generated,
-      score_context,
-      sources,
-      source_url,
-   } = match;
-
-   const displayVerdict = final_verdict || verdict;
-   const ui = getVerdictUI(displayVerdict);
-
-   let confidence_bar_color = "#6b7280";
-   if (confidence_score < 40) confidence_bar_color = "#e02424";
-   else if (confidence_score >= 40 && confidence_score < 70) confidence_bar_color = "#ebdc09";
-   else if (confidence_score >= 70) confidence_bar_color = "#0e9f6e";
-
-   const displaySummary = moderator_notes || summary || "This claim has been reviewed by the community.";
-
-   const aiWarningHTML = is_ai_generated
-      ? `<div class="truthlens-banner truthlens-ai-warning">
-            <span class="truthlens-banner-icon">${iconSparkles}</span>
-            AI-GENERATED MEDIA DETECTED
-         </div>`
-      : "";
-
-   // 1. Determine the Dynamic Banner based on match_type
-   let customBannerHTML = "";
-   if (match.match_type === "resolved") {
-      customBannerHTML = `
-         <div class="truthlens-banner truthlens-community-verified">
-            <span class="truthlens-banner-icon">${iconShield}</span>
-            COMMUNITY VERIFIED
-         </div>`;
-   } else if (match.match_type === "has_thread") {
-      customBannerHTML = `
-         <div class="truthlens-banner" style="background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;">
-            <span class="truthlens-banner-icon">${iconSearch}</span>
-            COMMUNITY INVESTIGATION ONGOING
-         </div>`;
-   }
-
-   // 2. Determine Dynamic Buttons based on match_type
-   let actionButtonsHTML = "";
-   if (match.match_type === "no_verdict") {
-      const createThreadUrl = `${COMMUNITY_PLATFORM_URL}/thread/create?claim_id=${claim_id}`;
-      actionButtonsHTML = `
-            <div style="margin-top: 16px;">
-                  <p style="font-size: 12px; color: #4b5563; margin-bottom: 8px;">No one has verified this yet.</p>
-                  <a href='${createThreadUrl}' target='_blank' class='truthlens-primary-btn' style="text-align: center; display: block; text-decoration: none;">
-                     Post to Community for Verification
-                  </a>
-            </div>
-         `;
-   } else if (thread_id) {
-      const threadUrl = `${COMMUNITY_PLATFORM_URL}/thread/detail/${thread_id}`;
-      actionButtonsHTML = `
-            <div style="margin-top: 16px;">
-                  <a href='${threadUrl}' target='_blank' class='truthlens-primary-btn' style="text-align: center; display: block; text-decoration: none;">
-                     View Community Discussion
-                  </a>
-            </div>
-         `;
-   }
-
-   const cachedAnalysisId = pathComponent(claim_id || match.id);
-   const cachedBaseUrl = communityBaseUrl();
-   const cachedAnalysisUrl = cachedBaseUrl && cachedAnalysisId ? `${cachedBaseUrl}/analysis/${cachedAnalysisId}` : null;
-   const sourcesHTML =
-      displayVerdict === "OUT_OF_SCOPE"
-         ? ""
-         : compactSourcesHTML({
-              sources,
-              sourceUrl: source_url,
-              moreUrl: cachedAnalysisUrl,
-              moreLabel: "full report",
-           });
-
-   const card = document.createElement("div");
-   card.id = "truthlens-result-card";
-   card.className = "truthlens-card";
-
-   card.innerHTML = `
-      <div class="truthlens-header">
-         ${truthLensBrandHTML()}
-         <button id="truthlens-close-btn" class="truthlens-close-btn" aria-label="Close verification result">&times;</button>
-      </div>
-
-      <div style="overflow-y: auto; padding-right: 4px; overflow-x: hidden;">
-         <div class="truthlens-verdict-text">
-            This post is <span class="truthlens-badge badge-${ui.class}">${ui.icon} ${ui.text}</span>
-         </div>
-
-         ${customBannerHTML}
-         ${aiWarningHTML}
-
-         <div class="truthlens-summary-box">
-            <div class="truthlens-summary-title">Community Verdict Summary</div>
-            <div style="font-size: 14px; line-height: 1.4;">${displaySummary}</div>
-         </div>
-
-         ${
-            displayVerdict === "OUT_OF_SCOPE"
-               ? `
-            <section class="truthlens-confidence-na" aria-label="Confidence score not applicable">
-               <span class="truthlens-confidence-na-icon" aria-hidden="true">${iconHelp}</span>
-               <div>
-                  <strong>Confidence score not applicable</strong>
-                  <p>No factual verdict was produced for this input, so there is no factual confidence score to show.</p>
-               </div>
-            </section>
-         `
-               : confidence_score !== null
-                 ? `
-            <div class="truthlens-confidence-score">Confidence Score: ${confidence_score}</div>
-            <div class="truthlens-confidence-bar">
-               <div class="truthlens-confidence-fill" style="width: ${confidence_score}%; background-color: ${confidence_bar_color};"></div>
-            </div>
-            ${
-               score_context
-                  ? `
-            <div class="truthlens-score-context" style="font-size: 12px; color: #6b7280; margin-top: 8px; line-height: 1.3;">
-               <strong>Context:</strong> ${score_context}
-            </div>
-            `
-                  : ""
-            }
-         `
-                 : ""
-         }
-
-         ${sourcesHTML}
-
-         ${actionButtonsHTML}
-         <div class="truthlens-footer">Source Type: Community Moderation</div>
-      </div>
-   `;
-
-   document.body.appendChild(card);
-   void card.offsetWidth;
-   setTimeout(() => card.classList.add("show"), 100);
-
-   document.getElementById("truthlens-close-btn").addEventListener("click", () => {
-      card.classList.remove("show");
-      setTimeout(() => card.remove(), 300);
-   });
-}

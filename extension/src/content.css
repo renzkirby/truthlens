@@ -248,6 +248,36 @@
    margin-bottom: 20px;
 }
 
+.truthlens-result-source-meta {
+   display: grid;
+   gap: 6px;
+   margin: 0 0 16px;
+   padding-top: 10px;
+   border-top: 1px solid #e5e7eb;
+   color: #6b7280;
+   font-size: 10.5px;
+   line-height: 1.4;
+}
+
+.truthlens-result-source-meta > div {
+   display: flex;
+   align-items: baseline;
+   justify-content: center;
+   gap: 8px;
+   text-align: center;
+}
+
+.truthlens-result-source-meta strong {
+   color: #4b5563;
+   font-weight: 700;
+}
+
+.truthlens-result-source-meta span {
+   min-width: 0;
+   text-align: center;
+   overflow-wrap: anywhere;
+}
+
 .truthlens-confidence-na {
    display: flex;
    align-items: flex-start;

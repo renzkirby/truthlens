@@ -487,3 +487,53 @@ class AuthoritativeVerdictIntegrityTests(TestCase):
             AdjudicationProvenance.HUMAN_ADJUDICATION,
         )
         self.assertEqual(self._annotated_verdict(claim), "FACT")
+
+    def test_match_result_exposes_human_rationale_and_public_partner(self):
+        self.organization.public_profile_enabled = True
+        self.organization.save(update_fields=["public_profile_enabled"])
+        claim, _thread = self._create_claim(
+            "Public adjudication explanation",
+            ai_verdict="MISLEADING",
+        )
+        result = self._issue_decision(
+            claim,
+            AdjudicationDecision.Verdict.FACT,
+        )
+
+        match = get_match_result(claim)
+
+        self.assertEqual(match["resolution_source"], "ADJUDICATION")
+        self.assertEqual(match["verdict"], "FACT")
+        self.assertEqual(match["ai_verdict"], "MISLEADING")
+        self.assertEqual(
+            match["adjudication_review"]["rationale"],
+            result["decision"].rationale,
+        )
+        self.assertEqual(
+            match["adjudication_review"]["organization"],
+            {
+                "id": str(self.organization.id),
+                "name": self.organization.name,
+                "slug": self.organization.slug,
+            },
+        )
+        self.assertIn("Automated analysis", match["summary"])
+
+    def test_match_result_hides_nonpublic_partner_identity(self):
+        claim, _thread = self._create_claim(
+            "Private partner adjudication explanation",
+            ai_verdict="MISLEADING",
+        )
+        result = self._issue_decision(
+            claim,
+            AdjudicationDecision.Verdict.FACT,
+        )
+
+        match = get_match_result(claim)
+
+        self.assertEqual(match["resolution_source"], "ADJUDICATION")
+        self.assertEqual(
+            match["adjudication_review"]["rationale"],
+            result["decision"].rationale,
+        )
+        self.assertIsNone(match["adjudication_review"]["organization"])

@@ -237,24 +237,18 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       sendResponse({ success: true });
    }
 
-   if (request.type === "DISPLAY_SNIPPET_CACHED_RESULT" || request.type === "DISPLAY_IMAGE_CACHED_RESULT") {
+   if (
+      request.type === "DISPLAY_SNIPPET_CACHED_RESULT" ||
+      request.type === "DISPLAY_IMAGE_CACHED_RESULT" ||
+      request.type === "DISPLAY_URL_CACHED_RESULT" ||
+      request.type === "DISPLAY_TEXT_CACHED_RESULT"
+   ) {
       import("./modules/ui.jsx").then(({ displayResultCard, removeLoadingCard, successCard }) => {
          setTimeout(() => {
             removeLoadingCard();
          }, 1000);
-         successCard("Previously verified claim found!");
+         successCard("Previous TruthLens result found!");
          displayResultCard(request.data);
-      });
-      sendResponse({ success: true });
-   }
-
-   if (request.type === "DISPLAY_URL_CACHED_RESULT" || request.type === "DISPLAY_TEXT_CACHED_RESULT") {
-      import("./modules/ui.jsx").then(({ displayCachedResultCard, removeLoadingCard, successCard }) => {
-         setTimeout(() => {
-            removeLoadingCard();
-         }, 1000);
-         successCard("Previously verified claim found!");
-         displayCachedResultCard(request.data);
       });
       sendResponse({ success: true });
    }

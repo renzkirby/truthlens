@@ -31,6 +31,7 @@ from .knowledge_reuse_service import (
     record_knowledge_reuse,
 )
 from .adjudication_provenance import get_claim_adjudication_provenance
+from .organization_public_presence_service import is_public_partner_eligible
 
 logger = logging.getLogger(__name__)
 
@@ -311,6 +312,7 @@ def get_match_result(
     moderator_notes = None
     official_fact_check = None
     related_fact_checks = []
+    adjudication_review = None
     resolution_source = None
 
     adjudication_provenance = get_claim_adjudication_provenance(matched_claim)
@@ -400,12 +402,31 @@ def get_match_result(
                     )
 
         else:
-            # The Claim has an authoritative
-            # adjudication, but no public
-            # article has been published.
-            #
-            # Do not expose internal moderator
-            # or adjudication notes here.
+            # The Claim has an attributable human adjudication but no
+            # published article. Expose the decision rationale as the
+            # human-facing explanation while keeping the earlier AI summary
+            # separate for audit/history surfaces.
+            decision = adjudication_provenance.get("decision")
+            public_organization = None
+            rationale = None
+
+            if decision is not None:
+                rationale = (decision.rationale or "").strip() or None
+                organization = decision.organization
+                if (
+                    organization is not None
+                    and is_public_partner_eligible(organization)
+                ):
+                    public_organization = {
+                        "id": str(organization.id),
+                        "name": organization.name,
+                        "slug": organization.slug,
+                    }
+
+            adjudication_review = {
+                "rationale": rationale,
+                "organization": public_organization,
+            }
             resolution_source = "ADJUDICATION"
 
     # =====================================
@@ -489,6 +510,7 @@ def get_match_result(
         "moderator_notes": (moderator_notes),
         "score_context": (matched_claim.score_context),
         "resolution_source": (resolution_source),
+        "adjudication_review": adjudication_review,
         "official_fact_check": (official_fact_check),
         "related_fact_checks": related_fact_checks,
     }

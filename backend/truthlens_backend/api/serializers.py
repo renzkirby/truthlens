@@ -4258,9 +4258,18 @@ class ClaimMatchSerializer(serializers.Serializer):
         allow_null=True,
     )
 
+    adjudication_review = serializers.JSONField(
+        required=False,
+        allow_null=True,
+    )
+
     official_fact_check = serializers.JSONField(
         required=False,
         allow_null=True,
+    )
+
+    related_fact_checks = serializers.JSONField(
+        required=False,
     )
 
 
