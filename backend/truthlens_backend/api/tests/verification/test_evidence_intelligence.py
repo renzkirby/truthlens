@@ -588,13 +588,20 @@ class EvidenceIntelligenceTests(TestCase):
         OrganizationMembership.objects.create(
             user=self.actor,
             organization=other,
-            role=OrganizationMembership.Role.ADMIN,
+            role=OrganizationMembership.Role.LEAD_VERIFIER,
             status=OrganizationMembership.Status.ACTIVE,
         )
         self.assertEqual(self.get(other).status_code, 404)
         with self.assertRaises(VerificationIntelligenceNotFound):
             self.project(organization=other)
-        OrganizationMembership.objects.filter(pk=self.membership.pk).update(role="CONTRIBUTOR")
+        OrganizationMembership.objects.filter(
+            user=self.actor,
+            organization=other,
+        ).update(status=OrganizationMembership.Status.LEFT)
+        OrganizationMembership.objects.filter(pk=self.membership.pk).update(
+            status=OrganizationMembership.Status.ACTIVE,
+            role="CONTRIBUTOR",
+        )
         self.assertEqual(self.get().status_code, 403)
         safety = User.objects.create_user(username="evidence-intelligence-safety")
         safety.profile.role = UserProfile.Role.MOD
