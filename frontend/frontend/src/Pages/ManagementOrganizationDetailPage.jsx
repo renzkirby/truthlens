@@ -206,7 +206,7 @@ function VerificationScopeSection({ organization }) {
          <DetailList items={[
             { label: "Selected subjects", value: specializations.length
                ? specializations.map(formatVerificationDomain).join(", ") : "Not configured" },
-            { label: "Managed by", value: "Organization Organization Admin" },
+            { label: "Managed by", value: "Organization Admin" },
          ]} />
       </section>
    );
@@ -308,7 +308,7 @@ function PrimaryAdminState({
                <h2>Organization Admin</h2>
                <ManagementStatus value={invitation.status} />
             </div>
-            <p className="management-section__description">A Organization Admin onboarding invitation is awaiting acceptance.</p>
+            <p className="management-section__description">An Organization Admin onboarding invitation is awaiting acceptance.</p>
             <DetailList items={[
                { label: "Email", value: invitation.email },
                { label: "Role", value: invitation.role_label },
