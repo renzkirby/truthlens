@@ -101,12 +101,27 @@ def get_invitation_role_label(
 ):
     if (
         invitation.purpose
-        == OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING
-        and invitation.invited_role == OrganizationMembership.Role.ADMIN
+        in {
+            OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING,
+            "PRIMARY_ADMIN_ONBOARDING",
+        }
+        and invitation.invited_role
+        in {
+            OrganizationMembership.Role.ADMIN,
+            "OWNER",
+        }
     ):
         return "Organization Admin"
 
-    return invitation.get_invited_role_display()
+    legacy_labels = {
+        "OWNER": "Administrator",
+        "MODERATOR": "Verification Reviewer",
+        "CONTRIBUTOR": "Former Contributor",
+    }
+    return legacy_labels.get(
+        invitation.invited_role,
+        invitation.get_invited_role_display(),
+    )
 
 
 def _normalize_invitation_token(
@@ -360,9 +375,8 @@ def accept_organization_invitation(
                 != OrganizationInvitation.InvitationPurpose.MEMBERSHIP
                 or invitation.invited_role not in ADMIN_INVITABLE_ROLES
             ):
-                # Defense in depth. Ordinary
-                # invitations must never produce
-                # organization ownership.
+                # Defense in depth: ordinary membership invitations may
+                # assign only currently supported organization roles.
                 raise (
                     InvalidOrganizationInvitationRole(
                         "This invitation contains " "an invalid organization " "role."
