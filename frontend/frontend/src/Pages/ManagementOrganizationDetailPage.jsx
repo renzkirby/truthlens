@@ -199,14 +199,14 @@ function VerificationScopeSection({ organization }) {
       <section className="management-detail-section">
          <h2>Organization verification specializations</h2>
          <p className="management-section__description">
-            The Primary Admin manages these investigation subjects in the partner workspace.
+            The Organization Admin manages these investigation subjects in the partner workspace.
             Platform administration oversees partnership status and onboarding, not the
             organization's subject choices.
          </p>
          <DetailList items={[
             { label: "Selected subjects", value: specializations.length
                ? specializations.map(formatVerificationDomain).join(", ") : "Not configured" },
-            { label: "Managed by", value: "Organization Primary Admin" },
+            { label: "Managed by", value: "Organization Organization Admin" },
          ]} />
       </section>
    );
@@ -248,7 +248,7 @@ function PrimaryAdminState({
 
       setProvisioningOpen(false);
       setEmail("");
-      onFeedback(`Primary Admin invitation sent to ${result.data.email}.`);
+      onFeedback(`Organization Admin invitation sent to ${result.data.email}.`);
       onRefresh();
    };
 
@@ -273,7 +273,7 @@ function PrimaryAdminState({
 
       returnFocusAfterRefreshRef.current = true;
       setCancelConfirmationOpen(false);
-      onFeedback("Primary Admin invitation cancelled.");
+      onFeedback("Organization Admin invitation cancelled.");
       onRefresh();
    };
 
@@ -282,7 +282,7 @@ function PrimaryAdminState({
       return (
          <>
             <div className="management-section__title-row">
-               <h2>Primary Admin</h2>
+               <h2>Organization Admin</h2>
                <ManagementStatus value={membership.status} />
             </div>
             <p className="management-section__description">
@@ -305,10 +305,10 @@ function PrimaryAdminState({
       return (
          <>
             <div className="management-section__title-row">
-               <h2>Primary Admin</h2>
+               <h2>Organization Admin</h2>
                <ManagementStatus value={invitation.status} />
             </div>
-            <p className="management-section__description">A Primary Admin onboarding invitation is awaiting acceptance.</p>
+            <p className="management-section__description">A Organization Admin onboarding invitation is awaiting acceptance.</p>
             <DetailList items={[
                { label: "Email", value: invitation.email },
                { label: "Role", value: invitation.role_label },
@@ -343,7 +343,7 @@ function PrimaryAdminState({
             {error ? <ManagementFeedback tone="error">{error.message}</ManagementFeedback> : null}
             <ManagementConfirmDialog
                open={resendConfirmationOpen}
-               title="Resend Primary Admin invitation?"
+               title="Resend Organization Admin invitation?"
                description={`Send a new invitation link to ${invitation.email}?`}
                warning="Resending invalidates the previous invitation link."
                error={error?.message}
@@ -354,9 +354,9 @@ function PrimaryAdminState({
             />
             <ManagementConfirmDialog
                open={cancelConfirmationOpen}
-               title="Cancel Primary Admin invitation?"
+               title="Cancel Organization Admin invitation?"
                description="Cancel the pending onboarding invitation for this organization?"
-               warning="The current invitation link will stop working immediately. The organization will return to having no assigned Primary Admin until a new invitation is issued."
+               warning="The current invitation link will stop working immediately. The organization will return to having no assigned Organization Admin until a new invitation is issued."
                error={error?.message}
                confirmLabel="Cancel invitation"
                confirmVariant="destructive"
@@ -371,7 +371,7 @@ function PrimaryAdminState({
 
    return (
       <>
-         <h2>Primary Admin</h2>
+         <h2>Organization Admin</h2>
          <p className="management-section__description">Highest organization authority within TruthLens.</p>
          {!provisioningOpen ? (
             <div className="management-empty-action">
@@ -383,13 +383,13 @@ function PrimaryAdminState({
                      setProvisioningOpen(true);
                   }}
                >
-                  Provision Primary Admin
+                  Provision Organization Admin
                </Button>
             </div>
          ) : (
             <form className="management-provision-form" onSubmit={submitProvision}>
                <div className="management-provision-form__intro">
-                  <strong>Invite the organization’s first Primary Admin</strong>
+                  <strong>Invite the organization’s first Organization Admin</strong>
                   <p>
                      The recipient uses their own TruthLens account, and the invited email must match their verified account when accepting. TruthLens does not create or know their password. This role does not imply legal or business ownership.
                   </p>
@@ -474,7 +474,7 @@ function ManagementOrganizationDetailPage() {
                   <section className="management-detail-section">
                      <PrimaryAdminState
                         organizationId={data.id}
-                        primaryAdmin={data.primary_admin}
+                        primaryAdmin={data.organization_admin ?? data.primary_admin}
                         onRefresh={retry}
                         onFeedback={showFeedback}
                         returnFocusAfterRefreshRef={returnFocusAfterPrimaryAdminRefreshRef}
