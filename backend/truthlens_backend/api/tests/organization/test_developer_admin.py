@@ -83,7 +83,7 @@ class DeveloperConsoleTests(TestCase):
         self.owner_membership = OrganizationMembership.objects.create(
             organization=self.organization,
             user=self.owner,
-            role=OrganizationMembership.Role.OWNER,
+            role=OrganizationMembership.Role.ADMIN,
             status=OrganizationMembership.Status.ACTIVE,
             approved_at=timezone.now(),
             approved_by=self.owner,
@@ -210,9 +210,9 @@ class DeveloperConsoleTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Primary Admin")
+        self.assertContains(response, "Organization Admin")
         self.assertContains(response, "Not yet assigned")
-        self.assertContains(response, "Provision Primary Admin")
+        self.assertContains(response, "Provision Organization Admin")
 
     def test_organization_with_owner_hides_initial_provision_action(self):
         self.client.force_login(self.superuser)
@@ -228,7 +228,7 @@ class DeveloperConsoleTests(TestCase):
         self.assertContains(response, self.owner.username)
         self.assertContains(response, self.owner.email)
         self.assertContains(response, "Membership status: Active")
-        self.assertNotContains(response, "Provision Primary Admin")
+        self.assertNotContains(response, "Provision Organization Admin")
         self.assertNotContains(response, "Cancel invitation")
 
     def test_developer_console_can_provision_primary_admin_invitation(self):
@@ -257,11 +257,11 @@ class DeveloperConsoleTests(TestCase):
         )
         self.assertEqual(
             invitation.purpose,
-            OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING,
+            OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING,
         )
         self.assertEqual(
             invitation.invited_role,
-            OrganizationMembership.Role.OWNER,
+            OrganizationMembership.Role.ADMIN,
         )
         self.assertEqual(len(mail.outbox), 1)
         events = AccountabilityEvent.objects.filter(
@@ -295,7 +295,7 @@ class DeveloperConsoleTests(TestCase):
             response,
             reverse("developer_admin:api_organization_changelist"),
         )
-        self.assertContains(response, "Primary Admin Email")
+        self.assertContains(response, "Organization Admin Email")
         self.assertContains(response, 'name="email"')
         self.assertNotContains(response, 'name="password"')
         self.assertNotContains(response, 'name="username"')
@@ -323,7 +323,7 @@ class DeveloperConsoleTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Primary Admin invitation pending")
+        self.assertContains(response, "Organization Admin invitation pending")
         self.assertContains(response, invitation.email)
         self.assertContains(response, "Sent:")
         self.assertContains(response, "Expires:")
@@ -420,7 +420,7 @@ class DeveloperConsoleTests(TestCase):
         confirmation = self.client.get(cancel_url)
 
         self.assertEqual(confirmation.status_code, 200)
-        self.assertContains(confirmation, "Cancel Primary Admin Invitation")
+        self.assertContains(confirmation, "Cancel Organization Admin Invitation")
         self.assertContains(
             confirmation,
             "This immediately invalidates the current onboarding link.",
@@ -471,7 +471,7 @@ class DeveloperConsoleTests(TestCase):
                 organization=organization,
                 status=OrganizationInvitation.Status.PENDING,
                 purpose=(
-                    OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
+                    OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING
                 ),
             ).count(),
             1,
@@ -498,7 +498,7 @@ class DeveloperConsoleTests(TestCase):
         )
         self.assertContains(
             response,
-            "There is no active Primary Admin invitation to cancel.",
+            "There is no active Organization Admin invitation to cancel.",
         )
 
     def test_non_superuser_cannot_access_primary_admin_custom_view(self):
@@ -851,7 +851,7 @@ class DeveloperConsoleTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.organization.name)
         self.assertContains(response, self.owner.username)
-        self.assertContains(response, "Primary Admin")
+        self.assertContains(response, "Organization Admin")
 
         detail_response = self.client.get(
             reverse(
@@ -861,7 +861,7 @@ class DeveloperConsoleTests(TestCase):
         )
 
         self.assertEqual(detail_response.status_code, 200)
-        self.assertContains(detail_response, "Primary Admin")
+        self.assertContains(detail_response, "Organization Admin")
         self.assertNotContains(detail_response, "(OWNER)")
 
         mutation_response = self.client.post(
@@ -876,7 +876,7 @@ class DeveloperConsoleTests(TestCase):
         self.owner_membership.refresh_from_db()
         self.assertEqual(
             self.owner_membership.role,
-            OrganizationMembership.Role.OWNER,
+            OrganizationMembership.Role.ADMIN,
         )
 
     def test_invitation_is_available_for_readonly_inspection(self):
@@ -943,7 +943,7 @@ class DeveloperConsoleTests(TestCase):
             create_organization_invitation(
                 organization=self.organization,
                 email="second-owner@example.com",
-                invited_role=OrganizationMembership.Role.OWNER,
+                invited_role=OrganizationMembership.Role.ADMIN,
                 actor=self.owner,
             )
 
