@@ -101,9 +101,9 @@ export const MANAGEMENT_GOVERNANCE_ACTIONS = [
    ["ORGANIZATION_VERIFICATION_SCOPE_APPROVED", "Organization Verification Scope Approved (legacy)"],
    ["ORGANIZATION_VERIFICATION_SPECIALIZATIONS_UPDATED", "Organization Verification Specializations Updated"],
    ["CLAIM_INVESTIGATION_CLASSIFIED", "Claim Investigation Classified"],
-   ["ORGANIZATION_INVITATION_CREATED", "Primary Admin Invitation Created"],
-   ["ORGANIZATION_INVITATION_RESENT", "Primary Admin Invitation Resent"],
-   ["ORGANIZATION_INVITATION_CANCELLED", "Primary Admin Invitation Cancelled"],
+   ["ORGANIZATION_INVITATION_CREATED", "Organization Admin Invitation Created"],
+   ["ORGANIZATION_INVITATION_RESENT", "Organization Admin Invitation Resent"],
+   ["ORGANIZATION_INVITATION_CANCELLED", "Organization Admin Invitation Cancelled"],
 ];
 
 const MANAGEMENT_GOVERNANCE_ACTION_LABELS = new Map(MANAGEMENT_GOVERNANCE_ACTIONS);
@@ -131,8 +131,11 @@ const AUDIT_VALUE_LABELS = {
    NGO: "Non-Governmental Organization",
    GOVERNMENT: "Government Organization",
    OTHER: "Other",
-   PRIMARY_ADMIN_ONBOARDING: "Primary Admin onboarding",
-   OWNER: "Primary Admin",
+   ORGANIZATION_ADMIN_ONBOARDING: "Organization Admin onboarding",
+   PRIMARY_ADMIN_ONBOARDING: "Organization Admin onboarding",
+   OWNER: "Administrator",
+   MODERATOR: "Verification Reviewer",
+   CONTRIBUTOR: "Former Contributor",
    CANCELLED: "Cancelled",
 };
 
