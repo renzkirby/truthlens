@@ -12,14 +12,14 @@
   &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
   &rsaquo; <a href="{% url 'admin:api_organization_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
   &rsaquo; <a href="{{ change_url }}">{{ organization }}</a>
-  &rsaquo; Provision Primary Admin
+  &rsaquo; Provision Organization Admin
 </div>
 {% endblock %}
 
 {% block content %}
 <div id="content-main">
   <p>
-    Send the initial Primary Admin invitation for <strong>{{ organization }}</strong>.
+    Send the initial Organization Admin invitation for <strong>{{ organization }}</strong>.
     TruthLens will not create an account or password for the recipient.
   </p>
 
