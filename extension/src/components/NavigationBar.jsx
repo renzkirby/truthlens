@@ -1,9 +1,10 @@
 import "./NavigationBar.css";
-import { ArrowRight, Link, FileText, Sparkles } from "lucide-react";
+import { ArrowRight, FileText, Link, Sparkles, Upload } from "lucide-react";
 
 const tools = [
+   { id: "text-verify", label: "Verify Text", icon: FileText },
    { id: "url-upload", label: "Analyze URL", icon: Link },
-   { id: "file-upload", label: "Upload File", icon: FileText },
+   { id: "file-upload", label: "Upload Content", icon: Upload },
    { id: "detect-deepfake", label: "Deepfake Detection", icon: Sparkles },
 ];
 
