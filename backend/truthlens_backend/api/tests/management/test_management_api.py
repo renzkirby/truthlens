@@ -322,14 +322,15 @@ class ManagementApiTests(APITestCase):
             )
         )
 
-        primary_admin = response.data["primary_admin"]
-        self.assertEqual(primary_admin["state"], "CURRENT")
-        self.assertEqual(primary_admin["membership"]["role"], "OWNER")
+        organization_admin = response.data["organization_admin"]
+        self.assertEqual(organization_admin["state"], "CURRENT")
+        self.assertEqual(organization_admin["membership"]["role"], "ADMIN")
         self.assertEqual(
-            primary_admin["membership"]["role_label"],
-            "Organization Admin",
+            organization_admin["membership"]["role_label"],
+            "Administrator",
         )
-        self.assertIsNone(primary_admin["invitation"])
+        self.assertIsNone(organization_admin["invitation"])
+        self.assertEqual(response.data["primary_admin"], organization_admin)
 
     def test_organization_detail_returns_safe_pending_primary_admin(self):
         response = self.client_for(self.superuser).get(
@@ -339,16 +340,17 @@ class ManagementApiTests(APITestCase):
             )
         )
 
-        primary_admin = response.data["primary_admin"]
-        self.assertEqual(primary_admin["state"], "PENDING")
-        self.assertIsNone(primary_admin["membership"])
+        organization_admin = response.data["organization_admin"]
+        self.assertEqual(organization_admin["state"], "PENDING")
+        self.assertIsNone(organization_admin["membership"])
         self.assertEqual(
-            primary_admin["invitation"]["role_label"],
+            organization_admin["invitation"]["role_label"],
             "Organization Admin",
         )
-        self.assertNotIn("token_digest", primary_admin["invitation"])
+        self.assertNotIn("token_digest", organization_admin["invitation"])
+        self.assertEqual(response.data["primary_admin"], organization_admin)
 
-    def test_membership_owner_role_label_is_primary_admin(self):
+    def test_membership_admin_role_uses_canonical_label(self):
         response = self.client_for(self.superuser).get(
             reverse(
                 "management_membership_detail",
@@ -356,8 +358,8 @@ class ManagementApiTests(APITestCase):
             )
         )
 
-        self.assertEqual(response.data["role"], "OWNER")
-        self.assertEqual(response.data["role_label"], "Organization Admin")
+        self.assertEqual(response.data["role"], "ADMIN")
+        self.assertEqual(response.data["role_label"], "Administrator")
 
     def test_membership_list_and_detail_are_read_only(self):
         client = self.client_for(self.superuser)
@@ -446,7 +448,7 @@ class ManagementApiTests(APITestCase):
         memberships = client.get(
             reverse("management_memberships")
             + f"?q=primary&organization_id={self.organization.id}"
-            + "&role=OWNER&status=ACTIVE"
+            + "&role=ADMIN&status=ACTIVE"
         )
         invitations = client.get(
             reverse("management_invitations")
