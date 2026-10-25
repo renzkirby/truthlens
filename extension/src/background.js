@@ -758,6 +758,70 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       return true;
    }
 
+   if (request.type === "VERIFY_TEXT") {
+      const tabId = request.tabId ?? sender?.tab?.id;
+      const text = typeof request.text === "string" ? request.text.trim() : "";
+
+      if (!Number.isInteger(tabId)) {
+         sendResponse({
+            accepted: false,
+            error: "No active tab found for text verification.",
+         });
+         return false;
+      }
+
+      if (!text) {
+         sendResponse({
+            accepted: false,
+            error: "Enter a claim or passage to verify.",
+         });
+         return false;
+      }
+
+      sendResponse({ accepted: true });
+
+      (async () => {
+         try {
+            const res = await postJsonWithAuth("verify-text/", { text });
+            const data = await res.json().catch(() => ({}));
+
+            if (!res.ok) {
+               throw new Error(data?.detail || data?.error || "Text verification failed.");
+            }
+
+            if (data.cached && data.match) {
+               cacheGuestScanIfCurrentGuest(data.match, "TEXT").catch((cacheError) => {
+                  console.warn("Failed to cache guest text verdict:", cacheError);
+               });
+
+               sendTabMessage(tabId, {
+                  type: "DISPLAY_TEXT_CACHED_RESULT",
+                  data: data.match,
+               });
+               return;
+            }
+
+            startPollingClaim({
+               claimId: data.claim_id,
+               tabId,
+               successType: "DISPLAY_TEXT_RESULT",
+               timeoutMessage: "DISPLAY_TEXT_ERROR",
+               onResolved: (claim) => cacheGuestScanIfCurrentGuest(claim, "TEXT"),
+               maxPolls: 50,
+               pollEveryMs: 3000,
+            });
+         } catch (err) {
+            console.error("Text verification failed:", err);
+            sendTabMessage(tabId, {
+               type: "DISPLAY_TEXT_ERROR",
+               message: err?.message || "Unable to verify this text. Please try again.",
+            });
+         }
+      })();
+
+      return true;
+   }
+
    if (request.type === "VERIFY_FILE") {
       const tabId = request.tabId ?? sender?.tab?.id; // <--- Grabs the tabId we passed from the popup
       const payload = request.payload;
