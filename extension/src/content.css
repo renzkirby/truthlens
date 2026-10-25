@@ -270,6 +270,75 @@
    margin-top: 6px;
 }
 
+.truthlens-compact-sources {
+   margin: 12px 0 16px;
+   font-size: 11px;
+}
+
+.truthlens-source-heading {
+   display: block;
+   margin-bottom: 5px;
+   color: #374151;
+}
+
+.truthlens-source-list {
+   display: grid;
+   gap: 4px;
+}
+
+.truthlens-source-link {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: 8px;
+   min-width: 0;
+   padding: 6px 10px;
+   border: 1px solid #e5e7eb;
+   border-radius: 6px;
+   background: #f9fafb;
+   color: #4f46e5;
+   font-weight: 600;
+   text-decoration: none;
+}
+
+.truthlens-source-link > span {
+   min-width: 0;
+   overflow: hidden;
+   text-overflow: ellipsis;
+   white-space: nowrap;
+}
+
+.truthlens-source-link > svg {
+   flex: 0 0 auto;
+}
+
+.truthlens-source-link:hover {
+   border-color: #c7d2fe;
+   background: #eef2ff;
+}
+
+.truthlens-source-more {
+   margin: 6px 0 0;
+   color: #6b7280;
+   line-height: 1.4;
+}
+
+.truthlens-source-more a {
+   color: #4f46e5;
+   font-weight: 700;
+   text-decoration: none;
+}
+
+.truthlens-source-more a:hover {
+   text-decoration: underline;
+}
+
+.truthlens-source-link:focus-visible,
+.truthlens-source-more a:focus-visible {
+   outline: 2px solid #4f46e5;
+   outline-offset: 2px;
+}
+
 /* Reading context stays separate from the result's verdict and confidence. */
 .truthlens-related-publications {
    margin: 0 0 16px;
