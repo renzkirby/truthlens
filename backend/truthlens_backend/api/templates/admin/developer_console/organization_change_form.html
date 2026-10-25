@@ -4,7 +4,7 @@
 {{ block.super }}
 
 <fieldset class="module aligned">
-  <h2>Primary Admin</h2>
+  <h2>Organization Admin</h2>
 
   <div class="form-row">
     <div>
@@ -13,7 +13,7 @@
         <p>{{ primary_admin_state.current_owner.user.email }}</p>
         <p>Membership status: {{ primary_admin_state.current_owner.get_status_display }}</p>
       {% elif primary_admin_state.pending_invitation %}
-        <p><strong>Primary Admin invitation pending</strong></p>
+        <p><strong>Organization Admin invitation pending</strong></p>
         <p>{{ primary_admin_state.pending_invitation.email }}</p>
         <p>Sent: {{ primary_admin_state.pending_invitation.last_sent_at }}</p>
         <p>Expires: {{ primary_admin_state.pending_invitation.expires_at }}</p>
@@ -28,7 +28,7 @@
           their own TruthLens account and chooses their own password.
         </p>
         <p>
-          <a class="button" href="{{ primary_admin_state.provision_url }}">Provision Primary Admin</a>
+          <a class="button" href="{{ primary_admin_state.provision_url }}">Provision Organization Admin</a>
         </p>
       {% endif %}
     </div>
