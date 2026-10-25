@@ -236,6 +236,15 @@ class ManagementOrganizationAdminInvitationSerializer(serializers.ModelSerialize
     role_label = serializers.SerializerMethodField()
 
     def get_role_label(self, obj):
+        if (
+            obj.purpose
+            in {
+                OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING,
+                "PRIMARY_ADMIN_ONBOARDING",
+            }
+            and obj.invited_role in {OrganizationMembership.Role.ADMIN, "OWNER"}
+        ):
+            return "Organization Admin"
         return management_role_label(obj.invited_role)
 
     class Meta:
