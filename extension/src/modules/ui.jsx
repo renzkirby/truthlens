@@ -407,15 +407,11 @@ function displayPublishedResultCard(claim, publication) {
         : claim.source_url
           ? [claim.source_url]
           : [];
-   const sourceLinks = sources
-      .map((source) => {
-         const url = safeHttpUrl(typeof source === "string" ? source : isRecord(source) ? source.url : null);
-         if (!url) return "";
-         const title = (isRecord(source) && nonblankText(source.title)) || new URL(url).hostname;
-         return `<li><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(title)} ${iconExternal}</a></li>`;
-      })
-      .filter(Boolean)
-      .join("");
+   const sourcesHTML = compactSourcesHTML({
+      sources,
+      moreUrl: articleUrl,
+      moreLabel: "full fact-check",
+   });
 
    const card = document.createElement("div");
    card.id = "truthlens-result-card";
@@ -439,7 +435,7 @@ function displayPublishedResultCard(claim, publication) {
             <div class="truthlens-partner-identity"><span class="truthlens-publication-label">Published by</span>${identityHTML}</div>
          </div>
          ${metadata.length ? `<div class="truthlens-publication-metadata">${metadata.join("")}</div>` : ""}
-         ${sourceLinks ? `<section class="truthlens-publication-sources"><h3 class="truthlens-publication-label">Sources</h3><ul>${sourceLinks}</ul></section>` : ""}
+         ${sourcesHTML}
          ${articleUrl ? `<a ${publicReachAttributes(organization.slug, publication.fact_check_id, "EXTENSION_OFFICIAL_FACT_CHECK")} href="${escapeHtml(articleUrl)}" target="_blank" rel="noopener noreferrer" class="truthlens-primary-btn">Read Full Fact-Check ${iconExternal}</a>` : ""}
       </div>
    `;
