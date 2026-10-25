@@ -1,0 +1,336 @@
+{
+  "schema_version": 1,
+  "fixture_kind": "PROPOSED_SYNTHETIC_NOT_HUMAN_ADJUDICATED",
+  "examples": [
+    {
+      "id": "campus_student_election",
+      "claim_text": "University A student council moved its campus election to Friday.",
+      "primary_subject": "ELECTIONS",
+      "required_subjects": [
+        "ELECTIONS"
+      ],
+      "campus_state": "CONFIRMED",
+      "institution_hint": "University A",
+      "reason": "The material proposition concerns student voting procedures at the institution."
+    },
+    {
+      "id": "campus_tuition",
+      "claim_text": "University A announced higher tuition rates for the next academic year.",
+      "primary_subject": "EDUCATION",
+      "required_subjects": [
+        "EDUCATION"
+      ],
+      "campus_state": "CONFIRMED",
+      "institution_hint": "University A",
+      "reason": "The material proposition concerns tuition policy for students."
+    },
+    {
+      "id": "campus_team_win",
+      "claim_text": "University A basketball team won the intercollegiate final on Sunday.",
+      "primary_subject": "SPORTS",
+      "required_subjects": [
+        "SPORTS"
+      ],
+      "campus_state": "CONFIRMED",
+      "institution_hint": "University A",
+      "reason": "The material proposition concerns a campus sports team result."
+    },
+    {
+      "id": "campus_clinic",
+      "claim_text": "University A campus clinic changed its vaccination appointment rules.",
+      "primary_subject": "HEALTH",
+      "required_subjects": [
+        "HEALTH"
+      ],
+      "campus_state": "CONFIRMED",
+      "institution_hint": "University A",
+      "reason": "Campus-specific medical service policy, not an education claim."
+    },
+    {
+      "id": "campus_flood",
+      "claim_text": "University A cancelled classes following flooding in the campus grounds.",
+      "primary_subject": "EDUCATION",
+      "required_subjects": [
+        "EDUCATION"
+      ],
+      "campus_state": "CONFIRMED",
+      "institution_hint": "University A",
+      "reason": "The material proposition is the university decision to cancel classes; flooding explains the decision but is not itself the disputed event."
+    },
+    {
+      "id": "campus_flood_evacuation",
+      "claim_text": "University A ordered dormitory residents to evacuate after floodwaters entered the campus.",
+      "primary_subject": "DISASTERS",
+      "required_subjects": [
+        "DISASTERS"
+      ],
+      "campus_state": "CONFIRMED",
+      "institution_hint": "University A",
+      "reason": "The material proposition is an emergency evacuation caused by campus flooding."
+    },
+    {
+      "id": "campus_admin",
+      "claim_text": "University A student government changed its rules for approving funding for recognized student clubs.",
+      "primary_subject": "CIVICS",
+      "required_subjects": [
+        "CIVICS"
+      ],
+      "campus_state": "CONFIRMED",
+      "institution_hint": "University A",
+      "reason": "The proposition concerns a formal student-governance decision, not ordinary university administration."
+    },
+    {
+      "id": "campus_culture",
+      "claim_text": "University A cancelled its annual campus music festival this weekend.",
+      "primary_subject": "CULTURE",
+      "required_subjects": [
+        "CULTURE"
+      ],
+      "campus_state": "CONFIRMED",
+      "institution_hint": "University A",
+      "reason": "Campus event, with a material cultural-event proposition."
+    },
+    {
+      "id": "university_research",
+      "claim_text": "University A researchers reported atmospheric water vapor on a distant planet.",
+      "primary_subject": "SCIENCE",
+      "required_subjects": [
+        "SCIENCE"
+      ],
+      "campus_state": "NOT_APPLICABLE",
+      "institution_hint": null,
+      "reason": "University authorship alone does not make a generally scientific discovery campus affairs."
+    },
+    {
+      "id": "university_medical_research",
+      "claim_text": "Researchers from University A reported evidence about vaccine effectiveness worldwide.",
+      "primary_subject": "HEALTH",
+      "required_subjects": [
+        "HEALTH"
+      ],
+      "campus_state": "NOT_APPLICABLE",
+      "institution_hint": null,
+      "reason": "The research finding is about worldwide health, not campus operations."
+    },
+    {
+      "id": "student_scholarship",
+      "claim_text": "University A changed the eligibility rules for its sports scholarships.",
+      "primary_subject": "EDUCATION",
+      "required_subjects": [
+        "EDUCATION"
+      ],
+      "campus_state": "CONFIRMED",
+      "institution_hint": "University A",
+      "reason": "The proposition concerns scholarship eligibility, not a competition."
+    },
+    {
+      "id": "court_ruling",
+      "claim_text": "The Supreme Court issued a ruling on the challenged election law yesterday.",
+      "primary_subject": "LAW",
+      "required_subjects": [
+        "LAW"
+      ],
+      "campus_state": "NOT_APPLICABLE",
+      "institution_hint": null,
+      "reason": "The claimed event is a judicial decision rather than the conduct of an election."
+    },
+    {
+      "id": "government_inflation",
+      "claim_text": "The national statistical agency reported a rise in consumer prices this month.",
+      "primary_subject": "ECONOMY",
+      "required_subjects": [
+        "ECONOMY"
+      ],
+      "campus_state": "NOT_APPLICABLE",
+      "institution_hint": null,
+      "reason": "The proposition concerns inflation, not the agency itself."
+    },
+    {
+      "id": "cybersecurity",
+      "claim_text": "The hospital reported that ransomware disabled its electronic records platform.",
+      "primary_subject": "TECHNOLOGY",
+      "required_subjects": [
+        "TECHNOLOGY"
+      ],
+      "campus_state": "NOT_APPLICABLE",
+      "institution_hint": null,
+      "reason": "The disputed event is a cybersecurity incident affecting a digital system."
+    },
+    {
+      "id": "pollution",
+      "claim_text": "Scientists reported unusually high pollution levels in the river downstream.",
+      "primary_subject": "ENVIRONMENT",
+      "required_subjects": [
+        "ENVIRONMENT"
+      ],
+      "campus_state": "NOT_APPLICABLE",
+      "institution_hint": null,
+      "reason": "The proposition concerns environmental pollution, not necessarily a disaster."
+    },
+    {
+      "id": "election_candidate",
+      "claim_text": "Election officials announced a new deadline for candidate registrations.",
+      "primary_subject": "ELECTIONS",
+      "required_subjects": [
+        "ELECTIONS"
+      ],
+      "campus_state": "NOT_APPLICABLE",
+      "institution_hint": null,
+      "reason": "The proposition concerns the electoral process."
+    },
+    {
+      "id": "film_award",
+      "claim_text": "The national film festival announced the winning film awards this week.",
+      "primary_subject": "CULTURE",
+      "required_subjects": [
+        "CULTURE"
+      ],
+      "campus_state": "NOT_APPLICABLE",
+      "institution_hint": null,
+      "reason": "The material claim is about an entertainment award event."
+    },
+    {
+      "id": "civic_services",
+      "claim_text": "The city government moved its permit application service to a new office.",
+      "primary_subject": "CIVICS",
+      "required_subjects": [
+        "CIVICS"
+      ],
+      "campus_state": "NOT_APPLICABLE",
+      "institution_hint": null,
+      "reason": "The proposition is about administrative public service delivery."
+    },
+    {
+      "id": "school_curriculum",
+      "claim_text": "The education ministry changed required mathematics subjects for secondary schools.",
+      "primary_subject": "EDUCATION",
+      "required_subjects": [
+        "EDUCATION"
+      ],
+      "campus_state": "NOT_APPLICABLE",
+      "institution_hint": null,
+      "reason": "The proposition concerns curriculum requirements."
+    },
+    {
+      "id": "scientific_experiment",
+      "claim_text": "Astronomers reported a new observation of the planet transit using telescope data.",
+      "primary_subject": "SCIENCE",
+      "required_subjects": [
+        "SCIENCE"
+      ],
+      "campus_state": "NOT_APPLICABLE",
+      "institution_hint": null,
+      "reason": "The proposition is a scientific observation."
+    },
+    {
+      "id": "sports_result",
+      "claim_text": "The visiting volleyball team won the national championship in the final set.",
+      "primary_subject": "SPORTS",
+      "required_subjects": [
+        "SPORTS"
+      ],
+      "campus_state": "NOT_APPLICABLE",
+      "institution_hint": null,
+      "reason": "The factual proposition is a sports result."
+    },
+    {
+      "id": "emergency",
+      "claim_text": "Emergency officials ordered an evacuation after a volcanic alert was raised.",
+      "primary_subject": "DISASTERS",
+      "required_subjects": [
+        "DISASTERS"
+      ],
+      "campus_state": "NOT_APPLICABLE",
+      "institution_hint": null,
+      "reason": "The proposition is about an emergency response."
+    },
+    {
+      "id": "cross_campaign_ai",
+      "claim_text": "Election officials investigated AI-generated campaign advertisements distributed during the parliamentary vote.",
+      "primary_subject": "ELECTIONS",
+      "required_subjects": [
+        "ELECTIONS",
+        "TECHNOLOGY"
+      ],
+      "campus_state": "NOT_APPLICABLE",
+      "institution_hint": null,
+      "reason": "The election process is the primary public topic, while the disputed use of AI-generated campaign material also requires technology expertise."
+    },
+    {
+      "id": "cross_privacy_law",
+      "claim_text": "A court ordered a social-media platform to disable a facial-recognition login feature after finding that its biometric data collection violated privacy law.",
+      "primary_subject": "LAW",
+      "required_subjects": [
+        "LAW",
+        "TECHNOLOGY"
+      ],
+      "campus_state": "NOT_APPLICABLE",
+      "institution_hint": null,
+      "reason": "The court order and privacy-law finding are primary, while the disputed facial-recognition system is a material technology component of the same proposition."
+    },
+    {
+      "id": "cross_emergency_health",
+      "claim_text": "Public health officials warned of waterborne illness as emergency teams coordinated flood evacuations.",
+      "primary_subject": "HEALTH",
+      "required_subjects": [
+        "HEALTH",
+        "DISASTERS"
+      ],
+      "campus_state": "NOT_APPLICABLE",
+      "institution_hint": null,
+      "reason": "The warning is primarily a public-health claim, while the flood evacuation is a material emergency component rather than incidental context."
+    },
+    {
+      "id": "cross_school_environment",
+      "claim_text": "The education board suspended outdoor classes after environmental monitors reported unsafe air-pollution levels around district schools.",
+      "primary_subject": "EDUCATION",
+      "required_subjects": [
+        "EDUCATION",
+        "ENVIRONMENT"
+      ],
+      "campus_state": "NOT_APPLICABLE",
+      "institution_hint": null,
+      "reason": "The school suspension is the primary education action, while the asserted unsafe pollution level is a material environmental condition needed to assess the same proposition."
+    },
+    {
+      "id": "campus_unknown_institution",
+      "claim_text": "An unnamed college has increased its dormitory fees for next semester.",
+      "primary_subject": "EDUCATION",
+      "required_subjects": [
+        "EDUCATION"
+      ],
+      "campus_state": "CONFIRMED",
+      "institution_hint": null,
+      "reason": "Campus relevance is explicit but there is no verified institution identity."
+    },
+    {
+      "id": "ambiguous_campus",
+      "claim_text": "The organizers changed the schedule for a university-related gathering.",
+      "primary_subject": null,
+      "required_subjects": [],
+      "campus_state": "UNCERTAIN",
+      "institution_hint": null,
+      "reason": "The stated gathering is too vague to establish a particular investigation subject or institutional impact."
+    },
+    {
+      "id": "unsupported_claim",
+      "claim_text": "Something important happened somewhere recently according to an unnamed post.",
+      "primary_subject": null,
+      "required_subjects": [],
+      "campus_state": "NOT_APPLICABLE",
+      "institution_hint": null,
+      "reason": "The submitted text does not identify a specific supported factual topic."
+    },
+    {
+      "id": "campus_external_election",
+      "claim_text": "The national election voting center at University A will open an hour earlier.",
+      "primary_subject": "ELECTIONS",
+      "required_subjects": [
+        "ELECTIONS"
+      ],
+      "campus_state": "NOT_APPLICABLE",
+      "institution_hint": null,
+      "reason": "A national election site happens to be on campus but the assertion is not about university governance or the campus community as such."
+    }
+  ]
+}
