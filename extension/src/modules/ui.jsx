@@ -612,7 +612,7 @@ export function displayDeepfakeResultCard(data) {
       : null;
    const hasSignalDecision = typeof data?.is_fake === "boolean";
    const detected = data?.is_fake === true;
-   const summary = nonblankText(data?.summary) || "No detailed model explanation is available.";
+   const summary = nonblankText(data?.summary) || "No detailed AI analysis is available.";
    const signalLabel = !hasSignalDecision
       ? "AI-generation signal result unavailable"
       : detected
@@ -643,12 +643,12 @@ export function displayDeepfakeResultCard(data) {
                </span>
                <strong id="truthlens-media-signal-title">${signalLabel}</strong>
             </div>
-            <p>This is a model estimate, not proof that the image is authentic or fabricated.</p>
+            <p>This is an automated estimate, not proof that the image is AI-generated or authentic.</p>
          </section>
 
          <section class="truthlens-media-likelihood" aria-labelledby="truthlens-media-likelihood-title">
             <div class="truthlens-media-likelihood-heading">
-               <span id="truthlens-media-likelihood-title">Model-estimated AI-generation likelihood</span>
+               <span id="truthlens-media-likelihood-title">Estimated AI-generation likelihood</span>
                <strong>${percentage === null ? "Unavailable" : `${percentage}%`}</strong>
             </div>
             <div class="truthlens-media-likelihood-bar" aria-hidden="true">
@@ -661,7 +661,7 @@ export function displayDeepfakeResultCard(data) {
 
          <section class="truthlens-summary-box truthlens-media-explanation" aria-labelledby="truthlens-media-explanation-title">
             <div id="truthlens-media-explanation-title" class="truthlens-summary-title">
-               ${iconSparkles} MODEL EXPLANATION
+               ${iconSparkles} AI ANALYSIS
             </div>
             <div class="truthlens-summary-text">${escapeHtml(summary)}</div>
          </section>
