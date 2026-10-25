@@ -689,10 +689,10 @@ class OrganizationInvitation(models.Model):
                     "organization",
                 ],
                 condition=Q(
-                    purpose="PRIMARY_ADMIN_ONBOARDING",
+                    purpose="ORGANIZATION_ADMIN_ONBOARDING",
                     status="PENDING",
                 ),
-                name=("unique_pending_primary_admin_" "invite_org"),
+                name=("unique_pending_org_admin_" "invite_org"),
             ),
         ]
 
