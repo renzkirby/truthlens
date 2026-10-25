@@ -267,15 +267,16 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
     primary_admin = serializers.SerializerMethodField()
 
     def get_organization_admin(self, obj):
-        membership = (
+        current_admins = (
             obj.memberships.select_related("user")
             .filter(role=OrganizationMembership.Role.ADMIN)
             .exclude(status=OrganizationMembership.Status.LEFT)
-            .first()
         )
+        membership = current_admins.first()
         if membership is not None:
             return {
                 "state": "CURRENT",
+                "current_count": current_admins.count(),
                 "membership": ManagementOrganizationAdminMembershipSerializer(
                     membership
                 ).data,
@@ -297,13 +298,19 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
         if invitation is not None:
             return {
                 "state": "PENDING",
+                "current_count": 0,
                 "membership": None,
                 "invitation": ManagementOrganizationAdminInvitationSerializer(
                     invitation
                 ).data,
             }
 
-        return {"state": "NONE", "membership": None, "invitation": None}
+        return {
+            "state": "NONE",
+            "current_count": 0,
+            "membership": None,
+            "invitation": None,
+        }
 
     def get_primary_admin(self, obj):
         return self.get_organization_admin(obj)
