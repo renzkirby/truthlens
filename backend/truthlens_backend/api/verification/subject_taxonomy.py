@@ -1,8 +1,11 @@
-"""Proposed, offline-only subject taxonomy for TruthLens.
+"""TruthLens subject-taxonomy vocabulary and public grouping helpers.
 
-This module is a reviewable vocabulary, NOT an active classifier, source of
-verification authority, partner-intake policy, or public feed filter. Existing
-classification and authorization contracts remain unchanged.
+The rubric remains a reviewable design artifact, not an active classifier,
+source of verification authority, or partner-intake policy. Community feed
+projection/filtering may use these public grouping helpers only with persisted
+authoritative classifications; multi-domain rows are not assigned a guessed
+primary topic. Existing classification and authorization contracts remain
+unchanged.
 """
 
 from dataclasses import dataclass
