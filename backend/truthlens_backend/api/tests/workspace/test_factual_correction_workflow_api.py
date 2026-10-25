@@ -223,6 +223,14 @@ class FactualCorrectionWorkflowApiTests(
             ).status_code,
             status.HTTP_404_NOT_FOUND,
         )
+        OrganizationMembership.objects.filter(
+            organization=self.other_organization,
+            user=self.lead,
+        ).update(status=OrganizationMembership.Status.LEFT)
+        OrganizationMembership.objects.filter(
+            organization=self.organization,
+            user=self.lead,
+        ).update(status=OrganizationMembership.Status.ACTIVE)
 
         duplicate = self.make_published_context(suffix="api-request-duplicate")
         first = self.client_for(self.lead).post(
