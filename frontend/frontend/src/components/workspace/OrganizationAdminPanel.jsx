@@ -1634,8 +1634,8 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                               ) : (
                                  <span className="org-member-protected-label">
                                     {membership.role === "OWNER"
-                                       ? "Primary Admin protected"
-                                       : "Managed by Primary Admin"}
+                                       ? "Administrator protected"
+                                       : "Managed by Administrator"}
                                  </span>
                               )}
                            </div>
