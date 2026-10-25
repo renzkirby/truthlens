@@ -919,10 +919,10 @@ class DeveloperConsoleTests(TestCase):
             OrganizationInvitation.Status.PENDING,
         )
 
-    def test_owner_storage_and_existing_permission_semantics_are_preserved(self):
+    def test_admin_storage_and_management_permission_semantics_are_preserved(self):
         self.owner_membership.refresh_from_db()
 
-        self.assertEqual(self.owner_membership.role, "OWNER")
+        self.assertEqual(self.owner_membership.role, "ADMIN")
         self.assertTrue(
             has_capability(
                 self.owner,
@@ -938,12 +938,12 @@ class DeveloperConsoleTests(TestCase):
             )
         )
 
-    def test_ordinary_owner_invitation_remains_forbidden(self):
+    def test_retired_owner_invitation_remains_forbidden(self):
         with self.assertRaises(InvalidOrganizationInvitationRole):
             create_organization_invitation(
                 organization=self.organization,
                 email="second-owner@example.com",
-                invited_role=OrganizationMembership.Role.ADMIN,
+                invited_role=OrganizationMembership.Role.OWNER,
                 actor=self.owner,
             )
 
