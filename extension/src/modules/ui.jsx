@@ -119,6 +119,77 @@ function safeHttpUrl(value) {
    }
 }
 
+function normalizeEvidenceSources(sources, sourceUrl) {
+   const candidates = Array.isArray(sources) && sources.length > 0 ? sources : sourceUrl ? [sourceUrl] : [];
+   const seen = new Set();
+   const normalized = [];
+
+   for (const source of candidates) {
+      const rawUrl = typeof source === "string" ? source : isRecord(source) ? source.url : null;
+      const url = safeHttpUrl(rawUrl);
+      if (!url || seen.has(url)) continue;
+
+      seen.add(url);
+
+      let title = isRecord(source) ? nonblankText(source.title).trim() : "";
+      if (!title) {
+         try {
+            title = new URL(url).hostname.replace(/^www\./i, "");
+         } catch {
+            title = "External source";
+         }
+      }
+
+      normalized.push({ url, title });
+   }
+
+   return normalized;
+}
+
+function compactSourcesHTML({ sources, sourceUrl, moreUrl = null, moreLabel = "full report" }) {
+   const normalizedSources = normalizeEvidenceSources(sources, sourceUrl);
+   if (!normalizedSources.length) return "";
+
+   const visibleSources = normalizedSources.slice(0, 3);
+   const remainingCount = normalizedSources.length - visibleSources.length;
+   const safeMoreUrl = safeHttpUrl(moreUrl);
+
+   const sourceLinks = visibleSources
+      .map(
+         (source) => `
+            <a
+               class="truthlens-source-link"
+               href="${escapeHtml(source.url)}"
+               target="_blank"
+               rel="noopener noreferrer"
+               title="${escapeHtml(source.url)}"
+            >
+               <span>${escapeHtml(source.title)}</span>
+               ${iconExternal}
+            </a>
+         `,
+      )
+      .join("");
+
+   let moreHTML = "";
+   if (remainingCount > 0) {
+      const countLabel = `+${remainingCount} more ${remainingCount === 1 ? "source" : "sources"}`;
+      moreHTML = safeMoreUrl
+         ? `<p class="truthlens-source-more">${countLabel} in <a href="${escapeHtml(safeMoreUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(moreLabel)}</a>.</p>`
+         : `<p class="truthlens-source-more">${countLabel} available.</p>`;
+   }
+
+   return `
+      <section class="truthlens-compact-sources" aria-label="Sources">
+         <strong class="truthlens-source-heading">Sources</strong>
+         <div class="truthlens-source-list">
+            ${sourceLinks}
+         </div>
+         ${moreHTML}
+      </section>
+   `;
+}
+
 function communityBaseUrl() {
    const safeUrl = safeHttpUrl(COMMUNITY_PLATFORM_URL);
    if (!safeUrl) return null;
@@ -404,47 +475,15 @@ export function displayResultCard(claim) {
    const displayVerdict = final_verdict || verdict;
    const ui = getVerdictUI(displayVerdict);
 
-   // 1. Generate Sources HTML
-   let sourcesHTML = "";
-   const evidenceList = sources && sources.length > 0 ? sources : source_url ? [source_url] : [];
-
-   if (displayVerdict !== "OUT_OF_SCOPE" && evidenceList.length > 0) {
-      sourcesHTML = `
-         <div style="margin-top: 12px; margin-bottom: 16px; font-size: 11px;">
-            <strong style="color: #374151; display: block; margin-bottom: 4px;">Sources:</strong>
-            
-            <div style="display: flex; flex-direction: column; gap: 4px; max-height: 110px; overflow-y: auto; padding-right: 4px;">
-            ${evidenceList
-               .map((src) => {
-                  const urlStr = typeof src === "string" ? src : src.url;
-
-                  // 1. Skip rendering if the URL is empty or a placeholder
-                  if (!urlStr || urlStr === "#") return "";
-
-                  // 2. Safely determine the display title
-                  let displayTitle = urlStr;
-                  if (typeof src === "object" && src.title) {
-                     displayTitle = src.title;
-                  } else if (urlStr.startsWith("http")) {
-                     try {
-                        displayTitle = new URL(urlStr).hostname.replace("www.", "");
-                     } catch {
-                        displayTitle = urlStr;
-                     }
-                  }
-
-                  // 3. Return the anchor tag
-                  return `
-               <a href="${urlStr}" target="_blank" title="${urlStr}" style="color: #4f46e5; text-decoration: none; background: #f9fafb; padding: 6px 10px; border-radius: 6px; border: 1px solid #e5e7eb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; font-weight: 600;">
-                  ${displayTitle}
-               </a>
-               `;
-               })
-               .join("")}
-            </div>
-         </div>
-      `;
-   }
+   const sourcesHTML =
+      displayVerdict === "OUT_OF_SCOPE"
+         ? ""
+         : compactSourcesHTML({
+              sources,
+              sourceUrl: source_url,
+              moreUrl: deepAnalysisUrl,
+              moreLabel: "full report",
+           });
 
    // 2. Dynamic Button Logic
    let primaryButtonHTML = "";
@@ -872,41 +911,18 @@ export function displayCachedResultCard(match) {
          `;
    }
 
-   let sourcesHTML = "";
-   const evidenceList = sources && sources.length > 0 ? sources : source_url ? [source_url] : [];
-
-   if (displayVerdict !== "OUT_OF_SCOPE" && evidenceList.length > 0) {
-      sourcesHTML = `
-            <div style="margin-top: 12px; margin-bottom: 16px; font-size: 11px;">
-               <strong style="color: #374151; display: block; margin-bottom: 4px;">Sources:</strong>
-               
-               <div style="display: flex; flex-direction: column; gap: 4px; max-height: 110px; overflow-y: auto; padding-right: 4px;">
-                  ${evidenceList
-                     .map((src) => {
-                        const urlStr = typeof src === "string" ? src : src.url;
-
-                        // NEW: Try to use the article title. If it doesn't exist, extract the clean domain name (e.g., "gmanetwork.com")
-                        let displayTitle = urlStr;
-                        try {
-                           displayTitle =
-                              typeof src === "object" && src.title
-                                 ? src.title
-                                 : new URL(urlStr).hostname.replace("www.", "");
-                        } catch {
-                           displayTitle = urlStr;
-                        }
-
-                        return `
-                     <a href="${urlStr}" target="_blank" title="${urlStr}" style="color: #4f46e5; text-decoration: none; background: #f9fafb; padding: 6px 10px; border-radius: 6px; border: 1px solid #e5e7eb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; font-weight: 600;">
-                        ${displayTitle}
-                     </a>
-                     `;
-                     })
-                     .join("")}
-               </div>
-            </div>
-         `;
-   }
+   const cachedAnalysisId = pathComponent(claim_id || match.id);
+   const cachedBaseUrl = communityBaseUrl();
+   const cachedAnalysisUrl = cachedBaseUrl && cachedAnalysisId ? `${cachedBaseUrl}/analysis/${cachedAnalysisId}` : null;
+   const sourcesHTML =
+      displayVerdict === "OUT_OF_SCOPE"
+         ? ""
+         : compactSourcesHTML({
+              sources,
+              sourceUrl: source_url,
+              moreUrl: cachedAnalysisUrl,
+              moreLabel: "full report",
+           });
 
    const card = document.createElement("div");
    card.id = "truthlens-result-card";
