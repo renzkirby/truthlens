@@ -692,6 +692,8 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         self.save_claim.assert_called_once_with(
             self.claim.pk, self.verdict, "Live Web Search",
             self.cleaned["cleaned_claim"], expected_sources,
+            related_proposition=self.cleaned["cleaned_claim"],
+            related_candidate=None,
         )
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, self.verdict["verdict"])
