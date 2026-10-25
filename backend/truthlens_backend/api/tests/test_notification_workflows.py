@@ -974,16 +974,16 @@ class MembershipNotificationTests(TestCase):
             verification_status=Organization.VerificationStatus.VERIFIED,
             partner_status=Organization.PartnerStatus.ACTIVE)
         OrganizationMembership.objects.create(organization=self.organization, user=self.owner,
-            role=OrganizationMembership.Role.OWNER, status=OrganizationMembership.Status.ACTIVE)
+            role=OrganizationMembership.Role.ADMIN, status=OrganizationMembership.Status.ACTIVE)
         self.membership = OrganizationMembership.objects.create(organization=self.organization, user=self.user,
-            role=OrganizationMembership.Role.CONTRIBUTOR, status=OrganizationMembership.Status.ACTIVE)
+            role=OrganizationMembership.Role.RESEARCHER, status=OrganizationMembership.Status.ACTIVE)
 
     def change(self, service, **kwargs):
         return service(organization=self.organization, membership_id=self.membership.pk, actor=self.owner, **kwargs)
 
     def test_role_suspend_restore_and_remove_notify_affected_user(self):
         transitions = (
-            (change_organization_membership_role, {"role": OrganizationMembership.Role.RESEARCHER}, "role has changed"),
+            (change_organization_membership_role, {"role": OrganizationMembership.Role.VERIFICATION_REVIEWER}, "role has changed"),
             (suspend_organization_membership, {}, "suspended"),
             (restore_organization_membership, {}, "restored"),
             (suspend_organization_membership, {}, "suspended"),
