@@ -482,6 +482,7 @@ export function displayResultCard(claim) {
       source_type,
       resolution_source,
       score_context,
+      adjudication_review,
    } = claim;
    const id = pathComponent(claim.claim_id || claim.id);
    const baseUrl = communityBaseUrl();
@@ -492,18 +493,12 @@ export function displayResultCard(claim) {
    const isAdjudicated = resolution_source === "ADJUDICATION" && Boolean(final_verdict);
    const confidenceValue = Number(confidence_score);
    const hasConfidence = Number.isFinite(confidenceValue);
-
-   const provenanceHTML = isAdjudicated
-      ? `
-         <section class="truthlens-result-provenance" aria-label="Verdict provenance">
-            <span class="truthlens-result-provenance-icon" aria-hidden="true">${iconShield}</span>
-            <div>
-               <strong>Partner adjudication</strong>
-               <p>The verdict shown above comes from partner adjudication. The AI summary below is preserved from the earlier automated analysis.</p>
-            </div>
-         </section>
-      `
-      : "";
+   const adjudicationReview = isRecord(adjudication_review) ? adjudication_review : {};
+   const decisionRationale = nonblankText(adjudicationReview.rationale);
+   const reviewOrganization = isRecord(adjudicationReview.organization)
+      ? adjudicationReview.organization
+      : {};
+   const reviewOrganizationName = nonblankText(reviewOrganization.name);
 
    const sourcesHTML =
       displayVerdict === "OUT_OF_SCOPE"
@@ -562,9 +557,10 @@ export function displayResultCard(claim) {
    const sourceTypeText = nonblankText(source_type);
    const sourceMetadataHTML = isAdjudicated
       ? `
-         <div class="truthlens-result-source-meta">
-            <div><strong>Verdict Source</strong><span>Partner Adjudication</span></div>
-            ${sourceTypeText ? `<div><strong>Prior AI Source Type</strong><span>${escapeHtml(sourceTypeText)}</span></div>` : ""}
+         <div class="truthlens-result-source-meta" aria-label="Review provenance">
+            ${reviewOrganizationName
+               ? `<div><strong>Reviewed by</strong><span>${escapeHtml(reviewOrganizationName)}</span></div>`
+               : `<div><strong>Partner Reviewed</strong></div>`}
          </div>
       `
       : sourceTypeText
@@ -618,13 +614,15 @@ export function displayResultCard(claim) {
             ${ui.icon} ${ui.text}
          </div>
 
-         ${provenanceHTML}
-
          <div class="truthlens-summary-box">
             <div class="truthlens-summary-title">
-               ${iconSparkles} ${isAdjudicated ? "PRIOR AI SUMMARY" : "AI SUMMARY"}
+               ${isAdjudicated ? iconShield : iconSparkles} ${isAdjudicated ? "DECISION RATIONALE" : "AI SUMMARY"}
             </div>
-            <div class="truthlens-summary-text">${escapeHtml(summary || "No summary available.")}</div>
+            <div class="truthlens-summary-text">${escapeHtml(
+               isAdjudicated
+                  ? decisionRationale || "This claim was reviewed by a TruthLens partner organization."
+                  : summary || "No summary available.",
+            )}</div>
          </div>
 
          ${confidenceHTML}
