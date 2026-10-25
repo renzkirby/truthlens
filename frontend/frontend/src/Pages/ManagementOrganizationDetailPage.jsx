@@ -212,7 +212,7 @@ function VerificationScopeSection({ organization }) {
    );
 }
 
-function PrimaryAdminState({
+function OrganizationAdminState({
    organizationId,
    primaryAdmin,
    onRefresh,
@@ -282,14 +282,15 @@ function PrimaryAdminState({
       return (
          <>
             <div className="management-section__title-row">
-               <h2>Organization Admin</h2>
+               <h2>Organization Admins</h2>
                <ManagementStatus value={membership.status} />
             </div>
             <p className="management-section__description">
-               Highest organization authority within TruthLens. This role does not imply legal or business ownership of the organization.
+               Platform onboarding is complete. Additional Admins are managed through the organization's membership controls.
             </p>
             <DetailList items={[
-               { label: "Username", value: `@${membership.user.username}` },
+               { label: "Current Admins", value: String(primaryAdmin.current_count || 1) },
+               { label: "Admin record", value: `@${membership.user.username}` },
                { label: "Email", value: membership.user.email },
                { label: "Role", value: membership.role_label },
                { label: "Joined", node: formatManagementDate(membership.joined_at) },
@@ -371,8 +372,10 @@ function PrimaryAdminState({
 
    return (
       <>
-         <h2>Organization Admin</h2>
-         <p className="management-section__description">Highest organization authority within TruthLens.</p>
+         <h2>Organization Admin onboarding</h2>
+         <p className="management-section__description">
+            Provision the organization's first Admin. Additional Admins can be invited later by an existing Admin.
+         </p>
          {!provisioningOpen ? (
             <div className="management-empty-action">
                <p>Not yet assigned</p>
@@ -389,7 +392,7 @@ function PrimaryAdminState({
          ) : (
             <form className="management-provision-form" onSubmit={submitProvision}>
                <div className="management-provision-form__intro">
-                  <strong>Invite the organization’s first Organization Admin</strong>
+                  <strong>Invite the organization’s first Admin</strong>
                   <p>
                      The recipient uses their own TruthLens account, and the invited email must match their verified account when accepting. TruthLens does not create or know their password. This role does not imply legal or business ownership.
                   </p>
@@ -472,7 +475,7 @@ function ManagementOrganizationDetailPage() {
                   />
                   <VerificationScopeSection organization={data} />
                   <section className="management-detail-section">
-                     <PrimaryAdminState
+                     <OrganizationAdminState
                         organizationId={data.id}
                         primaryAdmin={data.organization_admin ?? data.primary_admin}
                         onRefresh={retry}
