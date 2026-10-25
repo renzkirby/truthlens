@@ -4,7 +4,6 @@ import "@fontsource-variable/mona-sans/wght.css";
 import {
    Sparkles,
    ShieldCheck,
-   Flag,
    CheckCircle,
    XCircle,
    AlertTriangle,
@@ -17,11 +16,11 @@ import {
 import { state } from "./state.js";
 
 const COMMUNITY_PLATFORM_URL = state.WEB_APP_BASE_URL;
+const TRUTHLENS_LOGO_URL = chrome.runtime.getURL("truthlens_logo.png");
 
 // Pre-render icons
 const iconSparkles = renderToString(React.createElement(Sparkles, { size: 14 }));
 const iconShield = renderToString(React.createElement(ShieldCheck, { size: 16 }));
-const iconFlag = renderToString(React.createElement(Flag, { size: 16 }));
 const iconCheck = renderToString(React.createElement(CheckCircle, { size: 16 }));
 const iconX = renderToString(React.createElement(XCircle, { size: 16 }));
 const iconAlert = renderToString(React.createElement(AlertTriangle, { size: 16 }));
@@ -84,6 +83,15 @@ function getVerdictUI(verdict) {
 function escapeHtml(value) {
    const entities = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
    return String(value ?? "").replace(/[&<>"']/g, (character) => entities[character]);
+}
+
+function truthLensBrandHTML() {
+   return `
+      <div class="truthlens-brand-title" aria-label="TruthLens">
+         <img class="truthlens-brand-logo" src="${escapeHtml(TRUTHLENS_LOGO_URL)}" alt="" aria-hidden="true">
+         <span>TruthLens</span>
+      </div>
+   `;
 }
 
 function nonblankText(value) {
@@ -470,8 +478,6 @@ export function displayResultCard(claim) {
 
    const displayVerdict = final_verdict || verdict;
    const ui = getVerdictUI(displayVerdict);
-   const headerLabel = displayVerdict === "OUT_OF_SCOPE" ? "ANALYSIS COMPLETE" : "CLAIM FLAGGED";
-   const headerIcon = displayVerdict === "OUT_OF_SCOPE" ? iconHelp : iconFlag;
 
    const sourcesHTML =
       displayVerdict === "OUT_OF_SCOPE"
@@ -549,9 +555,7 @@ export function displayResultCard(claim) {
 
    card.innerHTML = `
       <div class="truthlens-header">
-         <div class="truthlens-title" style="color: ${ui.color};">
-            ${headerIcon} ${headerLabel}
-         </div>
+         ${truthLensBrandHTML()}
          <button id="truthlens-close-btn" class="truthlens-close-btn" aria-label="Close verification result">&times;</button>
       </div>
 
@@ -981,8 +985,8 @@ export function displayCachedResultCard(match) {
 
    card.innerHTML = `
       <div class="truthlens-header">
-         <strong class="truthlens-title">TruthLens</strong>
-         <button id="truthlens-close-btn" class="truthlens-close-btn">&times;</button>
+         ${truthLensBrandHTML()}
+         <button id="truthlens-close-btn" class="truthlens-close-btn" aria-label="Close verification result">&times;</button>
       </div>
 
       <div style="overflow-y: auto; padding-right: 4px; overflow-x: hidden;">
