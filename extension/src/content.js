@@ -221,7 +221,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       sendResponse({ success: true });
    }
 
-   if (request.type === "DISPLAY_SNIPPET_RESULT") {
+   if (request.type === "DISPLAY_SNIPPET_RESULT" || request.type === "DISPLAY_IMAGE_RESULT") {
       import("./modules/ui.jsx").then(({ displayResultCard, removeLoadingCard, successCard }) => {
          setTimeout(() => {
             removeLoadingCard();
@@ -232,7 +232,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       sendResponse({ success: true });
    }
 
-   if (request.type === "DISPLAY_SNIPPET_CACHED_RESULT") {
+   if (request.type === "DISPLAY_SNIPPET_CACHED_RESULT" || request.type === "DISPLAY_IMAGE_CACHED_RESULT") {
       import("./modules/ui.jsx").then(({ displayResultCard, removeLoadingCard, successCard }) => {
          setTimeout(() => {
             removeLoadingCard();
@@ -254,7 +254,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       sendResponse({ success: true });
    }
 
-   if (request.type === "DISPLAY_SNIPPET_ERROR") {
+   if (request.type === "DISPLAY_SNIPPET_ERROR" || request.type === "DISPLAY_IMAGE_ERROR") {
       import("./modules/ui.jsx").then(({ removeLoadingCard, displayErrorCard }) => {
          removeLoadingCard();
          displayErrorCard(request.message || "Failed to analyze image. Please try again.");
