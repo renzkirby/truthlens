@@ -63,18 +63,56 @@
 
 .selected-file-display {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 8px;
   margin-top: 14px;
-  padding: 8px;
-  border-radius: 6px;
+  padding: 9px 10px;
+  border: 1px solid var(--tl-border);
+  border-radius: 8px;
   background: var(--tl-bg);
+  text-align: left;
   font-size: 11px;
 }
 
 .selected-file-display svg {
   flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--tl-primary);
 }
 
-.file-name-text { min-width: 0; overflow-wrap: anywhere; }
+.selected-file-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.selected-file-copy small {
+  color: var(--tl-text-secondary);
+  font-size: 10px;
+}
+
+.file-name-text {
+  min-width: 0;
+  color: var(--tl-text);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.file-upload-error {
+  margin: -4px 0 0;
+  padding: 9px 10px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.file-upload-note {
+  margin: -2px 0 0;
+  color: var(--tl-text-secondary);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
