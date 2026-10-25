@@ -479,6 +479,10 @@ class ThreadDetailApiTests(TestCase):
             partner_status=Organization.PartnerStatus.ACTIVE,
             public_profile_enabled=True,
         )
+        OrganizationMembership.objects.filter(
+            organization=self.organization,
+            user=self.reviewer,
+        ).update(status=OrganizationMembership.Status.LEFT)
         OrganizationMembership.objects.create(
             organization=publishing_organization,
             user=self.reviewer,
