@@ -7,6 +7,7 @@ import NavigationBar from "./components/NavigationBar";
 import FileUpload from "./pages/FileUpload";
 import SnippingTool from "./pages/SnippingTool";
 import UrlUpload from "./pages/UrlUpload";
+import TextVerify from "./pages/TextVerify";
 import DetectDeepfake from "./pages/DetectDeepfake";
 import { AUTH_STORAGE_KEYS, getAuthSession } from "./modules/auth.js";
 import { state } from "./modules/state.js";
@@ -292,6 +293,8 @@ function App() {
             return <FileUpload />;
          case "url-upload":
             return <UrlUpload />;
+         case "text-verify":
+            return <TextVerify />;
          default:
             return null;
       }

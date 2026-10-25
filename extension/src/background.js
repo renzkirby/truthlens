@@ -621,6 +621,69 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       return true;
    }
 
+   if (request.type === "VERIFY_IMAGE") {
+      const tabId = request.tabId ?? sender?.tab?.id;
+      const payload = request.payload;
+
+      if (!Number.isInteger(tabId)) {
+         sendResponse({
+            accepted: false,
+            error: "No active tab found for image verification.",
+         });
+         return false;
+      }
+
+      if (!payload?.image_data) {
+         sendResponse({
+            accepted: false,
+            error: "Missing image payload.",
+         });
+         return false;
+      }
+
+      sendResponse({ accepted: true });
+
+      (async () => {
+         try {
+            const res = await postJsonWithAuth("analyze/", payload);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+               throw new Error(data?.detail || data?.error || "Image verification failed.");
+            }
+
+            if (data.cached && data.match) {
+               cacheGuestScanIfCurrentGuest(data.match, "IMAGE").catch((cacheError) => {
+                  console.warn("Failed to cache guest image verdict:", cacheError);
+               });
+
+               sendTabMessage(tabId, {
+                  type: "DISPLAY_IMAGE_CACHED_RESULT",
+                  data: data.match,
+               });
+               return;
+            }
+
+            startPollingClaim({
+               claimId: data.claim_id,
+               tabId,
+               successType: "DISPLAY_IMAGE_RESULT",
+               timeoutMessage: "DISPLAY_IMAGE_ERROR",
+               onResolved: (claim) => cacheGuestScanIfCurrentGuest(claim, "IMAGE"),
+               maxPolls: 50,
+               pollEveryMs: 3000,
+            });
+         } catch (err) {
+            console.error("Image verification failed:", err);
+            sendTabMessage(tabId, {
+               type: "DISPLAY_IMAGE_ERROR",
+               message: err?.message || "Failed to analyze image. Please try again.",
+            });
+         }
+      })();
+
+      return true;
+   }
+
    if (request.type === "VERIFY_DEEPFAKE") {
       const tabId = request.tabId ?? sender?.tab?.id;
       const payload = request.payload;
@@ -688,6 +751,70 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             sendTabMessage(tabId, {
                type: "DISPLAY_URL_ERROR",
                message: "Unable to verify this URL. Please try again.",
+            });
+         }
+      })();
+
+      return true;
+   }
+
+   if (request.type === "VERIFY_TEXT") {
+      const tabId = request.tabId ?? sender?.tab?.id;
+      const text = typeof request.text === "string" ? request.text.trim() : "";
+
+      if (!Number.isInteger(tabId)) {
+         sendResponse({
+            accepted: false,
+            error: "No active tab found for text verification.",
+         });
+         return false;
+      }
+
+      if (!text) {
+         sendResponse({
+            accepted: false,
+            error: "Enter a claim or passage to verify.",
+         });
+         return false;
+      }
+
+      sendResponse({ accepted: true });
+
+      (async () => {
+         try {
+            const res = await postJsonWithAuth("verify-text/", { text });
+            const data = await res.json().catch(() => ({}));
+
+            if (!res.ok) {
+               throw new Error(data?.detail || data?.error || "Text verification failed.");
+            }
+
+            if (data.cached && data.match) {
+               cacheGuestScanIfCurrentGuest(data.match, "TEXT").catch((cacheError) => {
+                  console.warn("Failed to cache guest text verdict:", cacheError);
+               });
+
+               sendTabMessage(tabId, {
+                  type: "DISPLAY_TEXT_CACHED_RESULT",
+                  data: data.match,
+               });
+               return;
+            }
+
+            startPollingClaim({
+               claimId: data.claim_id,
+               tabId,
+               successType: "DISPLAY_TEXT_RESULT",
+               timeoutMessage: "DISPLAY_TEXT_ERROR",
+               onResolved: (claim) => cacheGuestScanIfCurrentGuest(claim, "TEXT"),
+               maxPolls: 50,
+               pollEveryMs: 3000,
+            });
+         } catch (err) {
+            console.error("Text verification failed:", err);
+            sendTabMessage(tabId, {
+               type: "DISPLAY_TEXT_ERROR",
+               message: err?.message || "Unable to verify this text. Please try again.",
             });
          }
       })();

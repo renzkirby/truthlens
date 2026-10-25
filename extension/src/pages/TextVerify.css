@@ -1,0 +1,64 @@
+.text-verify-page {
+  display: grid;
+  gap: 13px;
+}
+
+.text-verify-label {
+  color: var(--tl-text);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.text-verify-input-wrap {
+  position: relative;
+}
+
+.text-verify-input-icon {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  color: #9ca3af;
+  pointer-events: none;
+}
+
+.text-verify-input-wrap textarea {
+  width: 100%;
+  min-height: 132px;
+  resize: vertical;
+  padding: 10px 11px 10px 36px;
+  border: 1px solid var(--tl-border);
+  border-radius: 9px;
+  background: var(--tl-surface);
+  color: var(--tl-text);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.text-verify-input-wrap textarea::placeholder {
+  color: #9ca3af;
+}
+
+.text-verify-input-wrap textarea:focus {
+  border-color: #a5b4fc;
+  outline: 2px solid #e0e7ff;
+  outline-offset: 0;
+}
+
+.text-verify-help {
+  margin: -5px 0 0;
+  color: var(--tl-text-secondary);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.text-verify-error {
+  margin: -3px 0 0;
+  padding: 9px 10px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 11px;
+  line-height: 1.45;
+}

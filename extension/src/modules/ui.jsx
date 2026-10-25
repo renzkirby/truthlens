@@ -4,7 +4,6 @@ import "@fontsource-variable/mona-sans/wght.css";
 import {
    Sparkles,
    ShieldCheck,
-   Flag,
    CheckCircle,
    XCircle,
    AlertTriangle,
@@ -17,11 +16,11 @@ import {
 import { state } from "./state.js";
 
 const COMMUNITY_PLATFORM_URL = state.WEB_APP_BASE_URL;
+const TRUTHLENS_LOGO_URL = chrome.runtime.getURL("truthlens_logo.png");
 
 // Pre-render icons
 const iconSparkles = renderToString(React.createElement(Sparkles, { size: 14 }));
 const iconShield = renderToString(React.createElement(ShieldCheck, { size: 16 }));
-const iconFlag = renderToString(React.createElement(Flag, { size: 16 }));
 const iconCheck = renderToString(React.createElement(CheckCircle, { size: 16 }));
 const iconX = renderToString(React.createElement(XCircle, { size: 16 }));
 const iconAlert = renderToString(React.createElement(AlertTriangle, { size: 16 }));
@@ -86,6 +85,15 @@ function escapeHtml(value) {
    return String(value ?? "").replace(/[&<>"']/g, (character) => entities[character]);
 }
 
+function truthLensBrandHTML() {
+   return `
+      <div class="truthlens-brand-title" aria-label="TruthLens">
+         <img class="truthlens-brand-logo" src="${escapeHtml(TRUTHLENS_LOGO_URL)}" alt="" aria-hidden="true">
+         <span>TruthLens</span>
+      </div>
+   `;
+}
+
 function nonblankText(value) {
    return typeof value === "string" && value.trim() ? value : "";
 }
@@ -117,6 +125,77 @@ function safeHttpUrl(value) {
    } catch {
       return null;
    }
+}
+
+function normalizeEvidenceSources(sources, sourceUrl) {
+   const candidates = Array.isArray(sources) && sources.length > 0 ? sources : sourceUrl ? [sourceUrl] : [];
+   const seen = new Set();
+   const normalized = [];
+
+   for (const source of candidates) {
+      const rawUrl = typeof source === "string" ? source : isRecord(source) ? source.url : null;
+      const url = safeHttpUrl(rawUrl);
+      if (!url || seen.has(url)) continue;
+
+      seen.add(url);
+
+      let title = isRecord(source) ? nonblankText(source.title).trim() : "";
+      if (!title) {
+         try {
+            title = new URL(url).hostname.replace(/^www\./i, "");
+         } catch {
+            title = "External source";
+         }
+      }
+
+      normalized.push({ url, title });
+   }
+
+   return normalized;
+}
+
+function compactSourcesHTML({ sources, sourceUrl, moreUrl = null, moreLabel = "full report" }) {
+   const normalizedSources = normalizeEvidenceSources(sources, sourceUrl);
+   if (!normalizedSources.length) return "";
+
+   const visibleSources = normalizedSources.slice(0, 3);
+   const remainingCount = normalizedSources.length - visibleSources.length;
+   const safeMoreUrl = safeHttpUrl(moreUrl);
+
+   const sourceLinks = visibleSources
+      .map(
+         (source) => `
+            <a
+               class="truthlens-source-link"
+               href="${escapeHtml(source.url)}"
+               target="_blank"
+               rel="noopener noreferrer"
+               title="${escapeHtml(source.url)}"
+            >
+               <span>${escapeHtml(source.title)}</span>
+               ${iconExternal}
+            </a>
+         `,
+      )
+      .join("");
+
+   let moreHTML = "";
+   if (remainingCount > 0) {
+      const countLabel = `+${remainingCount} more ${remainingCount === 1 ? "source" : "sources"}`;
+      moreHTML = safeMoreUrl
+         ? `<p class="truthlens-source-more">${countLabel} in <a href="${escapeHtml(safeMoreUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(moreLabel)}</a>.</p>`
+         : `<p class="truthlens-source-more">${countLabel} available.</p>`;
+   }
+
+   return `
+      <section class="truthlens-compact-sources" aria-label="Sources">
+         <strong class="truthlens-source-heading">Sources</strong>
+         <div class="truthlens-source-list">
+            ${sourceLinks}
+         </div>
+         ${moreHTML}
+      </section>
+   `;
 }
 
 function communityBaseUrl() {
@@ -336,15 +415,11 @@ function displayPublishedResultCard(claim, publication) {
         : claim.source_url
           ? [claim.source_url]
           : [];
-   const sourceLinks = sources
-      .map((source) => {
-         const url = safeHttpUrl(typeof source === "string" ? source : isRecord(source) ? source.url : null);
-         if (!url) return "";
-         const title = (isRecord(source) && nonblankText(source.title)) || new URL(url).hostname;
-         return `<li><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(title)} ${iconExternal}</a></li>`;
-      })
-      .filter(Boolean)
-      .join("");
+   const sourcesHTML = compactSourcesHTML({
+      sources,
+      moreUrl: articleUrl,
+      moreLabel: "full fact-check",
+   });
 
    const card = document.createElement("div");
    card.id = "truthlens-result-card";
@@ -368,7 +443,7 @@ function displayPublishedResultCard(claim, publication) {
             <div class="truthlens-partner-identity"><span class="truthlens-publication-label">Published by</span>${identityHTML}</div>
          </div>
          ${metadata.length ? `<div class="truthlens-publication-metadata">${metadata.join("")}</div>` : ""}
-         ${sourceLinks ? `<section class="truthlens-publication-sources"><h3 class="truthlens-publication-label">Sources</h3><ul>${sourceLinks}</ul></section>` : ""}
+         ${sourcesHTML}
          ${articleUrl ? `<a ${publicReachAttributes(organization.slug, publication.fact_check_id, "EXTENSION_OFFICIAL_FACT_CHECK")} href="${escapeHtml(articleUrl)}" target="_blank" rel="noopener noreferrer" class="truthlens-primary-btn">Read Full Fact-Check ${iconExternal}</a>` : ""}
       </div>
    `;
@@ -404,47 +479,43 @@ export function displayResultCard(claim) {
    const displayVerdict = final_verdict || verdict;
    const ui = getVerdictUI(displayVerdict);
 
-   // 1. Generate Sources HTML
-   let sourcesHTML = "";
-   const evidenceList = sources && sources.length > 0 ? sources : source_url ? [source_url] : [];
+   const sourcesHTML =
+      displayVerdict === "OUT_OF_SCOPE"
+         ? ""
+         : compactSourcesHTML({
+              sources,
+              sourceUrl: source_url,
+              moreUrl: deepAnalysisUrl,
+              moreLabel: "full report",
+           });
 
-   if (displayVerdict !== "OUT_OF_SCOPE" && evidenceList.length > 0) {
-      sourcesHTML = `
-         <div style="margin-top: 12px; margin-bottom: 16px; font-size: 11px;">
-            <strong style="color: #374151; display: block; margin-bottom: 4px;">Sources:</strong>
-            
-            <div style="display: flex; flex-direction: column; gap: 4px; max-height: 110px; overflow-y: auto; padding-right: 4px;">
-            ${evidenceList
-               .map((src) => {
-                  const urlStr = typeof src === "string" ? src : src.url;
-
-                  // 1. Skip rendering if the URL is empty or a placeholder
-                  if (!urlStr || urlStr === "#") return "";
-
-                  // 2. Safely determine the display title
-                  let displayTitle = urlStr;
-                  if (typeof src === "object" && src.title) {
-                     displayTitle = src.title;
-                  } else if (urlStr.startsWith("http")) {
-                     try {
-                        displayTitle = new URL(urlStr).hostname.replace("www.", "");
-                     } catch {
-                        displayTitle = urlStr;
-                     }
-                  }
-
-                  // 3. Return the anchor tag
-                  return `
-               <a href="${urlStr}" target="_blank" title="${urlStr}" style="color: #4f46e5; text-decoration: none; background: #f9fafb; padding: 6px 10px; border-radius: 6px; border: 1px solid #e5e7eb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; font-weight: 600;">
-                  ${displayTitle}
-               </a>
-               `;
-               })
-               .join("")}
+   const confidenceHTML =
+      displayVerdict === "OUT_OF_SCOPE"
+         ? `
+            <section class="truthlens-confidence-na" aria-label="Confidence score not applicable">
+               <span class="truthlens-confidence-na-icon" aria-hidden="true">${iconHelp}</span>
+               <div>
+                  <strong>Confidence score not applicable</strong>
+                  <p>No factual verdict was produced for this input, so there is no factual confidence score to show.</p>
+               </div>
+            </section>
+         `
+         : `
+            <div class="truthlens-confidence-container">
+               <div class="truthlens-confidence-header">
+                  <div class="truthlens-confidence-title">
+                     ${iconActivity} AI CONFIDENCE
+                  </div>
+                  <div class="truthlens-confidence-value" style="color: ${ui.color};">${confidence_score || 0}%</div>
+               </div>
+               <div class="truthlens-confidence-bar">
+                  <div class="truthlens-confidence-fill" style="width: ${confidence_score || 0}%; background: linear-gradient(90deg, #10b981 0%, ${ui.color} 100%);"></div>
+               </div>
+               <div class="truthlens-score-context">
+                  ${confidence_score < 50 ? "Low confidence — human review recommended" : "High confidence based on available data"}
+               </div>
             </div>
-         </div>
-      `;
-   }
+         `;
 
    // 2. Dynamic Button Logic
    let primaryButtonHTML = "";
@@ -484,9 +555,7 @@ export function displayResultCard(claim) {
 
    card.innerHTML = `
       <div class="truthlens-header">
-         <div class="truthlens-title" style="color: ${ui.color};">
-            ${iconFlag} CLAIM FLAGGED
-         </div>
+         ${truthLensBrandHTML()}
          <button id="truthlens-close-btn" class="truthlens-close-btn" aria-label="Close verification result">&times;</button>
       </div>
 
@@ -502,20 +571,7 @@ export function displayResultCard(claim) {
             <div class="truthlens-summary-text">${summary || "No summary available."}</div>
          </div>
 
-         <div class="truthlens-confidence-container">
-            <div class="truthlens-confidence-header">
-               <div class="truthlens-confidence-title">
-                  ${iconActivity} AI CONFIDENCE
-               </div>
-               <div class="truthlens-confidence-value" style="color: ${ui.color};">${confidence_score || 0}%</div>
-            </div>
-            <div class="truthlens-confidence-bar">
-               <div class="truthlens-confidence-fill" style="width: ${confidence_score || 0}%; background: linear-gradient(90deg, #10b981 0%, ${ui.color} 100%);"></div>
-            </div>
-            <div class="truthlens-score-context">
-               ${confidence_score < 50 ? "Low confidence — human review recommended" : "High confidence based on available data"}
-            </div>
-         </div>
+         ${confidenceHTML}
 
          ${sourcesHTML}
          ${relatedPublicationsHTML(claim)}
@@ -571,49 +627,87 @@ export function displayLoadingCard(customMsg) {
 }
 
 export function displayDeepfakeResultCard(data) {
-   const { ai_probability, is_fake, summary } = data;
-   const percentage = Math.round(ai_probability * 100);
-   const badgeColor = is_fake ? "#e02424" : "#0e9f6e";
-   const verdictText = is_fake ? "AI-GENERATED" : "AUTHENTIC / HUMAN";
+   const probability = Number(data?.ai_probability);
+   const percentage = Number.isFinite(probability)
+      ? Math.max(0, Math.min(100, Math.round(probability * 100)))
+      : null;
+   const hasSignalDecision = typeof data?.is_fake === "boolean";
+   const detected = data?.is_fake === true;
+   const summary = nonblankText(data?.summary) || "No detailed AI analysis is available.";
+   const signalLabel = !hasSignalDecision
+      ? "AI-generation signal result unavailable"
+      : detected
+        ? "AI-generation signals detected"
+        : "No strong AI-generation signals detected";
+   const signalClass = !hasSignalDecision ? "neutral" : detected ? "detected" : "clear";
 
    const card = document.createElement("div");
    card.id = "truthlens-result-card";
-   card.className = "truthlens-card";
+   card.className = "truthlens-card truthlens-result-card-shell truthlens-media-analysis-card";
+   card.setAttribute("role", "region");
+   card.setAttribute("aria-label", "AI image analysis result");
 
    card.innerHTML = `
       <div class="truthlens-header">
-      
-         <strong class="truthlens-title" style="color: #7c3aed;">TruthLens</strong>
-         <button id="truthlens-close-btn" class="truthlens-close-btn">&times;</button>
+         <div class="truthlens-title truthlens-media-analysis-title">
+            ${iconSparkles} AI IMAGE CHECK
+         </div>
+         <button class="truthlens-close-btn" aria-label="Close AI image analysis">&times;</button>
       </div>
-      
-      <div style="max-height: 380px; overflow-y: auto; padding-right: 4px; overflow-x: hidden;">
-         <div class="truthlens-verdict-text">
-            Analysis: <span class="truthlens-verdict" style="background-color: ${badgeColor};">${verdictText}</span>
-         </div>
-         
-         <div class="truthlens-summary-box">
-            <div style="font-size: 14px; line-height: 1.4; margin-bottom: 8px;">
-               Our neural network indicates a <strong>${percentage}%</strong> probability that this image is AI-generated.
+
+      <div class="truthlens-result-body" role="region" aria-label="AI image analysis details" tabindex="0">
+         <section class="truthlens-media-intro" aria-labelledby="truthlens-media-signal-title">
+            <span class="truthlens-media-kicker">Automated image analysis</span>
+            <div class="truthlens-media-signal truthlens-media-signal--${signalClass}">
+               <span class="truthlens-media-signal-icon" aria-hidden="true">
+                  ${detected ? iconAlert : iconHelp}
+               </span>
+               <strong id="truthlens-media-signal-title">${signalLabel}</strong>
             </div>
-            <div style="font-size: 13px; line-height: 1.4; color: #4b5563; border-top: 1px solid #e5e7eb; padding-top: 8px;">
-               <strong>AI Explanation:</strong> ${summary || "No detailed explanation available."}
+            <p>This is an automated estimate, not proof that the image is AI-generated or authentic.</p>
+         </section>
+
+         <section class="truthlens-media-likelihood" aria-labelledby="truthlens-media-likelihood-title">
+            <div class="truthlens-media-likelihood-heading">
+               <span id="truthlens-media-likelihood-title">Estimated AI-generation likelihood</span>
+               <strong>${percentage === null ? "Unavailable" : `${percentage}%`}</strong>
             </div>
-         </div>
-         
-         <div class="truthlens-confidence-bar">
-            <div class="truthlens-confidence-fill" style="width: ${percentage}%; background-color: ${badgeColor};"></div>
-         </div>
+            <div class="truthlens-media-likelihood-bar" aria-hidden="true">
+               <span
+                  class="truthlens-media-likelihood-fill truthlens-media-likelihood-fill--${signalClass}"
+                  style="width: ${percentage ?? 0}%;"
+               ></span>
+            </div>
+         </section>
+
+         <section class="truthlens-summary-box truthlens-media-explanation" aria-labelledby="truthlens-media-explanation-title">
+            <div id="truthlens-media-explanation-title" class="truthlens-summary-title">
+               ${iconSparkles} AI ANALYSIS
+            </div>
+            <div class="truthlens-summary-text">${escapeHtml(summary)}</div>
+         </section>
+
+         <aside class="truthlens-media-caveat">
+            <span aria-hidden="true">${iconHelp}</span>
+            <p>
+               Automated detection can miss sophisticated edits or flag genuine images. Use provenance,
+               original files, and corroborating evidence before drawing a conclusion.
+            </p>
+         </aside>
       </div>
    `;
 
    document.body.appendChild(card);
+   const cleanupScrollShadows = initializeScrollPositionShadows(card.querySelector(".truthlens-result-body"));
    void card.offsetWidth;
    setTimeout(() => card.classList.add("show"), 100);
 
-   document.getElementById("truthlens-close-btn").addEventListener("click", () => {
+   card.querySelector(".truthlens-close-btn").addEventListener("click", () => {
       card.classList.remove("show");
-      setTimeout(() => card.remove(), 300);
+      setTimeout(() => {
+         cleanupScrollShadows();
+         card.remove();
+      }, 300);
    });
 }
 
@@ -872,41 +966,18 @@ export function displayCachedResultCard(match) {
          `;
    }
 
-   let sourcesHTML = "";
-   const evidenceList = sources && sources.length > 0 ? sources : source_url ? [source_url] : [];
-
-   if (displayVerdict !== "OUT_OF_SCOPE" && evidenceList.length > 0) {
-      sourcesHTML = `
-            <div style="margin-top: 12px; margin-bottom: 16px; font-size: 11px;">
-               <strong style="color: #374151; display: block; margin-bottom: 4px;">Sources:</strong>
-               
-               <div style="display: flex; flex-direction: column; gap: 4px; max-height: 110px; overflow-y: auto; padding-right: 4px;">
-                  ${evidenceList
-                     .map((src) => {
-                        const urlStr = typeof src === "string" ? src : src.url;
-
-                        // NEW: Try to use the article title. If it doesn't exist, extract the clean domain name (e.g., "gmanetwork.com")
-                        let displayTitle = urlStr;
-                        try {
-                           displayTitle =
-                              typeof src === "object" && src.title
-                                 ? src.title
-                                 : new URL(urlStr).hostname.replace("www.", "");
-                        } catch {
-                           displayTitle = urlStr;
-                        }
-
-                        return `
-                     <a href="${urlStr}" target="_blank" title="${urlStr}" style="color: #4f46e5; text-decoration: none; background: #f9fafb; padding: 6px 10px; border-radius: 6px; border: 1px solid #e5e7eb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; font-weight: 600;">
-                        ${displayTitle}
-                     </a>
-                     `;
-                     })
-                     .join("")}
-               </div>
-            </div>
-         `;
-   }
+   const cachedAnalysisId = pathComponent(claim_id || match.id);
+   const cachedBaseUrl = communityBaseUrl();
+   const cachedAnalysisUrl = cachedBaseUrl && cachedAnalysisId ? `${cachedBaseUrl}/analysis/${cachedAnalysisId}` : null;
+   const sourcesHTML =
+      displayVerdict === "OUT_OF_SCOPE"
+         ? ""
+         : compactSourcesHTML({
+              sources,
+              sourceUrl: source_url,
+              moreUrl: cachedAnalysisUrl,
+              moreLabel: "full report",
+           });
 
    const card = document.createElement("div");
    card.id = "truthlens-result-card";
@@ -914,8 +985,8 @@ export function displayCachedResultCard(match) {
 
    card.innerHTML = `
       <div class="truthlens-header">
-         <strong class="truthlens-title">TruthLens</strong>
-         <button id="truthlens-close-btn" class="truthlens-close-btn">&times;</button>
+         ${truthLensBrandHTML()}
+         <button id="truthlens-close-btn" class="truthlens-close-btn" aria-label="Close verification result">&times;</button>
       </div>
 
       <div style="overflow-y: auto; padding-right: 4px; overflow-x: hidden;">
@@ -932,8 +1003,18 @@ export function displayCachedResultCard(match) {
          </div>
 
          ${
-            confidence_score !== null
+            displayVerdict === "OUT_OF_SCOPE"
                ? `
+            <section class="truthlens-confidence-na" aria-label="Confidence score not applicable">
+               <span class="truthlens-confidence-na-icon" aria-hidden="true">${iconHelp}</span>
+               <div>
+                  <strong>Confidence score not applicable</strong>
+                  <p>No factual verdict was produced for this input, so there is no factual confidence score to show.</p>
+               </div>
+            </section>
+         `
+               : confidence_score !== null
+                 ? `
             <div class="truthlens-confidence-score">Confidence Score: ${confidence_score}</div>
             <div class="truthlens-confidence-bar">
                <div class="truthlens-confidence-fill" style="width: ${confidence_score}%; background-color: ${confidence_bar_color};"></div>
@@ -948,7 +1029,7 @@ export function displayCachedResultCard(match) {
                   : ""
             }
          `
-               : ""
+                 : ""
          }
 
          ${sourcesHTML}
