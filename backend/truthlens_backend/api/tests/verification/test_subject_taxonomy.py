@@ -11,6 +11,8 @@ from api.verification.subject_taxonomy import (
     PUBLIC_CATEGORIES,
     SUBJECT_RULES,
     TAXONOMY_VERSION,
+    public_category_for_code,
+    public_category_for_domains,
     public_category_for_primary_subject,
 )
 
@@ -68,6 +70,19 @@ class ProposedSubjectTaxonomyTests(TestCase):
         self.assertIsNone(public_category_for_primary_subject("CAMPUS_AFFAIRS"))
         self.assertIsNone(public_category_for_primary_subject(["EDUCATION", "ELECTIONS"]))
         self.assertIsNone(public_category_for_primary_subject("UNKNOWN"))
+
+    def test_public_category_helpers_do_not_infer_multidomain_primary_subject(self):
+        education = public_category_for_domains(["EDUCATION"])
+        self.assertEqual(education.code, "EDUCATION")
+        self.assertEqual(education.label, "Education")
+        self.assertIsNone(public_category_for_domains(["ELECTIONS", "TECHNOLOGY"]))
+        self.assertIsNone(public_category_for_domains([]))
+        self.assertIsNone(public_category_for_domains(None))
+
+        governance = public_category_for_code("POLITICS_GOVERNMENT_LAW")
+        self.assertEqual(governance.label, "Politics, Governance & Law")
+        self.assertIsNone(public_category_for_code("CAMPUS_AFFAIRS"))
+        self.assertIsNone(public_category_for_code("UNKNOWN"))
 
     def test_examples_cover_every_code_and_campus_boundaries(self):
         rows = json.loads(_EXAMPLES.read_text(encoding="utf-8"))

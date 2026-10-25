@@ -110,6 +110,9 @@ PUBLIC_CATEGORIES = (
 _DOMAIN_TO_PUBLIC_CATEGORY = {
     domain: group for group in PUBLIC_CATEGORIES for domain in group.domains
 }
+_PUBLIC_CATEGORY_BY_CODE = {
+    category.code: category for category in PUBLIC_CATEGORIES
+}
 
 
 def public_category_for_primary_subject(primary_subject):
@@ -121,3 +124,22 @@ def public_category_for_primary_subject(primary_subject):
     if not isinstance(primary_subject, str):
         return None
     return _DOMAIN_TO_PUBLIC_CATEGORY.get(primary_subject)
+
+
+def public_category_for_domains(domains):
+    """Return a public topic only when one authoritative subject is present.
+
+    Current authoritative classification rows do not persist an explicit
+    primary subject. Multi-domain rows therefore remain unresolved for public
+    topic display/filtering until primary-subject persistence is introduced.
+    """
+    if not isinstance(domains, (list, tuple)) or len(domains) != 1:
+        return None
+    return public_category_for_primary_subject(domains[0])
+
+
+def public_category_for_code(code):
+    """Return a configured public category by stable API code, or None."""
+    if not isinstance(code, str):
+        return None
+    return _PUBLIC_CATEGORY_BY_CODE.get(code)
