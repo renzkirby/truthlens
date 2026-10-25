@@ -610,49 +610,84 @@ export function displayLoadingCard(customMsg) {
 }
 
 export function displayDeepfakeResultCard(data) {
-   const { ai_probability, is_fake, summary } = data;
-   const percentage = Math.round(ai_probability * 100);
-   const badgeColor = is_fake ? "#e02424" : "#0e9f6e";
-   const verdictText = is_fake ? "AI-GENERATED" : "AUTHENTIC / HUMAN";
+   const probability = Number(data?.ai_probability);
+   const percentage = Number.isFinite(probability)
+      ? Math.max(0, Math.min(100, Math.round(probability * 100)))
+      : null;
+   const detected = Boolean(data?.is_fake);
+   const summary = nonblankText(data?.summary) || "No detailed model explanation is available.";
+   const signalLabel = detected
+      ? "AI-generation signals detected"
+      : "No strong AI-generation signals detected";
+   const signalClass = detected ? "detected" : "clear";
 
    const card = document.createElement("div");
    card.id = "truthlens-result-card";
-   card.className = "truthlens-card";
+   card.className = "truthlens-card truthlens-result-card-shell truthlens-media-analysis-card";
+   card.setAttribute("role", "region");
+   card.setAttribute("aria-label", "AI image analysis result");
 
    card.innerHTML = `
       <div class="truthlens-header">
-      
-         <strong class="truthlens-title" style="color: #7c3aed;">TruthLens</strong>
-         <button id="truthlens-close-btn" class="truthlens-close-btn">&times;</button>
+         <div class="truthlens-title truthlens-media-analysis-title">
+            ${iconSparkles} AI IMAGE CHECK
+         </div>
+         <button class="truthlens-close-btn" aria-label="Close AI image analysis">&times;</button>
       </div>
-      
-      <div style="max-height: 380px; overflow-y: auto; padding-right: 4px; overflow-x: hidden;">
-         <div class="truthlens-verdict-text">
-            Analysis: <span class="truthlens-verdict" style="background-color: ${badgeColor};">${verdictText}</span>
-         </div>
-         
-         <div class="truthlens-summary-box">
-            <div style="font-size: 14px; line-height: 1.4; margin-bottom: 8px;">
-               Our neural network indicates a <strong>${percentage}%</strong> probability that this image is AI-generated.
+
+      <div class="truthlens-result-body" role="region" aria-label="AI image analysis details" tabindex="0">
+         <section class="truthlens-media-intro" aria-labelledby="truthlens-media-signal-title">
+            <span class="truthlens-media-kicker">Automated image analysis</span>
+            <div class="truthlens-media-signal truthlens-media-signal--${signalClass}">
+               <span class="truthlens-media-signal-icon" aria-hidden="true">
+                  ${detected ? iconAlert : iconHelp}
+               </span>
+               <strong id="truthlens-media-signal-title">${signalLabel}</strong>
             </div>
-            <div style="font-size: 13px; line-height: 1.4; color: #4b5563; border-top: 1px solid #e5e7eb; padding-top: 8px;">
-               <strong>AI Explanation:</strong> ${summary || "No detailed explanation available."}
+            <p>This is a model estimate, not proof that the image is authentic or fabricated.</p>
+         </section>
+
+         <section class="truthlens-media-likelihood" aria-labelledby="truthlens-media-likelihood-title">
+            <div class="truthlens-media-likelihood-heading">
+               <span id="truthlens-media-likelihood-title">Model-estimated AI-generation likelihood</span>
+               <strong>${percentage === null ? "Unavailable" : `${percentage}%`}</strong>
             </div>
-         </div>
-         
-         <div class="truthlens-confidence-bar">
-            <div class="truthlens-confidence-fill" style="width: ${percentage}%; background-color: ${badgeColor};"></div>
-         </div>
+            <div class="truthlens-media-likelihood-bar" aria-hidden="true">
+               <span
+                  class="truthlens-media-likelihood-fill truthlens-media-likelihood-fill--${signalClass}"
+                  style="width: ${percentage ?? 0}%;"
+               ></span>
+            </div>
+         </section>
+
+         <section class="truthlens-summary-box truthlens-media-explanation" aria-labelledby="truthlens-media-explanation-title">
+            <div id="truthlens-media-explanation-title" class="truthlens-summary-title">
+               ${iconSparkles} MODEL EXPLANATION
+            </div>
+            <div class="truthlens-summary-text">${escapeHtml(summary)}</div>
+         </section>
+
+         <aside class="truthlens-media-caveat">
+            <span aria-hidden="true">${iconHelp}</span>
+            <p>
+               Automated detection can miss sophisticated edits or flag genuine images. Use provenance,
+               original files, and corroborating evidence before drawing a conclusion.
+            </p>
+         </aside>
       </div>
    `;
 
    document.body.appendChild(card);
+   const cleanupScrollShadows = initializeScrollPositionShadows(card.querySelector(".truthlens-result-body"));
    void card.offsetWidth;
    setTimeout(() => card.classList.add("show"), 100);
 
-   document.getElementById("truthlens-close-btn").addEventListener("click", () => {
+   card.querySelector(".truthlens-close-btn").addEventListener("click", () => {
       card.classList.remove("show");
-      setTimeout(() => card.remove(), 300);
+      setTimeout(() => {
+         cleanupScrollShadows();
+         card.remove();
+      }, 300);
    });
 }
 
