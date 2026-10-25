@@ -872,7 +872,7 @@ function OrganizationPublicProfilePanel({ organizationId }) {
                      <div className="org-public-profile-field org-public-profile-field-wide">
                         <strong>Verification specializations</strong>
                         <p className="org-public-profile-help">
-                           Your organization's Primary Admin selects investigation subjects
+                           Your organization's Organization Admin selects investigation subjects
                            in the Verification scope tab. These organization-declared
                            specializations are used when TruthLens enables subject-based intake
                            matching. Descriptive profile interests do not grant investigation authority.

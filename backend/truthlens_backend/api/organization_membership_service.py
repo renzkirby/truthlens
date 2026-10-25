@@ -33,6 +33,36 @@ class InvalidOrganizationMembershipRole(OrganizationMembershipManagementError):
     pass
 
 
+def _ensure_admin_continuity(*, membership, next_role=None, next_status=None):
+    """Prevent an organization from losing its final active Admin."""
+
+    if (
+        membership.role != OrganizationMembership.Role.ADMIN
+        or membership.status != OrganizationMembership.Status.ACTIVE
+    ):
+        return
+
+    will_remain_active_admin = (
+        (next_role is None or next_role == OrganizationMembership.Role.ADMIN)
+        and (next_status is None or next_status == OrganizationMembership.Status.ACTIVE)
+    )
+    if will_remain_active_admin:
+        return
+
+    has_other_active_admin = OrganizationMembership.objects.select_for_update(
+        of=("self",),
+    ).filter(
+        organization=membership.organization,
+        role=OrganizationMembership.Role.ADMIN,
+        status=OrganizationMembership.Status.ACTIVE,
+    ).exclude(pk=membership.pk).exists()
+
+    if not has_other_active_admin:
+        raise OrganizationMembershipConflict(
+            "An organization must keep at least one active Admin."
+        )
+
+
 def _normalize_role(
     role,
 ):
@@ -112,17 +142,6 @@ def _get_locked_management_context(
 
     manageable_roles = get_manageable_membership_roles(actor_membership)
 
-    # Ownership is deliberately immutable through
-    # ordinary membership administration.
-    if target_membership.role == OrganizationMembership.Role.OWNER:
-        raise (
-            OrganizationMembershipAuthorizationError(
-                "Organization ownership must "
-                "be managed through a separate "
-                "ownership-transfer workflow."
-            )
-        )
-
     if target_membership.role not in manageable_roles:
         raise (
             OrganizationMembershipAuthorizationError(
@@ -167,13 +186,6 @@ def change_organization_membership_role(
             "rejoin the organization."
         )
 
-    if new_role == OrganizationMembership.Role.OWNER:
-        raise InvalidOrganizationMembershipRole(
-            "Organization ownership cannot "
-            "be assigned through ordinary "
-            "membership administration."
-        )
-
     if new_role not in manageable_roles:
         raise InvalidOrganizationMembershipRole(
             "You cannot assign this " "organization role."
@@ -183,6 +195,11 @@ def change_organization_membership_role(
         raise OrganizationMembershipConflict(
             "This member already has " "that organization role."
         )
+
+    _ensure_admin_continuity(
+        membership=membership,
+        next_role=new_role,
+    )
 
     previous_role = membership.role
     membership.role = new_role
@@ -232,6 +249,11 @@ def suspend_organization_membership(
         raise OrganizationMembershipConflict(
             "Only an active membership " "can be suspended."
         )
+
+    _ensure_admin_continuity(
+        membership=membership,
+        next_status=OrganizationMembership.Status.SUSPENDED,
+    )
 
     previous_status = membership.status
     membership.status = OrganizationMembership.Status.SUSPENDED
@@ -330,6 +352,11 @@ def remove_organization_membership(
         raise OrganizationMembershipConflict(
             "This person has already left " "the organization."
         )
+
+    _ensure_admin_continuity(
+        membership=membership,
+        next_status=OrganizationMembership.Status.LEFT,
+    )
 
     previous_status = membership.status
     membership.status = OrganizationMembership.Status.LEFT

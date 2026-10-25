@@ -173,17 +173,15 @@ class InvestigationWorkspaceApiTests(APITestCase):
             status.HTTP_400_BAD_REQUEST,
         )
 
-    def test_contributor_is_forbidden(self):
-        self.membership.role = OrganizationMembership.Role.CONTRIBUTOR
+    def test_admin_is_forbidden_from_operational_workspace(self):
+        self.membership.role = OrganizationMembership.Role.ADMIN
         self.membership.save(update_fields=["role"])
         self.assertEqual(self.get().status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_all_existing_workload_roles_can_view(self):
+    def test_existing_operational_roles_can_view(self):
         for role in (
-            OrganizationMembership.Role.OWNER,
-            OrganizationMembership.Role.ADMIN,
             OrganizationMembership.Role.LEAD_VERIFIER,
-            OrganizationMembership.Role.MODERATOR,
+            OrganizationMembership.Role.VERIFICATION_REVIEWER,
             OrganizationMembership.Role.RESEARCHER,
         ):
             with self.subTest(role=role):
@@ -191,6 +189,8 @@ class InvestigationWorkspaceApiTests(APITestCase):
                 self.assertEqual(self.get().status_code, status.HTTP_200_OK)
 
     def test_wrong_organization_does_not_expose_investigation(self):
+        self.membership.status = OrganizationMembership.Status.LEFT
+        self.membership.save(update_fields=["status"])
         OrganizationMembership.objects.create(
             user=self.actor,
             organization=self.other,

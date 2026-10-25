@@ -1139,16 +1139,12 @@ class OrganizationMembershipRoleUpdateSerializer(serializers.Serializer):
                 "Lead Verifier",
             ),
             (
-                OrganizationMembership.Role.MODERATOR,
-                "Moderator",
+                OrganizationMembership.Role.VERIFICATION_REVIEWER,
+                "Verification Reviewer",
             ),
             (
                 OrganizationMembership.Role.RESEARCHER,
                 "Researcher",
-            ),
-            (
-                OrganizationMembership.Role.CONTRIBUTOR,
-                "Contributor",
             ),
         ],
     )

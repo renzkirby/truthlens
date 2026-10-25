@@ -9,7 +9,7 @@ const DESTINATIONS = [
    {
       to: "/management/organizations",
       title: "Partner Organizations",
-      description: "Inspect institutional identity, platform trust, and Primary Admin state.",
+      description: "Inspect institutional identity, platform trust, and Organization Admin state.",
       icon: "landmark",
       primary: true,
    },
@@ -22,7 +22,7 @@ const DESTINATIONS = [
    {
       to: "/management/invitations",
       title: "Invitations",
-      description: "Review membership and Primary Admin onboarding invitations.",
+      description: "Review membership and Organization Admin onboarding invitations.",
       icon: "mail",
    },
 ];

@@ -96,7 +96,7 @@ class AccountabilityInstrumentationTests(TestCase):
         OrganizationMembership.objects.create(
             organization=self.organization,
             user=self.manager,
-            role=OrganizationMembership.Role.OWNER,
+            role=OrganizationMembership.Role.ADMIN,
             status=OrganizationMembership.Status.ACTIVE,
         )
 
@@ -383,13 +383,13 @@ class AccountabilityInstrumentationTests(TestCase):
         target_membership = OrganizationMembership.objects.create(
             organization=self.organization,
             user=target,
-            role=OrganizationMembership.Role.CONTRIBUTOR,
+            role=OrganizationMembership.Role.RESEARCHER,
             status=OrganizationMembership.Status.ACTIVE,
         )
         target_membership = change_organization_membership_role(
             organization=self.organization,
             membership_id=target_membership.pk,
-            role=OrganizationMembership.Role.RESEARCHER,
+            role=OrganizationMembership.Role.VERIFICATION_REVIEWER,
             actor=self.manager,
         )
         suspend_organization_membership(
@@ -423,7 +423,7 @@ class AccountabilityInstrumentationTests(TestCase):
         accepted_invitation, accepted_token = create_organization_invitation(
             organization=self.organization,
             email=invitee.email,
-            invited_role=OrganizationMembership.Role.CONTRIBUTOR,
+            invited_role=OrganizationMembership.Role.RESEARCHER,
             actor=self.manager,
         )
         accept_organization_invitation(raw_token=accepted_token, actor=invitee)
@@ -431,7 +431,7 @@ class AccountabilityInstrumentationTests(TestCase):
         cancelled_invitation, _cancelled_token = create_organization_invitation(
             organization=self.organization,
             email="cancelled@example.com",
-            invited_role=OrganizationMembership.Role.CONTRIBUTOR,
+            invited_role=OrganizationMembership.Role.RESEARCHER,
             actor=self.manager,
         )
         cancel_organization_invitation(
@@ -447,7 +447,7 @@ class AccountabilityInstrumentationTests(TestCase):
         expired_invitation, _expired_token = create_organization_invitation(
             organization=self.organization,
             email="expired@example.com",
-            invited_role=OrganizationMembership.Role.CONTRIBUTOR,
+            invited_role=OrganizationMembership.Role.RESEARCHER,
             actor=self.manager,
         )
         expired_invitation.expires_at = timezone.now() - timedelta(seconds=1)

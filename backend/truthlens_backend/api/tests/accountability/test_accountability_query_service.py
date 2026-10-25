@@ -58,7 +58,7 @@ class AccountabilityQueryServiceTests(TestCase):
         self.owner_membership = OrganizationMembership.objects.create(
             organization=self.organization,
             user=self.owner,
-            role=OrganizationMembership.Role.OWNER,
+            role=OrganizationMembership.Role.ADMIN,
             status=OrganizationMembership.Status.ACTIVE,
         )
         self.lead_membership = OrganizationMembership.objects.create(
@@ -68,7 +68,7 @@ class AccountabilityQueryServiceTests(TestCase):
             status=OrganizationMembership.Status.ACTIVE,
         )
 
-    def test_primary_admin_specialization_change_is_visible_in_org_accountability(self):
+    def test_organization_admin_specialization_change_is_visible_in_org_accountability(self):
         from api.organization_scope_service import update_organization_specializations
 
         update_organization_specializations(

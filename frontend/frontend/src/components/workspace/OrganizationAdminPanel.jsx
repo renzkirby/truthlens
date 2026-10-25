@@ -21,7 +21,15 @@ function formatLabel(value) {
    }
 
    if (value === "OWNER") {
-      return "Primary Admin";
+      return "Administrator";
+   }
+
+   if (value === "MODERATOR") {
+      return "Verification Reviewer";
+   }
+
+   if (value === "CONTRIBUTOR") {
+      return "Former Contributor";
    }
 
    return String(value)
@@ -62,7 +70,7 @@ function getStatusIcon(status) {
    }
 }
 
-const OWNER_MANAGEABLE_ROLES = [
+const ADMIN_MANAGEABLE_ROLES = [
    {
       value: "ADMIN",
       label: "Administrator",
@@ -72,23 +80,17 @@ const OWNER_MANAGEABLE_ROLES = [
       label: "Lead Verifier",
    },
    {
-      value: "MODERATOR",
-      label: "Verifier / Moderator",
+      value: "VERIFICATION_REVIEWER",
+      label: "Verification Reviewer",
    },
    {
       value: "RESEARCHER",
       label: "Researcher",
    },
-   {
-      value: "CONTRIBUTOR",
-      label: "Contributor",
-   },
 ];
 
-const ADMIN_MANAGEABLE_ROLES = OWNER_MANAGEABLE_ROLES.filter((role) => role.value !== "ADMIN");
-
-const OWNER_INVITABLE_ROLES = OWNER_MANAGEABLE_ROLES;
 const ADMIN_INVITABLE_ROLES = ADMIN_MANAGEABLE_ROLES;
+
 
 const SUMMARY_KEY_BY_STATUS = {
    ACTIVE: "active",
@@ -97,11 +99,7 @@ const SUMMARY_KEY_BY_STATUS = {
 };
 
 function getManageableRoles(membershipRole) {
-   if (membershipRole === "OWNER") {
-      return OWNER_MANAGEABLE_ROLES;
-   }
-
-   if (membershipRole === "ADMIN") {
+   if (["ADMIN", "OWNER"].includes(membershipRole)) {
       return ADMIN_MANAGEABLE_ROLES;
    }
 
@@ -109,11 +107,7 @@ function getManageableRoles(membershipRole) {
 }
 
 function getInvitableRoles(membershipRole) {
-   if (membershipRole === "OWNER") {
-      return OWNER_INVITABLE_ROLES;
-   }
-
-   if (membershipRole === "ADMIN") {
+   if (["ADMIN", "OWNER"].includes(membershipRole)) {
       return ADMIN_INVITABLE_ROLES;
    }
 
@@ -121,19 +115,13 @@ function getInvitableRoles(membershipRole) {
 }
 
 function canManageMembership(actorRole, targetMembership) {
-   if (!targetMembership || targetMembership.role === "OWNER") {
+   if (!targetMembership || !["ADMIN", "OWNER"].includes(actorRole)) {
       return false;
    }
 
-   if (actorRole === "OWNER") {
-      return true;
-   }
-
-   if (actorRole === "ADMIN") {
-      return ["LEAD_VERIFIER", "MODERATOR", "RESEARCHER", "CONTRIBUTOR"].includes(targetMembership.role);
-   }
-
-   return false;
+   return ["ADMIN", "LEAD_VERIFIER", "VERIFICATION_REVIEWER", "RESEARCHER", "MODERATOR"].includes(
+      targetMembership.role,
+   );
 }
 
 function transitionSummary(summary, previousStatus, nextStatus) {
@@ -1646,8 +1634,8 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                               ) : (
                                  <span className="org-member-protected-label">
                                     {membership.role === "OWNER"
-                                       ? "Primary Admin protected"
-                                       : "Managed by Primary Admin"}
+                                       ? "Administrator protected"
+                                       : "Managed by Administrator"}
                                  </span>
                               )}
                            </div>

@@ -338,7 +338,7 @@ class Organization(models.Model):
     verification_specializations = models.JSONField(
         default=list,
         blank=True,
-        help_text="Primary Admin-managed subject specializations for new partner intake.",
+        help_text="Organization Admin-managed subject specializations for new partner intake.",
     )
 
     expertise_areas = models.JSONField(
@@ -370,24 +370,26 @@ class Organization(models.Model):
 
 class OrganizationMembership(models.Model):
     class Role(models.TextChoices):
-        OWNER = "OWNER", "Owner"
         ADMIN = "ADMIN", "Administrator"
         LEAD_VERIFIER = (
             "LEAD_VERIFIER",
             "Lead Verifier",
         )
-        MODERATOR = (
-            "MODERATOR",
-            "Moderator",
+        VERIFICATION_REVIEWER = (
+            "VERIFICATION_REVIEWER",
+            "Verification Reviewer",
         )
         RESEARCHER = (
             "RESEARCHER",
             "Researcher",
         )
-        CONTRIBUTOR = (
-            "CONTRIBUTOR",
-            "Contributor",
-        )
+
+    # Legacy persisted values remain addressable for historical rows and
+    # migration compatibility, but they are intentionally excluded from
+    # Role.choices and cannot be assigned through current workflows.
+    Role.OWNER = "OWNER"
+    Role.MODERATOR = "MODERATOR"
+    Role.CONTRIBUTOR = "CONTRIBUTOR"
 
     class Status(models.TextChoices):
         PENDING = (
@@ -468,6 +470,11 @@ class OrganizationMembership(models.Model):
                 ],
                 name=("unique_user_organization_membership"),
             ),
+            models.UniqueConstraint(
+                fields=["user"],
+                condition=~models.Q(status="LEFT"),
+                name="unique_current_organization_membership_per_user",
+            ),
         ]
 
         indexes = [
@@ -540,10 +547,13 @@ class OrganizationInvitation(models.Model):
             "MEMBERSHIP",
             "Membership",
         )
-        PRIMARY_ADMIN_ONBOARDING = (
-            "PRIMARY_ADMIN_ONBOARDING",
-            "Primary Admin onboarding",
+        ORGANIZATION_ADMIN_ONBOARDING = (
+            "ORGANIZATION_ADMIN_ONBOARDING",
+            "Organization Admin onboarding",
         )
+
+    # Legacy purpose remains readable for historical rows and compatibility.
+    InvitationPurpose.PRIMARY_ADMIN_ONBOARDING = "PRIMARY_ADMIN_ONBOARDING"
 
     class Status(models.TextChoices):
         PENDING = (
@@ -679,10 +689,10 @@ class OrganizationInvitation(models.Model):
                     "organization",
                 ],
                 condition=Q(
-                    purpose="PRIMARY_ADMIN_ONBOARDING",
+                    purpose="ORGANIZATION_ADMIN_ONBOARDING",
                     status="PENDING",
                 ),
-                name=("unique_pending_primary_admin_" "invite_org"),
+                name=("unique_pending_org_admin_" "invite_org"),
             ),
         ]
 

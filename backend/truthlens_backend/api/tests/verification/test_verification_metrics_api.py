@@ -189,12 +189,10 @@ class VerificationMetricsApiTests(APITestCase):
         )
         self.members = {}
         for role in (
-            OrganizationMembership.Role.OWNER,
             OrganizationMembership.Role.ADMIN,
             OrganizationMembership.Role.LEAD_VERIFIER,
-            OrganizationMembership.Role.CONTRIBUTOR,
             OrganizationMembership.Role.RESEARCHER,
-            OrganizationMembership.Role.MODERATOR,
+            OrganizationMembership.Role.VERIFICATION_REVIEWER,
         ):
             actor = User.objects.create_user(username=f"metrics-{role.lower()}")
             OrganizationMembership.objects.create(
@@ -458,8 +456,8 @@ class VerificationMetricsApiTests(APITestCase):
                 self.current_state.assert_not_called()
                 trend.assert_not_called()
 
-    def test_owner_can_read_metrics(self):
-        self.assert_allowed(self.members[OrganizationMembership.Role.OWNER])
+    def test_management_admin_can_read_metrics(self):
+        self.assert_allowed(self.members[OrganizationMembership.Role.ADMIN])
 
     def test_admin_can_read_metrics(self):
         self.assert_allowed(self.members[OrganizationMembership.Role.ADMIN])
@@ -467,14 +465,14 @@ class VerificationMetricsApiTests(APITestCase):
     def test_lead_verifier_can_read_metrics(self):
         self.assert_allowed(self.members[OrganizationMembership.Role.LEAD_VERIFIER])
 
-    def test_contributor_is_forbidden(self):
-        self.assert_forbidden(self.members[OrganizationMembership.Role.CONTRIBUTOR])
+    def test_research_support_role_is_forbidden(self):
+        self.assert_forbidden(self.members[OrganizationMembership.Role.RESEARCHER])
 
     def test_researcher_is_forbidden(self):
         self.assert_forbidden(self.members[OrganizationMembership.Role.RESEARCHER])
 
-    def test_organization_moderator_is_forbidden(self):
-        self.assert_forbidden(self.members[OrganizationMembership.Role.MODERATOR])
+    def test_verification_reviewer_is_forbidden(self):
+        self.assert_forbidden(self.members[OrganizationMembership.Role.VERIFICATION_REVIEWER])
 
     def test_platform_safety_moderator_is_forbidden(self):
         self.assert_forbidden(self.safety_moderator)
@@ -484,7 +482,6 @@ class VerificationMetricsApiTests(APITestCase):
 
     def assert_inactive_memberships_forbidden(self, membership_status, *, params=None):
         for role in (
-            OrganizationMembership.Role.OWNER,
             OrganizationMembership.Role.ADMIN,
             OrganizationMembership.Role.LEAD_VERIFIER,
         ):
@@ -505,22 +502,22 @@ class VerificationMetricsApiTests(APITestCase):
 
     def test_qualifying_capabilities_do_not_cross_organizations(self):
         for role in (
-            OrganizationMembership.Role.OWNER,
             OrganizationMembership.Role.ADMIN,
             OrganizationMembership.Role.LEAD_VERIFIER,
         ):
             with self.subTest(role=role):
                 actor = self.members[role]
+                OrganizationMembership.objects.filter(
+                    organization=self.organization,
+                    user=actor,
+                ).update(status=OrganizationMembership.Status.LEFT)
                 OrganizationMembership.objects.create(
                     organization=self.other_organization,
                     user=actor,
-                    role=OrganizationMembership.Role.CONTRIBUTOR,
+                    role=role,
                     status=OrganizationMembership.Status.ACTIVE,
                 )
-                self.assert_allowed(actor)
-                self.assert_forbidden(
-                    actor, url=self.metrics_url(self.other_organization.pk),
-                )
+                self.assert_forbidden(actor)
 
     def test_unknown_organization_returns_404(self):
         with (
@@ -529,7 +526,7 @@ class VerificationMetricsApiTests(APITestCase):
             patch(TREND_PATCH) as trend,
         ):
             response = self.request_metrics(
-                self.members[OrganizationMembership.Role.OWNER],
+                self.members[OrganizationMembership.Role.ADMIN],
                 url=self.metrics_url(uuid.uuid4()),
             )
         self.assertEqual(response.status_code, 404)
@@ -543,7 +540,7 @@ class VerificationMetricsApiTests(APITestCase):
         trend.assert_not_called()
 
     def test_success_preserves_baseline_and_activity_coverage_on_the_wire(self):
-        response = self.assert_allowed(self.members[OrganizationMembership.Role.OWNER])
+        response = self.assert_allowed(self.members[OrganizationMembership.Role.ADMIN])
         expected = {
             **self.expected_payload(),
             "measurement_basis": {
@@ -617,7 +614,7 @@ class VerificationMetricsApiTests(APITestCase):
             patch(ACTIVITY_PATCH, return_value=self.activity_payload) as activity,
             patch("api.views.logger.exception") as log_exception,
         ):
-            response = self.request_metrics(self.members[OrganizationMembership.Role.OWNER])
+            response = self.request_metrics(self.members[OrganizationMembership.Role.ADMIN])
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json(), {
             "detail": "Verification metrics are temporarily unavailable.",
@@ -650,7 +647,7 @@ class VerificationMetricsApiTests(APITestCase):
             patch(ACTIVITY_PATCH, side_effect=error) as activity,
             patch("api.views.logger.exception") as log_exception,
         ):
-            response = self.request_metrics(self.members[OrganizationMembership.Role.OWNER])
+            response = self.request_metrics(self.members[OrganizationMembership.Role.ADMIN])
         self.assert_generic_unavailable(response, log_exception)
         self.assertNotIn(str(error), response.content.decode())
         baseline.assert_called_once_with(organization=self.organization)
@@ -665,7 +662,7 @@ class VerificationMetricsApiTests(APITestCase):
             patch("api.views.get_organization_verification_metrics", side_effect=error),
             patch("api.views.logger.exception") as log_exception,
         ):
-            response = self.request_metrics(self.members[OrganizationMembership.Role.OWNER])
+            response = self.request_metrics(self.members[OrganizationMembership.Role.ADMIN])
         self.assert_generic_unavailable(response, log_exception)
         self.assertNotIn(str(error), response.content.decode())
         self.public_reach.assert_not_called()
@@ -707,7 +704,7 @@ class VerificationMetricsApiTests(APITestCase):
                         patch("api.views.logger.exception") as log_exception,
                     ):
                         response = self.request_metrics(
-                            self.members[OrganizationMembership.Role.OWNER],
+                            self.members[OrganizationMembership.Role.ADMIN],
                         )
                     self.assert_generic_unavailable(response, log_exception)
                     baseline.assert_called_once_with(organization=self.organization)
@@ -792,7 +789,7 @@ class VerificationMetricsApiTests(APITestCase):
             patch(CURRENT_STATE_PATCH) as current_state,
             patch(TREND_PATCH) as trend,
         ):
-            response = self.request_metrics(self.members[OrganizationMembership.Role.OWNER], params=params)
+            response = self.request_metrics(self.members[OrganizationMembership.Role.ADMIN], params=params)
         self.assertEqual(response.status_code, 400)
         baseline.assert_not_called()
         activity.assert_not_called()
@@ -805,7 +802,7 @@ class VerificationMetricsApiTests(APITestCase):
         return response
 
     def test_owner_window_adds_only_trend_and_preserves_full_history_summaries(self):
-        self.assert_window_allowed(self.members[OrganizationMembership.Role.OWNER])
+        self.assert_window_allowed(self.members[OrganizationMembership.Role.ADMIN])
 
     def test_admin_with_valid_window_is_allowed(self):
         self.assert_window_allowed(self.members[OrganizationMembership.Role.ADMIN])
@@ -814,7 +811,7 @@ class VerificationMetricsApiTests(APITestCase):
         self.assert_window_allowed(self.members[OrganizationMembership.Role.LEAD_VERIFIER])
 
     def test_explicit_offsets_are_accepted_and_passed_downstream_as_utc(self):
-        self.assert_window_allowed(self.members[OrganizationMembership.Role.OWNER], params={
+        self.assert_window_allowed(self.members[OrganizationMembership.Role.ADMIN], params={
             "created_after": "2026-09-20T18:00:00+08:00",
             "created_before": "2026-09-22T07:00:00-05:00",
         })
@@ -849,7 +846,7 @@ class VerificationMetricsApiTests(APITestCase):
         })
 
     def test_equal_boundaries_are_accepted(self):
-        self.assert_window_allowed(self.members[OrganizationMembership.Role.OWNER],
+        self.assert_window_allowed(self.members[OrganizationMembership.Role.ADMIN],
                                    params={"created_after": self.window["created_after"],
                                            "created_before": self.window["created_after"]},
                                    before=self.created_after)
@@ -857,7 +854,7 @@ class VerificationMetricsApiTests(APITestCase):
     def test_exactly_90_intersected_utc_dates_are_accepted(self):
         after = self.created_after.replace(hour=23, minute=59)
         before = (after + timedelta(days=89)).replace(hour=0, minute=0)
-        self.assert_window_allowed(self.members[OrganizationMembership.Role.OWNER],
+        self.assert_window_allowed(self.members[OrganizationMembership.Role.ADMIN],
                                    params={"created_after": after.isoformat(),
                                            "created_before": before.isoformat()},
                                    after=after, before=before)
@@ -874,7 +871,7 @@ class VerificationMetricsApiTests(APITestCase):
         local_after = after.astimezone(timezone(timedelta(hours=-2)))
         local_before = before.astimezone(timezone(timedelta(hours=8)))
         self.assertEqual((local_before.date() - local_after.date()).days + 1, 92)
-        self.assert_window_allowed(self.members[OrganizationMembership.Role.OWNER],
+        self.assert_window_allowed(self.members[OrganizationMembership.Role.ADMIN],
                                    params={"created_after": local_after.isoformat(),
                                            "created_before": local_before.isoformat()},
                                    after=after, before=before)
@@ -898,9 +895,9 @@ class VerificationMetricsApiTests(APITestCase):
 
     def test_forbidden_windowed_actors_execute_no_measurement_services(self):
         for actor in (
-            self.members[OrganizationMembership.Role.CONTRIBUTOR],
             self.members[OrganizationMembership.Role.RESEARCHER],
-            self.members[OrganizationMembership.Role.MODERATOR],
+            self.members[OrganizationMembership.Role.RESEARCHER],
+            self.members[OrganizationMembership.Role.VERIFICATION_REVIEWER],
             self.safety_moderator, self.outsider,
         ):
             with self.subTest(actor=actor.username):
@@ -913,18 +910,23 @@ class VerificationMetricsApiTests(APITestCase):
                 self.assert_inactive_memberships_forbidden(membership_status, params=self.window)
 
     def test_windowed_capabilities_do_not_cross_organizations(self):
-        for role in (OrganizationMembership.Role.OWNER, OrganizationMembership.Role.ADMIN,
-                     OrganizationMembership.Role.LEAD_VERIFIER):
+        for role in (
+            OrganizationMembership.Role.ADMIN,
+            OrganizationMembership.Role.LEAD_VERIFIER,
+        ):
             with self.subTest(role=role):
                 actor = self.members[role]
+                OrganizationMembership.objects.filter(
+                    organization=self.organization,
+                    user=actor,
+                ).update(status=OrganizationMembership.Status.LEFT)
                 OrganizationMembership.objects.create(
-                    organization=self.other_organization, user=actor,
-                    role=OrganizationMembership.Role.CONTRIBUTOR,
+                    organization=self.other_organization,
+                    user=actor,
+                    role=role,
                     status=OrganizationMembership.Status.ACTIVE,
                 )
-                self.assert_window_allowed(actor)
-                self.assert_forbidden(actor, params=self.window,
-                                      url=self.metrics_url(self.other_organization.pk))
+                self.assert_forbidden(actor, params=self.window)
 
     def test_unknown_organization_with_window_remains_404(self):
         with (
@@ -932,7 +934,7 @@ class VerificationMetricsApiTests(APITestCase):
             patch(ACTIVITY_PATCH) as activity,
             patch(TREND_PATCH) as trend,
         ):
-            response = self.request_metrics(self.members[OrganizationMembership.Role.OWNER],
+            response = self.request_metrics(self.members[OrganizationMembership.Role.ADMIN],
                                             params=self.window, url=self.metrics_url(uuid.uuid4()))
         self.assertEqual(response.status_code, 404)
         baseline.assert_not_called()
@@ -963,7 +965,7 @@ class VerificationMetricsApiTests(APITestCase):
                   side_effect=error if source == "trend" else None) as trend,
             patch("api.views.logger.exception") as log_exception,
         ):
-            response = self.request_metrics(self.members[OrganizationMembership.Role.OWNER], params=self.window)
+            response = self.request_metrics(self.members[OrganizationMembership.Role.ADMIN], params=self.window)
         self.assert_generic_unavailable(response, log_exception)
         self.assertNotIn(str(error), response.content.decode())
         baseline.assert_called_once_with(organization=self.organization)
@@ -1035,7 +1037,7 @@ class VerificationMetricsApiTests(APITestCase):
                         patch("api.views.logger.exception") as log_exception,
                     ):
                         response = self.request_metrics(
-                            self.members[OrganizationMembership.Role.OWNER], params=params,
+                            self.members[OrganizationMembership.Role.ADMIN], params=params,
                         )
                     self.assert_generic_unavailable(response, log_exception)
                     self.assertNotIn(str(error), response.content.decode())
@@ -1087,7 +1089,7 @@ class VerificationMetricsApiTests(APITestCase):
                     patch(TREND_PATCH, return_value=payload),
                     patch("api.views.logger.exception") as log_exception,
                 ):
-                    response = self.request_metrics(self.members[OrganizationMembership.Role.OWNER], params=self.window)
+                    response = self.request_metrics(self.members[OrganizationMembership.Role.ADMIN], params=self.window)
                 self.assert_generic_unavailable(response, log_exception)
                 self.assertEqual(payload, original)
                 reach.assert_called_once_with(organization=self.organization)
@@ -1102,7 +1104,7 @@ class VerificationMetricsApiTests(APITestCase):
             patch(TREND_PATCH, side_effect=error),
             patch("api.views.logger.exception") as log_exception,
         ):
-            response = self.request_metrics(self.members[OrganizationMembership.Role.OWNER], params=self.window)
+            response = self.request_metrics(self.members[OrganizationMembership.Role.ADMIN], params=self.window)
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json(), {"detail": "Invalid verification analytics time window."})
         log_exception.assert_not_called()
@@ -1111,7 +1113,7 @@ class VerificationMetricsApiTests(APITestCase):
         self.current_state.assert_called_once_with(organization=self.organization)
 
     def test_trend_datetimes_serialize_as_utc_over_http(self):
-        response = self.assert_window_allowed(self.members[OrganizationMembership.Role.OWNER])
+        response = self.assert_window_allowed(self.members[OrganizationMembership.Role.ADMIN])
         self.assertEqual(response.json()["trend"], {
             "measurement_basis": {
                 **self.trend_payload["measurement_basis"],
@@ -1130,7 +1132,7 @@ class VerificationMetricsApiTests(APITestCase):
             {"date": value, **deepcopy(zeros)}
             for value in ("2026-09-20", "2026-09-21", "2026-09-22")
         ]
-        response = self.assert_window_allowed(self.members[OrganizationMembership.Role.OWNER])
+        response = self.assert_window_allowed(self.members[OrganizationMembership.Role.ADMIN])
         self.assertEqual(response.json()["trend"]["totals"], zeros)
         self.assertEqual(response.json()["trend"]["daily"], self.trend_payload["daily"])
 
@@ -1140,7 +1142,7 @@ class VerificationMetricsApiTests(APITestCase):
         ))
 
     def test_new_sections_expose_only_structural_aggregate_metrics(self):
-        response = self.assert_allowed(self.members[OrganizationMembership.Role.OWNER])
+        response = self.assert_allowed(self.members[OrganizationMembership.Role.ADMIN])
         resolution = response.json()["resolution_distribution"]
         reviewers = response.json()["reviewer_participation"]
         self.assertEqual(set(resolution["latest_observed_resolutions"]), {"count", "by_verdict"})
@@ -1270,10 +1272,10 @@ class VerificationMetricsApiTests(APITestCase):
             patch(TREND_PATCH, return_value=self.trend_payload),
         ):
             aggregate = self.request_metrics(
-                self.members[OrganizationMembership.Role.OWNER]
+                self.members[OrganizationMembership.Role.ADMIN]
             )
             windowed = self.request_metrics(
-                self.members[OrganizationMembership.Role.OWNER],
+                self.members[OrganizationMembership.Role.ADMIN],
                 params=self.window,
             )
 
@@ -1337,7 +1339,7 @@ class VerificationMetricsApiTests(APITestCase):
         self.knowledge_reuse_payload["material_reuse"]["by_type"]["USER_RESPONSE"] = 2
         self.knowledge_reuse_payload["material_reuse"]["by_match_method"]["CLAIM_CACHE"] = 2
         self.knowledge_reuse_payload["repeat_claim_reuse"].update(cached_published_responses=2, distinct_cached_claims=1)
-        actor = self.members[OrganizationMembership.Role.OWNER]
+        actor = self.members[OrganizationMembership.Role.ADMIN]
         aggregate = self.assert_allowed(actor)
         windowed = self.assert_window_allowed(actor)
         for section in ("public_reach", "knowledge_reuse"):

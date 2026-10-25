@@ -2623,7 +2623,6 @@ VERIFICATION_WORKLOAD_CAPABILITIES = {
     PartnerCapability.ADJUDICATE,
     PartnerCapability.CREATE_FACT_CHECK_DRAFT,
     PartnerCapability.PUBLISH_FACT_CHECK,
-    PartnerCapability.MANAGE_ORGANIZATION,
 }
 
 
@@ -2767,7 +2766,7 @@ def organization_verification_metrics(request, organization_id):
 @api_view(["GET", "PATCH"])
 @permission_classes([IsAuthenticated])
 def organization_verification_scope(request, organization_id):
-    """Read specializations as a manager; only Primary Admin can modify them."""
+    """Read specializations as a manager; only an Organization Admin can modify them."""
     from .organization_scope_service import (
         OrganizationScopeForbidden,
         OrganizationScopeInvalid,
@@ -2780,7 +2779,7 @@ def organization_verification_scope(request, organization_id):
     organization = get_object_or_404(Organization, pk=organization_id)
     if not can_view_specializations(organization=organization, actor=request.user):
         return Response(
-            {"detail": "An active Primary Admin or Admin membership is required."},
+            {"detail": "An active Organization Admin membership is required."},
             status=status.HTTP_403_FORBIDDEN,
         )
     try:

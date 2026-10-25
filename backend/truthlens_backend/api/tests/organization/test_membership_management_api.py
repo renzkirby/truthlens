@@ -76,7 +76,7 @@ class OrganizationMembershipManagementApiTests(APITestCase):
         self.owner_membership = OrganizationMembership.objects.create(
             organization=self.organization,
             user=self.owner,
-            role=(OrganizationMembership.Role.OWNER),
+            role=(OrganizationMembership.Role.ADMIN),
             status=(OrganizationMembership.Status.ACTIVE),
             approved_by=self.owner,
         )
@@ -108,7 +108,7 @@ class OrganizationMembershipManagementApiTests(APITestCase):
         self.contributor_membership = OrganizationMembership.objects.create(
             organization=self.organization,
             user=self.contributor,
-            role=(OrganizationMembership.Role.CONTRIBUTOR),
+            role=(OrganizationMembership.Role.VERIFICATION_REVIEWER),
             status=(OrganizationMembership.Status.ACTIVE),
             approved_by=self.owner,
         )
@@ -116,7 +116,7 @@ class OrganizationMembershipManagementApiTests(APITestCase):
         self.other_owner_membership = OrganizationMembership.objects.create(
             organization=self.other_organization,
             user=self.other_owner,
-            role=(OrganizationMembership.Role.OWNER),
+            role=(OrganizationMembership.Role.ADMIN),
             status=(OrganizationMembership.Status.ACTIVE),
             approved_by=self.other_owner,
         )
@@ -219,7 +219,7 @@ class OrganizationMembershipManagementApiTests(APITestCase):
         response = APIClient().patch(
             self.role_url(),
             {
-                "role": (OrganizationMembership.Role.MODERATOR),
+                "role": (OrganizationMembership.Role.VERIFICATION_REVIEWER),
             },
             format="json",
         )
@@ -418,7 +418,7 @@ class OrganizationMembershipManagementApiTests(APITestCase):
     # Admin operations
     # ─────────────────────────────────────────────
 
-    def test_admin_can_change_researcher_to_moderator(
+    def test_admin_can_change_researcher_to_verification_reviewer(
         self,
     ):
         response = self.client_for(
@@ -426,7 +426,7 @@ class OrganizationMembershipManagementApiTests(APITestCase):
         ).patch(
             self.role_url(),
             {
-                "role": (OrganizationMembership.Role.MODERATOR),
+                "role": (OrganizationMembership.Role.VERIFICATION_REVIEWER),
             },
             format="json",
         )
@@ -440,7 +440,7 @@ class OrganizationMembershipManagementApiTests(APITestCase):
 
         self.assertEqual(
             self.researcher_membership.role,
-            (OrganizationMembership.Role.MODERATOR),
+            (OrganizationMembership.Role.VERIFICATION_REVIEWER),
         )
 
     def test_admin_can_suspend_researcher(
@@ -524,11 +524,11 @@ class OrganizationMembershipManagementApiTests(APITestCase):
     # Hierarchy restrictions
     # ─────────────────────────────────────────────
 
-    def test_admin_cannot_manage_admin(
+    def test_admin_can_manage_another_admin(
         self,
     ):
         response = self.client_for(
-            self.admin,
+            self.owner,
         ).post(
             self.suspend_url(
                 self.admin_membership,
@@ -539,17 +539,17 @@ class OrganizationMembershipManagementApiTests(APITestCase):
 
         self.assertEqual(
             response.status_code,
-            status.HTTP_403_FORBIDDEN,
+            status.HTTP_200_OK,
         )
 
         self.admin_membership.refresh_from_db()
 
         self.assertEqual(
             self.admin_membership.status,
-            OrganizationMembership.Status.ACTIVE,
+            OrganizationMembership.Status.SUSPENDED,
         )
 
-    def test_admin_cannot_assign_admin_role(
+    def test_admin_can_assign_admin_role(
         self,
     ):
         response = self.client_for(
@@ -564,14 +564,14 @@ class OrganizationMembershipManagementApiTests(APITestCase):
 
         self.assertEqual(
             response.status_code,
-            status.HTTP_400_BAD_REQUEST,
+            status.HTTP_200_OK,
         )
 
         self.researcher_membership.refresh_from_db()
 
         self.assertEqual(
             self.researcher_membership.role,
-            (OrganizationMembership.Role.RESEARCHER),
+            OrganizationMembership.Role.ADMIN,
         )
 
     def test_admin_cannot_assign_owner_role(
@@ -582,7 +582,7 @@ class OrganizationMembershipManagementApiTests(APITestCase):
         ).patch(
             self.role_url(),
             {
-                "role": (OrganizationMembership.Role.OWNER),
+                "role": "OWNER",
             },
             format="json",
         )
@@ -600,7 +600,7 @@ class OrganizationMembershipManagementApiTests(APITestCase):
         ).patch(
             self.role_url(),
             {
-                "role": (OrganizationMembership.Role.OWNER),
+                "role": "OWNER",
             },
             format="json",
         )
@@ -610,9 +610,12 @@ class OrganizationMembershipManagementApiTests(APITestCase):
             status.HTTP_400_BAD_REQUEST,
         )
 
-    def test_owner_cannot_suspend_owner(
+    def test_final_active_admin_cannot_suspend_self(
         self,
     ):
+        self.admin_membership.status = OrganizationMembership.Status.SUSPENDED
+        self.admin_membership.save(update_fields=["status"])
+
         response = self.client_for(
             self.owner,
         ).post(
@@ -625,7 +628,7 @@ class OrganizationMembershipManagementApiTests(APITestCase):
 
         self.assertEqual(
             response.status_code,
-            status.HTTP_403_FORBIDDEN,
+            status.HTTP_409_CONFLICT,
         )
 
         self.owner_membership.refresh_from_db()
@@ -635,9 +638,12 @@ class OrganizationMembershipManagementApiTests(APITestCase):
             OrganizationMembership.Status.ACTIVE,
         )
 
-    def test_owner_cannot_remove_owner(
+    def test_final_active_admin_cannot_remove_self(
         self,
     ):
+        self.admin_membership.status = OrganizationMembership.Status.LEFT
+        self.admin_membership.save(update_fields=["status"])
+
         response = self.client_for(
             self.owner,
         ).post(
@@ -650,7 +656,7 @@ class OrganizationMembershipManagementApiTests(APITestCase):
 
         self.assertEqual(
             response.status_code,
-            status.HTTP_403_FORBIDDEN,
+            status.HTTP_409_CONFLICT,
         )
 
         self.owner_membership.refresh_from_db()
@@ -738,7 +744,7 @@ class OrganizationMembershipManagementApiTests(APITestCase):
         ).patch(
             self.role_url(),
             {
-                "role": (OrganizationMembership.Role.CONTRIBUTOR),
+                "role": (OrganizationMembership.Role.VERIFICATION_REVIEWER),
             },
             format="json",
         )
@@ -890,7 +896,7 @@ class OrganizationMembershipManagementApiTests(APITestCase):
         ).patch(
             self.role_url(),
             {
-                "role": (OrganizationMembership.Role.MODERATOR),
+                "role": (OrganizationMembership.Role.VERIFICATION_REVIEWER),
             },
             format="json",
         )
@@ -907,7 +913,7 @@ class OrganizationMembershipManagementApiTests(APITestCase):
 
         self.assertEqual(
             response.data["role"],
-            OrganizationMembership.Role.MODERATOR,
+            OrganizationMembership.Role.VERIFICATION_REVIEWER,
         )
 
         self.assertEqual(
@@ -938,7 +944,7 @@ class OrganizationMembershipManagementApiTests(APITestCase):
         ).patch(
             self.role_url(),
             {
-                "role": (OrganizationMembership.Role.MODERATOR),
+                "role": (OrganizationMembership.Role.VERIFICATION_REVIEWER),
             },
             format="json",
         )
@@ -1056,7 +1062,7 @@ class OrganizationMembershipManagementApiTests(APITestCase):
         ).post(
             self.role_url(),
             {
-                "role": (OrganizationMembership.Role.MODERATOR),
+                "role": (OrganizationMembership.Role.VERIFICATION_REVIEWER),
             },
             format="json",
         )

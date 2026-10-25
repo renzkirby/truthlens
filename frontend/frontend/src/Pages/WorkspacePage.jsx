@@ -169,7 +169,11 @@ function formatRole(role) {
    }
 
    if (role === "OWNER") {
-      return "Primary Admin";
+      return "Administrator";
+   }
+
+   if (role === "MODERATOR") {
+      return "Verification Reviewer";
    }
 
    return role

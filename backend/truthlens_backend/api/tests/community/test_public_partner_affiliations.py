@@ -33,7 +33,7 @@ class PublicPartnerAffiliationProjectionTests(TestCase):
         return OrganizationMembership.objects.create(
             organization=organization,
             user=self.user,
-            role=OrganizationMembership.Role.OWNER,
+            role=OrganizationMembership.Role.ADMIN,
             status=status_value,
         )
 
@@ -69,9 +69,12 @@ class PublicPartnerAffiliationProjectionTests(TestCase):
                 name=f"{membership_status} Partner",
                 slug=f"{membership_status.lower()}-partner",
             )
-            self.membership(organization, status_value=membership_status)
-
-        self.assertEqual(self.affiliations(), [])
+            membership = self.membership(
+                organization,
+                status_value=membership_status,
+            )
+            self.assertEqual(self.affiliations(), [])
+            membership.delete()
 
     def test_ineligible_organization_states_are_excluded_individually(self):
         cases = (
@@ -89,35 +92,37 @@ class PublicPartnerAffiliationProjectionTests(TestCase):
                 slug=f"{suffix}-partner",
                 **overrides,
             )
-            self.membership(organization)
+            membership = self.membership(organization)
+            self.assertEqual(self.affiliations(), [])
+            membership.delete()
 
-        self.assertEqual(self.affiliations(), [])
-
-    def test_logo_permission_multiple_memberships_and_ordering(self):
-        zebra = self.create_organization(
-            name="Zebra Verification",
-            slug="zebra-verification",
+    def test_historical_membership_is_excluded_from_public_affiliation(self):
+        former = self.create_organization(
+            name="Former Verification",
+            slug="former-verification",
             public_logo_enabled=False,
         )
-        alpha = self.create_organization(
-            name="Alpha Verification",
-            slug="alpha-verification",
+        current = self.create_organization(
+            name="Current Verification",
+            slug="current-verification",
         )
-        self.membership(zebra)
-        self.membership(alpha)
+        self.membership(
+            former,
+            status_value=OrganizationMembership.Status.LEFT,
+        )
+        self.membership(current)
 
         affiliations = self.affiliations()
 
         self.assertEqual(
             [item["name"] for item in affiliations],
-            ["Alpha Verification", "Zebra Verification"],
+            ["Current Verification"],
         )
-        self.assertEqual(affiliations[0]["logo_url"], alpha.logo_url)
-        self.assertIsNone(affiliations[1]["logo_url"])
+        self.assertEqual(affiliations[0]["logo_url"], current.logo_url)
         serialized = str(affiliations)
         for private_value in (
             self.user.email,
-            OrganizationMembership.Role.OWNER,
+            OrganizationMembership.Role.ADMIN,
             "capabilities",
         ):
             self.assertNotIn(private_value, serialized)

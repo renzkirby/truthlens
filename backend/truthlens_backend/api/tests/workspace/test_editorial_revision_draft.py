@@ -174,6 +174,10 @@ class EditorialRevisionDraftTests(AdjudicationContractFixtures, TestCase):
                 wrong_organization,
                 organization_id=self.other_organization.id,
             )
+        OrganizationMembership.objects.filter(
+            organization=self.organization,
+            user=self.lead,
+        ).update(status=OrganizationMembership.Status.LEFT)
         OrganizationMembership.objects.create(
             organization=self.other_organization,
             user=self.lead,
@@ -185,6 +189,15 @@ class EditorialRevisionDraftTests(AdjudicationContractFixtures, TestCase):
                 wrong_organization,
                 organization_id=self.other_organization.id,
             )
+
+        OrganizationMembership.objects.filter(
+            organization=self.other_organization,
+            user=self.lead,
+        ).update(status=OrganizationMembership.Status.LEFT)
+        OrganizationMembership.objects.filter(
+            organization=self.organization,
+            user=self.lead,
+        ).update(status=OrganizationMembership.Status.ACTIVE)
 
         revoked = self.make_published_context(suffix="revoked")
         OrganizationMembership.objects.filter(

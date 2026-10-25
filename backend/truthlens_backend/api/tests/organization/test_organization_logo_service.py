@@ -134,8 +134,8 @@ class OrganizationLogoServiceTests(TestCase):
             )
 
         self.suspended_owner = self.create_member(
-            "suspended-owner",
-            OrganizationMembership.Role.OWNER,
+            "suspended-admin",
+            OrganizationMembership.Role.ADMIN,
             status=OrganizationMembership.Status.SUSPENDED,
         )
         self.left_admin = self.create_member(
@@ -144,8 +144,8 @@ class OrganizationLogoServiceTests(TestCase):
             status=OrganizationMembership.Status.LEFT,
         )
         self.other_owner = self.create_member(
-            "other-owner",
-            OrganizationMembership.Role.OWNER,
+            "other-admin",
+            OrganizationMembership.Role.ADMIN,
             organization=self.other_organization,
         )
 
@@ -182,9 +182,9 @@ class OrganizationLogoServiceTests(TestCase):
             storage=self.storage,
         )
 
-    def test_owner_upload_uses_generated_scoped_png_and_persists_url(self):
+    def test_admin_upload_uses_generated_scoped_png_and_persists_url(self):
         updated = self.upload_as(
-            self.members[OrganizationMembership.Role.OWNER],
+            self.members[OrganizationMembership.Role.ADMIN],
             uploaded_file=make_logo_file(
                 filename="do-not-use-this-name.png",
                 size=(2048, 1024),
@@ -224,9 +224,8 @@ class OrganizationLogoServiceTests(TestCase):
     def test_non_management_roles_cannot_upload(self):
         for role in [
             OrganizationMembership.Role.LEAD_VERIFIER,
-            OrganizationMembership.Role.MODERATOR,
+            OrganizationMembership.Role.VERIFICATION_REVIEWER,
             OrganizationMembership.Role.RESEARCHER,
-            OrganizationMembership.Role.CONTRIBUTOR,
         ]:
             with self.subTest(role=role):
                 with self.assertRaises(
@@ -353,7 +352,7 @@ class OrganizationLogoServiceTests(TestCase):
         )
         capabilities_before = get_membership_capabilities(lead_membership)
 
-        self.upload_as(self.members[OrganizationMembership.Role.OWNER])
+        self.upload_as(self.members[OrganizationMembership.Role.ADMIN])
 
         self.organization.refresh_from_db()
         self.assertFalse(self.organization.public_profile_enabled)
@@ -396,7 +395,7 @@ class OrganizationLogoServiceTests(TestCase):
         )
         self.organization.save(update_fields=["logo_url"])
 
-        self.upload_as(self.members[OrganizationMembership.Role.OWNER])
+        self.upload_as(self.members[OrganizationMembership.Role.ADMIN])
 
         self.assertEqual(self.storage.deletions, [old_object_path])
 
@@ -404,7 +403,7 @@ class OrganizationLogoServiceTests(TestCase):
         self.organization.logo_url = "https://external.example/logo.png"
         self.organization.save(update_fields=["logo_url"])
 
-        self.upload_as(self.members[OrganizationMembership.Role.OWNER])
+        self.upload_as(self.members[OrganizationMembership.Role.ADMIN])
 
         self.assertEqual(self.storage.deletions, [])
 
@@ -415,7 +414,7 @@ class OrganizationLogoServiceTests(TestCase):
             side_effect=DatabaseError("database unavailable"),
         ):
             with self.assertRaises(DatabaseError):
-                self.upload_as(self.members[OrganizationMembership.Role.OWNER])
+                self.upload_as(self.members[OrganizationMembership.Role.ADMIN])
 
         self.assertEqual(
             self.storage.deletions,
@@ -440,7 +439,7 @@ class OrganizationLogoServiceTests(TestCase):
 
         remove_organization_logo(
             organization=self.organization,
-            actor=self.members[OrganizationMembership.Role.OWNER],
+            actor=self.members[OrganizationMembership.Role.ADMIN],
             storage=self.storage,
         )
 

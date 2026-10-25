@@ -411,10 +411,14 @@ class FactualCorrectionRequestTests(FactualCorrectionRequestFixtures, TestCase):
             self.request_correction(unauthenticated, actor=None)
 
         wrong_organization = self.make_published_context(suffix="wrong-organization")
+        OrganizationMembership.objects.filter(
+            organization=self.organization,
+            user=self.lead,
+        ).update(status=OrganizationMembership.Status.LEFT)
         OrganizationMembership.objects.create(
             organization=self.other_organization,
             user=self.lead,
-            role=OrganizationMembership.Role.MODERATOR,
+            role=OrganizationMembership.Role.VERIFICATION_REVIEWER,
             status=OrganizationMembership.Status.ACTIVE,
         )
         with self.assertRaises(FactualCorrectionConflict):
@@ -422,6 +426,14 @@ class FactualCorrectionRequestTests(FactualCorrectionRequestFixtures, TestCase):
                 wrong_organization,
                 organization_id=self.other_organization.id,
             )
+        OrganizationMembership.objects.filter(
+            organization=self.other_organization,
+            user=self.lead,
+        ).update(status=OrganizationMembership.Status.LEFT)
+        OrganizationMembership.objects.filter(
+            organization=self.organization,
+            user=self.lead,
+        ).update(status=OrganizationMembership.Status.ACTIVE)
 
         insufficient = self.make_published_context(suffix="insufficient-role")
         researcher = User.objects.create_user(

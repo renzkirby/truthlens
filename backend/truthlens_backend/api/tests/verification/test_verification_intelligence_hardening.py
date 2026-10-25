@@ -183,7 +183,11 @@ class VerificationIntelligenceHardeningTests(TestCase):
             result = read()
         self.assertEqual(self.state(), before)
         for query in queries:
-            self.assertTrue(query["sql"].lstrip().upper().startswith("SELECT"), query["sql"])
+            sql = query["sql"].lstrip().upper()
+            self.assertTrue(
+                sql.startswith(("SELECT", "SAVEPOINT", "RELEASE SAVEPOINT")),
+                query["sql"],
+            )
         self.assertFalse(AccountabilityEvent.objects.exists())
         self.assertFalse(KnowledgeReuseEvent.objects.exists())
         self.assertFalse(PublicReachEvent.objects.exists())
@@ -319,7 +323,7 @@ class VerificationIntelligenceHardeningTests(TestCase):
         self.assert_status_and_cache(self.passive_read(self.get), 403)
 
     def test_existing_qualifying_roles_retain_access(self):
-        for role in ("OWNER", "ADMIN", "LEAD_VERIFIER", "MODERATOR", "RESEARCHER"):
+        for role in ("LEAD_VERIFIER", "VERIFICATION_REVIEWER", "RESEARCHER"):
             with self.subTest(role=role):
                 OrganizationMembership.objects.filter(pk=self.membership.pk).update(role=role)
                 self.assert_status_and_cache(self.passive_read(self.get), 200)
@@ -331,6 +335,9 @@ class VerificationIntelligenceHardeningTests(TestCase):
                 self.assert_status_and_cache(self.passive_read(self.get), 403)
 
     def test_authorized_other_partner_cannot_see_active_work(self):
+        OrganizationMembership.objects.filter(pk=self.membership.pk).update(
+            status=OrganizationMembership.Status.LEFT,
+        )
         OrganizationMembership.objects.create(
             user=self.actor, organization=self.other, role="LEAD_VERIFIER", status="ACTIVE",
         )
@@ -474,7 +481,11 @@ class VerificationIntelligenceHardeningTests(TestCase):
 
     def test_related_intelligence_never_transfers_verdict(self):
         _, related = self.populated_context()
-        response = self.passive_read(self.get)
+        with patch(
+            "api.verification.relatedness.accepted_reference",
+            return_value=True,
+        ):
+            response = self.passive_read(self.get)
         self.assert_status_and_cache(response, 200)
         knowledge = response.json()["institutional_knowledge"]
         self.assertEqual(len(knowledge["related_publications"]), 1)

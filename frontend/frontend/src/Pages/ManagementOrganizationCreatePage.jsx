@@ -48,7 +48,7 @@ function ManagementOrganizationCreatePage() {
       <div className="management-page management-page--form">
          <ManagementPageHeader
             title="Add Partner Organization"
-            subtitle="Create the institutional identity and initial platform trust record. The organization will manage its own public profile after a Primary Admin is invited separately."
+            subtitle="Create the institutional identity and initial platform trust record. The organization will manage its own public profile after a Organization Admin is invited separately."
             backTo="/management/organizations"
             backLabel="Partner Organizations"
          />

@@ -22,8 +22,8 @@ from .organization_provisioning_service import (
 
 
 def _organization_role_label(role):
-    if role == OrganizationMembership.Role.OWNER:
-        return "Primary Admin"
+    if role == OrganizationMembership.Role.ADMIN:
+        return "Organization Admin"
 
     return dict(OrganizationMembership.Role.choices).get(role, role)
 
@@ -49,7 +49,7 @@ developer_admin_site = DeveloperAdminSite(name="developer_admin")
 
 class PrimaryAdminProvisionForm(forms.Form):
     email = forms.EmailField(
-        label="Primary Admin Email",
+        label="Organization Admin Email",
         max_length=254,
         help_text=(
             "The recipient must sign in or create their own TruthLens account "
@@ -270,7 +270,7 @@ class DeveloperOrganizationAdmin(admin.ModelAdmin):
             OrganizationMembership.objects.select_related("user")
             .filter(
                 organization=organization,
-                role=OrganizationMembership.Role.OWNER,
+                role=OrganizationMembership.Role.ADMIN,
             )
             .exclude(
                 status=OrganizationMembership.Status.LEFT,
@@ -285,9 +285,9 @@ class DeveloperOrganizationAdmin(admin.ModelAdmin):
                 OrganizationInvitation.objects.filter(
                     organization=organization,
                     purpose=(
-                        OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
+                        OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING
                     ),
-                    invited_role=OrganizationMembership.Role.OWNER,
+                    invited_role=OrganizationMembership.Role.ADMIN,
                     status=OrganizationInvitation.Status.PENDING,
                     expires_at__gt=timezone.now(),
                 )
@@ -389,7 +389,7 @@ class DeveloperOrganizationAdmin(admin.ModelAdmin):
                 self.message_user(
                     request,
                     (
-                        "Primary Admin invitation sent to "
+                        "Organization Admin invitation sent to "
                         f"{invitation.email}."
                     ),
                     level=messages.SUCCESS,
@@ -402,7 +402,7 @@ class DeveloperOrganizationAdmin(admin.ModelAdmin):
         context = self._provisioning_view_context(
             request=request,
             organization=organization,
-            title="Provision Primary Admin",
+            title="Provision Organization Admin",
             form=form,
         )
 
@@ -425,9 +425,9 @@ class DeveloperOrganizationAdmin(admin.ModelAdmin):
             OrganizationInvitation.objects.filter(
                 organization=organization,
                 purpose=(
-                    OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
+                    OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING
                 ),
-                invited_role=OrganizationMembership.Role.OWNER,
+                invited_role=OrganizationMembership.Role.ADMIN,
                 status=OrganizationInvitation.Status.PENDING,
                 expires_at__gt=timezone.now(),
             )
@@ -439,7 +439,7 @@ class DeveloperOrganizationAdmin(admin.ModelAdmin):
             self.message_user(
                 request,
                 (
-                    "There is no active Primary Admin invitation to resend. "
+                    "There is no active Organization Admin invitation to resend. "
                     "Issue a replacement invitation if the previous one expired."
                 ),
                 level=messages.WARNING,
@@ -463,7 +463,7 @@ class DeveloperOrganizationAdmin(admin.ModelAdmin):
                 self.message_user(
                     request,
                     (
-                        "A new Primary Admin invitation link was sent to "
+                        "A new Organization Admin invitation link was sent to "
                         f"{invitation.email}."
                     ),
                     level=messages.SUCCESS,
@@ -476,7 +476,7 @@ class DeveloperOrganizationAdmin(admin.ModelAdmin):
         context = self._provisioning_view_context(
             request=request,
             organization=organization,
-            title="Resend Primary Admin Invitation",
+            title="Resend Organization Admin Invitation",
             invitation=invitation,
             error_message=error_message,
         )
@@ -499,7 +499,7 @@ class DeveloperOrganizationAdmin(admin.ModelAdmin):
         has_current_primary_admin = (
             OrganizationMembership.objects.filter(
                 organization=organization,
-                role=OrganizationMembership.Role.OWNER,
+                role=OrganizationMembership.Role.ADMIN,
             )
             .exclude(status=OrganizationMembership.Status.LEFT)
             .exists()
@@ -508,9 +508,9 @@ class DeveloperOrganizationAdmin(admin.ModelAdmin):
             OrganizationInvitation.objects.filter(
                 organization=organization,
                 purpose=(
-                    OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
+                    OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING
                 ),
-                invited_role=OrganizationMembership.Role.OWNER,
+                invited_role=OrganizationMembership.Role.ADMIN,
                 status=OrganizationInvitation.Status.PENDING,
                 expires_at__gt=timezone.now(),
             )
@@ -521,7 +521,7 @@ class DeveloperOrganizationAdmin(admin.ModelAdmin):
         if has_current_primary_admin or invitation is None:
             self.message_user(
                 request,
-                "There is no active Primary Admin invitation to cancel.",
+                "There is no active Organization Admin invitation to cancel.",
                 level=messages.WARNING,
             )
             return HttpResponseRedirect(
@@ -541,7 +541,7 @@ class DeveloperOrganizationAdmin(admin.ModelAdmin):
             else:
                 self.message_user(
                     request,
-                    "Primary Admin invitation cancelled.",
+                    "Organization Admin invitation cancelled.",
                     level=messages.SUCCESS,
                 )
                 return HttpResponseRedirect(
@@ -551,7 +551,7 @@ class DeveloperOrganizationAdmin(admin.ModelAdmin):
         context = self._provisioning_view_context(
             request=request,
             organization=organization,
-            title="Cancel Primary Admin Invitation",
+            title="Cancel Organization Admin Invitation",
             invitation=invitation,
             error_message=error_message,
         )

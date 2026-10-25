@@ -27,7 +27,7 @@ class OrganizationVerificationScopeTests(TestCase):
             partner_status=Organization.PartnerStatus.ACTIVE,
         )
         for user, role in (
-            (self.owner, OrganizationMembership.Role.OWNER),
+            (self.owner, OrganizationMembership.Role.ADMIN),
             (self.admin, OrganizationMembership.Role.ADMIN),
             (self.lead, OrganizationMembership.Role.LEAD_VERIFIER),
         ):
@@ -37,7 +37,7 @@ class OrganizationVerificationScopeTests(TestCase):
             )
         self.url = reverse("organization_verification_scope", args=[self.organization.pk])
 
-    def test_owner_updates_specializations_immediately_with_org_audit(self):
+    def test_admin_updates_specializations_immediately_with_org_audit(self):
         updated = update_organization_specializations(
             organization=self.organization, actor=self.owner,
             domains=["TECHNOLOGY", "SCIENCE"],
@@ -57,18 +57,27 @@ class OrganizationVerificationScopeTests(TestCase):
         self.assertEqual(event.previous_state, {"domains": []})
         self.assertEqual(event.new_state, {"domains": ["SCIENCE", "TECHNOLOGY"]})
 
-    def test_org_admin_and_platform_admin_cannot_self_edit(self):
-        for user in (self.admin, self.lead, self.superuser):
+    def test_additional_admin_can_manage_but_operational_and_platform_roles_cannot(self):
+        self.assertTrue(can_manage_specializations(
+            organization=self.organization, actor=self.admin,
+        ))
+        updated = update_organization_specializations(
+            organization=self.organization, actor=self.admin,
+            domains=["SCIENCE"], rationale="Admin updates organization specialization.",
+        )
+        self.assertEqual(organization_specializations(updated), ["SCIENCE"])
+
+        for user in (self.lead, self.superuser):
             with self.subTest(user=user.username), self.assertRaises(OrganizationScopeForbidden):
                 update_organization_specializations(
                     organization=self.organization, actor=user,
-                    domains=["SCIENCE"], rationale="A restricted actor tries to change scope.",
+                    domains=["TECHNOLOGY"], rationale="A restricted actor tries to change scope.",
                 )
             self.assertFalse(can_manage_specializations(
                 organization=self.organization, actor=user,
             ))
 
-    def test_membership_must_be_active_primary_admin(self):
+    def test_membership_must_be_active_admin(self):
         membership = OrganizationMembership.objects.get(
             organization=self.organization, user=self.owner,
         )
@@ -90,7 +99,7 @@ class OrganizationVerificationScopeTests(TestCase):
         self.assertEqual(self.organization.verification_specializations, [])
         self.assertFalse(AccountabilityEvent.objects.exists())
 
-    def test_owner_can_downscope_and_unset_without_reapproval(self):
+    def test_admin_can_downscope_and_unset_without_reapproval(self):
         for domains in (["SCIENCE", "TECHNOLOGY"], ["SCIENCE"], []):
             updated = update_organization_specializations(
                 organization=self.organization, actor=self.owner,
@@ -157,7 +166,7 @@ class OrganizationVerificationScopeTests(TestCase):
             "NEEDS_CLASSIFICATION",
         )
 
-    def test_endpoint_primary_admin_updates_admin_reads_others_denied(self):
+    def test_endpoint_admins_update_others_denied(self):
         client = APIClient()
         client.force_authenticate(user=self.owner)
         response = client.patch(self.url, data={
@@ -170,17 +179,15 @@ class OrganizationVerificationScopeTests(TestCase):
         client.force_authenticate(user=self.admin)
         response = client.get(self.url)
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.data["can_manage"])
+        self.assertTrue(response.data["can_manage"])
         response = client.patch(self.url, data={
-            "domains": ["SPORTS"], "rationale": "Admin cannot change primary admin settings.",
+            "domains": ["SPORTS"], "rationale": "Second Admin updates institutional scope.",
         }, format="json")
-        self.assertEqual(response.status_code, 403)
-        self.organization.refresh_from_db()
-        self.assertEqual(self.organization.verification_specializations, ["SCIENCE"])
+        self.assertEqual(response.status_code, 200)
 
         client.force_authenticate(user=self.superuser)
         self.assertEqual(client.patch(self.url, data={
-            "domains": ["SPORTS"], "rationale": "Platform cannot change institutional expertise.",
+            "domains": ["TECHNOLOGY"], "rationale": "Platform cannot change institutional expertise.",
         }, format="json").status_code, 403)
         client.force_authenticate(user=self.lead)
         self.assertEqual(client.get(self.url).status_code, 403)
