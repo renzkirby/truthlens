@@ -63,6 +63,11 @@ def migrate_partner_role_model(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    # PostgreSQL keeps deferred trigger events pending for the data updates above.
+    # Keep the migration non-atomic so those writes commit before the constraint
+    # DDL, while keeping the data conversion itself atomic below.
+    atomic = False
+
     dependencies = [
         ("api", "0088_claim_relatedness_context_nullable"),
     ]
@@ -71,6 +76,7 @@ class Migration(migrations.Migration):
         migrations.RunPython(
             migrate_partner_role_model,
             migrations.RunPython.noop,
+            atomic=True,
         ),
         migrations.AlterField(
             model_name="organization",
