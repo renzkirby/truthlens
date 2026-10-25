@@ -205,7 +205,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       sendResponse({ success: true });
    }
 
-   if (request.type === "DISPLAY_URL_RESULT") {
+   if (request.type === "DISPLAY_URL_RESULT" || request.type === "DISPLAY_TEXT_RESULT") {
       import("./modules/ui.jsx").then(({ displayResultCard, removeLoadingCard }) => {
          removeLoadingCard();
          setTimeout(() => displayResultCard(request.data), 2000);
@@ -213,10 +213,15 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       sendResponse({ success: true });
    }
 
-   if (request.type === "DISPLAY_URL_ERROR") {
+   if (request.type === "DISPLAY_URL_ERROR" || request.type === "DISPLAY_TEXT_ERROR") {
       import("./modules/ui.jsx").then(({ displayErrorCard, removeLoadingCard }) => {
          removeLoadingCard();
-         displayErrorCard(request.message || "Unable to verify this URL. Please try again.");
+         displayErrorCard(
+            request.message ||
+               (request.type === "DISPLAY_TEXT_ERROR"
+                  ? "Unable to verify this text. Please try again."
+                  : "Unable to verify this URL. Please try again."),
+         );
       });
       sendResponse({ success: true });
    }
@@ -243,7 +248,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       sendResponse({ success: true });
    }
 
-   if (request.type === "DISPLAY_URL_CACHED_RESULT") {
+   if (request.type === "DISPLAY_URL_CACHED_RESULT" || request.type === "DISPLAY_TEXT_CACHED_RESULT") {
       import("./modules/ui.jsx").then(({ displayCachedResultCard, removeLoadingCard, successCard }) => {
          setTimeout(() => {
             removeLoadingCard();
