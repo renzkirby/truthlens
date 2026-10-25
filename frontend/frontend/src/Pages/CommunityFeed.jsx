@@ -16,20 +16,39 @@ const UNSAFE_ERROR_PATTERN =
    /<[^>]+>|traceback|stack trace|django|internal server error|exception at|request failed with status code|\b(?:valueerror|typeerror|runtimeerror|databaseerror|integrityerror|operationalerror)\b|\bat\s+\S+\s*\([^)]*:\d+:\d+\)/i;
 
 const ASSESSMENT_SOURCES = { ALL: "ALL", HUMAN: "human", AI: "ai" };
+const TOPIC_ALL = "ALL";
 const CATEGORIES = { ALL: "ALL", TEXT: "TEXT", IMAGE: "IMAGE", VIDEO: "VIDEO", FILE: "FILE", URL: "URL" };
 
+const TOPIC_FILTERS = [
+   { value: TOPIC_ALL, label: "All Topics" },
+   { value: "POLITICS_GOVERNMENT_LAW", label: "Politics, Governance & Law" },
+   { value: "BUSINESS_ECONOMY", label: "Business & Economy" },
+   { value: "HEALTH_MEDICINE", label: "Health & Medicine" },
+   { value: "SCIENCE_TECHNOLOGY", label: "Science & Technology" },
+   { value: "EDUCATION", label: "Education" },
+   { value: "ENVIRONMENT_SAFETY", label: "Environment & Public Safety" },
+   { value: "SPORTS", label: "Sports" },
+   { value: "CULTURE_ENTERTAINMENT", label: "Culture & Entertainment" },
+];
+
 const CATEGORY_FILTERS = [
-   { value: CATEGORIES.ALL, label: "All", icon: null },
+   { value: CATEGORIES.ALL, label: "All formats", icon: null },
    { value: CATEGORIES.TEXT, label: "Text", icon: "file-text" },
    { value: CATEGORIES.IMAGE, label: "Images", icon: "image" },
+   { value: CATEGORIES.VIDEO, label: "Videos", icon: "play" },
    { value: CATEGORIES.FILE, label: "Files", icon: "paperclip" },
    { value: CATEGORIES.URL, label: "Links", icon: "link" },
 ];
 
 const ASSESSMENT_FILTERS = [
-   { value: ASSESSMENT_SOURCES.ALL, label: "All" },
-   { value: ASSESSMENT_SOURCES.HUMAN, label: "Human review" },
-   { value: ASSESSMENT_SOURCES.AI, label: "AI analysis" },
+   { value: ASSESSMENT_SOURCES.ALL, label: "All Reviews" },
+   { value: ASSESSMENT_SOURCES.HUMAN, label: "Human Review" },
+   { value: ASSESSMENT_SOURCES.AI, label: "AI Analysis" },
+];
+
+const SORT_OPTIONS = [
+   { value: "newest", label: "Latest" },
+   { value: "oldest", label: "Oldest" },
 ];
 
 function getSafeActionMessage(error, fallback) {
@@ -235,12 +254,16 @@ function CommunityFeed() {
    const [hasMore, setHasMore] = useState(true);
    const [loadError, setLoadError] = useState(null);
    const [currentCursor, setCurrentCursor] = useState(null);
+   const [activeTopic, setActiveTopic] = useState(TOPIC_ALL);
    const [activeAssessmentSource, setActiveAssessmentSource] = useState(ASSESSMENT_SOURCES.ALL);
-   const [activeCategoryFilter, setActiveCategoryFilter] = useState(CATEGORIES.ALL);
+   const [activeContentType, setActiveContentType] = useState(CATEGORIES.ALL);
    const [sortOrder, setSortOrder] = useState("newest");
 
+   const [isTopicMenuOpen, setIsTopicMenuOpen] = useState(false);
    const [isAssessmentMenuOpen, setIsAssessmentMenuOpen] = useState(false);
    const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
+   const [isMobileControlsOpen, setIsMobileControlsOpen] = useState(false);
    const [openMenuThreadId, setOpenMenuThreadId] = useState(null);
    const [editingThreadId, setEditingThreadId] = useState(null);
    const [editingCaption, setEditingCaption] = useState("");
@@ -255,10 +278,16 @@ function CommunityFeed() {
    const observerTarget = useRef(null);
    const requestedPagesRef = useRef(new Set());
    const requestGenerationRef = useRef(0);
+   const topicTriggerRef = useRef(null);
+   const topicMenuRef = useRef(null);
    const assessmentTriggerRef = useRef(null);
    const assessmentMenuRef = useRef(null);
    const sortTriggerRef = useRef(null);
    const sortMenuRef = useRef(null);
+   const filterTriggerRef = useRef(null);
+   const filterMenuRef = useRef(null);
+   const mobileControlsTriggerRef = useRef(null);
+   const mobileControlsMenuRef = useRef(null);
    const threadMenuRefs = useRef(new Map());
    const dialogRef = useRef(null);
    const dialogReturnFocusRef = useRef(null);
@@ -297,14 +326,29 @@ function CommunityFeed() {
       restoreDialogFocus();
    }, [reportingThreadId, restoreDialogFocus]);
 
-   const closeSortMenu = useCallback(() => {
-      setIsSortMenuOpen(false);
-      window.setTimeout(() => sortTriggerRef.current?.focus(), 0);
+   const closeTopicMenu = useCallback(() => {
+      setIsTopicMenuOpen(false);
+      window.setTimeout(() => topicTriggerRef.current?.focus(), 0);
    }, []);
 
    const closeAssessmentMenu = useCallback(() => {
       setIsAssessmentMenuOpen(false);
       window.setTimeout(() => assessmentTriggerRef.current?.focus(), 0);
+   }, []);
+
+   const closeSortMenu = useCallback(() => {
+      setIsSortMenuOpen(false);
+      window.setTimeout(() => sortTriggerRef.current?.focus(), 0);
+   }, []);
+
+   const closeFilterMenu = useCallback(() => {
+      setIsFilterMenuOpen(false);
+      window.setTimeout(() => filterTriggerRef.current?.focus(), 0);
+   }, []);
+
+   const closeMobileControls = useCallback(() => {
+      setIsMobileControlsOpen(false);
+      window.setTimeout(() => mobileControlsTriggerRef.current?.focus(), 0);
    }, []);
 
    const closeThreadMenu = useCallback(() => {
@@ -316,12 +360,20 @@ function CommunityFeed() {
    useEffect(() => {
       const handleClickOutside = (event) => {
          if (!event.target.closest(".feed-thread-menu-wrap")) setOpenMenuThreadId(null);
-         if (!event.target.closest(".feed-mobile-assessment")) setIsAssessmentMenuOpen(false);
-         if (!event.target.closest(".feed-sort")) setIsSortMenuOpen(false);
+         if (!event.target.closest(".feed-toolbar-topic")) setIsTopicMenuOpen(false);
+         if (!event.target.closest(".feed-toolbar-review")) setIsAssessmentMenuOpen(false);
+         if (!event.target.closest(".feed-toolbar-sort")) setIsSortMenuOpen(false);
+         if (!event.target.closest(".feed-toolbar-filter")) setIsFilterMenuOpen(false);
+         if (!event.target.closest(".feed-mobile-controls")) setIsMobileControlsOpen(false);
       };
       document.addEventListener("mousedown", handleClickOutside);
       return () => document.removeEventListener("mousedown", handleClickOutside);
    }, []);
+
+   useEffect(() => {
+      if (!isTopicMenuOpen) return;
+      window.requestAnimationFrame(() => topicMenuRef.current?.querySelector('[role="menuitemradio"]')?.focus());
+   }, [isTopicMenuOpen]);
 
    useEffect(() => {
       if (!isAssessmentMenuOpen) return;
@@ -334,6 +386,18 @@ function CommunityFeed() {
       if (!isSortMenuOpen) return;
       window.requestAnimationFrame(() => sortMenuRef.current?.querySelector('[role="menuitemradio"]')?.focus());
    }, [isSortMenuOpen]);
+
+   useEffect(() => {
+      if (!isFilterMenuOpen) return;
+      window.requestAnimationFrame(() => filterMenuRef.current?.querySelector('[role="menuitemradio"]')?.focus());
+   }, [isFilterMenuOpen]);
+
+   useEffect(() => {
+      if (!isMobileControlsOpen) return;
+      window.requestAnimationFrame(() =>
+         mobileControlsMenuRef.current?.querySelector('[role="menuitemradio"]')?.focus(),
+      );
+   }, [isMobileControlsOpen]);
 
    useEffect(() => {
       if (!openMenuThreadId) return;
@@ -529,8 +593,9 @@ function CommunityFeed() {
                const query = new URLSearchParams();
                if (activeSearchTerm) query.set("search", activeSearchTerm);
                query.set("sort", sortOrder);
+               if (activeTopic !== TOPIC_ALL) query.set("topic", activeTopic);
                if (activeAssessmentSource !== ASSESSMENT_SOURCES.ALL) query.set("assessment_source", activeAssessmentSource);
-               if (activeCategoryFilter !== CATEGORIES.ALL) query.set("claim_type", activeCategoryFilter);
+               if (activeContentType !== CATEGORIES.ALL) query.set("claim_type", activeContentType);
                url = `${threadsEndpoint}?${query.toString()}`;
             }
 
@@ -555,7 +620,7 @@ function CommunityFeed() {
             if (generation === requestGenerationRef.current) setLoading(false);
          }
       },
-      [authFetch, addToast, threadsEndpoint, activeSearchTerm, sortOrder, activeAssessmentSource, activeCategoryFilter],
+      [authFetch, addToast, threadsEndpoint, activeSearchTerm, sortOrder, activeTopic, activeAssessmentSource, activeContentType],
    );
 
    useEffect(() => {
@@ -597,9 +662,9 @@ function CommunityFeed() {
       navigate(query ? `${detailPath}?${query}` : detailPath);
    };
 
-   const selectSortOrder = (value) => {
-      setSortOrder(value);
-      closeSortMenu();
+   const selectTopic = (value) => {
+      setActiveTopic(value);
+      closeTopicMenu();
    };
 
    const selectAssessmentSource = (value) => {
@@ -607,11 +672,34 @@ function CommunityFeed() {
       closeAssessmentMenu();
    };
 
+   const selectSortOrder = (value) => {
+      setSortOrder(value);
+      closeSortMenu();
+   };
+
+   const selectContentType = (value) => {
+      setActiveContentType(value);
+      closeFilterMenu();
+   };
+
    const markMediaFailed = (threadId) => {
       setFailedMediaIds((currentIds) => new Set(currentIds).add(threadId));
    };
 
    const retryUrl = threads.length > 0 ? currentCursor : null;
+   const activeTopicLabel = TOPIC_FILTERS.find((topic) => topic.value === activeTopic)?.label || "All Topics";
+   const activeAssessmentLabel =
+      ASSESSMENT_FILTERS.find((source) => source.value === activeAssessmentSource)?.label || "All Reviews";
+   const activeSortLabel = SORT_OPTIONS.find((option) => option.value === sortOrder)?.label || "Latest";
+   const desktopFilterCount = activeContentType === CATEGORIES.ALL ? 0 : 1;
+   const hasActiveFilters =
+      activeTopic !== TOPIC_ALL ||
+      activeAssessmentSource !== ASSESSMENT_SOURCES.ALL ||
+      activeContentType !== CATEGORIES.ALL;
+   const mobileControlCount =
+      (activeAssessmentSource === ASSESSMENT_SOURCES.ALL ? 0 : 1) +
+      (sortOrder === "newest" ? 0 : 1) +
+      (activeContentType === CATEGORIES.ALL ? 0 : 1);
 
    return (
       <div className="feed-layout">
@@ -619,69 +707,82 @@ function CommunityFeed() {
             <h1 className="feed-visually-hidden">Community</h1>
 
             <section className="feed-controls" aria-label="Community feed controls">
-               <div className="feed-category-scroll" role="group" aria-label="Filter by claim type">
-                  {CATEGORY_FILTERS.map((category) => (
+               <div className="feed-toolbar">
+                  <div className="feed-toolbar-control feed-toolbar-topic">
                      <button
-                        key={category.value}
+                        ref={topicTriggerRef}
                         type="button"
-                        className={`feed-category-btn ${activeCategoryFilter === category.value ? "is-selected" : ""}`}
-                        onClick={() => setActiveCategoryFilter(category.value)}
-                        aria-pressed={activeCategoryFilter === category.value}
+                        className={`feed-toolbar-trigger ${activeTopic !== TOPIC_ALL ? "is-active" : ""}`}
+                        onClick={() => {
+                           setIsAssessmentMenuOpen(false);
+                           setIsSortMenuOpen(false);
+                           setIsFilterMenuOpen(false);
+                           setIsMobileControlsOpen(false);
+                           setIsTopicMenuOpen((isOpen) => !isOpen);
+                        }}
+                        aria-haspopup="menu"
+                        aria-expanded={isTopicMenuOpen}
+                        aria-controls="community-topic-menu"
                      >
-                        {category.icon && <Icons name={category.icon} size={15} aria-hidden="true" />}
-                        {category.label}
+                        <span className="feed-control-trigger-label">{activeTopicLabel}</span>
+                        <Icons name="chevron-down" size={15} aria-hidden="true" />
                      </button>
-                  ))}
-               </div>
 
-               <div className="feed-filter-row">
-                  <div className="feed-assessment-filters" role="group" aria-label="Filter by assessment source">
-                     <span className="feed-filter-label" aria-hidden="true">Assessment</span>
-                     {ASSESSMENT_FILTERS.map((source) => (
-                        <button
-                           key={source.value}
-                           type="button"
-                           className={`feed-filter-btn ${activeAssessmentSource === source.value ? "is-selected" : ""}`}
-                           onClick={() => {
-                              setIsAssessmentMenuOpen(false);
-                              setActiveAssessmentSource(source.value);
-                           }}
-                           aria-pressed={activeAssessmentSource === source.value}
+                     {isTopicMenuOpen && (
+                        <div
+                           ref={topicMenuRef}
+                           id="community-topic-menu"
+                           className="feed-popup-menu feed-toolbar-menu feed-topic-menu"
+                           role="menu"
+                           aria-label="Filter by topic"
+                           onKeyDown={(event) => moveMenuFocus(event, closeTopicMenu)}
                         >
-                           {source.label}
-                        </button>
-                     ))}
+                           {TOPIC_FILTERS.map((topic) => (
+                              <button
+                                 key={topic.value}
+                                 type="button"
+                                 role="menuitemradio"
+                                 aria-checked={activeTopic === topic.value}
+                                 className="feed-popup-item"
+                                 onClick={() => selectTopic(topic.value)}
+                              >
+                                 <span>{topic.label}</span>
+                                 {activeTopic === topic.value && <Icons name="check" size={15} aria-hidden="true" />}
+                              </button>
+                           ))}
+                        </div>
+                     )}
                   </div>
 
-                  <div className="feed-mobile-assessment">
+                  <div className="feed-toolbar-control feed-toolbar-review">
                      <button
                         ref={assessmentTriggerRef}
                         type="button"
-                        className="feed-sort-trigger feed-assessment-trigger"
+                        className={`feed-toolbar-trigger ${
+                           activeAssessmentSource !== ASSESSMENT_SOURCES.ALL ? "is-active" : ""
+                        }`}
                         onClick={() => {
+                           setIsTopicMenuOpen(false);
                            setIsSortMenuOpen(false);
+                           setIsFilterMenuOpen(false);
+                           setIsMobileControlsOpen(false);
                            setIsAssessmentMenuOpen((isOpen) => !isOpen);
                         }}
                         aria-haspopup="menu"
                         aria-expanded={isAssessmentMenuOpen}
-                        aria-controls="community-assessment-menu"
+                        aria-controls="community-review-menu"
                      >
-                        <span className="feed-control-trigger-label">
-                           {activeAssessmentSource === ASSESSMENT_SOURCES.ALL
-                              ? "All assessments"
-                              : ASSESSMENT_FILTERS.find(
-                                   (source) => source.value === activeAssessmentSource,
-                                )?.label}
-                        </span>
+                        <span className="feed-control-trigger-label">{activeAssessmentLabel}</span>
                         <Icons name="chevron-down" size={15} aria-hidden="true" />
                      </button>
+
                      {isAssessmentMenuOpen && (
                         <div
                            ref={assessmentMenuRef}
-                           id="community-assessment-menu"
-                           className="feed-popup-menu feed-assessment-menu"
+                           id="community-review-menu"
+                           className="feed-popup-menu feed-toolbar-menu"
                            role="menu"
-                           aria-label="Filter by assessment source"
+                           aria-label="Filter by review source"
                            onKeyDown={(event) => moveMenuFocus(event, closeAssessmentMenu)}
                         >
                            {ASSESSMENT_FILTERS.map((source) => (
@@ -693,9 +794,7 @@ function CommunityFeed() {
                                  className="feed-popup-item"
                                  onClick={() => selectAssessmentSource(source.value)}
                               >
-                                 {source.value === ASSESSMENT_SOURCES.ALL
-                                    ? "All assessments"
-                                    : source.label}
+                                 <span>{source.label}</span>
                                  {activeAssessmentSource === source.value && (
                                     <Icons name="check" size={15} aria-hidden="true" />
                                  )}
@@ -705,50 +804,239 @@ function CommunityFeed() {
                      )}
                   </div>
 
-                  <div className="feed-sort">
-                     <span className="feed-filter-label">Sort</span>
+                  <div className="feed-toolbar-control feed-toolbar-sort">
                      <button
                         ref={sortTriggerRef}
                         type="button"
-                        className="feed-sort-trigger"
+                        className={`feed-toolbar-trigger ${sortOrder !== "newest" ? "is-active" : ""}`}
                         onClick={() => {
+                           setIsTopicMenuOpen(false);
                            setIsAssessmentMenuOpen(false);
+                           setIsFilterMenuOpen(false);
+                           setIsMobileControlsOpen(false);
                            setIsSortMenuOpen((isOpen) => !isOpen);
                         }}
                         aria-haspopup="menu"
                         aria-expanded={isSortMenuOpen}
                         aria-controls="community-sort-menu"
                      >
-                        <span className="feed-control-trigger-label">
-                           {sortOrder === "newest" ? "Newest first" : "Oldest first"}
-                        </span>
+                        <span className="feed-control-trigger-label">{activeSortLabel}</span>
                         <Icons name="chevron-down" size={15} aria-hidden="true" />
                      </button>
+
                      {isSortMenuOpen && (
                         <div
                            ref={sortMenuRef}
                            id="community-sort-menu"
-                           className="feed-popup-menu feed-sort-menu"
+                           className="feed-popup-menu feed-toolbar-menu"
                            role="menu"
                            aria-label="Sort discussions"
                            onKeyDown={(event) => moveMenuFocus(event, closeSortMenu)}
                         >
-                           {[
-                              ["newest", "Newest first"],
-                              ["oldest", "Oldest first"],
-                           ].map(([value, label]) => (
+                           {SORT_OPTIONS.map((option) => (
                               <button
-                                 key={value}
+                                 key={option.value}
                                  type="button"
                                  role="menuitemradio"
-                                 aria-checked={sortOrder === value}
+                                 aria-checked={sortOrder === option.value}
                                  className="feed-popup-item"
-                                 onClick={() => selectSortOrder(value)}
+                                 onClick={() => selectSortOrder(option.value)}
                               >
-                                 {label}
-                                 {sortOrder === value && <Icons name="check" size={15} aria-hidden="true" />}
+                                 <span>{option.label}</span>
+                                 {sortOrder === option.value && <Icons name="check" size={15} aria-hidden="true" />}
                               </button>
                            ))}
+                        </div>
+                     )}
+                  </div>
+
+                  <div className="feed-toolbar-control feed-toolbar-filter">
+                     <button
+                        ref={filterTriggerRef}
+                        type="button"
+                        className={`feed-toolbar-trigger ${desktopFilterCount ? "is-active" : ""}`}
+                        onClick={() => {
+                           setIsTopicMenuOpen(false);
+                           setIsAssessmentMenuOpen(false);
+                           setIsSortMenuOpen(false);
+                           setIsMobileControlsOpen(false);
+                           setIsFilterMenuOpen((isOpen) => !isOpen);
+                        }}
+                        aria-haspopup="menu"
+                        aria-expanded={isFilterMenuOpen}
+                        aria-controls="community-filter-menu"
+                     >
+                        <Icons name="filter" size={15} aria-hidden="true" />
+                        <span className="feed-control-trigger-label">Filters</span>
+                        {desktopFilterCount > 0 && <span className="feed-filter-count">{desktopFilterCount}</span>}
+                     </button>
+
+                     {isFilterMenuOpen && (
+                        <div
+                           ref={filterMenuRef}
+                           id="community-filter-menu"
+                           className="feed-popup-menu feed-toolbar-menu feed-filter-menu"
+                           role="menu"
+                           aria-label="Content filters"
+                           onKeyDown={(event) => moveMenuFocus(event, closeFilterMenu)}
+                        >
+                           <span className="feed-popup-section-label">Content format</span>
+                           {CATEGORY_FILTERS.map((category) => (
+                              <button
+                                 key={category.value}
+                                 type="button"
+                                 role="menuitemradio"
+                                 aria-checked={activeContentType === category.value}
+                                 className="feed-popup-item"
+                                 onClick={() => selectContentType(category.value)}
+                              >
+                                 <span className="feed-popup-item-label">
+                                    {category.icon && <Icons name={category.icon} size={15} aria-hidden="true" />}
+                                    {category.label}
+                                 </span>
+                                 {activeContentType === category.value && (
+                                    <Icons name="check" size={15} aria-hidden="true" />
+                                 )}
+                              </button>
+                           ))}
+                           <div className="feed-popup-divider" role="separator" />
+                           <button
+                              type="button"
+                              role="menuitem"
+                              className="feed-popup-item feed-popup-action"
+                              disabled={!hasActiveFilters}
+                              onClick={() => {
+                                 setActiveTopic(TOPIC_ALL);
+                                 setActiveAssessmentSource(ASSESSMENT_SOURCES.ALL);
+                                 setActiveContentType(CATEGORIES.ALL);
+                                 closeFilterMenu();
+                              }}
+                           >
+                              Clear filters
+                           </button>
+                        </div>
+                     )}
+                  </div>
+
+                  <div className="feed-mobile-controls">
+                     <button
+                        ref={mobileControlsTriggerRef}
+                        type="button"
+                        className={`feed-toolbar-trigger ${mobileControlCount ? "is-active" : ""}`}
+                        onClick={() => {
+                           setIsTopicMenuOpen(false);
+                           setIsAssessmentMenuOpen(false);
+                           setIsSortMenuOpen(false);
+                           setIsFilterMenuOpen(false);
+                           setIsMobileControlsOpen((isOpen) => !isOpen);
+                        }}
+                        aria-haspopup="menu"
+                        aria-expanded={isMobileControlsOpen}
+                        aria-controls="community-mobile-controls-menu"
+                     >
+                        <Icons name="filter" size={15} aria-hidden="true" />
+                        <span className="feed-control-trigger-label">Sort & Filter</span>
+                        {mobileControlCount > 0 && <span className="feed-filter-count">{mobileControlCount}</span>}
+                     </button>
+
+                     {isMobileControlsOpen && (
+                        <div
+                           ref={mobileControlsMenuRef}
+                           id="community-mobile-controls-menu"
+                           className="feed-popup-menu feed-mobile-controls-menu"
+                           role="menu"
+                           aria-label="Sort and filter discussions"
+                           onKeyDown={(event) => moveMenuFocus(event, closeMobileControls)}
+                        >
+                           <div className="feed-mobile-section">
+                              <span className="feed-popup-section-label">Review</span>
+                              {ASSESSMENT_FILTERS.map((source) => (
+                                 <button
+                                    key={source.value}
+                                    type="button"
+                                    role="menuitemradio"
+                                    aria-checked={activeAssessmentSource === source.value}
+                                    className="feed-popup-item"
+                                    onClick={() => setActiveAssessmentSource(source.value)}
+                                 >
+                                    <span>{source.label}</span>
+                                    {activeAssessmentSource === source.value && (
+                                       <Icons name="check" size={15} aria-hidden="true" />
+                                    )}
+                                 </button>
+                              ))}
+                           </div>
+
+                           <div className="feed-popup-divider" role="separator" />
+
+                           <div className="feed-mobile-section">
+                              <span className="feed-popup-section-label">Sort</span>
+                              {SORT_OPTIONS.map((option) => (
+                                 <button
+                                    key={option.value}
+                                    type="button"
+                                    role="menuitemradio"
+                                    aria-checked={sortOrder === option.value}
+                                    className="feed-popup-item"
+                                    onClick={() => setSortOrder(option.value)}
+                                 >
+                                    <span>{option.label}</span>
+                                    {sortOrder === option.value && (
+                                       <Icons name="check" size={15} aria-hidden="true" />
+                                    )}
+                                 </button>
+                              ))}
+                           </div>
+
+                           <div className="feed-popup-divider" role="separator" />
+
+                           <div className="feed-mobile-section">
+                              <span className="feed-popup-section-label">Content format</span>
+                              {CATEGORY_FILTERS.map((category) => (
+                                 <button
+                                    key={category.value}
+                                    type="button"
+                                    role="menuitemradio"
+                                    aria-checked={activeContentType === category.value}
+                                    className="feed-popup-item"
+                                    onClick={() => setActiveContentType(category.value)}
+                                 >
+                                    <span className="feed-popup-item-label">
+                                       {category.icon && <Icons name={category.icon} size={15} aria-hidden="true" />}
+                                       {category.label}
+                                    </span>
+                                    {activeContentType === category.value && (
+                                       <Icons name="check" size={15} aria-hidden="true" />
+                                    )}
+                                 </button>
+                              ))}
+                           </div>
+
+                           <div className="feed-popup-divider" role="separator" />
+
+                           <div className="feed-mobile-actions">
+                              <button
+                                 type="button"
+                                 role="menuitem"
+                                 className="feed-popup-item feed-popup-action"
+                                 disabled={mobileControlCount === 0}
+                                 onClick={() => {
+                                    setActiveAssessmentSource(ASSESSMENT_SOURCES.ALL);
+                                    setSortOrder("newest");
+                                    setActiveContentType(CATEGORIES.ALL);
+                                 }}
+                              >
+                                 Reset
+                              </button>
+                              <button
+                                 type="button"
+                                 role="menuitem"
+                                 className="feed-popup-item feed-popup-action feed-popup-action--primary"
+                                 onClick={closeMobileControls}
+                              >
+                                 Done
+                              </button>
+                           </div>
                         </div>
                      )}
                   </div>
@@ -780,7 +1068,9 @@ function CommunityFeed() {
                   <h2 id="feed-empty-title">
                      {activeSearchTerm
                         ? `No discussions found for “${activeSearchTerm}”.`
-                        : activeAssessmentSource !== ASSESSMENT_SOURCES.ALL || activeCategoryFilter !== CATEGORIES.ALL
+                        : activeTopic !== TOPIC_ALL ||
+                            activeAssessmentSource !== ASSESSMENT_SOURCES.ALL ||
+                            activeContentType !== CATEGORIES.ALL
                           ? "No discussions match these filters."
                           : "No community discussions yet."}
                   </h2>
