@@ -385,7 +385,7 @@ class PriorInstitutionalKnowledgeTests(TestCase):
         OrganizationMembership.objects.create(
             user=self.actor,
             organization=other,
-            role=OrganizationMembership.Role.ADMIN,
+            role=OrganizationMembership.Role.LEAD_VERIFIER,
             status=OrganizationMembership.Status.ACTIVE,
         )
         self.assertEqual(self.get(other).status_code, 404)
