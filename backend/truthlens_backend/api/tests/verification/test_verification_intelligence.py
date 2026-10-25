@@ -696,7 +696,7 @@ class VerificationIntelligenceTests(TestCase):
             "api.knowledge_reuse_service.get_public_partner_fact_check_detail",
             side_effect=public_detail,
         ), patch(
-            "api.knowledge_reuse_service.accepted_reference",
+            "api.verification.relatedness.accepted_reference",
             return_value=True,
         ):
             result = self.project()
