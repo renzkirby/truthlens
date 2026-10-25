@@ -235,6 +235,8 @@ class VerificationIntelligenceTests(TestCase):
             self.project(organization=self.other)
 
     def test_authorized_other_organization_cannot_see_assignment(self):
+        self.membership.status = OrganizationMembership.Status.LEFT
+        self.membership.save(update_fields=["status"])
         OrganizationMembership.objects.create(
             user=self.actor,
             organization=self.other,
@@ -258,7 +260,7 @@ class VerificationIntelligenceTests(TestCase):
             self.project(claim_id=uuid4())
 
     def test_all_workload_roles_are_allowed(self):
-        for role in ("OWNER", "ADMIN", "LEAD_VERIFIER", "MODERATOR", "RESEARCHER"):
+        for role in ("ADMIN", "LEAD_VERIFIER", "VERIFICATION_REVIEWER", "RESEARCHER"):
             with self.subTest(role=role):
                 OrganizationMembership.objects.filter(pk=self.membership.pk).update(
                     role=role
