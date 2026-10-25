@@ -84,7 +84,7 @@ class ManagementApiTests(APITestCase):
         self.owner_membership = OrganizationMembership.objects.create(
             organization=self.organization,
             user=self.owner,
-            role=OrganizationMembership.Role.OWNER,
+            role=OrganizationMembership.Role.ADMIN,
             status=OrganizationMembership.Status.ACTIVE,
             approved_at=timezone.now(),
             approved_by=self.superuser,
@@ -113,9 +113,9 @@ class ManagementApiTests(APITestCase):
             OrganizationInvitation.objects.create(
                 organization=self.pending_organization,
                 email="pending-primary@example.com",
-                invited_role=OrganizationMembership.Role.OWNER,
+                invited_role=OrganizationMembership.Role.ADMIN,
                 purpose=(
-                    OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
+                    OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING
                 ),
                 invited_by=self.superuser,
                 token_digest="b" * 64,
@@ -327,7 +327,7 @@ class ManagementApiTests(APITestCase):
         self.assertEqual(primary_admin["membership"]["role"], "OWNER")
         self.assertEqual(
             primary_admin["membership"]["role_label"],
-            "Primary Admin",
+            "Organization Admin",
         )
         self.assertIsNone(primary_admin["invitation"])
 
@@ -344,7 +344,7 @@ class ManagementApiTests(APITestCase):
         self.assertIsNone(primary_admin["membership"])
         self.assertEqual(
             primary_admin["invitation"]["role_label"],
-            "Primary Admin",
+            "Organization Admin",
         )
         self.assertNotIn("token_digest", primary_admin["invitation"])
 
@@ -357,7 +357,7 @@ class ManagementApiTests(APITestCase):
         )
 
         self.assertEqual(response.data["role"], "OWNER")
-        self.assertEqual(response.data["role_label"], "Primary Admin")
+        self.assertEqual(response.data["role_label"], "Organization Admin")
 
     def test_membership_list_and_detail_are_read_only(self):
         client = self.client_for(self.superuser)
@@ -725,10 +725,10 @@ class ManagementApiTests(APITestCase):
         invitation = OrganizationInvitation.objects.get(pk=response.data["id"])
         self.assertEqual(
             invitation.purpose,
-            OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING,
+            OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING,
         )
-        self.assertEqual(invitation.invited_role, OrganizationMembership.Role.OWNER)
-        self.assertEqual(response.data["role_label"], "Primary Admin")
+        self.assertEqual(invitation.invited_role, OrganizationMembership.Role.ADMIN)
+        self.assertEqual(response.data["role_label"], "Organization Admin")
         self.assertNotIn("token", json.dumps(response.data).lower())
         events = AccountabilityEvent.objects.filter(
             action_type=AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CREATED,
