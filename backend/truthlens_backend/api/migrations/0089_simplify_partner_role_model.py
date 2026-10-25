@@ -73,6 +73,18 @@ class Migration(migrations.Migration):
             migrations.RunPython.noop,
         ),
         migrations.AlterField(
+            model_name="organization",
+            name="verification_specializations",
+            field=models.JSONField(
+                blank=True,
+                default=list,
+                help_text=(
+                    "Organization Admin-managed subject specializations "
+                    "for new partner intake."
+                ),
+            ),
+        ),
+        migrations.AlterField(
             model_name="organizationmembership",
             name="role",
             field=models.CharField(
