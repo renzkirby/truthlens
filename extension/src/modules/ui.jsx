@@ -481,6 +481,34 @@ export function displayResultCard(claim) {
               moreLabel: "full report",
            });
 
+   const confidenceHTML =
+      displayVerdict === "OUT_OF_SCOPE"
+         ? `
+            <section class="truthlens-confidence-na" aria-label="Confidence score not applicable">
+               <span class="truthlens-confidence-na-icon" aria-hidden="true">${iconHelp}</span>
+               <div>
+                  <strong>Confidence score not applicable</strong>
+                  <p>No factual verdict was produced for this input, so there is no factual confidence score to show.</p>
+               </div>
+            </section>
+         `
+         : `
+            <div class="truthlens-confidence-container">
+               <div class="truthlens-confidence-header">
+                  <div class="truthlens-confidence-title">
+                     ${iconActivity} AI CONFIDENCE
+                  </div>
+                  <div class="truthlens-confidence-value" style="color: ${ui.color};">${confidence_score || 0}%</div>
+               </div>
+               <div class="truthlens-confidence-bar">
+                  <div class="truthlens-confidence-fill" style="width: ${confidence_score || 0}%; background: linear-gradient(90deg, #10b981 0%, ${ui.color} 100%);"></div>
+               </div>
+               <div class="truthlens-score-context">
+                  ${confidence_score < 50 ? "Low confidence — human review recommended" : "High confidence based on available data"}
+               </div>
+            </div>
+         `;
+
    // 2. Dynamic Button Logic
    let primaryButtonHTML = "";
    let secondaryLinkHTML = "";
@@ -537,20 +565,7 @@ export function displayResultCard(claim) {
             <div class="truthlens-summary-text">${summary || "No summary available."}</div>
          </div>
 
-         <div class="truthlens-confidence-container">
-            <div class="truthlens-confidence-header">
-               <div class="truthlens-confidence-title">
-                  ${iconActivity} AI CONFIDENCE
-               </div>
-               <div class="truthlens-confidence-value" style="color: ${ui.color};">${confidence_score || 0}%</div>
-            </div>
-            <div class="truthlens-confidence-bar">
-               <div class="truthlens-confidence-fill" style="width: ${confidence_score || 0}%; background: linear-gradient(90deg, #10b981 0%, ${ui.color} 100%);"></div>
-            </div>
-            <div class="truthlens-score-context">
-               ${confidence_score < 50 ? "Low confidence — human review recommended" : "High confidence based on available data"}
-            </div>
-         </div>
+         ${confidenceHTML}
 
          ${sourcesHTML}
          ${relatedPublicationsHTML(claim)}
@@ -982,8 +997,18 @@ export function displayCachedResultCard(match) {
          </div>
 
          ${
-            confidence_score !== null
+            displayVerdict === "OUT_OF_SCOPE"
                ? `
+            <section class="truthlens-confidence-na" aria-label="Confidence score not applicable">
+               <span class="truthlens-confidence-na-icon" aria-hidden="true">${iconHelp}</span>
+               <div>
+                  <strong>Confidence score not applicable</strong>
+                  <p>No factual verdict was produced for this input, so there is no factual confidence score to show.</p>
+               </div>
+            </section>
+         `
+               : confidence_score !== null
+                 ? `
             <div class="truthlens-confidence-score">Confidence Score: ${confidence_score}</div>
             <div class="truthlens-confidence-bar">
                <div class="truthlens-confidence-fill" style="width: ${confidence_score}%; background-color: ${confidence_bar_color};"></div>
@@ -998,7 +1023,7 @@ export function displayCachedResultCard(match) {
                   : ""
             }
          `
-               : ""
+                 : ""
          }
 
          ${sourcesHTML}
