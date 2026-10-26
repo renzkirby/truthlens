@@ -96,6 +96,8 @@ DOMAIN_ACTIONS = {
     AccountabilityDomain.PLATFORM_GOVERNANCE: (
         AccountabilityEvent.ActionType.ORGANIZATION_CREATED,
         AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED,
+        AccountabilityEvent.ActionType.INSTITUTION_CREATED,
+        AccountabilityEvent.ActionType.ORGANIZATION_INSTITUTION_AFFILIATION_UPDATED,
         AccountabilityEvent.ActionType.ORGANIZATION_VERIFICATION_SCOPE_APPROVED,
         AccountabilityEvent.ActionType.CLAIM_INVESTIGATION_CLASSIFIED,
         AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CREATED,
@@ -197,6 +199,8 @@ DOMAIN_RESOURCES = {
     AccountabilityDomain.PLATFORM_GOVERNANCE: {
         AccountabilityEvent.ResourceType.CLAIM,
         AccountabilityEvent.ResourceType.ORGANIZATION,
+        AccountabilityEvent.ResourceType.INSTITUTION,
+        AccountabilityEvent.ResourceType.ORGANIZATION_INSTITUTION_AFFILIATION,
         AccountabilityEvent.ResourceType.ORGANIZATION_INVITATION,
         AccountabilityEvent.ResourceType.USER_ACCOUNT,
         AccountabilityEvent.ResourceType.PLATFORM_STAFF_INVITATION,
@@ -215,6 +219,12 @@ MANAGEMENT_GOVERNANCE_ACTION_CAPABILITIES = {
         MANAGE_PARTNER_ORGANIZATION
     ),
     AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED: (
+        MANAGE_PARTNER_ORGANIZATION
+    ),
+    AccountabilityEvent.ActionType.INSTITUTION_CREATED: (
+        MANAGE_PARTNER_ORGANIZATION
+    ),
+    AccountabilityEvent.ActionType.ORGANIZATION_INSTITUTION_AFFILIATION_UPDATED: (
         MANAGE_PARTNER_ORGANIZATION
     ),
     AccountabilityEvent.ActionType.ORGANIZATION_VERIFICATION_SCOPE_APPROVED: (

@@ -12,8 +12,8 @@ Keep public browsing simple without weakening institutional verification rules.
 TruthLens retains the existing **12 investigation subjects** and groups them into
 **eight public news categories** for the Community feed. **Campus Affairs**
 remains a separate planned context dimension, not a thirteenth subject, and is
-intentionally withheld from the live Topic control until authoritative campus
-context and institution identity are persisted.
+intentionally withheld from the live Topic control until authoritative
+claim-to-institution identity and campus-routing policy are implemented.
 
 The subject rubric and public group mapping live in
 `api/verification/subject_taxonomy.py`. The Community API currently projects a
@@ -115,12 +115,14 @@ true. University-specific partner matching additionally needs a separate,
 **verified canonical institution ID**. A text `institution_hint` in examples is
 illustrative only and **must not authorize intake**.
 
-For the first implementation, a student publication may be represented as
-organization type `NEWS` with a proposed `STUDENT_PUBLICATION` subtype. Its
-`Own Institution` coverage may only match an independently verified institution
-association. Do not enable partner routing on tentative campus or identity
-matches. Existing partner status, capability and all-required-domain checks
-still apply. Conflict-of-interest review is a separate future policy.
+The institution-affiliation foundation represents a student publication as
+organization type `NEWS` with subtype `STUDENT_PUBLICATION`. A platform-reviewed
+`OrganizationInstitutionAffiliation` links it to one canonical `Institution`
+with `INSTITUTION_WIDE` coverage. This identity contract does not yet affect
+partner intake: existing partner status, capability and all-required-domain
+checks still apply until a separate routing policy is reviewed and merged.
+Claim-to-institution identity is also still required before that exception can
+be applied. Conflict-of-interest review remains a separate future policy.
 
 ## Current Community controls
 
@@ -177,6 +179,6 @@ Still excluded:
 - changes to `api/verification_domain_policy.py`, `api/services.py`, or
   `api/tasks.py`;
 - partner-routing or authorization changes;
-- Campus Affairs filtering before authoritative campus context and verified
-  institution identity are persisted;
+- Campus Affairs filtering before authoritative claim-to-institution identity
+  and campus-routing policy are implemented;
 - any claim that the synthetic fixture measures real classifier accuracy.

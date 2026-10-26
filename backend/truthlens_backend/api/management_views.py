@@ -31,14 +31,22 @@ from .management_governance_service import (
     create_partner_organization,
     update_organization_platform_trust,
 )
+from .institution_affiliation_service import (
+    create_institution,
+    set_organization_institution_affiliation,
+)
 from .management_serializers import (
     ManagementEmptyMutationSerializer,
     ManagementGovernanceAuditDetailQuerySerializer,
     ManagementGovernanceAuditQuerySerializer,
+    ManagementInstitutionAffiliationUpdateSerializer,
+    ManagementInstitutionCreateSerializer,
+    ManagementInstitutionSerializer,
     ManagementInvitationSerializer,
     ManagementMembershipSerializer,
     ManagementOrganizationCreateSerializer,
     ManagementOrganizationDetailSerializer,
+    ManagementOrganizationInstitutionAffiliationSerializer,
     ManagementOrganizationListSerializer,
     ManagementPlatformStaffInvitationCreateSerializer,
     ManagementPlatformStaffInvitationPublicSerializer,
@@ -52,7 +60,9 @@ from .management_serializers import (
     ManagementPipelineRunListQuerySerializer,
 )
 from .models import (
+    Institution,
     Organization,
+    OrganizationInstitutionAffiliation,
     OrganizationInvitation,
     OrganizationMembership,
     PlatformStaffInvitation,
@@ -439,6 +449,120 @@ def _provisioning_error_response(error):
         response_status = status.HTTP_400_BAD_REQUEST
 
     return Response({"detail": str(error)}, status=response_status)
+
+
+class ManagementInstitutionListView(generics.ListCreateAPIView):
+    permission_classes = [IsPlatformManagementAdmin]
+    serializer_class = ManagementInstitutionSerializer
+    pagination_class = ManagementPagination
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return ManagementInstitutionCreateSerializer
+        return super().get_serializer_class()
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            institution = create_institution(
+                **serializer.validated_data,
+                actor=request.user,
+            )
+        except ManagementGovernanceAuthorizationError as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except ManagementGovernanceValidationError as error:
+            return _governance_validation_response(error)
+        except ManagementGovernanceConflict as error:
+            return _governance_conflict_response(error)
+
+        return Response(
+            ManagementInstitutionSerializer(institution).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    def get_queryset(self):
+        queryset = Institution.objects.all().order_by("name", "id")
+        query = self.request.query_params.get("q", "").strip()
+        if query:
+            queryset = queryset.filter(
+                Q(name__icontains=query) | Q(slug__icontains=query)
+            )
+
+        active = self.request.query_params.get("is_active")
+        if active:
+            normalized = active.lower()
+            if normalized not in {"true", "false"}:
+                raise ValidationError({"is_active": "Use true or false."})
+            queryset = queryset.filter(is_active=normalized == "true")
+
+        return queryset
+
+
+class ManagementInstitutionDetailView(generics.RetrieveAPIView):
+    permission_classes = [IsPlatformManagementAdmin]
+    serializer_class = ManagementInstitutionSerializer
+    queryset = Institution.objects.all()
+    lookup_url_kwarg = "institution_id"
+
+
+class ManagementOrganizationInstitutionAffiliationView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def get(self, request, organization_id):
+        organization = get_object_or_404(Organization, pk=organization_id)
+        try:
+            affiliation = organization.institution_affiliation
+        except OrganizationInstitutionAffiliation.DoesNotExist:
+            return Response(
+                {"detail": "Institution affiliation not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(
+            ManagementOrganizationInstitutionAffiliationSerializer(affiliation).data,
+            status=status.HTTP_200_OK,
+        )
+
+    def put(self, request, organization_id):
+        serializer = ManagementInstitutionAffiliationUpdateSerializer(
+            data=request.data
+        )
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            affiliation = set_organization_institution_affiliation(
+                organization_id=organization_id,
+                actor=request.user,
+                **serializer.validated_data,
+            )
+        except Organization.DoesNotExist:
+            return Response(
+                {"detail": "Organization not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Institution.DoesNotExist:
+            return Response(
+                {"detail": "Institution not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except ManagementGovernanceAuthorizationError as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except ManagementGovernanceValidationError as error:
+            return _governance_validation_response(error)
+        except ManagementGovernanceConflict as error:
+            return _governance_conflict_response(error)
+
+        return Response(
+            ManagementOrganizationInstitutionAffiliationSerializer(affiliation).data,
+            status=status.HTTP_200_OK,
+        )
 
 
 class ManagementOrganizationListView(generics.ListCreateAPIView):
