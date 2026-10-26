@@ -1,3 +1,38 @@
+
+.thread-detail-governance-notice {
+   width: min(1180px, calc(100% - 32px));
+   box-sizing: border-box;
+   display: flex;
+   align-items: flex-start;
+   gap: 10px;
+   margin: 16px auto 0;
+   padding: 12px 14px;
+   border: 1px solid var(--tl-color-status-info-border);
+   border-radius: 10px;
+   background: var(--tl-color-status-info-bg);
+   color: var(--tl-color-status-info-text);
+}
+
+.thread-detail-governance-notice > div {
+   min-width: 0;
+   display: flex;
+   flex-direction: column;
+   gap: 2px;
+}
+
+.thread-detail-governance-notice strong {
+   font-size: 0.82rem;
+}
+
+.thread-detail-governance-notice span {
+   font-size: 0.76rem;
+   line-height: 1.5;
+}
+
+.thread-detail-comment-like--readonly {
+   cursor: default;
+}
+
 /* Thread Detail S3E — restore the original Community visual language while
    retaining S3 semantics, accessibility, and real interactions. */
 .thread-detail-page {
