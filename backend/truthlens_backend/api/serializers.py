@@ -43,6 +43,10 @@ from .organization_service import (
     get_workspace_access_context,
 )
 from .management_permissions import can_access_management_console
+from .platform_identity_service import (
+    get_community_identity_context,
+    is_platform_staff_identity,
+)
 from .organization_invitation_service import (
     get_invitation_role_label,
 )
@@ -131,6 +135,11 @@ class PublicIdentityProfileSerializer(serializers.ModelSerializer):
         source="*",
         read_only=True,
     )
+
+    def get_trust_score(self, obj):
+        if is_platform_staff_identity(obj):
+            return None
+        return obj.profile.trust_score
 
     def get_followers_count(self, obj):
         return obj.profile.followers.count()
@@ -295,7 +304,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
-    trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
+    trust_score = serializers.SerializerMethodField()
     is_email_verified = serializers.BooleanField(
         source="profile.is_email_verified", read_only=True
     )
@@ -380,6 +389,8 @@ class UserWithTrustBreakdownSerializer(UserSerializer):
     trust_breakdown = serializers.SerializerMethodField()
 
     def get_trust_breakdown(self, obj):
+        if is_platform_staff_identity(obj):
+            return None
         return calculate_trust_components(obj)
 
     class Meta(UserSerializer.Meta):
@@ -389,6 +400,7 @@ class UserWithTrustBreakdownSerializer(UserSerializer):
 class CurrentUserSerializer(UserWithTrustBreakdownSerializer):
     workspace = serializers.SerializerMethodField()
     management_console = serializers.SerializerMethodField()
+    community_identity = serializers.SerializerMethodField()
     auth_methods = serializers.SerializerMethodField()
     partner_affiliations = PublicPartnerAffiliationsField(
         source="*",
@@ -400,6 +412,9 @@ class CurrentUserSerializer(UserWithTrustBreakdownSerializer):
 
     def get_management_console(self, obj):
         return {"can_access": can_access_management_console(obj)}
+
+    def get_community_identity(self, obj):
+        return get_community_identity_context(obj)
 
     def get_auth_methods(self, obj):
         methods = []
@@ -416,6 +431,7 @@ class CurrentUserSerializer(UserWithTrustBreakdownSerializer):
         fields = UserWithTrustBreakdownSerializer.Meta.fields + [
             "workspace",
             "management_console",
+            "community_identity",
             "auth_methods",
             "partner_affiliations",
         ]
