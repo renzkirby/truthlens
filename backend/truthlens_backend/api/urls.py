@@ -12,6 +12,21 @@ urlpatterns = [
         name="management_overview",
     ),
     path(
+        "management/platform-staff/",
+        management_views.ManagementPlatformStaffListView.as_view(),
+        name="management_platform_staff",
+    ),
+    path(
+        "management/platform-staff/candidates/",
+        management_views.ManagementPlatformStaffCandidateListView.as_view(),
+        name="management_platform_staff_candidates",
+    ),
+    path(
+        "management/platform-staff/<int:user_id>/",
+        management_views.ManagementPlatformStaffDetailView.as_view(),
+        name="management_platform_staff_detail",
+    ),
+    path(
         "management/pipeline/overview/",
         management_views.ManagementPipelineOverviewView.as_view(),
         name="management_pipeline_overview",
