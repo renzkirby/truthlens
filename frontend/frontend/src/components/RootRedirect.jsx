@@ -1,10 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { canAccessWorkspace } from "../utils/workspace";
-import {
-   canAccessManagementConsole,
-   isPlatformSafetyModerator,
-} from "../utils/management";
+import { getDefaultAuthenticatedDestination } from "../utils/authNavigation";
 import AuthRouteLoader from "./AuthRouteLoader";
 
 function RootRedirect() {
@@ -18,13 +14,7 @@ function RootRedirect() {
       return <Navigate to="/landing" replace />;
    }
 
-   const destination = canAccessManagementConsole(user)
-      ? "/management"
-      : isPlatformSafetyModerator(user)
-        ? "/management/safety"
-        : canAccessWorkspace(user)
-          ? "/workspace"
-          : "/community";
+   const destination = getDefaultAuthenticatedDestination(user);
 
    return <Navigate to={destination} replace />;
 }
