@@ -1,3 +1,25 @@
+import {
+   canAccessManagementConsole,
+   isPlatformSafetyModerator,
+} from "./management";
+import { canAccessWorkspace } from "./workspace";
+
+export function getDefaultAuthenticatedDestination(user) {
+   if (canAccessManagementConsole(user)) {
+      return "/management";
+   }
+
+   if (isPlatformSafetyModerator(user)) {
+      return "/management/safety";
+   }
+
+   if (canAccessWorkspace(user)) {
+      return "/workspace";
+   }
+
+   return "/community";
+}
+
 export function resolveAuthDestination(from, fallback = "/community") {
    if (!from) {
       return fallback;
