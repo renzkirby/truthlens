@@ -166,6 +166,19 @@ class ManagementApiTests(APITestCase):
         requests = (
             (
                 "post",
+                reverse("management_platform_staff"),
+                {"user_id": self.ordinary_user.id},
+            ),
+            (
+                "delete",
+                reverse(
+                    "management_platform_staff_detail",
+                    kwargs={"user_id": self.ordinary_user.id},
+                ),
+                {},
+            ),
+            (
+                "post",
                 reverse("management_organizations"),
                 {
                     "name": "Unauthorized Organization",
