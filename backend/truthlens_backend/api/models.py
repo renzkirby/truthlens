@@ -2113,6 +2113,14 @@ class AccountabilityEvent(models.Model):
             "SAFETY_CONTENT_REMOVED",
             "Safety Content Removed",
         )
+        PLATFORM_SAFETY_MODERATOR_GRANTED = (
+            "PLATFORM_SAFETY_MODERATOR_GRANTED",
+            "Platform Safety Moderator Granted",
+        )
+        PLATFORM_SAFETY_MODERATOR_REVOKED = (
+            "PLATFORM_SAFETY_MODERATOR_REVOKED",
+            "Platform Safety Moderator Revoked",
+        )
         EVIDENCE_REOPENED = "EVIDENCE_REOPENED", "Evidence Reopened"
         EVIDENCE_VERIFIED = "EVIDENCE_VERIFIED", "Evidence Verified"
         EVIDENCE_REJECTED = "EVIDENCE_REJECTED", "Evidence Rejected"
@@ -2171,6 +2179,7 @@ class AccountabilityEvent(models.Model):
         CLAIM = "CLAIM", "Claim"
         MODERATION_CASE = "MODERATION_CASE", "Moderation Case"
         THREAD = "THREAD", "Thread"
+        USER_ACCOUNT = "USER_ACCOUNT", "User Account"
         EVIDENCE_SUBMISSION = "EVIDENCE_SUBMISSION", "Evidence Submission"
         ADJUDICATION_DECISION = (
             "ADJUDICATION_DECISION",
