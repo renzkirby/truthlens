@@ -2847,16 +2847,14 @@ def verification_intake(request):
 
     queryset = get_available_verification_assignments()
     from .verification_domain_policy import (
-        eligibility_reason,
-        organization_specializations,
+        organization_claim_eligibility_reason,
         subject_eligibility_enforced,
     )
 
-    # Subject routing is only authoritative in the separately approved
+    # Taxonomy routing is authoritative only in the separately approved
     # enforce rollout. Off/shadow preserve today's partner intake; shadow
     # suggestions never silently remove claims from the shared pool.
     if subject_eligibility_enforced():
-        specializations = organization_specializations(organization)
         eligible = []
         for assignment in queryset:
             classification = getattr(
@@ -2864,9 +2862,9 @@ def verification_intake(request):
                 "investigation_classification",
                 None,
             )
-            if eligibility_reason(
+            if organization_claim_eligibility_reason(
                 classification=classification,
-                specializations=specializations,
+                organization=organization,
             ) is None:
                 eligible.append(assignment)
     else:
