@@ -20,7 +20,7 @@ function formatLabel(value) {
       return "Unknown";
    }
 
-   if (value === "OWNER") {
+   if (["ADMIN", "OWNER"].includes(value)) {
       return "Administrator";
    }
 
