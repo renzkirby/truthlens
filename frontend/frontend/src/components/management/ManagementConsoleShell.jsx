@@ -3,28 +3,33 @@ import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import LogoImage from "../../assets/truthlens_logo.png";
 import { useAuth } from "../../hooks/useAuth";
+import {
+   canAccessManagementConsole,
+   isPlatformSafetyModerator,
+} from "../../utils/management";
 import Icons from "../Icons";
 import Button from "../ui/Button";
 
 import "./ManagementConsole.css";
 
 const NAVIGATION_ITEMS = [
-   { to: "/management", label: "Overview", icon: "dashboard", end: true },
-   { to: "/management/pipeline", label: "Pipeline Health", icon: "activity", section: "Operations" },
-   { to: "/management/safety", label: "Safety Review", icon: "shield-check", section: "Platform Safety" },
-   { to: "/management/organizations", label: "Organizations", icon: "landmark", section: "Governance" },
-   { to: "/management/memberships", label: "Memberships", icon: "users" },
-   { to: "/management/invitations", label: "Invitations", icon: "mail" },
-   { to: "/management/audit", label: "Governance Audit", icon: "shield-check" },
+   { to: "/management", label: "Overview", icon: "dashboard", end: true, access: "admin" },
+   { to: "/management/pipeline", label: "Pipeline Health", icon: "activity", section: "Operations", access: "admin" },
+   { to: "/management/safety", label: "Safety Review", icon: "shield-check", section: "Platform Safety", access: "safety" },
+   { to: "/management/safety/audit", label: "Safety Audit", icon: "activity", access: "safety" },
+   { to: "/management/organizations", label: "Organizations", icon: "landmark", section: "Governance", access: "admin" },
+   { to: "/management/memberships", label: "Memberships", icon: "users", access: "admin" },
+   { to: "/management/invitations", label: "Invitations", icon: "mail", access: "admin" },
+   { to: "/management/audit", label: "Governance Audit", icon: "shield-check", access: "admin" },
 ];
 
 const MOBILE_NAVIGATION_ID = "management-mobile-navigation";
 
-function ManagementNavigation({ label, onNavigate, firstLinkRef }) {
+function ManagementNavigation({ label, onNavigate, firstLinkRef, items }) {
    return (
       <>
          <nav aria-label={label}>
-            {NAVIGATION_ITEMS.map((item, index) => (
+            {items.map((item, index) => (
                <div key={item.to} className={item.section ? "management-shell__nav-section" : ""}>
                   {item.section ? <span className="management-shell__nav-label">{item.section}</span> : null}
                   <NavLink
@@ -53,6 +58,12 @@ function ManagementNavigation({ label, onNavigate, firstLinkRef }) {
 function ManagementConsoleShell() {
    const { user, logout } = useAuth();
    const navigate = useNavigate();
+   const isPlatformAdmin = canAccessManagementConsole(user);
+   const isSafetyModerator = isPlatformSafetyModerator(user);
+   const navigationItems = NAVIGATION_ITEMS.filter((item) =>
+      isPlatformAdmin ? true : item.access === "safety",
+   );
+   const homePath = isPlatformAdmin ? "/management" : "/management/safety";
    const explicitLogoutRef = useRef(false);
    const menuTriggerRef = useRef(null);
    const mobileDrawerRef = useRef(null);
@@ -126,11 +137,11 @@ function ManagementConsoleShell() {
    return (
       <div className="management-shell">
          <header className="management-shell__header">
-            <Link className="management-shell__brand" to="/management">
+            <Link className="management-shell__brand" to={homePath}>
                <img src={LogoImage} alt="" />
                <span>
                   <strong>TruthLens</strong>
-                  <small>Management Console</small>
+                  <small>{isSafetyModerator && !isPlatformAdmin ? "Platform Safety Console" : "Management Console"}</small>
                </span>
             </Link>
             <div className="management-shell__account">
@@ -162,7 +173,7 @@ function ManagementConsoleShell() {
 
          <div className="management-shell__body">
             <aside className="management-shell__sidebar management-shell__sidebar--desktop">
-               <ManagementNavigation label="Management Console" />
+               <ManagementNavigation label="Management Console" items={navigationItems} />
             </aside>
 
             <main className="management-shell__main" id="management-main">
@@ -202,6 +213,7 @@ function ManagementConsoleShell() {
                      label="Management Console mobile navigation"
                      onNavigate={closeMobileNavigation}
                      firstLinkRef={firstMobileLinkRef}
+                     items={navigationItems}
                   />
                </aside>
             </div>
