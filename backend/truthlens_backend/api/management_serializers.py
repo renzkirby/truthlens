@@ -179,6 +179,51 @@ class ManagementUserSummarySerializer(serializers.Serializer):
     username = serializers.CharField(read_only=True)
 
 
+class ManagementPlatformStaffSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    username = serializers.CharField(read_only=True)
+    email = serializers.EmailField(read_only=True)
+    is_active = serializers.BooleanField(read_only=True)
+    platform_role = serializers.SerializerMethodField()
+    platform_role_label = serializers.SerializerMethodField()
+    access_label = serializers.SerializerMethodField()
+    can_revoke = serializers.SerializerMethodField()
+
+    def get_platform_role(self, obj):
+        return (
+            "PLATFORM_ADMIN"
+            if obj.is_superuser
+            else "PLATFORM_SAFETY_MODERATOR"
+        )
+
+    def get_platform_role_label(self, obj):
+        return (
+            "Platform Admin"
+            if obj.is_superuser
+            else "Platform Safety Moderator"
+        )
+
+    def get_access_label(self, obj):
+        return (
+            "Full Management Console"
+            if obj.is_superuser
+            else "Safety Review and Safety Audit"
+        )
+
+    def get_can_revoke(self, obj):
+        return not obj.is_superuser
+
+
+class ManagementPlatformStaffCandidateSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    username = serializers.CharField(read_only=True)
+    email = serializers.EmailField(read_only=True)
+
+
+class ManagementPlatformStaffMutationSerializer(StrictFieldsSerializer):
+    user_id = serializers.IntegerField(min_value=1)
+
+
 class ManagementOrganizationListSerializer(serializers.ModelSerializer):
     organization_type_label = serializers.CharField(
         source="get_organization_type_display",
