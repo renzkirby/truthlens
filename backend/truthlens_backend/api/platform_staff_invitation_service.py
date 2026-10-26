@@ -249,11 +249,18 @@ def send_platform_staff_invitation_email(invitation, raw_token):
     )
     message.attach_alternative(html_body, "text/html")
     try:
-        message.send(fail_silently=False)
+        delivered_count = message.send(fail_silently=False)
     except Exception as error:
         raise PlatformStaffInvitationDeliveryError(
             "The Platform Staff invitation email could not be delivered."
         ) from error
+
+    if delivered_count != 1:
+        raise PlatformStaffInvitationDeliveryError(
+            "The Platform Staff invitation email was not accepted by the configured email backend."
+        )
+
+    return delivered_count
 
 
 @transaction.atomic
