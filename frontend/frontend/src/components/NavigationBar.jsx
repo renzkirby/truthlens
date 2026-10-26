@@ -85,6 +85,7 @@ function NavigationBar() {
    const isDashboardRoute = location.pathname === "/dashboard";
    const isWorkspaceRoute = location.pathname.startsWith("/workspace") || location.pathname === "/moderation";
    const isProfileRoute = location.pathname === "/profile";
+   const isManagementRoute = location.pathname === "/management" || location.pathname.startsWith("/management/");
    const isSettingsRoute = location.pathname === "/settings";
    const isNotificationsRoute = location.pathname === "/notifications";
    return (
@@ -287,8 +288,9 @@ function NavigationBar() {
             ) : canUsePlatformSafetyConsole ? (
                <Link
                   to={managementDestination}
-                  className="bottom-tab"
+                  className={`bottom-tab ${isManagementRoute ? "active" : ""}`}
                   onClick={closeNavigationOverlays}
+                  aria-current={isManagementRoute ? "page" : undefined}
                >
                   <Icons name="landmark" size={20} />
                   <span>{canUseManagementConsole ? "Manage" : "Safety"}</span>
