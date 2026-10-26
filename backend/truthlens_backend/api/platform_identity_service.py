@@ -73,10 +73,20 @@ def get_community_identity_context(user):
     }
 
 
-def exclude_platform_staff_identities(queryset):
-    """Remove privileged platform identities from Community discovery surfaces."""
+def platform_staff_identity_q(user_field=""):
+    """Build a Q expression matching platform staff through an optional user relation."""
 
-    return queryset.exclude(
-        Q(is_superuser=True)
-        | Q(profile__role__in=tuple(PLATFORM_SAFETY_PROFILE_ROLES))
+    prefix = f"{user_field}__" if user_field else ""
+    return Q(**{f"{prefix}is_superuser": True}) | Q(
+        **{
+            f"{prefix}profile__role__in": tuple(
+                PLATFORM_SAFETY_PROFILE_ROLES
+            )
+        }
     )
+
+
+def exclude_platform_staff_identities(queryset, user_field=""):
+    """Remove privileged platform identities from Community-facing querysets."""
+
+    return queryset.exclude(platform_staff_identity_q(user_field))
