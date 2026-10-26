@@ -3,7 +3,9 @@ from rest_framework import serializers
 from .accountability_query_service import MANAGEMENT_GOVERNANCE_ACTIONS
 from .models import (
     AccountabilityEvent,
+    Institution,
     Organization,
+    OrganizationInstitutionAffiliation,
     OrganizationInvitation,
     OrganizationMembership,
     PlatformStaffInvitation,
@@ -43,6 +45,31 @@ class ManagementOrganizationCreateSerializer(StrictFieldsSerializer):
     partner_status = serializers.ChoiceField(
         choices=Organization.PartnerStatus.choices,
         default=Organization.PartnerStatus.NONE,
+    )
+
+
+class ManagementInstitutionCreateSerializer(StrictFieldsSerializer):
+    name = serializers.CharField(max_length=255, allow_blank=False, trim_whitespace=True)
+    slug = serializers.SlugField(max_length=255, allow_blank=False)
+    website = serializers.URLField(
+        max_length=2000,
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+    )
+
+
+class ManagementInstitutionAffiliationUpdateSerializer(StrictFieldsSerializer):
+    institution_id = serializers.UUIDField()
+    verification_status = serializers.ChoiceField(
+        choices=OrganizationInstitutionAffiliation.VerificationStatus.choices,
+    )
+    rationale = serializers.CharField(
+        max_length=2000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
     )
 
 
@@ -280,9 +307,58 @@ class ManagementPlatformStaffInvitationPublicSerializer(serializers.ModelSeriali
         read_only_fields = fields
 
 
+class ManagementInstitutionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Institution
+        fields = (
+            "id",
+            "name",
+            "slug",
+            "website",
+            "is_active",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = fields
+
+
+class ManagementOrganizationInstitutionAffiliationSerializer(serializers.ModelSerializer):
+    institution = ManagementInstitutionSerializer(read_only=True)
+    reviewed_by = ManagementUserSummarySerializer(read_only=True)
+    coverage_scope_label = serializers.CharField(
+        source="get_coverage_scope_display",
+        read_only=True,
+    )
+    verification_status_label = serializers.CharField(
+        source="get_verification_status_display",
+        read_only=True,
+    )
+
+    class Meta:
+        model = OrganizationInstitutionAffiliation
+        fields = (
+            "id",
+            "institution",
+            "coverage_scope",
+            "coverage_scope_label",
+            "verification_status",
+            "verification_status_label",
+            "rationale",
+            "reviewed_by",
+            "reviewed_at",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = fields
+
+
 class ManagementOrganizationListSerializer(serializers.ModelSerializer):
     organization_type_label = serializers.CharField(
         source="get_organization_type_display",
+        read_only=True,
+    )
+    organization_subtype_label = serializers.CharField(
+        source="get_organization_subtype_display",
         read_only=True,
     )
     verification_status_label = serializers.CharField(
@@ -302,6 +378,8 @@ class ManagementOrganizationListSerializer(serializers.ModelSerializer):
             "slug",
             "organization_type",
             "organization_type_label",
+            "organization_subtype",
+            "organization_subtype_label",
             "verification_status",
             "verification_status_label",
             "partner_status",
@@ -363,6 +441,7 @@ class ManagementOrganizationAdminInvitationSerializer(serializers.ModelSerialize
 
 
 class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerializer):
+    institution_affiliation = serializers.SerializerMethodField()
     verification_specializations = serializers.ListField(
         child=serializers.CharField(), read_only=True
     )
@@ -425,6 +504,15 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
     def get_primary_admin(self, obj):
         return self.get_organization_admin(obj)
 
+    def get_institution_affiliation(self, obj):
+        try:
+            affiliation = obj.institution_affiliation
+        except OrganizationInstitutionAffiliation.DoesNotExist:
+            return None
+        return ManagementOrganizationInstitutionAffiliationSerializer(
+            affiliation
+        ).data
+
     class Meta(ManagementOrganizationListSerializer.Meta):
         fields = ManagementOrganizationListSerializer.Meta.fields + (
             "description",
@@ -440,6 +528,7 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
             "active_verification_jurisdictions",
             "active_scope_configured",
             "public_logo_enabled",
+            "institution_affiliation",
             "organization_admin",
             "primary_admin",
             "created_at",

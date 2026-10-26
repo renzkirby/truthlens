@@ -190,6 +190,30 @@ class UserProfile(models.Model):
         return f"UserProfile {self.id} - User: {self.user.username} - Trust Score: {self.trust_score}"
 
 
+class Institution(models.Model):
+    """Canonical institution identity used for campus-specific verification scope."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=255, unique=True)
+    website = models.URLField(max_length=2000, blank=True, null=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                Lower("name"),
+                name="unique_institution_name_ci",
+            ),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
 class Organization(models.Model):
     class OrganizationType(models.TextChoices):
         FACT_CHECKING = (
@@ -219,6 +243,12 @@ class Organization(models.Model):
         OTHER = (
             "OTHER",
             "Other",
+        )
+
+    class OrganizationSubtype(models.TextChoices):
+        STUDENT_PUBLICATION = (
+            "STUDENT_PUBLICATION",
+            "Student Publication",
         )
 
     class VerificationStatus(models.TextChoices):
@@ -303,6 +333,17 @@ class Organization(models.Model):
         default=OrganizationType.OTHER,
     )
 
+    organization_subtype = models.CharField(
+        max_length=32,
+        choices=OrganizationSubtype.choices,
+        null=True,
+        blank=True,
+        help_text=(
+            "Platform-managed organization subtype. Student Publication is "
+            "valid only for News Organizations."
+        ),
+    )
+
     verification_status = models.CharField(
         max_length=20,
         choices=VerificationStatus.choices,
@@ -362,10 +403,146 @@ class Organization(models.Model):
                 Lower("name"),
                 name="unique_organization_name_ci",
             ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(organization_subtype__isnull=True)
+                    | models.Q(
+                        organization_subtype="STUDENT_PUBLICATION",
+                        organization_type="NEWS",
+                    )
+                ),
+                name="student_publication_requires_news_org",
+            ),
         ]
+
+    def clean(self):
+        super().clean()
+        if self.organization_subtype == "":
+            self.organization_subtype = None
+        if (
+            self.organization_subtype == self.OrganizationSubtype.STUDENT_PUBLICATION
+            and self.organization_type != self.OrganizationType.NEWS
+        ):
+            raise ValidationError(
+                {
+                    "organization_subtype": (
+                        "Student Publication subtype requires News Organization type."
+                    )
+                }
+            )
 
     def __str__(self):
         return self.name
+
+
+class OrganizationInstitutionAffiliation(models.Model):
+    """Platform-reviewed affiliation between a student publication and institution."""
+
+    class CoverageScope(models.TextChoices):
+        INSTITUTION_WIDE = (
+            "INSTITUTION_WIDE",
+            "Institution-wide",
+        )
+
+    class VerificationStatus(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        VERIFIED = "VERIFIED", "Verified"
+        REJECTED = "REJECTED", "Rejected"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.OneToOneField(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="institution_affiliation",
+    )
+    institution = models.ForeignKey(
+        Institution,
+        on_delete=models.PROTECT,
+        related_name="student_publication_affiliations",
+    )
+    coverage_scope = models.CharField(
+        max_length=32,
+        choices=CoverageScope.choices,
+        default=CoverageScope.INSTITUTION_WIDE,
+    )
+    verification_status = models.CharField(
+        max_length=16,
+        choices=VerificationStatus.choices,
+        default=VerificationStatus.PENDING,
+        db_index=True,
+    )
+    rationale = models.TextField(max_length=2000, blank=True, default="")
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_institution_affiliations",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["organization_id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        verification_status="PENDING",
+                        reviewed_by__isnull=True,
+                        reviewed_at__isnull=True,
+                    )
+                    | models.Q(
+                        verification_status__in=["VERIFIED", "REJECTED"],
+                        reviewed_by__isnull=False,
+                        reviewed_at__isnull=False,
+                    )
+                ),
+                name="institution_affiliation_review_state_valid",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if (
+            self.organization.organization_type
+            != Organization.OrganizationType.NEWS
+            or self.organization.organization_subtype
+            != Organization.OrganizationSubtype.STUDENT_PUBLICATION
+        ):
+            raise ValidationError(
+                {
+                    "organization": (
+                        "Institution-wide affiliation is reserved for "
+                        "Student Publication news organizations."
+                    )
+                }
+            )
+        if self.coverage_scope != self.CoverageScope.INSTITUTION_WIDE:
+            raise ValidationError(
+                {"coverage_scope": "Select the supported institution-wide scope."}
+            )
+        if self.verification_status == self.VerificationStatus.PENDING:
+            if self.reviewed_by_id is not None or self.reviewed_at is not None:
+                raise ValidationError(
+                    {
+                        "verification_status": (
+                            "Pending affiliations cannot have review metadata."
+                        )
+                    }
+                )
+        elif self.reviewed_by_id is None or self.reviewed_at is None:
+            raise ValidationError(
+                {
+                    "verification_status": (
+                        "Reviewed affiliations require reviewer and review time."
+                    )
+                }
+            )
+
+    def __str__(self):
+        return f"{self.organization.name} - {self.institution.name}"
 
 
 class OrganizationMembership(models.Model):
@@ -2109,6 +2286,14 @@ class AccountabilityEvent(models.Model):
             "ORGANIZATION_PLATFORM_TRUST_UPDATED",
             "Organization Platform Trust Updated",
         )
+        INSTITUTION_CREATED = (
+            "INSTITUTION_CREATED",
+            "Institution Created",
+        )
+        ORGANIZATION_INSTITUTION_AFFILIATION_UPDATED = (
+            "ORGANIZATION_INSTITUTION_AFFILIATION_UPDATED",
+            "Organization Institution Affiliation Updated",
+        )
         ORGANIZATION_VERIFICATION_SCOPE_APPROVED = (
             "ORGANIZATION_VERIFICATION_SCOPE_APPROVED",
             "Organization Verification Scope Approved",
@@ -2280,6 +2465,11 @@ class AccountabilityEvent(models.Model):
             "Organization Invitation",
         )
         ORGANIZATION = "ORGANIZATION", "Organization"
+        INSTITUTION = "INSTITUTION", "Institution"
+        ORGANIZATION_INSTITUTION_AFFILIATION = (
+            "ORGANIZATION_INSTITUTION_AFFILIATION",
+            "Organization Institution Affiliation",
+        )
         CLAIM = "CLAIM", "Claim"
         MODERATION_CASE = "MODERATION_CASE", "Moderation Case"
         THREAD = "THREAD", "Thread"

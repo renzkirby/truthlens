@@ -62,6 +62,16 @@ urlpatterns = [
         name="management_pipeline_run_detail",
     ),
     path(
+        "management/institutions/",
+        management_views.ManagementInstitutionListView.as_view(),
+        name="management_institutions",
+    ),
+    path(
+        "management/institutions/<uuid:institution_id>/",
+        management_views.ManagementInstitutionDetailView.as_view(),
+        name="management_institution_detail",
+    ),
+    path(
         "management/organizations/",
         management_views.ManagementOrganizationListView.as_view(),
         name="management_organizations",
@@ -70,6 +80,11 @@ urlpatterns = [
         "management/organizations/<uuid:organization_id>/",
         management_views.ManagementOrganizationDetailView.as_view(),
         name="management_organization_detail",
+    ),
+    path(
+        "management/organizations/<uuid:organization_id>/institution-affiliation/",
+        management_views.ManagementOrganizationInstitutionAffiliationView.as_view(),
+        name="management_organization_institution_affiliation",
     ),
     path(
         "management/organizations/<uuid:organization_id>/platform-trust/",
