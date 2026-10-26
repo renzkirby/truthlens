@@ -408,6 +408,22 @@
    overflow-wrap: anywhere;
 }
 
+.org-member-self-label {
+   display: inline-flex;
+   align-items: center;
+   gap: 6px;
+   min-height: 30px;
+   padding: 5px 10px;
+   border: 1px solid var(--border-default);
+   border-radius: 999px;
+   background: var(--bg-subtle);
+   color: var(--text-muted);
+   font-size: 0.72rem;
+   font-weight: 700;
+   line-height: 1;
+   white-space: nowrap;
+}
+
 .org-admin-state {
    min-height: 220px;
    display: flex;
@@ -872,6 +888,10 @@
 
    .org-member-protected-label {
       text-align: left;
+   }
+
+   .org-member-self-label {
+      justify-self: flex-start;
    }
 
    .org-member-menu {
