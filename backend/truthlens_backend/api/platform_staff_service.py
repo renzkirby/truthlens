@@ -126,7 +126,6 @@ def grant_platform_safety_moderator(*, actor, user_id):
             "This account is already a Platform Safety Moderator."
         )
 
-    previous_role = profile.role
     profile.role = UserProfile.Role.MOD
     profile.save(update_fields=["role"])
 
@@ -134,8 +133,8 @@ def grant_platform_safety_moderator(*, actor, user_id):
         actor=actor,
         target_user=target_user,
         action_type=AccountabilityEvent.ActionType.PLATFORM_SAFETY_MODERATOR_GRANTED,
-        previous_role=previous_role,
-        new_role=UserProfile.Role.MOD,
+        previous_role="COMMUNITY_USER",
+        new_role="PLATFORM_SAFETY_MODERATOR",
     )
 
     return User.objects.select_related("profile").get(pk=target_user.pk)
@@ -165,7 +164,6 @@ def revoke_platform_safety_moderator(*, actor, user_id):
             "This account is not a Platform Safety Moderator."
         )
 
-    previous_role = profile.role
     profile.role = UserProfile.Role.USER
     profile.save(update_fields=["role"])
 
@@ -173,8 +171,8 @@ def revoke_platform_safety_moderator(*, actor, user_id):
         actor=actor,
         target_user=target_user,
         action_type=AccountabilityEvent.ActionType.PLATFORM_SAFETY_MODERATOR_REVOKED,
-        previous_role=previous_role,
-        new_role=UserProfile.Role.USER,
+        previous_role="PLATFORM_SAFETY_MODERATOR",
+        new_role="COMMUNITY_USER",
     )
 
     return User.objects.select_related("profile").get(pk=target_user.pk)
