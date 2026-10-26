@@ -100,6 +100,7 @@ DOMAIN_ACTIONS = {
         AccountabilityEvent.ActionType.ORGANIZATION_INSTITUTION_AFFILIATION_UPDATED,
         AccountabilityEvent.ActionType.ORGANIZATION_VERIFICATION_SCOPE_APPROVED,
         AccountabilityEvent.ActionType.CLAIM_INVESTIGATION_CLASSIFIED,
+        AccountabilityEvent.ActionType.CLAIM_INSTITUTION_CONTEXT_UPDATED,
         AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CREATED,
         AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_RESENT,
         AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED,
@@ -231,6 +232,9 @@ MANAGEMENT_GOVERNANCE_ACTION_CAPABILITIES = {
         MANAGE_PARTNER_ORGANIZATION
     ),
     AccountabilityEvent.ActionType.CLAIM_INVESTIGATION_CLASSIFIED: (
+        MANAGE_PARTNER_ORGANIZATION
+    ),
+    AccountabilityEvent.ActionType.CLAIM_INSTITUTION_CONTEXT_UPDATED: (
         MANAGE_PARTNER_ORGANIZATION
     ),
     AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CREATED: (

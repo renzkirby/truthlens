@@ -2,6 +2,7 @@ import json
 from datetime import timedelta
 
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -19,6 +20,12 @@ from api.organization_provisioning_service import PROVISION_PARTNER_ORGANIZATION
 
 class ManagementGovernanceAuditApiTests(APITestCase):
     def setUp(self):
+        # DRF's default user throttle uses Django's shared cache. Database
+        # isolation can recycle user IDs between tests, so isolate this class
+        # from throttle state accumulated by earlier API tests.
+        cache.clear()
+        self.addCleanup(cache.clear)
+
         self.superuser = User.objects.create_superuser(
             username="governance-audit-admin",
             email="audit-admin@example.com",

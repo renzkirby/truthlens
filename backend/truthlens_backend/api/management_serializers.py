@@ -3,6 +3,8 @@ from rest_framework import serializers
 from .accountability_query_service import MANAGEMENT_GOVERNANCE_ACTIONS
 from .models import (
     AccountabilityEvent,
+    ClaimInvestigationClassification,
+    ClaimInstitutionAssociation,
     Institution,
     Organization,
     OrganizationInstitutionAffiliation,
@@ -307,6 +309,73 @@ class ManagementPlatformStaffInvitationPublicSerializer(serializers.ModelSeriali
         read_only_fields = fields
 
 
+class ManagementClaimInstitutionAssociationInputSerializer(StrictFieldsSerializer):
+    institution_id = serializers.UUIDField()
+    rationale = serializers.CharField(
+        max_length=2000,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+
+
+class ManagementClaimInstitutionContextUpdateSerializer(StrictFieldsSerializer):
+    campus_context_state = serializers.ChoiceField(
+        choices=ClaimInvestigationClassification.CampusContextState.choices,
+        allow_null=True,
+    )
+    campus_context_rationale = serializers.CharField(
+        max_length=2000,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+    institutions = ManagementClaimInstitutionAssociationInputSerializer(
+        many=True,
+        default=list,
+    )
+
+    def validate(self, attrs):
+        state = attrs.get("campus_context_state")
+        campus_context_rationale = str(
+            attrs.get("campus_context_rationale") or ""
+        ).strip()
+        institutions = attrs.get("institutions", [])
+
+        if state is None:
+            if campus_context_rationale:
+                raise serializers.ValidationError(
+                    {"campus_context_rationale": "Unassessed campus context cannot have a rationale."}
+                )
+        elif not campus_context_rationale:
+            raise serializers.ValidationError(
+                {"campus_context_rationale": "Campus context rationale is required."}
+            )
+
+        if (
+            state
+            != ClaimInvestigationClassification.CampusContextState.CONFIRMED
+            and institutions
+        ):
+            raise serializers.ValidationError(
+                {
+                    "institutions": (
+                        "Institution associations require confirmed campus context."
+                    )
+                }
+            )
+
+        institution_ids = [
+            str(entry["institution_id"])
+            for entry in institutions
+        ]
+        if len(institution_ids) != len(set(institution_ids)):
+            raise serializers.ValidationError(
+                {"institutions": "Duplicate institution IDs are not allowed."}
+            )
+
+        return attrs
+
+
 class ManagementInstitutionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Institution
@@ -318,6 +387,58 @@ class ManagementInstitutionSerializer(serializers.ModelSerializer):
             "is_active",
             "created_at",
             "updated_at",
+        )
+        read_only_fields = fields
+
+
+class ManagementClaimInstitutionAssociationSerializer(serializers.ModelSerializer):
+    institution = ManagementInstitutionSerializer(read_only=True)
+    assigned_by = ManagementUserSummarySerializer(read_only=True)
+
+    class Meta:
+        model = ClaimInstitutionAssociation
+        fields = (
+            "id",
+            "institution",
+            "rationale",
+            "assigned_by",
+            "assigned_at",
+            "updated_at",
+        )
+        read_only_fields = fields
+
+
+class ManagementClaimInstitutionContextSerializer(serializers.ModelSerializer):
+    claim_id = serializers.UUIDField(read_only=True)
+    campus_context_state_label = serializers.SerializerMethodField()
+    campus_context_reviewed_by = ManagementUserSummarySerializer(read_only=True)
+    institutions = serializers.SerializerMethodField()
+
+    def get_campus_context_state_label(self, obj):
+        if obj.campus_context_state is None:
+            return None
+        return obj.get_campus_context_state_display()
+
+    def get_institutions(self, obj):
+        associations = obj.institution_associations.select_related(
+            "institution",
+            "assigned_by",
+        ).order_by("institution__name", "institution_id")
+        return ManagementClaimInstitutionAssociationSerializer(
+            associations,
+            many=True,
+        ).data
+
+    class Meta:
+        model = ClaimInvestigationClassification
+        fields = (
+            "claim_id",
+            "campus_context_state",
+            "campus_context_state_label",
+            "campus_context_rationale",
+            "campus_context_reviewed_by",
+            "campus_context_reviewed_at",
+            "institutions",
         )
         read_only_fields = fields
 

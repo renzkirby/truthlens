@@ -62,6 +62,11 @@ urlpatterns = [
         name="management_pipeline_run_detail",
     ),
     path(
+        "management/claims/<uuid:claim_id>/institution-context/",
+        management_views.ManagementClaimInstitutionContextView.as_view(),
+        name="management_claim_institution_context",
+    ),
+    path(
         "management/institutions/",
         management_views.ManagementInstitutionListView.as_view(),
         name="management_institutions",

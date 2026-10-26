@@ -2314,6 +2314,10 @@ class AccountabilityEvent(models.Model):
             "CLAIM_INVESTIGATION_CLASSIFIED",
             "Claim Investigation Classified",
         )
+        CLAIM_INSTITUTION_CONTEXT_UPDATED = (
+            "CLAIM_INSTITUTION_CONTEXT_UPDATED",
+            "Claim Institution Context Updated",
+        )
         VERIFICATION_ASSIGNMENT_CREATED = (
             "VERIFICATION_ASSIGNMENT_CREATED",
             "Verification Assignment Created",
@@ -5423,6 +5427,20 @@ class ClaimInvestigationClassification(models.Model):
             "Null means campus context has not been assessed."
         ),
     )
+    campus_context_rationale = models.TextField(
+        max_length=2000,
+        blank=True,
+        default="",
+        help_text="Platform-reviewed rationale for the campus-context assessment.",
+    )
+    campus_context_reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_claim_campus_contexts",
+    )
+    campus_context_reviewed_at = models.DateTimeField(null=True, blank=True)
     # Historical geographic context is retained; new subject classifications
     # do not require or infer geographic authorization.
     jurisdiction = models.CharField(max_length=32, blank=True, default="")
@@ -5456,6 +5474,71 @@ class ClaimInvestigationClassification(models.Model):
 
     def __str__(self):
         return f"Investigation classification for {self.claim_id}"
+
+
+class ClaimInstitutionAssociation(models.Model):
+    """Canonical institution identity attached to authoritative claim context."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    classification = models.ForeignKey(
+        ClaimInvestigationClassification,
+        on_delete=models.CASCADE,
+        related_name="institution_associations",
+    )
+    institution = models.ForeignKey(
+        Institution,
+        on_delete=models.PROTECT,
+        related_name="claim_associations",
+    )
+    rationale = models.TextField(max_length=2000)
+    assigned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_claim_institutions",
+    )
+    assigned_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["institution__name", "institution_id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["classification", "institution"],
+                name="unique_claim_institution_association",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if (
+            self.classification.campus_context_state
+            != ClaimInvestigationClassification.CampusContextState.CONFIRMED
+        ):
+            raise ValidationError(
+                {
+                    "classification": (
+                        "Institution associations require confirmed campus context."
+                    )
+                }
+            )
+        if not self.institution.is_active:
+            raise ValidationError(
+                {"institution": "Institution associations require an active institution."}
+            )
+        if not str(self.rationale or "").strip():
+            raise ValidationError(
+                {"rationale": "Institution association rationale is required."}
+            )
+
+    def save(self, *args, **kwargs):
+        self.rationale = str(self.rationale or "").strip()
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.classification.claim_id} - {self.institution.name}"
 
 
 class InvestigationClassificationAssessment(models.Model):
