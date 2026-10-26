@@ -801,11 +801,11 @@ class PlatformStaffInvitation(models.Model):
         indexes = [
             models.Index(
                 fields=["email", "status"],
-                name="platform_staff_inv_email_status_idx",
+                name="plat_inv_email_status_idx",
             ),
             models.Index(
                 fields=["status", "expires_at"],
-                name="platform_staff_inv_status_exp_idx",
+                name="plat_inv_status_exp_idx",
             ),
         ]
 
