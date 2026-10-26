@@ -1,8 +1,12 @@
 import os
 
-# Set the environment identity before importing base settings so test settings
-# never require development, staging, or production database credentials.
+# Set the environment identity and inert provider credentials before importing
+# base settings so offline tests never depend on an ignored local .env file or
+# accidentally use real development/staging/production provider credentials.
 os.environ["APP_ENV"] = "test"
+os.environ["GROQ_API_KEY"] = "truthlens-offline-test-groq-key"
+os.environ["GEMINI_API_KEY"] = "truthlens-offline-test-gemini-key"
+os.environ["INVESTIGATION_CLASSIFICATION_MODE"] = "off"
 
 from .settings import *
 
