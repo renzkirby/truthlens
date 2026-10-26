@@ -7,7 +7,6 @@ import PartnerLogo from "../components/partners/PartnerLogo.jsx";
 import {
    WorkspaceCapability,
    getDefaultWorkspaceOrganizationId,
-   getPlatformCapabilities,
    getWorkspaceMembership,
    getWorkspaceMemberships,
 } from "../utils/workspace";
@@ -16,7 +15,6 @@ import "./WorkspacePage.css";
 import VerificationIntakePanel from "../components/workspace/VerificationIntakePanel.jsx";
 import OrganizationWorkloadPanel from "../components/workspace/OrganizationWorkloadPanel.jsx";
 import OrganizationAdminPanel from "../components/workspace/OrganizationAdminPanel.jsx";
-import SafetyReviewPanel from "../components/workspace/SafetyReviewPanel.jsx";
 import EvidenceReviewPanel from "../components/workspace/EvidenceReviewPanel.jsx";
 import AdjudicationReviewPanel from "../components/workspace/AdjudicationReviewPanel.jsx";
 import DraftingPanel from "../components/workspace/DraftingPanel.jsx";
@@ -56,22 +54,6 @@ const ORGANIZATION_ACCOUNTABILITY_CAPABILITIES = [
 ];
 
 const WORKSPACE_SECTIONS = [
-   {
-      id: "safety",
-      label: "Safety Review",
-      description: "Review reports, abuse, spam, misuse, and platform policy issues.",
-      icon: "shield",
-      scope: "platform",
-      capability: WorkspaceCapability.REVIEW_SAFETY,
-   },
-   {
-      id: "safety-audit",
-      label: "Safety Audit",
-      description: "Review the append-only accountability history for Platform Safety actions.",
-      icon: "activity",
-      scope: "platform",
-      capability: WorkspaceCapability.REVIEW_SAFETY,
-   },
    {
       id: "intake",
       label: "Intake",
@@ -212,8 +194,6 @@ function WorkspacePage() {
 
    const memberships = useMemo(() => getWorkspaceMemberships(user), [user]);
 
-   const platformCapabilities = useMemo(() => getPlatformCapabilities(user), [user]);
-
    const defaultOrganizationId = useMemo(() => getDefaultWorkspaceOrganizationId(user), [user]);
 
    const [requestedSectionId, setRequestedSectionId] = useState(null);
@@ -345,17 +325,13 @@ function WorkspacePage() {
    const visibleSections = useMemo(
       () =>
          WORKSPACE_SECTIONS.filter((section) => {
-            if (section.scope === "platform") {
-               return platformCapabilities.includes(section.capability);
-            }
-
             if (Array.isArray(section.capabilities)) {
                return section.capabilities.some((capability) => organizationCapabilities.includes(capability));
             }
 
             return organizationCapabilities.includes(section.capability);
          }),
-      [platformCapabilities, organizationCapabilities],
+      [organizationCapabilities],
    );
 
    const visibleSectionGroups = useMemo(() => {
@@ -366,11 +342,6 @@ function WorkspacePage() {
       });
 
       return [
-         {
-            id: "platform",
-            label: "Platform Safety",
-            sections: visibleSections.filter((section) => section.scope === "platform"),
-         },
          group("work", "Investigation work", ["workload", "intake", "evidence", "adjudication"]),
          group("publication", "Publication", ["drafting", "publishing", "publications", "factual-corrections"]),
          group("organization", "Organization & insights", ["organization", "analytics", "accountability"]),
@@ -399,8 +370,6 @@ function WorkspacePage() {
    }, [isCorrectionRoute, visibleSections, requestedSectionId, routeSectionId]);
 
    const activeSection = visibleSections.find((section) => section.id === activeSectionId) ?? null;
-
-   const isPlatformSection = activeSection?.scope === "platform";
 
    const selectedOrganization = selectedMembership?.organization ?? null;
 
@@ -754,17 +723,11 @@ function WorkspacePage() {
                </div>
 
                <p className="workspace-description">
-                  Access operational tools according to your platform and partner organization permissions.
+                  Access professional verification tools according to your Partner Organization role.
                </p>
             </div>
 
-            {isPlatformSection ? (
-               <div className="workspace-platform-context">
-                  <Icons name="shield" size={15} />
-
-                  <span>Platform Safety · Platform-wide</span>
-               </div>
-            ) : memberships.length > 0 ? (
+            {memberships.length > 0 ? (
                <div className="workspace-organization-context" aria-label="Current partner organization">
                   <PartnerLogo
                      logoUrl={selectedOrganization?.logo_url}
@@ -784,13 +747,7 @@ function WorkspacePage() {
                      )}
                   </div>
                </div>
-            ) : (
-               <div className="workspace-platform-context">
-                  <Icons name="shield" size={15} />
-
-                  <span>Platform Safety</span>
-               </div>
-            )}
+            ) : null}
          </header>
 
          <div className="workspace-body">
@@ -832,11 +789,9 @@ function WorkspacePage() {
                      <div className="workspace-content-header">
                         <div>
                            <span className="workspace-scope-context">
-                              {activeSection.scope === "platform"
-                                 ? "Platform Safety"
-                                 : selectedOrganization?.name
-                                   ? `Organization · ${selectedOrganization.name}`
-                                   : "Organization"}
+                              {selectedOrganization?.name
+                                 ? `Organization · ${selectedOrganization.name}`
+                                 : "Organization"}
                            </span>
 
                            <h2>{activeSection.label}</h2>
@@ -845,11 +800,7 @@ function WorkspacePage() {
                         </div>
                      </div>
 
-                     {activeSection.id === "safety" ? (
-                        <SafetyReviewPanel />
-                     ) : activeSection.id === "safety-audit" ? (
-                        <AccountabilityPanel scope="platform" />
-                     ) : activeSection.id === "intake" ? (
+                     {activeSection.id === "intake" ? (
                         <VerificationIntakePanel
                            key={selectedOrganizationId ?? "no-organization"}
                            organizationId={selectedOrganizationId}

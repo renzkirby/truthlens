@@ -15,7 +15,6 @@ import "./SafetyReviewPanel.css";
 const ACTIVE_CASE_STATUSES = new Set(["OPEN", "IN_REVIEW", "ESCALATED", "REOPENED"]);
 
 const STATUS_OPTIONS = ["", "OPEN", "IN_REVIEW", "ESCALATED", "REOPENED"];
-const PRIORITY_OPTIONS = ["", "LOW", "NORMAL", "HIGH", "URGENT"];
 const ASSIGNMENT_OPTIONS = [
    { value: "", label: "All assignments" },
    { value: "me", label: "My cases" },
@@ -90,7 +89,7 @@ function getAssignmentLabel(caseItem, currentUserId) {
       return "Assigned to you";
    }
 
-   return assignedTo.username ? `Assigned to @${assignedTo.username}` : "Assigned to another moderator";
+   return assignedTo.username ? `Assigned to @${assignedTo.username}` : "Assigned to another reviewer";
 }
 
 function requiresServerReconciliation(error) {
@@ -108,7 +107,6 @@ function SafetyReviewPanel() {
 
    const [filters, setFilters] = useState({
       status: "",
-      priority: "",
       assigned: "",
    });
    const [queue, setQueue] = useState({ count: 0, results: [] });
@@ -217,10 +215,6 @@ function SafetyReviewPanel() {
 
       if (filters.status) {
          query.set("status", filters.status);
-      }
-
-      if (filters.priority) {
-         query.set("priority", filters.priority);
       }
 
       if (filters.assigned) {
@@ -432,9 +426,23 @@ function SafetyReviewPanel() {
    };
 
    const handleReturnToQueue = () => {
+      detailRequestIdRef.current += 1;
+      selectedCaseIdRef.current = null;
+      focusDetailAfterLoadRef.current = false;
+      focusDetailAfterMutationRef.current = false;
+      focusDetailErrorRef.current = false;
+      decisionReturnFocusRef.current = null;
+      restoreReleaseFocusRef.current = false;
+      setSelectedCaseId(null);
+      setDetail(null);
+      setDetailLoading(false);
       setDetailError("");
       setDetailUnavailable(false);
-      queueHeadingRef.current?.focus();
+      setActionError("");
+      setConfirmingRelease(false);
+      setDecisionAction(null);
+      setDecisionNotes("");
+      window.requestAnimationFrame(() => queueHeadingRef.current?.focus());
    };
 
    const reconcileConflict = (caseId, error) => {
@@ -632,7 +640,7 @@ function SafetyReviewPanel() {
          setConfirmingRelease(false);
          showWorkspaceSuccess(addToast, {
             title: "Safety case released",
-            message: `Case ${formatCaseReference(caseId)} is available for another Safety moderator to claim.`,
+            message: `Case ${formatCaseReference(caseId)} is available for another Safety reviewer to claim.`,
          });
          requestQueueRefresh();
       } catch (error) {
@@ -663,7 +671,7 @@ function SafetyReviewPanel() {
       }
 
       if (actionDetail.notesRequired && !notes) {
-         setActionError("Moderator notes are required for this Safety action.");
+         setActionError("Review notes are required for this Safety action.");
          return;
       }
 
@@ -754,15 +762,22 @@ function SafetyReviewPanel() {
 
    return (
       <div className="safety-review-panel">
-         {!selectedCaseId && (
          <div className="safety-toolbar">
             <div className="safety-toolbar-summary" role="status" aria-live="polite">
+               <h3
+                  id="safety-queue-heading"
+                  ref={queueHeadingRef}
+                  className="safety-toolbar-kicker"
+                  tabIndex="-1"
+               >
+                  Safety review queue
+               </h3>
                <strong>
                   {isInitialQueueLoading
                      ? "Loading active cases"
                      : `${queue.count} active ${queue.count === 1 ? "case" : "cases"}`}
                </strong>
-               <span>{queueLoading ? "Updating queue…" : "Platform-wide Safety queue"}</span>
+               <span>{queueLoading ? "Updating queue…" : "Review reports, assignment, and case state."}</span>
             </div>
 
             <div className="safety-filter-grid">
@@ -777,22 +792,6 @@ function SafetyReviewPanel() {
                      {STATUS_OPTIONS.map((value) => (
                         <option key={value || "ALL"} value={value}>
                            {value ? formatLabel(value) : "All statuses"}
-                        </option>
-                     ))}
-                  </Select>
-               </label>
-
-               <label>
-                  <span>Priority</span>
-                  <Select
-                     density="standard"
-                     value={filters.priority}
-                     disabled={queueLoading}
-                     onChange={(event) => handleFilterChange("priority", event.target.value)}
-                  >
-                     {PRIORITY_OPTIONS.map((value) => (
-                        <option key={value || "ALL"} value={value}>
-                           {value ? formatLabel(value) : "All priorities"}
                         </option>
                      ))}
                   </Select>
@@ -827,7 +826,6 @@ function SafetyReviewPanel() {
                </Button>
             </div>
          </div>
-         )}
 
          {notice && (
             <div className="safety-notice" role="status" aria-live="polite">
@@ -848,15 +846,6 @@ function SafetyReviewPanel() {
 
          <div className={`safety-workspace-grid ${selectedCaseId ? "has-selection" : ""}`}>
             <section className="safety-queue" aria-labelledby="safety-queue-heading" aria-busy={queueLoading}>
-               <div className="safety-section-heading">
-                  <div>
-                     <h3 id="safety-queue-heading" ref={queueHeadingRef} tabIndex="-1">
-                        Active cases
-                     </h3>
-                     <p>Select a case to load its reports, history, and available actions.</p>
-                  </div>
-               </div>
-
                {queueError && (
                   <div className="safety-contained-error" role="alert">
                      <strong>Safety queue unavailable</strong>
@@ -898,9 +887,6 @@ function SafetyReviewPanel() {
                                  <span className="safety-case-row-top">
                                     <span className={`safety-status status-${String(caseItem.status).toLowerCase()}`}>
                                        {formatLabel(caseItem.status)}
-                                    </span>
-                                    <span className={`safety-priority priority-${String(caseItem.priority).toLowerCase()}`}>
-                                       {formatLabel(caseItem.priority)} priority
                                     </span>
                                     {isSelected && <span className="safety-selected-label">Selected</span>}
                                  </span>
@@ -1000,7 +986,7 @@ function SafetyReviewPanel() {
                   <div className="safety-detail-content">
                      <header className="safety-detail-header">
                         <div className="safety-detail-heading-copy">
-                           <span className="safety-detail-eyebrow">Platform Safety case</span>
+                           <span className="safety-detail-eyebrow">Case review</span>
                            <h3 id="safety-case-detail-heading" ref={detailHeadingRef} tabIndex="-1">
                               {getCaseTitle(detail)}
                            </h3>
@@ -1010,9 +996,6 @@ function SafetyReviewPanel() {
                         <div className="safety-detail-badges">
                            <span className={`safety-status status-${String(detail.status).toLowerCase()}`}>
                               Status: {formatLabel(detail.status)}
-                           </span>
-                           <span className={`safety-priority priority-${String(detail.priority).toLowerCase()}`}>
-                              Priority: {formatLabel(detail.priority)}
                            </span>
                         </div>
                      </header>
@@ -1039,13 +1022,18 @@ function SafetyReviewPanel() {
                      <section className="safety-detail-section">
                         <div className="safety-subheading-row safety-major-section-heading">
                            <div>
-                              <h4>Thread context</h4>
-                              <p>Context associated with the reported community thread.</p>
+                              <h4>Reported content</h4>
+                              <p>Community content associated with this safety case.</p>
                            </div>
                            {detail.thread?.id && (
-                              <Link to={`/thread/detail/${detail.thread.id}`} className="safety-thread-link">
+                              <Link
+                                 to={`/thread/detail/${detail.thread.id}`}
+                                 className="safety-thread-link"
+                                 target="_blank"
+                                 rel="noopener noreferrer"
+                              >
                                  Open thread
-                                 <Icons name="arrow-right" size={14} />
+                                 <Icons name="external-link" size={14} />
                               </Link>
                            )}
                         </div>
@@ -1223,7 +1211,7 @@ function SafetyReviewPanel() {
                                     </div>
 
                                     <label htmlFor="safety-moderator-notes">
-                                       Moderator notes {selectedActionDetail.notesRequired ? "(required)" : "(optional)"}
+                                       Review notes {selectedActionDetail.notesRequired ? "(required)" : "(optional)"}
                                     </label>
                                     <Textarea
                                        ref={decisionNotesRef}
@@ -1278,8 +1266,8 @@ function SafetyReviewPanel() {
                      <section className="safety-detail-section">
                         <div className="safety-subheading-row safety-major-section-heading">
                            <div>
-                              <h4>Moderation history</h4>
-                              <p>Recent case events supplied by the Safety audit history.</p>
+                              <h4>Case history</h4>
+                              <p>Recent state changes recorded in the Platform Safety audit trail.</p>
                            </div>
                         </div>
 

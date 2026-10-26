@@ -29,6 +29,7 @@ class AccountabilityApiTests(TestCase):
         self.contributor = User.objects.create_user(username="api-accountability-contributor")
         self.outsider = User.objects.create_user(username="api-accountability-outsider")
         self.safety_moderator = User.objects.create_user(username="api-safety-moderator")
+        self.platform_admin = User.objects.create_superuser(username="api-platform-admin")
         self.dual_role = User.objects.create_user(username="api-dual-role")
         self.safety_moderator.profile.role = UserProfile.Role.MOD
         self.safety_moderator.profile.save(update_fields=["role"])
@@ -312,6 +313,10 @@ class AccountabilityApiTests(TestCase):
                 "offset": 0,
             },
         )
+        admin_response = self.authenticated_client(self.platform_admin).get(self.platform_url)
+        self.assertEqual(admin_response.status_code, 200)
+        self.assertEqual(admin_response.data["scope"], "PLATFORM")
+
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["scope"], "PLATFORM")
         self.assertIsNone(response.data["organization"])

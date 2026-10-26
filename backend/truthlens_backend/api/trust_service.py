@@ -9,6 +9,7 @@ from .models import (
     Thread,
     Vote,
 )
+from .platform_identity_service import is_platform_staff_identity
 
 
 BASE_SCORE = 50.0
@@ -505,6 +506,12 @@ def recompute_user_trust_score(user_id):
     ).get(
         id=user_id,
     )
+
+    if is_platform_staff_identity(user):
+        return {
+            "applicable": False,
+            "trust_score": None,
+        }
 
     components = calculate_trust_components(
         user,

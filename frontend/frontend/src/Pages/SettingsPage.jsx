@@ -289,13 +289,18 @@ function SettingsPage() {
    };
 
    const avatarFallback = formData.username.trim().charAt(0).toUpperCase() || "?";
+   const hasPublicCommunityProfile = user?.community_identity?.public_profile_available !== false;
 
    return (
       <main className="settings-page">
          <div className="settings-page__container">
             <header className="settings-page__header">
                <h1>Settings</h1>
-               <p>Manage your public profile and the security details tied to your account.</p>
+               <p>
+                  {hasPublicCommunityProfile
+                     ? "Manage your public profile and the security details tied to your account."
+                     : "Manage your platform account identity and security details."}
+               </p>
             </header>
 
             <div className="settings-page__layout">
@@ -325,7 +330,11 @@ function SettingsPage() {
                      <section aria-labelledby="profile-settings-title">
                         <div className="settings-section__header">
                            <h2 id="profile-settings-title">Profile</h2>
-                           <p>Control how you appear to other people across TruthLens.</p>
+                           <p>
+                              {hasPublicCommunityProfile
+                                 ? "Control how you appear to other people across TruthLens."
+                                 : "Manage the identity used for platform governance and accountability."}
+                           </p>
                         </div>
 
                         <form className="settings-form" onSubmit={handleSaveProfile} noValidate>
@@ -390,7 +399,9 @@ function SettingsPage() {
                                  required
                               />
                               <p id="username-hint" className="settings-field__hint">
-                                 This is the name shown on your profile and contributions.
+                                 {hasPublicCommunityProfile
+                                    ? "This is the name shown on your profile and contributions."
+                                    : "This name identifies your account in governance records and administrative actions."}
                               </p>
                               {fieldErrors.username ? (
                                  <p id="username-error" className="settings-field__error">
@@ -415,7 +426,9 @@ function SettingsPage() {
                                  disabled={isSaving}
                               />
                               <p id="bio-hint" className="settings-field__hint">
-                                 Share a short introduction for people viewing your public profile.
+                                 {hasPublicCommunityProfile
+                                    ? "Share a short introduction for people viewing your public profile."
+                                    : "Add an internal account description. Platform staff accounts are not publicly profiled."}
                               </p>
                               {fieldErrors.bio ? (
                                  <p id="bio-error" className="settings-field__error">

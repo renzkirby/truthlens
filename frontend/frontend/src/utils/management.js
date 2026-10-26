@@ -2,6 +2,14 @@ export function canAccessManagementConsole(user) {
    return user?.management_console?.can_access === true;
 }
 
+export function isPlatformSafetyModerator(user) {
+   return user?.community_identity?.platform_role === "PLATFORM_SAFETY_MODERATOR";
+}
+
+export function canAccessPlatformSafetyConsole(user) {
+   return canAccessManagementConsole(user) || isPlatformSafetyModerator(user);
+}
+
 export function formatManagementDate(value, { dateOnly = false } = {}) {
    if (!value) return "Not recorded";
 
@@ -104,6 +112,10 @@ export const MANAGEMENT_GOVERNANCE_ACTIONS = [
    ["ORGANIZATION_INVITATION_CREATED", "Organization Admin Invitation Created"],
    ["ORGANIZATION_INVITATION_RESENT", "Organization Admin Invitation Resent"],
    ["ORGANIZATION_INVITATION_CANCELLED", "Organization Admin Invitation Cancelled"],
+   ["PLATFORM_SAFETY_MODERATOR_REVOKED", "Platform Safety Moderator Revoked"],
+   ["PLATFORM_STAFF_INVITATION_CREATED", "Platform Staff Invitation Created"],
+   ["PLATFORM_STAFF_INVITATION_RESENT", "Platform Staff Invitation Resent"],
+   ["PLATFORM_STAFF_INVITATION_CANCELLED", "Platform Staff Invitation Cancelled"],
 ];
 
 const MANAGEMENT_GOVERNANCE_ACTION_LABELS = new Map(MANAGEMENT_GOVERNANCE_ACTIONS);
@@ -137,6 +149,8 @@ const AUDIT_VALUE_LABELS = {
    OWNER: "Administrator",
    MODERATOR: "Verification Reviewer",
    CONTRIBUTOR: "Former Contributor",
+   COMMUNITY_USER: "Community User",
+   PLATFORM_SAFETY_MODERATOR: "Platform Safety Moderator",
    CANCELLED: "Cancelled",
 };
 
@@ -152,5 +166,6 @@ export function formatManagementCapability(value) {
    if (value === "MANAGE_PARTNER_ORGANIZATION") return "Manage Partner Organization";
    if (value === "MANAGE_VERIFICATION_SPECIALIZATIONS") return "Manage Verification Specializations";
    if (value === "PROVISION_PARTNER_ORGANIZATION") return "Provision Partner Organization";
+   if (value === "MANAGE_PLATFORM_STAFF") return "Manage Platform Staff";
    return value || "Not recorded";
 }

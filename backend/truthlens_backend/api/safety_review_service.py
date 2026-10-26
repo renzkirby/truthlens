@@ -19,7 +19,8 @@ from .moderation_service import (
     resolve_safety_case,
     unassign_moderation_case,
 )
-from .organization_service import PartnerCapability, has_capability
+from .organization_service import PartnerCapability
+from .platform_identity_service import can_review_platform_safety
 
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ class SafetyCaseConflict(SafetyReviewError):
 
 
 def ensure_can_review_safety(actor):
-    if not has_capability(actor, PartnerCapability.REVIEW_SAFETY):
+    if not can_review_platform_safety(actor):
         raise SafetyReviewAuthorizationError(
             "Platform Safety review authority is required."
         )
@@ -143,7 +144,7 @@ def _ensure_case_owner(case, actor):
 
     if case.assigned_to_id != actor.pk:
         raise SafetyCaseConflict(
-            "This Safety case is assigned to another moderator."
+            "This Safety case is assigned to another reviewer."
         )
 
 
@@ -159,7 +160,7 @@ def claim_safety_case(*, case, actor):
 
         if locked_case.assigned_to_id is not None:
             raise SafetyCaseConflict(
-                "This Safety case is assigned to another moderator."
+                "This Safety case is assigned to another reviewer."
             )
 
         claimed_case = assign_moderation_case(

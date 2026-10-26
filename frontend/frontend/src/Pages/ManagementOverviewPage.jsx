@@ -7,11 +7,17 @@ import { resolveApiEndpoint } from "../utils/api";
 
 const DESTINATIONS = [
    {
+      to: "/management/safety",
+      title: "Safety Review",
+      description: "Review reported Community content and apply platform-safety actions.",
+      icon: "shield-check",
+      primary: true,
+   },
+   {
       to: "/management/organizations",
       title: "Partner Organizations",
       description: "Inspect institutional identity, platform trust, and Organization Admin state.",
       icon: "landmark",
-      primary: true,
    },
    {
       to: "/management/memberships",
@@ -63,8 +69,8 @@ function ManagementOverviewPage() {
 
          <section className="management-section" aria-labelledby="governance-heading">
             <div className="management-section__heading">
-               <h2 id="governance-heading">Governance records</h2>
-               <p>Read-only access to the institutional records maintained by TruthLens.</p>
+               <h2 id="governance-heading">Platform governance</h2>
+               <p>Oversee Community safety and institutional partner records.</p>
             </div>
             <div className="management-destinations">
                {DESTINATIONS.map((destination) => (

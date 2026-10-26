@@ -9,6 +9,8 @@ from .management_permissions import can_access_management_console
 from .models import AccountabilityEvent
 from .organization_provisioning_service import PROVISION_PARTNER_ORGANIZATION
 from .organization_service import PartnerCapability, has_capability
+from .platform_identity_service import can_review_platform_safety
+from .platform_staff_service import MANAGE_PLATFORM_STAFF
 
 
 class AccountabilityDomain:
@@ -99,6 +101,10 @@ DOMAIN_ACTIONS = {
         AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CREATED,
         AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_RESENT,
         AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED,
+        AccountabilityEvent.ActionType.PLATFORM_SAFETY_MODERATOR_REVOKED,
+        AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_CREATED,
+        AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_RESENT,
+        AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_CANCELLED,
     ),
 }
 
@@ -118,6 +124,12 @@ ACTION_DOMAINS.update(
         ),
         AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED: (
             AccountabilityDomain.ORGANIZATION_ADMIN
+        ),
+        AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_ACCEPTED: (
+            AccountabilityDomain.PLATFORM_GOVERNANCE
+        ),
+        AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_EXPIRED: (
+            AccountabilityDomain.PLATFORM_GOVERNANCE
         ),
     }
 )
@@ -186,6 +198,8 @@ DOMAIN_RESOURCES = {
         AccountabilityEvent.ResourceType.CLAIM,
         AccountabilityEvent.ResourceType.ORGANIZATION,
         AccountabilityEvent.ResourceType.ORGANIZATION_INVITATION,
+        AccountabilityEvent.ResourceType.USER_ACCOUNT,
+        AccountabilityEvent.ResourceType.PLATFORM_STAFF_INVITATION,
     },
 }
 
@@ -217,6 +231,18 @@ MANAGEMENT_GOVERNANCE_ACTION_CAPABILITIES = {
     ),
     AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED: (
         PROVISION_PARTNER_ORGANIZATION
+    ),
+    AccountabilityEvent.ActionType.PLATFORM_SAFETY_MODERATOR_REVOKED: (
+        MANAGE_PLATFORM_STAFF
+    ),
+    AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_CREATED: (
+        MANAGE_PLATFORM_STAFF
+    ),
+    AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_RESENT: (
+        MANAGE_PLATFORM_STAFF
+    ),
+    AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_CANCELLED: (
+        MANAGE_PLATFORM_STAFF
     ),
 }
 
@@ -495,16 +521,22 @@ def _require_management_governance_authority(actor):
 def _management_governance_queryset():
     governance_pairs = Q()
     for action_type, capability in MANAGEMENT_GOVERNANCE_ACTION_CAPABILITIES.items():
-        resource_type = (
-            AccountabilityEvent.ResourceType.ORGANIZATION_INVITATION
-            if action_type
-            in {
-                AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CREATED,
-                AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_RESENT,
-                AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED,
-            }
-            else AccountabilityEvent.ResourceType.ORGANIZATION
-        )
+        if action_type in {
+            AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CREATED,
+            AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_RESENT,
+            AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED,
+        }:
+            resource_type = AccountabilityEvent.ResourceType.ORGANIZATION_INVITATION
+        elif action_type == AccountabilityEvent.ActionType.PLATFORM_SAFETY_MODERATOR_REVOKED:
+            resource_type = AccountabilityEvent.ResourceType.USER_ACCOUNT
+        elif action_type in {
+            AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_CREATED,
+            AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_RESENT,
+            AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_CANCELLED,
+        }:
+            resource_type = AccountabilityEvent.ResourceType.PLATFORM_STAFF_INVITATION
+        else:
+            resource_type = AccountabilityEvent.ResourceType.ORGANIZATION
         governance_pairs |= Q(
             action_type=action_type,
             capability=capability,
@@ -669,7 +701,7 @@ def list_platform_accountability_events(
         limit=limit,
         offset=offset,
     )
-    if not has_capability(actor, PartnerCapability.REVIEW_SAFETY):
+    if not can_review_platform_safety(actor):
         raise AccountabilityQueryAuthorizationError(
             "You do not have permission to view Platform Safety accountability history."
         )

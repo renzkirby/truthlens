@@ -89,7 +89,10 @@ export function AuthProvider({ children }) {
          throw new Error("Invalid authenticated user response");
       }
 
-      const normalizedTrustScore = Number(data?.trust_breakdown?.trust_score ?? data?.trust_score ?? 0);
+      const reputationApplicable = data?.community_identity?.reputation_applicable !== false;
+      const normalizedTrustScore = reputationApplicable
+         ? Number(data?.trust_breakdown?.trust_score ?? data?.trust_score ?? 0)
+         : null;
       const normalizedUser = {
          ...data,
          trust_score: normalizedTrustScore,

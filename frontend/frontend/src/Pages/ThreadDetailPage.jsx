@@ -315,6 +315,7 @@ function CommentItem({
    onShare,
    onRetry,
    onDiscard,
+   readOnly = false,
 }) {
    const isOwner = String(comment.commenter?.id || "") === String(currentUserId || "");
    const username = comment.commenter?.username || "Unknown";
@@ -372,7 +373,7 @@ function CommentItem({
                )}
             </div>
 
-            {!isEditing && isFailed && (
+            {!readOnly && !isEditing && isFailed && (
                <div className="thread-detail-comment-actions" role="group" aria-label={`Recovery actions for ${username}'s comment`}>
                   <button type="button" className="is-primary-text" onClick={() => onRetry(comment)}>Retry</button>
                   <button type="button" onClick={() => onDiscard(comment)}>Discard</button>
@@ -381,20 +382,29 @@ function CommentItem({
 
             {!isEditing && isPersisted && (
                <div className="thread-detail-comment-actions" role="group" aria-label={`Actions for ${username}'s comment`}>
-                  <button
-                     type="button"
-                     className={`thread-detail-comment-like ${comment.is_liked ? "is-selected" : ""}`}
-                     aria-pressed={Boolean(comment.is_liked)}
-                     aria-label={`${comment.is_liked ? "Unlike" : "Like"} ${username}'s comment. ${comment.like_count || 0} likes`}
-                     disabled={isLiking}
-                     onClick={() => onLike(comment)}
-                  >
-                     <Icons name="thumbs-up" size={13} />
-                     <span aria-hidden="true">{comment.like_count || 0}</span>
-                  </button>
-                  <button type="button" onClick={() => onReply(comment)}>Reply</button>
+                  {readOnly ? (
+                     <span className="thread-detail-comment-like thread-detail-comment-like--readonly" aria-label={`${comment.like_count || 0} likes`}>
+                        <Icons name="thumbs-up" size={13} />
+                        <span aria-hidden="true">{comment.like_count || 0}</span>
+                     </span>
+                  ) : (
+                     <>
+                        <button
+                           type="button"
+                           className={`thread-detail-comment-like ${comment.is_liked ? "is-selected" : ""}`}
+                           aria-pressed={Boolean(comment.is_liked)}
+                           aria-label={`${comment.is_liked ? "Unlike" : "Like"} ${username}'s comment. ${comment.like_count || 0} likes`}
+                           disabled={isLiking}
+                           onClick={() => onLike(comment)}
+                        >
+                           <Icons name="thumbs-up" size={13} />
+                           <span aria-hidden="true">{comment.like_count || 0}</span>
+                        </button>
+                        <button type="button" onClick={() => onReply(comment)}>Reply</button>
+                     </>
+                  )}
                   <button type="button" onClick={() => onShare(comment)}>Share</button>
-                  {isOwner && (
+                  {!readOnly && isOwner && (
                      <>
                         <button type="button" className="is-owner-action" onClick={() => onStartEdit(comment)}>Edit</button>
                         <button type="button" className="is-danger is-owner-action" onClick={() => onDelete(comment.id)}>Delete</button>
@@ -433,6 +443,7 @@ function CommentThread({
    onShowReplies,
    onShowMoreReplies,
    onHideReplies,
+   readOnly = false,
 }) {
    const replies = flattenReplies(root);
    const safeVisibleCount = Math.max(0, Math.min(visibleReplyCount, replies.length));
@@ -459,9 +470,10 @@ function CommentThread({
             onShare={onShare}
             onRetry={onRetry}
             onDiscard={onDiscard}
+            readOnly={readOnly}
          />
 
-         {rootHasReplyComposer && (
+         {!readOnly && rootHasReplyComposer && (
             <InlineReplyComposer
                target={root}
                currentUser={currentUser}
@@ -497,7 +509,7 @@ function CommentThread({
                         onRetry={onRetry}
                         onDiscard={onDiscard}
                      />
-                     {replyComposer?.targetId === comment.id && (
+                     {!readOnly && replyComposer?.targetId === comment.id && (
                         <InlineReplyComposer
                            target={comment}
                            currentUser={currentUser}
@@ -666,6 +678,7 @@ function ThreadDetailSkeleton() {
 export default function ThreadDetailPage() {
    const { authFetch, user } = useAuth();
    const { addToast } = useNotification();
+   const canParticipateInCommunity = user?.community_identity?.can_participate !== false;
    const { threadId } = useParams();
    const navigate = useNavigate();
    const location = useLocation();
@@ -745,8 +758,9 @@ export default function ThreadDetailPage() {
       const openForm = searchParams.get("openForm") === "evidence";
       if (commentHash) setCurrentTab("comments");
       else setCurrentTab(searchParams.get("tab") === "evidence" || openForm ? "evidence" : "comments");
-      if (openForm) setShowEvidenceForm(true);
-   }, [commentHash, searchParams]);
+      if (openForm && canParticipateInCommunity) setShowEvidenceForm(true);
+      else if (!canParticipateInCommunity) setShowEvidenceForm(false);
+   }, [canParticipateInCommunity, commentHash, searchParams]);
 
    useEffect(() => {
       if (loading || !commentHash || deepLinkHandledRef.current || currentTab !== "comments") return undefined;
@@ -1204,6 +1218,15 @@ export default function ThreadDetailPage() {
                   <span>Started {formatDate(thread.created_at, { hour: "numeric", minute: "2-digit" })} by <strong>@{authorUsername}</strong></span>
                </div>
                <div className="thread-detail-metadata">
+                  {!canParticipateInCommunity && (
+                     <span
+                        className="thread-detail-governance-chip"
+                        title="Platform staff can inspect and share Community content, but cannot participate or build Community reputation."
+                     >
+                        <Icons name="shield-check" size={13} aria-hidden="true" />
+                        Governance view · Read only
+                     </span>
+                  )}
                   <VerdictBadge verdict={assessmentVerdict} />
                   {thread.status && <span className="thread-detail-status">{thread.status}</span>}
                </div>
@@ -1327,17 +1350,19 @@ export default function ThreadDetailPage() {
                   </div>
                </article>
 
-               <button
-                  type="button"
-                  className="thread-detail-evidence-cta"
-                  onClick={() => {
-                     changeTab("evidence");
-                     setShowEvidenceForm(true);
-                     window.requestAnimationFrame(() => evidenceFormRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" }));
-                  }}
-               >
-                  <Icons name="paperclip" size={16} /> Submit Evidence for This Claim
-               </button>
+               {canParticipateInCommunity && (
+                  <button
+                     type="button"
+                     className="thread-detail-evidence-cta"
+                     onClick={() => {
+                        changeTab("evidence");
+                        setShowEvidenceForm(true);
+                        window.requestAnimationFrame(() => evidenceFormRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" }));
+                     }}
+                  >
+                     <Icons name="paperclip" size={16} /> Submit Evidence for This Claim
+                  </button>
+               )}
 
                <section className="thread-detail-discussion thread-detail-discussion--classic" aria-label="Thread discussion">
                   <div className="thread-detail-tabs" role="tablist" aria-label="Thread content">
@@ -1351,19 +1376,29 @@ export default function ThreadDetailPage() {
 
                   {currentTab === "comments" && (
                      <div id="thread-detail-comments-panel" role="tabpanel" aria-labelledby="thread-detail-comments-tab" className="thread-detail-panel thread-detail-panel--comments">
-                        <form className="thread-detail-composer thread-detail-composer--classic" onSubmit={handleCommentSubmit}>
-                           <Avatar user={user} />
-                           <div className="thread-detail-composer-body">
-                              <label className="sr-only" htmlFor="thread-comment-composer">Write a comment</label>
-                              <textarea id="thread-comment-composer" value={newComment} onChange={(event) => setNewComment(event.target.value)} placeholder="Write a comment…" rows={2} />
-                           </div>
-                           <button type="submit" className="thread-detail-comment-submit" disabled={!newComment.trim() || submittingComment} aria-label="Post comment">
-                              {submittingComment ? <span className="thread-detail-mini-spinner" aria-hidden="true" /> : <Icons name="send" size={16} />}
-                           </button>
-                        </form>
+                        {canParticipateInCommunity && (
+                           <form className="thread-detail-composer thread-detail-composer--classic" onSubmit={handleCommentSubmit}>
+                              <Avatar user={user} />
+                              <div className="thread-detail-composer-body">
+                                 <label className="sr-only" htmlFor="thread-comment-composer">Write a comment</label>
+                                 <textarea id="thread-comment-composer" value={newComment} onChange={(event) => setNewComment(event.target.value)} placeholder="Write a comment…" rows={2} />
+                              </div>
+                              <button type="submit" className="thread-detail-comment-submit" disabled={!newComment.trim() || submittingComment} aria-label="Post comment">
+                                 {submittingComment ? <span className="thread-detail-mini-spinner" aria-hidden="true" /> : <Icons name="send" size={16} />}
+                              </button>
+                           </form>
+                        )}
+
+
 
                         <div className="thread-detail-comment-list">
-                           {!commentTree.length && <p className="thread-detail-empty">No comments yet. Start the discussion.</p>}
+                           {!commentTree.length && (
+                              <p className="thread-detail-empty">
+                                 {canParticipateInCommunity
+                                    ? "No comments yet. Start the discussion."
+                                    : "No Community comments have been posted yet."}
+                              </p>
+                           )}
                            {commentTree.map((comment) => (
                               <CommentThread
                                  key={comment.id}
@@ -1392,6 +1427,7 @@ export default function ThreadDetailPage() {
                                  onShowReplies={showReplies}
                                  onShowMoreReplies={showMoreReplies}
                                  onHideReplies={hideReplies}
+                                 readOnly={!canParticipateInCommunity}
                               />
                            ))}
                         </div>
@@ -1405,11 +1441,13 @@ export default function ThreadDetailPage() {
                               <h2>Evidence Board</h2>
                               <p>Community-submitted sources, ranked by weighted trust score.</p>
                            </div>
-                           <button type="button" className="thread-detail-text-button" onClick={() => setShowEvidenceForm((open) => !open)}>
-                              {showEvidenceForm ? "Close form" : "Contribute evidence"}
-                           </button>
+                           {canParticipateInCommunity && (
+                              <button type="button" className="thread-detail-text-button" onClick={() => setShowEvidenceForm((open) => !open)}>
+                                 {showEvidenceForm ? "Close form" : "Contribute evidence"}
+                              </button>
+                           )}
                         </div>
-                        {showEvidenceForm && (
+                        {canParticipateInCommunity && showEvidenceForm && (
                            <form className="thread-detail-evidence-form thread-detail-evidence-form--legacy" ref={evidenceFormRef} onSubmit={handleEvidenceSubmit}>
                               <div className="thread-detail-evidence-form-title">
                                  <Icons name="paperclip" size={14} />
@@ -1490,6 +1528,7 @@ export default function ThreadDetailPage() {
                                  setEditingId={setEditingEvidenceId}
                                  setEditingText={setEditingEvidenceText}
                                  setEditingVerdict={setEditingEvidenceVerdict}
+                                 readOnly={!canParticipateInCommunity}
                               />
                            ))}
                         </div>
@@ -1533,7 +1572,9 @@ export default function ThreadDetailPage() {
                </section>
 
                <div className="thread-detail-sidebar-actions thread-detail-sidebar-actions--classic" role="group" aria-label="Thread actions">
-                  <button type="button" className="is-danger" onClick={() => setReportDialogOpen(true)}><Icons name="flag" size={15} /> Report</button>
+                  {canParticipateInCommunity && (
+                     <button type="button" className="is-danger" onClick={() => setReportDialogOpen(true)}><Icons name="flag" size={15} /> Report</button>
+                  )}
                   <button type="button" onClick={shareThread}><Icons name="share-2" size={15} /> Share</button>
                </div>
             </aside>
@@ -1546,10 +1587,10 @@ export default function ThreadDetailPage() {
             <div className="thread-detail-dialog-actions"><button type="button" className="thread-detail-text-button" data-dialog-initial onClick={() => setConfirmDialog({ open: false, type: null, targetId: null })} disabled={dialogBusy}>Cancel</button><button type="button" className="thread-detail-danger-button" onClick={performDelete} disabled={dialogBusy}>{dialogBusy ? "Deleting…" : "Delete"}</button></div>
          </AccessibleDialog>
 
-         <AccessibleDialog open={reportDialogOpen} busy={reporting} labelledBy="thread-detail-report-title" describedBy="thread-detail-report-description" onClose={() => setReportDialogOpen(false)} fallbackFocusRef={pageRef}>
+         <AccessibleDialog open={canParticipateInCommunity && reportDialogOpen} busy={reporting} labelledBy="thread-detail-report-title" describedBy="thread-detail-report-description" onClose={() => setReportDialogOpen(false)} fallbackFocusRef={pageRef}>
             <p className="thread-detail-dialog-kicker">Platform safety</p>
             <h2 id="thread-detail-report-title">Report this thread</h2>
-            <p id="thread-detail-report-description">Send this thread to platform moderators for a safety review.</p>
+            <p id="thread-detail-report-description">Send this thread to Platform Safety reviewers for a safety review.</p>
             <div className="thread-detail-field"><label htmlFor="thread-report-reason">Reason</label><select id="thread-report-reason" data-dialog-initial value={reportReason} onChange={(event) => setReportReason(event.target.value)} disabled={reporting}><option value="INAPPROPRIATE">Inappropriate</option><option value="SPAM">Spam</option><option value="HARASSMENT">Harassment</option><option value="OTHER">Other</option></select></div>
             <div className="thread-detail-field"><label htmlFor="thread-report-notes">Notes (optional)</label><textarea id="thread-report-notes" rows={4} value={reportNotes} onChange={(event) => setReportNotes(event.target.value)} disabled={reporting} /></div>
             <div className="thread-detail-dialog-actions"><button type="button" className="thread-detail-text-button" onClick={() => setReportDialogOpen(false)} disabled={reporting}>Cancel</button><button type="button" className="thread-detail-primary-button" onClick={submitReport} disabled={reporting}>{reporting ? "Submitting…" : "Submit report"}</button></div>

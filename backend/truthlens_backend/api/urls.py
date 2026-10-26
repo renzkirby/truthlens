@@ -12,6 +12,41 @@ urlpatterns = [
         name="management_overview",
     ),
     path(
+        "management/platform-staff/",
+        management_views.ManagementPlatformStaffListView.as_view(),
+        name="management_platform_staff",
+    ),
+    path(
+        "management/platform-staff/invitations/",
+        management_views.ManagementPlatformStaffInvitationListView.as_view(),
+        name="management_platform_staff_invitations",
+    ),
+    path(
+        "management/platform-staff/invitations/<uuid:invitation_id>/resend/",
+        management_views.ManagementPlatformStaffInvitationResendView.as_view(),
+        name="management_platform_staff_invitation_resend",
+    ),
+    path(
+        "management/platform-staff/invitations/<uuid:invitation_id>/cancel/",
+        management_views.ManagementPlatformStaffInvitationCancelView.as_view(),
+        name="management_platform_staff_invitation_cancel",
+    ),
+    path(
+        "management/platform-staff/<int:user_id>/",
+        management_views.ManagementPlatformStaffDetailView.as_view(),
+        name="management_platform_staff_detail",
+    ),
+    path(
+        "platform-staff-invitations/<str:token>/",
+        management_views.PlatformStaffInvitationDetailView.as_view(),
+        name="platform_staff_invitation_detail",
+    ),
+    path(
+        "platform-staff-invitations/<str:token>/accept/",
+        management_views.PlatformStaffInvitationAcceptView.as_view(),
+        name="platform_staff_invitation_accept",
+    ),
+    path(
         "management/pipeline/overview/",
         management_views.ManagementPipelineOverviewView.as_view(),
         name="management_pipeline_overview",

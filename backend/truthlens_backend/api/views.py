@@ -107,6 +107,13 @@ from .safety_review_service import (
     release_safety_case,
     schedule_safety_resolution_trust_updates,
 )
+from .platform_identity_service import (
+    can_participate_in_community,
+    can_review_platform_safety,
+    exclude_platform_staff_identities,
+    is_platform_staff_identity,
+    platform_staff_identity_q,
+)
 from .organization_service import (
     PartnerCapability,
     has_capability,
@@ -510,6 +517,18 @@ class StandardCursorPagination(CursorPagination):
         return ("-created_at",)
 
 
+class CanParticipateInCommunity(BasePermission):
+    message = (
+        "Platform staff identities do not participate in Community posting, "
+        "reputation, or social activity."
+    )
+
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return True
+        return can_participate_in_community(request.user)
+
+
 class IsThreadOwnerOrReadOnly(BasePermission):
     def has_object_permission(self, request, view, obj):
         if request.method in SAFE_METHODS:
@@ -547,10 +566,7 @@ class IsVoterOrReadOnly(BasePermission):
 
 class CanReviewSafety(BasePermission):
     def has_permission(self, request, view):
-        return has_capability(
-            request.user,
-            PartnerCapability.REVIEW_SAFETY,
-        )
+        return can_review_platform_safety(request.user)
 
 
 def _authenticated_user_or_none(request):
@@ -3105,7 +3121,11 @@ def verification_workload(request):
 # Viewsets
 class ThreadViewSet(viewsets.ModelViewSet):
     serializer_class = ThreadSerializer
-    permission_classes = [IsAuthenticated, IsThreadOwnerOrReadOnly]
+    permission_classes = [
+        IsAuthenticated,
+        CanParticipateInCommunity,
+        IsThreadOwnerOrReadOnly,
+    ]
     pagination_class = StandardCursorPagination
 
     def get_queryset(self):
@@ -3165,6 +3185,7 @@ class ThreadViewSet(viewsets.ModelViewSet):
             )
             .order_by(order_field)
         )
+        queryset = exclude_platform_staff_identities(queryset, "author")
         queryset = prefetch_public_partner_affiliations(queryset, "author")
 
         search_query = self.request.query_params.get("search", "").strip()[:120]
@@ -3221,13 +3242,28 @@ class ThreadViewSet(viewsets.ModelViewSet):
 
         if action == "list":
             queryset = queryset.annotate(
-                comment_count=Count("comments", distinct=True),
-                evidence_count=Count("evidence_submissions", distinct=True),
+                comment_count=Count(
+                    "comments",
+                    filter=~platform_staff_identity_q("comments__commenter"),
+                    distinct=True,
+                ),
+                evidence_count=Count(
+                    "evidence_submissions",
+                    filter=~platform_staff_identity_q(
+                        "evidence_submissions__contributor"
+                    ),
+                    distinct=True,
+                ),
                 verified_evidence_count=Count(
                     "claim__threads__evidence_submissions",
-                    filter=Q(
-                        claim__threads__evidence_submissions__evidence_status=(
-                            EvidenceSubmission.EvidenceStatus.VERIFIED
+                    filter=(
+                        Q(
+                            claim__threads__evidence_submissions__evidence_status=(
+                                EvidenceSubmission.EvidenceStatus.VERIFIED
+                            )
+                        )
+                        & ~platform_staff_identity_q(
+                            "claim__threads__evidence_submissions__contributor"
                         )
                     ),
                     distinct=True,
@@ -3237,29 +3273,45 @@ class ThreadViewSet(viewsets.ModelViewSet):
             queryset = queryset.annotate(
                 verified_evidence_count=Count(
                     "claim__threads__evidence_submissions",
-                    filter=Q(
-                        claim__threads__evidence_submissions__evidence_status=(
-                            EvidenceSubmission.EvidenceStatus.VERIFIED
+                    filter=(
+                        Q(
+                            claim__threads__evidence_submissions__evidence_status=(
+                                EvidenceSubmission.EvidenceStatus.VERIFIED
+                            )
+                        )
+                        & ~platform_staff_identity_q(
+                            "claim__threads__evidence_submissions__contributor"
                         )
                     ),
                     distinct=True,
                 ),
             )
             comment_queryset = prefetch_public_partner_affiliations(
-                ThreadComment.objects.select_related(
-                    "commenter__profile",
-                    "parent__commenter",
-                )
-                .prefetch_related("likes")
-                .order_by("-commented_at"),
+                exclude_platform_staff_identities(
+                    ThreadComment.objects.select_related(
+                        "commenter__profile",
+                        "parent__commenter",
+                    )
+                    .prefetch_related("likes")
+                    .order_by("-commented_at"),
+                    "commenter",
+                ),
                 "commenter",
             )
+            evidence_queryset = prefetch_public_partner_affiliations(
+                exclude_platform_staff_identities(
+                    EvidenceSubmission.objects.select_related(
+                        "contributor__profile",
+                        "verified_by__profile",
+                    ).prefetch_related("votes"),
+                    "contributor",
+                ),
+                "contributor",
+            )
             queryset = queryset.prefetch_related(
-                "evidence_submissions__votes",
-                "evidence_submissions__contributor__profile",
-                "evidence_submissions__verified_by__profile",
-                public_partner_affiliation_prefetch(
-                    "evidence_submissions__contributor"
+                Prefetch(
+                    "evidence_submissions",
+                    queryset=evidence_queryset,
                 ),
                 Prefetch(
                     "comments",
@@ -3360,6 +3412,7 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
     serializer_class = EvidenceSubmissionSerializer
     permission_classes = [
         IsAuthenticated,
+        CanParticipateInCommunity,
         IsEvidenceContributorOrReadOnly,
     ]
 
@@ -3408,7 +3461,11 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
 
 class ThreadCommentViewSet(viewsets.ModelViewSet):
     serializer_class = ThreadCommentSerializer
-    permission_classes = [IsAuthenticated, IsCommenterOrReadOnly]
+    permission_classes = [
+        IsAuthenticated,
+        CanParticipateInCommunity,
+        IsCommenterOrReadOnly,
+    ]
 
     def get_queryset(self):
         queryset = (
@@ -3436,7 +3493,7 @@ class ThreadCommentViewSet(viewsets.ModelViewSet):
     @action(
         detail=True,
         methods=["post", "delete"],
-        permission_classes=[IsAuthenticated],
+        permission_classes=[IsAuthenticated, CanParticipateInCommunity],
     )
     def like(self, request, pk=None):
         comment = self.get_object()
@@ -3473,7 +3530,7 @@ class ThreadCommentViewSet(viewsets.ModelViewSet):
 
 class ThreadFlagViewSet(viewsets.ModelViewSet):
     serializer_class = ThreadFlagSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanParticipateInCommunity]
     http_method_names = ["get", "post", "head", "options"]
 
     def get_queryset(self):
@@ -3514,7 +3571,11 @@ class ThreadFlagViewSet(viewsets.ModelViewSet):
 
 class VoteViewSet(viewsets.ModelViewSet):
     serializer_class = VoteSerializer
-    permission_classes = [IsAuthenticated, IsVoterOrReadOnly]
+    permission_classes = [
+        IsAuthenticated,
+        CanParticipateInCommunity,
+        IsVoterOrReadOnly,
+    ]
 
     def get_queryset(self):
         return Vote.objects.select_related("evidence", "voter", "evidence__contributor")
@@ -3728,7 +3789,9 @@ def search_users(request):
     limit = max(1, min(limit, 20))
 
     users = (
-        User.objects.select_related("profile")
+        exclude_platform_staff_identities(
+            User.objects.select_related("profile")
+        )
         .filter(Q(username__icontains=query) | Q(profile__bio__icontains=query))
         .exclude(id=request.user.id)
         .order_by("username")
@@ -3747,7 +3810,9 @@ def get_public_user_profile(request, username):
     """Fetch community-visible identity fields for an authenticated member."""
     target_user = get_object_or_404(
         prefetch_public_partner_affiliations(
-            User.objects.select_related("profile")
+            exclude_platform_staff_identities(
+                User.objects.select_related("profile")
+            )
         ),
         username=username,
     )
@@ -3763,7 +3828,10 @@ def get_public_user_profile(request, username):
 def public_user_threads(request, username):
     """Fetch non-removed community threads initiated by a specific user."""
     target_user = get_object_or_404(
-        User.objects.select_related("profile"), username=username
+        exclude_platform_staff_identities(
+            User.objects.select_related("profile")
+        ),
+        username=username,
     )
 
     threads = (
@@ -3788,7 +3856,10 @@ def public_user_threads(request, username):
 def public_user_evidence(request, username):
     """Fetch contributions attached to non-removed community threads."""
     target_user = get_object_or_404(
-        User.objects.select_related("profile"), username=username
+        exclude_platform_staff_identities(
+            User.objects.select_related("profile")
+        ),
+        username=username,
     )
 
     evidence_items = list(
@@ -3830,7 +3901,10 @@ def public_user_evidence(request, username):
 @permission_classes([IsAuthenticated])
 def public_user_claims(request, username):
     """Fetch public claims submitted by a specific user."""
-    target_user = get_object_or_404(User, username=username)
+    target_user = get_object_or_404(
+        exclude_platform_staff_identities(User.objects.select_related("profile")),
+        username=username,
+    )
     claims = (
         Claim.objects.filter(check_history__user=target_user)
         .annotate(last_checked_at=Max("check_history__checked_at"))
@@ -3848,11 +3922,19 @@ def public_user_claims(request, username):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def toggle_follow_user(request, username):
-    """Toggle follow/unfollow for a specific user."""
+    """Toggle follow/unfollow for a specific Community participant."""
+    if not can_participate_in_community(request.user):
+        raise PermissionDenied(
+            "Platform staff identities do not participate in Community social activity."
+        )
+
     if request.user.username == username:
         return Response({"error": "You cannot follow yourself."}, status=400)
 
-    target_user = get_object_or_404(User, username=username)
+    target_user = get_object_or_404(
+        exclude_platform_staff_identities(User.objects.select_related("profile")),
+        username=username,
+    )
     through_model = UserProfile.followers.through
 
     with transaction.atomic():
@@ -3888,11 +3970,14 @@ def toggle_follow_user(request, username):
 @permission_classes([IsAuthenticated])
 def get_user_followers(request, username):
     """Get community-safe identities for users who follow this profile."""
-    target_user = get_object_or_404(User, username=username)
+    target_user = get_object_or_404(
+        exclude_platform_staff_identities(User.objects.select_related("profile")),
+        username=username,
+    )
     followers = prefetch_public_partner_affiliations(
-        target_user.profile.followers.select_related("profile").order_by(
-            "username"
-        )
+        exclude_platform_staff_identities(
+            target_user.profile.followers.select_related("profile")
+        ).order_by("username")
     )
     serializer = CommunityUserIdentitySerializer(followers, many=True)
     return Response(serializer.data)
@@ -3902,10 +3987,15 @@ def get_user_followers(request, username):
 @permission_classes([IsAuthenticated])
 def get_user_following(request, username):
     """Get community-safe identities this profile is following."""
-    target_user = get_object_or_404(User, username=username)
+    target_user = get_object_or_404(
+        exclude_platform_staff_identities(User.objects.select_related("profile")),
+        username=username,
+    )
     following = (
-        User.objects.filter(profile__followers=target_user)
-        .select_related("profile")
+        exclude_platform_staff_identities(
+            User.objects.filter(profile__followers=target_user)
+            .select_related("profile")
+        )
         .order_by("username")
     )
     following = prefetch_public_partner_affiliations(following)
@@ -3953,6 +4043,17 @@ class UserHubView(APIView):
     def get(self, request):
         user = request.user
         profile = user.profile
+
+        if is_platform_staff_identity(user):
+            return Response(
+                {
+                    "detail": (
+                        "Platform staff identities do not have a Community "
+                        "reputation dashboard."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         # 1. Reputation & Progression
         components = calculate_trust_components(user)

@@ -5,6 +5,7 @@ from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -39,6 +40,10 @@ from .management_serializers import (
     ManagementOrganizationCreateSerializer,
     ManagementOrganizationDetailSerializer,
     ManagementOrganizationListSerializer,
+    ManagementPlatformStaffInvitationCreateSerializer,
+    ManagementPlatformStaffInvitationPublicSerializer,
+    ManagementPlatformStaffInvitationSerializer,
+    ManagementPlatformStaffSerializer,
     ManagementPlatformTrustUpdateSerializer,
     ManagementPrimaryAdminInvitationSerializer,
     ManagementPrimaryAdminProvisionSerializer,
@@ -50,6 +55,28 @@ from .models import (
     Organization,
     OrganizationInvitation,
     OrganizationMembership,
+    PlatformStaffInvitation,
+)
+from .platform_staff_invitation_service import (
+    PlatformStaffInvitationAuthorizationError,
+    PlatformStaffInvitationConflict,
+    PlatformStaffInvitationDeliveryError,
+    PlatformStaffInvitationError,
+    PlatformStaffInvitationNotFound,
+    accept_platform_staff_invitation,
+    cancel_platform_staff_invitation,
+    create_and_send_platform_staff_invitation,
+    get_platform_staff_invitation_by_token,
+    get_platform_staff_invitations,
+    resend_platform_staff_invitation,
+)
+from .platform_staff_service import (
+    PlatformStaffAuthorizationError,
+    PlatformStaffConflict,
+    PlatformStaffNotFound,
+    PlatformStaffValidationError,
+    list_platform_staff,
+    revoke_platform_safety_moderator,
 )
 from .organization_provisioning_service import (
     OrganizationProvisioningAuthorizationError,
@@ -92,6 +119,219 @@ def _filter_organization_id(queryset, params):
         raise ValidationError(
             {"organization_id": "Enter a valid organization ID."}
         ) from error
+
+
+def _platform_staff_error_response(error):
+    if isinstance(error, PlatformStaffAuthorizationError):
+        response_status = status.HTTP_403_FORBIDDEN
+    elif isinstance(error, PlatformStaffNotFound):
+        response_status = status.HTTP_404_NOT_FOUND
+    elif isinstance(error, PlatformStaffConflict):
+        response_status = status.HTTP_409_CONFLICT
+    else:
+        response_status = status.HTTP_400_BAD_REQUEST
+    return Response({"detail": str(error)}, status=response_status)
+
+
+def _platform_staff_invitation_error_response(error):
+    if isinstance(error, PlatformStaffInvitationAuthorizationError):
+        response_status = status.HTTP_403_FORBIDDEN
+    elif isinstance(error, PlatformStaffInvitationNotFound):
+        response_status = status.HTTP_404_NOT_FOUND
+    elif isinstance(error, PlatformStaffInvitationConflict):
+        response_status = status.HTTP_409_CONFLICT
+    elif isinstance(error, PlatformStaffInvitationDeliveryError):
+        response_status = status.HTTP_503_SERVICE_UNAVAILABLE
+    else:
+        response_status = status.HTTP_400_BAD_REQUEST
+    return Response({"detail": str(error)}, status=response_status)
+
+
+class ManagementPlatformStaffListView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def get(self, request):
+        try:
+            queryset = list_platform_staff(
+                actor=request.user,
+                query=request.query_params.get("q", ""),
+            )
+        except PlatformStaffAuthorizationError as error:
+            return _platform_staff_error_response(error)
+
+        paginator = ManagementPagination()
+        page = paginator.paginate_queryset(queryset, request, view=self)
+        return paginator.get_paginated_response(
+            ManagementPlatformStaffSerializer(page, many=True).data
+        )
+
+
+class ManagementPlatformStaffInvitationListView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def get(self, request):
+        try:
+            invitations = get_platform_staff_invitations(actor=request.user)
+        except PlatformStaffInvitationError as error:
+            return _platform_staff_invitation_error_response(error)
+
+        serializer = ManagementPlatformStaffInvitationSerializer(
+            invitations,
+            many=True,
+        )
+        return Response(
+            {
+                "count": invitations.count(),
+                "summary": {
+                    "pending": invitations.filter(
+                        status=PlatformStaffInvitation.Status.PENDING,
+                    ).count(),
+                    "accepted": invitations.filter(
+                        status=PlatformStaffInvitation.Status.ACCEPTED,
+                    ).count(),
+                    "cancelled": invitations.filter(
+                        status=PlatformStaffInvitation.Status.CANCELLED,
+                    ).count(),
+                    "expired": invitations.filter(
+                        status=PlatformStaffInvitation.Status.EXPIRED,
+                    ).count(),
+                },
+                "results": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request):
+        serializer = ManagementPlatformStaffInvitationCreateSerializer(
+            data=request.data,
+        )
+        serializer.is_valid(raise_exception=True)
+        try:
+            invitation = create_and_send_platform_staff_invitation(
+                email=serializer.validated_data["email"],
+                actor=request.user,
+            )
+        except PlatformStaffInvitationError as error:
+            return _platform_staff_invitation_error_response(error)
+
+        return Response(
+            ManagementPlatformStaffInvitationSerializer(invitation).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class ManagementPlatformStaffInvitationResendView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def post(self, request, invitation_id):
+        invitation = get_object_or_404(
+            PlatformStaffInvitation.objects.select_related("invited_by"),
+            pk=invitation_id,
+        )
+        try:
+            invitation = resend_platform_staff_invitation(
+                invitation=invitation,
+                actor=request.user,
+            )
+        except PlatformStaffInvitationError as error:
+            return _platform_staff_invitation_error_response(error)
+
+        return Response(
+            ManagementPlatformStaffInvitationSerializer(invitation).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class ManagementPlatformStaffInvitationCancelView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def post(self, request, invitation_id):
+        invitation = get_object_or_404(
+            PlatformStaffInvitation.objects.select_related("invited_by"),
+            pk=invitation_id,
+        )
+        try:
+            invitation = cancel_platform_staff_invitation(
+                invitation=invitation,
+                actor=request.user,
+            )
+        except PlatformStaffInvitationError as error:
+            return _platform_staff_invitation_error_response(error)
+
+        return Response(
+            ManagementPlatformStaffInvitationSerializer(invitation).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class ManagementPlatformStaffDetailView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def delete(self, request, user_id):
+        try:
+            target_user = revoke_platform_safety_moderator(
+                actor=request.user,
+                user_id=user_id,
+            )
+        except (
+            PlatformStaffAuthorizationError,
+            PlatformStaffConflict,
+            PlatformStaffNotFound,
+            PlatformStaffValidationError,
+        ) as error:
+            return _platform_staff_error_response(error)
+
+        return Response(
+            {
+                "id": target_user.id,
+                "username": target_user.username,
+                "revoked": True,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class PlatformStaffInvitationDetailView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, token):
+        try:
+            invitation = get_platform_staff_invitation_by_token(token)
+        except PlatformStaffInvitationError as error:
+            return _platform_staff_invitation_error_response(error)
+
+        return Response(
+            ManagementPlatformStaffInvitationPublicSerializer(
+                invitation,
+                context={"request": request},
+            ).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class PlatformStaffInvitationAcceptView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, token):
+        try:
+            invitation = accept_platform_staff_invitation(
+                raw_token=token,
+                actor=request.user,
+            )
+        except PlatformStaffInvitationError as error:
+            return _platform_staff_invitation_error_response(error)
+
+        return Response(
+            {
+                "invitation": ManagementPlatformStaffInvitationPublicSerializer(
+                    invitation,
+                    context={"request": request},
+                ).data,
+                "platform_role": invitation.platform_role,
+                "status": "ACTIVE",
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class ManagementOverviewView(APIView):

@@ -83,7 +83,7 @@ class WorkspaceAccessApiTests(APITestCase):
 
         self.assertIsNone(workspace["default_organization_id"])
 
-    def test_platform_safety_moderator_receives_only_platform_authority(
+    def test_platform_safety_moderator_receives_no_verification_workspace_access(
         self,
     ):
         user = User.objects.create_user(
@@ -104,15 +104,13 @@ class WorkspaceAccessApiTests(APITestCase):
 
         workspace = response.data["workspace"]
 
-        self.assertTrue(workspace["can_access"])
+        self.assertFalse(workspace["can_access"])
 
         self.assertTrue(workspace["is_platform_safety_moderator"])
 
         self.assertEqual(
             workspace["platform_capabilities"],
-            [
-                PartnerCapability.REVIEW_SAFETY,
-            ],
+            [],
         )
 
         self.assertEqual(
@@ -237,9 +235,7 @@ class WorkspaceAccessApiTests(APITestCase):
 
         self.assertEqual(
             workspace["platform_capabilities"],
-            [
-                PartnerCapability.REVIEW_SAFETY,
-            ],
+            [],
         )
 
         partner_capabilities = set(workspace["memberships"][0]["capabilities"])

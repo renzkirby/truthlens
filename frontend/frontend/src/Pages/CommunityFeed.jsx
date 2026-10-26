@@ -247,6 +247,7 @@ function CommunityFeed() {
    const [searchParams] = useSearchParams();
    const { authFetch, user } = useAuth();
    const { addToast } = useNotification();
+   const canParticipateInCommunity = user?.community_identity?.can_participate !== false;
    const threadsEndpoint = resolveApiEndpoint("THREADS");
 
    const [threads, setThreads] = useState([]);
@@ -706,6 +707,19 @@ function CommunityFeed() {
          <main ref={mainRef} className="feed-container" aria-busy={loading} tabIndex="-1">
             <h1 className="feed-visually-hidden">Community</h1>
 
+            {!canParticipateInCommunity && (
+               <div className="feed-governance-notice" role="note">
+                  <Icons name="shield-check" size={18} aria-hidden="true" />
+                  <div>
+                     <strong>Viewing Community in governance mode</strong>
+                     <span>
+                        Platform staff can inspect and share Community content, but this account does not
+                        post, vote, report, or build Community reputation.
+                     </span>
+                  </div>
+               </div>
+            )}
+
             <section className="feed-controls" aria-label="Community feed controls">
                <div className="feed-toolbar">
                   <div className="feed-toolbar-control feed-toolbar-topic">
@@ -1139,7 +1153,11 @@ function CommunityFeed() {
                                        aria-label={`Discussion actions for ${thread.author.username}`}
                                        onKeyDown={(event) => moveMenuFocus(event, closeThreadMenu)}
                                     >
-                                       {isThreadOwner(thread) ? (
+                                       {!canParticipateInCommunity ? (
+                                          <button type="button" role="menuitem" className="feed-popup-item" onClick={(event) => shareThread(event, thread)} disabled={sharingThreadId === thread.id}>
+                                             <Icons name="share-2" size={16} aria-hidden="true" /> {sharingThreadId === thread.id ? "Sharing..." : "Share"}
+                                          </button>
+                                       ) : isThreadOwner(thread) ? (
                                           <>
                                              <button type="button" role="menuitem" className="feed-popup-item" onClick={(event) => startEditThread(event, thread)}>
                                                 <Icons name="pencil" size={16} aria-hidden="true" /> Edit

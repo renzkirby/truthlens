@@ -87,6 +87,18 @@ export const NOTIFICATION_SSE_ENABLED =
 export const API_ENDPOINTS = {
    // Management Console governance
    MANAGEMENT_OVERVIEW: "management/overview/",
+   MANAGEMENT_PLATFORM_STAFF: "management/platform-staff/",
+   MANAGEMENT_PLATFORM_STAFF_INVITATIONS: "management/platform-staff/invitations/",
+   MANAGEMENT_PLATFORM_STAFF_INVITATION_RESEND: (invitationId) =>
+      `management/platform-staff/invitations/${encodeURIComponent(invitationId)}/resend/`,
+   MANAGEMENT_PLATFORM_STAFF_INVITATION_CANCEL: (invitationId) =>
+      `management/platform-staff/invitations/${encodeURIComponent(invitationId)}/cancel/`,
+   MANAGEMENT_PLATFORM_STAFF_DETAIL: (userId) =>
+      `management/platform-staff/${encodeURIComponent(userId)}/`,
+   PLATFORM_STAFF_INVITATION_DETAIL: (token) =>
+      `platform-staff-invitations/${encodeURIComponent(token)}/`,
+   PLATFORM_STAFF_INVITATION_ACCEPT: (token) =>
+      `platform-staff-invitations/${encodeURIComponent(token)}/accept/`,
    MANAGEMENT_PIPELINE_OVERVIEW: "management/pipeline/overview/",
    MANAGEMENT_PIPELINE_RUNS: "management/pipeline/runs/",
    MANAGEMENT_PIPELINE_RUN_DETAIL: (runId) =>

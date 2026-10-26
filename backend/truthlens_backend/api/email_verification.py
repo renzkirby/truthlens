@@ -1,7 +1,8 @@
 import secrets
 
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives
+from django.template.loader import render_to_string
 from django.utils import timezone
 
 
@@ -39,17 +40,38 @@ def prepare_email_verification(user):
 def send_email_verification(user):
     token = prepare_email_verification(user)
     verification_url = build_email_verification_url(token)
+    expiry_hours = settings.EMAIL_VERIFICATION_TOKEN_LIFETIME_HOURS
 
-    send_mail(
-        subject="Verify your TruthLens email",
-        message=(
-            "Thanks for creating a TruthLens account.\n\n"
-            "Verify your email address using this link:\n"
-            f"{verification_url}\n\n"
-            "If you did not create this account, "
-            "you can ignore this message."
-        ),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[user.email],
-        fail_silently=False,
+    subject = "Verify your TruthLens email"
+    text_body = (
+        "Verify your email address\n\n"
+        "Confirm this email address to secure your TruthLens account "
+        "and continue to TruthLens.\n\n"
+        "Verify your email:\n"
+        f"{verification_url}\n\n"
+        f"This verification link expires in {expiry_hours} hours.\n\n"
+        "If you did not request this verification, you can safely ignore this email."
     )
+    html_body = render_to_string(
+        "emails/email_verification.html",
+        {
+            "verification_url": verification_url,
+            "expiry_hours": expiry_hours,
+        },
+    )
+
+    message = EmailMultiAlternatives(
+        subject=subject,
+        body=text_body,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[user.email],
+    )
+    message.attach_alternative(html_body, "text/html")
+
+    delivered_count = message.send(fail_silently=False)
+    if delivered_count != 1:
+        raise RuntimeError(
+            "The email verification message was not accepted by the configured email backend."
+        )
+
+    return delivered_count

@@ -16,7 +16,10 @@ import Icons from "../components/Icons.jsx";
 import Button from "../components/ui/Button.jsx";
 import "./OnboardingPage.css";
 import { resolveApiEndpoint } from "../utils/api";
-import { resolveAuthDestination } from "../utils/authNavigation";
+import {
+   getDefaultAuthenticatedDestination,
+   resolveAuthDestination,
+} from "../utils/authNavigation";
 
 // ── Step Definitions ──────────────────────────────────────────────
 const STEPS = [
@@ -288,7 +291,10 @@ export default function OnboardingPage() {
    const location = useLocation();
    const verificationEmailSent = location.state?.verificationEmailSent;
 
-   const onboardingDestination = resolveAuthDestination(location.state?.from, "/community");
+   const onboardingDestination = resolveAuthDestination(
+      location.state?.from,
+      getDefaultAuthenticatedDestination(user),
+   );
 
    const step = STEPS[currentStep];
    const isFirst = currentStep === 0;

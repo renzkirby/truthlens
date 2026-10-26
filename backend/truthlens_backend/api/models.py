@@ -729,6 +729,94 @@ class OrganizationInvitation(models.Model):
         return f"{self.email} → " f"{self.organization.name} " f"({self.invited_role})"
 
 
+class PlatformStaffInvitation(models.Model):
+    class PlatformRole(models.TextChoices):
+        PLATFORM_SAFETY_MODERATOR = (
+            "PLATFORM_SAFETY_MODERATOR",
+            "Platform Safety Moderator",
+        )
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        ACCEPTED = "ACCEPTED", "Accepted"
+        CANCELLED = "CANCELLED", "Cancelled"
+        EXPIRED = "EXPIRED", "Expired"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    email = models.EmailField(max_length=254, db_index=True)
+    platform_role = models.CharField(
+        max_length=40,
+        choices=PlatformRole.choices,
+        default=PlatformRole.PLATFORM_SAFETY_MODERATOR,
+    )
+    invited_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sent_platform_staff_invitations",
+    )
+    token_digest = models.CharField(
+        max_length=64,
+        unique=True,
+        editable=False,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
+    expires_at = models.DateTimeField(db_index=True)
+    last_sent_at = models.DateTimeField()
+    send_count = models.PositiveIntegerField(default=1)
+    accepted_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="accepted_platform_staff_invitations",
+    )
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cancelled_platform_staff_invitations",
+    )
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["email"],
+                condition=Q(status="PENDING"),
+                name="unique_pending_platform_staff_invite_email",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["email", "status"],
+                name="plat_inv_email_status_idx",
+            ),
+            models.Index(
+                fields=["status", "expires_at"],
+                name="plat_inv_status_exp_idx",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        self.email = str(self.email or "").strip().lower()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.email} → {self.get_platform_role_display()}"
+
+
 class Claim(models.Model):
     class VerificationSource(models.TextChoices):
         AI_EXTENSION = "AI_EXTENSION", "AI Extension"
@@ -2113,6 +2201,30 @@ class AccountabilityEvent(models.Model):
             "SAFETY_CONTENT_REMOVED",
             "Safety Content Removed",
         )
+        PLATFORM_SAFETY_MODERATOR_REVOKED = (
+            "PLATFORM_SAFETY_MODERATOR_REVOKED",
+            "Platform Safety Moderator Revoked",
+        )
+        PLATFORM_STAFF_INVITATION_CREATED = (
+            "PLATFORM_STAFF_INVITATION_CREATED",
+            "Platform Staff Invitation Created",
+        )
+        PLATFORM_STAFF_INVITATION_RESENT = (
+            "PLATFORM_STAFF_INVITATION_RESENT",
+            "Platform Staff Invitation Resent",
+        )
+        PLATFORM_STAFF_INVITATION_CANCELLED = (
+            "PLATFORM_STAFF_INVITATION_CANCELLED",
+            "Platform Staff Invitation Cancelled",
+        )
+        PLATFORM_STAFF_INVITATION_ACCEPTED = (
+            "PLATFORM_STAFF_INVITATION_ACCEPTED",
+            "Platform Staff Invitation Accepted",
+        )
+        PLATFORM_STAFF_INVITATION_EXPIRED = (
+            "PLATFORM_STAFF_INVITATION_EXPIRED",
+            "Platform Staff Invitation Expired",
+        )
         EVIDENCE_REOPENED = "EVIDENCE_REOPENED", "Evidence Reopened"
         EVIDENCE_VERIFIED = "EVIDENCE_VERIFIED", "Evidence Verified"
         EVIDENCE_REJECTED = "EVIDENCE_REJECTED", "Evidence Rejected"
@@ -2171,6 +2283,11 @@ class AccountabilityEvent(models.Model):
         CLAIM = "CLAIM", "Claim"
         MODERATION_CASE = "MODERATION_CASE", "Moderation Case"
         THREAD = "THREAD", "Thread"
+        USER_ACCOUNT = "USER_ACCOUNT", "User Account"
+        PLATFORM_STAFF_INVITATION = (
+            "PLATFORM_STAFF_INVITATION",
+            "Platform Staff Invitation",
+        )
         EVIDENCE_SUBMISSION = "EVIDENCE_SUBMISSION", "Evidence Submission"
         ADJUDICATION_DECISION = (
             "ADJUDICATION_DECISION",

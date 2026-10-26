@@ -1,6 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { canAccessWorkspace } from "../utils/workspace";
+import { getDefaultAuthenticatedDestination } from "../utils/authNavigation";
 import AuthRouteLoader from "./AuthRouteLoader";
 
 function RootRedirect() {
@@ -14,7 +14,7 @@ function RootRedirect() {
       return <Navigate to="/landing" replace />;
    }
 
-   const destination = canAccessWorkspace(user) ? "/workspace" : "/community";
+   const destination = getDefaultAuthenticatedDestination(user);
 
    return <Navigate to={destination} replace />;
 }

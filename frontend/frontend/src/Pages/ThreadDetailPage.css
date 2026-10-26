@@ -1,3 +1,8 @@
+
+.thread-detail-comment-like--readonly {
+   cursor: default;
+}
+
 /* Thread Detail S3E — restore the original Community visual language while
    retaining S3 semantics, accessibility, and real interactions. */
 .thread-detail-page {
@@ -95,6 +100,22 @@
 
 .thread-detail-back:hover { color: var(--tl-color-brand-primary-hover); }
 .thread-detail-metadata { flex: 0 0 auto; font-size: 11px; color: #64748b; }
+
+.thread-detail-governance-chip {
+   min-height: 28px;
+   display: inline-flex;
+   align-items: center;
+   gap: 5px;
+   padding: 4px 9px;
+   border: 1px solid #c7d2fe;
+   border-radius: 7px;
+   background: #eef2ff;
+   color: #4338ca;
+   font-size: 10px;
+   font-weight: 800;
+   white-space: nowrap;
+}
+
 .thread-detail-status {
    padding: 4px 9px;
    border: 1px solid #dbe3ee;

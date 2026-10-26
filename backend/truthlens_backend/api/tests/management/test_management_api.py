@@ -135,6 +135,8 @@ class ManagementApiTests(APITestCase):
     def management_urls(self):
         return (
             reverse("management_overview"),
+            reverse("management_platform_staff"),
+            reverse("management_platform_staff_invitations"),
             reverse("management_organizations"),
             reverse(
                 "management_organization_detail",
@@ -162,6 +164,19 @@ class ManagementApiTests(APITestCase):
     def assert_all_management_write_endpoints(self, user, expected_status):
         client = self.client_for(user)
         requests = (
+            (
+                "post",
+                reverse("management_platform_staff_invitations"),
+                {"email": "unauthorized-safety@example.com"},
+            ),
+            (
+                "delete",
+                reverse(
+                    "management_platform_staff_detail",
+                    kwargs={"user_id": self.ordinary_user.id},
+                ),
+                {},
+            ),
             (
                 "post",
                 reverse("management_organizations"),

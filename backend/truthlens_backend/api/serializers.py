@@ -43,6 +43,11 @@ from .organization_service import (
     get_workspace_access_context,
 )
 from .management_permissions import can_access_management_console
+from .platform_identity_service import (
+    exclude_platform_staff_identities,
+    get_community_identity_context,
+    is_platform_staff_identity,
+)
 from .organization_invitation_service import (
     get_invitation_role_label,
 )
@@ -120,7 +125,7 @@ class PublicPartnerAffiliationsField(serializers.Field):
 
 
 class PublicIdentityProfileSerializer(serializers.ModelSerializer):
-    trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
+    trust_score = serializers.SerializerMethodField()
     role = serializers.CharField(source="profile.role", read_only=True)
     avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
     bio = serializers.CharField(source="profile.bio", read_only=True)
@@ -132,15 +137,27 @@ class PublicIdentityProfileSerializer(serializers.ModelSerializer):
         read_only=True,
     )
 
+    def get_trust_score(self, obj):
+        if is_platform_staff_identity(obj):
+            return None
+        return obj.profile.trust_score
+
     def get_followers_count(self, obj):
-        return obj.profile.followers.count()
+        return exclude_platform_staff_identities(
+            obj.profile.followers.select_related("profile")
+        ).count()
 
     def get_following_count(self, obj):
-        return obj.following_profiles.count()
+        return exclude_platform_staff_identities(
+            obj.following_profiles.select_related("user"),
+            "user",
+        ).count()
 
     def get_is_following(self, obj):
         request = self.context.get("request")
         if request and request.user and request.user.is_authenticated:
+            if is_platform_staff_identity(request.user):
+                return False
             return obj.profile.followers.filter(id=request.user.id).exists()
         return False
 
@@ -295,7 +312,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
-    trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
+    trust_score = serializers.SerializerMethodField()
     is_email_verified = serializers.BooleanField(
         source="profile.is_email_verified", read_only=True
     )
@@ -314,17 +331,33 @@ class UserSerializer(serializers.ModelSerializer):
     avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
     bio = serializers.CharField(source="profile.bio", read_only=True)
 
+    def get_trust_score(self, obj):
+        if is_platform_staff_identity(obj):
+            return None
+        return obj.profile.trust_score
+
     def get_followers_count(self, obj):
-        return obj.profile.followers.count()
+        if is_platform_staff_identity(obj):
+            return 0
+        return exclude_platform_staff_identities(
+            obj.profile.followers.select_related("profile")
+        ).count()
 
     def get_following_count(self, obj):
-        # Counts how many profiles this specific user is following
-        return obj.following_profiles.count()
+        if is_platform_staff_identity(obj):
+            return 0
+        return exclude_platform_staff_identities(
+            obj.following_profiles.select_related("user"),
+            "user",
+        ).count()
 
     def get_is_following(self, obj):
-        # Checks if the CURRENT logged-in user is in the target user's followers list
         request = self.context.get("request")
+        if is_platform_staff_identity(obj):
+            return False
         if request and request.user.is_authenticated:
+            if is_platform_staff_identity(request.user):
+                return False
             return obj.profile.followers.filter(id=request.user.id).exists()
         return False
 
@@ -360,7 +393,9 @@ class PublicUserSearchSerializer(serializers.ModelSerializer):
     )
 
     def get_followers_count(self, obj):
-        return obj.profile.followers.count()
+        return exclude_platform_staff_identities(
+            obj.profile.followers.select_related("profile")
+        ).count()
 
     class Meta:
         model = User
@@ -380,6 +415,8 @@ class UserWithTrustBreakdownSerializer(UserSerializer):
     trust_breakdown = serializers.SerializerMethodField()
 
     def get_trust_breakdown(self, obj):
+        if is_platform_staff_identity(obj):
+            return None
         return calculate_trust_components(obj)
 
     class Meta(UserSerializer.Meta):
@@ -389,6 +426,7 @@ class UserWithTrustBreakdownSerializer(UserSerializer):
 class CurrentUserSerializer(UserWithTrustBreakdownSerializer):
     workspace = serializers.SerializerMethodField()
     management_console = serializers.SerializerMethodField()
+    community_identity = serializers.SerializerMethodField()
     auth_methods = serializers.SerializerMethodField()
     partner_affiliations = PublicPartnerAffiliationsField(
         source="*",
@@ -400,6 +438,9 @@ class CurrentUserSerializer(UserWithTrustBreakdownSerializer):
 
     def get_management_console(self, obj):
         return {"can_access": can_access_management_console(obj)}
+
+    def get_community_identity(self, obj):
+        return get_community_identity_context(obj)
 
     def get_auth_methods(self, obj):
         methods = []
@@ -416,6 +457,7 @@ class CurrentUserSerializer(UserWithTrustBreakdownSerializer):
         fields = UserWithTrustBreakdownSerializer.Meta.fields + [
             "workspace",
             "management_console",
+            "community_identity",
             "auth_methods",
             "partner_affiliations",
         ]
