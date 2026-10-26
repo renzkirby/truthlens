@@ -632,7 +632,7 @@ function SafetyReviewPanel() {
          setConfirmingRelease(false);
          showWorkspaceSuccess(addToast, {
             title: "Safety case released",
-            message: `Case ${formatCaseReference(caseId)} is available for another Safety moderator to claim.`,
+            message: `Case ${formatCaseReference(caseId)} is available for another Safety reviewer to claim.`,
          });
          requestQueueRefresh();
       } catch (error) {
@@ -663,7 +663,7 @@ function SafetyReviewPanel() {
       }
 
       if (actionDetail.notesRequired && !notes) {
-         setActionError("Moderator notes are required for this Safety action.");
+         setActionError("Review notes are required for this Safety action.");
          return;
       }
 
@@ -1223,7 +1223,7 @@ function SafetyReviewPanel() {
                                     </div>
 
                                     <label htmlFor="safety-moderator-notes">
-                                       Moderator notes {selectedActionDetail.notesRequired ? "(required)" : "(optional)"}
+                                       Review notes {selectedActionDetail.notesRequired ? "(required)" : "(optional)"}
                                     </label>
                                     <Textarea
                                        ref={decisionNotesRef}
