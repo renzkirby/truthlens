@@ -385,7 +385,7 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
             created.contributor_trust_snapshot, self.other.profile.trust_score
         )
 
-    def test_platform_safety_role_can_submit_ordinary_community_evidence(self):
+    def test_platform_safety_role_cannot_submit_ordinary_community_evidence(self):
         self.other.profile.role = UserProfile.Role.MOD
         self.other.profile.save(update_fields=["role"])
 
@@ -407,12 +407,13 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        evidence = EvidenceSubmission.objects.get(id=response.data["id"])
-        self.assertEqual(evidence.contributor, self.other)
-        self.assertEqual(
-            evidence.evidence_status,
-            EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(
+            EvidenceSubmission.objects.filter(
+                contributor=self.other,
+                thread=self.thread,
+                evidence_url="https://safety-proof.example.com",
+            ).exists()
         )
 
     def test_thread_owner_can_submit_evidence_on_own_thread(self):
