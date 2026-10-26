@@ -3210,10 +3210,21 @@ class ThreadViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(claim__claim_type=claim_type)
 
         if topic_category is not None:
-            topic_filter = Q()
+            classification_path = "claim__investigation_classification"
+            topic_filter = Q(
+                **{
+                    f"{classification_path}__primary_subject__in": (
+                        topic_category.domains
+                    )
+                }
+            )
+            missing_primary = (
+                Q(**{f"{classification_path}__primary_subject__isnull": True})
+                | Q(**{f"{classification_path}__primary_subject": ""})
+            )
             for domain in topic_category.domains:
-                topic_filter |= Q(
-                    claim__investigation_classification__domains=[domain]
+                topic_filter |= missing_primary & Q(
+                    **{f"{classification_path}__domains": [domain]}
                 )
             queryset = queryset.filter(topic_filter)
 
