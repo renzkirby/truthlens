@@ -5085,6 +5085,11 @@ class ClaimInvestigationClassification(models.Model):
         MANUAL = "MANUAL", "Manual legacy classification"
         AUTOMATIC = "AUTOMATIC", "Validated automated classification"
 
+    class CampusContextState(models.TextChoices):
+        CONFIRMED = "CONFIRMED", "Confirmed campus relevance"
+        NOT_APPLICABLE = "NOT_APPLICABLE", "Not applicable"
+        UNCERTAIN = "UNCERTAIN", "Uncertain campus relevance"
+
     claim = models.OneToOneField(
         Claim,
         primary_key=True,
@@ -5092,6 +5097,25 @@ class ClaimInvestigationClassification(models.Model):
         related_name="investigation_classification",
     )
     domains = models.JSONField(default=list)
+    primary_subject = models.CharField(
+        max_length=32,
+        null=True,
+        blank=True,
+        help_text=(
+            "Explicit primary subject for public topic projection. "
+            "Must also appear in domains; null means no primary was persisted."
+        ),
+    )
+    campus_context_state = models.CharField(
+        max_length=16,
+        choices=CampusContextState.choices,
+        null=True,
+        blank=True,
+        help_text=(
+            "Authoritative campus relevance assessment. "
+            "Null means campus context has not been assessed."
+        ),
+    )
     # Historical geographic context is retained; new subject classifications
     # do not require or infer geographic authorization.
     jurisdiction = models.CharField(max_length=32, blank=True, default="")
@@ -5108,6 +5132,20 @@ class ClaimInvestigationClassification(models.Model):
     )
     classified_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def clean(self):
+        super().clean()
+        from .verification_domain_policy import validate_domains
+
+        validate_domains(self.domains)
+        if self.primary_subject == "":
+            self.primary_subject = None
+        if self.campus_context_state == "":
+            self.campus_context_state = None
+        if self.primary_subject is not None and self.primary_subject not in self.domains:
+            raise ValidationError(
+                {"primary_subject": "Primary subject must be one of the authoritative domains."}
+            )
 
     def __str__(self):
         return f"Investigation classification for {self.claim_id}"

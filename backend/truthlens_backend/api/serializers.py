@@ -1392,12 +1392,10 @@ class CommunityFeedClaimSerializer(serializers.ModelSerializer):
         return self.context["verified_evidence_count"]
 
     def get_public_topic(self, obj):
-        from .verification.subject_taxonomy import public_category_for_domains
+        from .verification.subject_taxonomy import public_category_for_classification
 
         classification = getattr(obj, "investigation_classification", None)
-        category = public_category_for_domains(
-            getattr(classification, "domains", None),
-        )
+        category = public_category_for_classification(classification)
         if category is None:
             return None
         return {

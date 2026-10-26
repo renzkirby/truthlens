@@ -109,10 +109,18 @@ class CommunityFeedApiTests(TestCase):
 
         return result["decision"]
 
-    def _classify_claim(self, claim, *domains):
+    def _classify_claim(
+        self,
+        claim,
+        *domains,
+        primary_subject=None,
+        campus_context_state=None,
+    ):
         return ClaimInvestigationClassification.objects.create(
             claim=claim,
             domains=list(domains),
+            primary_subject=primary_subject,
+            campus_context_state=campus_context_state,
             rationale=(
                 "Authoritative subject classification created for "
                 "Community feed API tests."
@@ -372,6 +380,68 @@ class CommunityFeedApiTests(TestCase):
         self.assertIsNone(
             items[str(unclassified_thread.id)]["claim"]["public_topic"]
         )
+
+    def test_public_topic_projection_uses_explicit_multidomain_primary_subject(self):
+        claim, thread = self._create_thread("explicit primary topic")
+        self._classify_claim(
+            claim,
+            "ELECTIONS",
+            "TECHNOLOGY",
+            primary_subject="ELECTIONS",
+        )
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        item = next(
+            item for item in response.data["results"] if item["id"] == str(thread.id)
+        )
+        self.assertEqual(
+            item["claim"]["public_topic"],
+            {
+                "code": "POLITICS_GOVERNMENT_LAW",
+                "label": "Politics, Governance & Law",
+            },
+        )
+
+    def test_topic_filter_uses_explicit_multidomain_primary_subject(self):
+        politics_claim, politics_thread = self._create_thread(
+            "explicit politics primary"
+        )
+        self._classify_claim(
+            politics_claim,
+            "ELECTIONS",
+            "TECHNOLOGY",
+            primary_subject="ELECTIONS",
+        )
+        technology_claim, technology_thread = self._create_thread(
+            "explicit technology primary"
+        )
+        self._classify_claim(
+            technology_claim,
+            "ELECTIONS",
+            "TECHNOLOGY",
+            primary_subject="TECHNOLOGY",
+        )
+
+        response = self.client.get(
+            self.url,
+            {"topic": "POLITICS_GOVERNMENT_LAW"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        result_ids = set(self._result_ids(response))
+        self.assertIn(str(politics_thread.id), result_ids)
+        self.assertNotIn(str(technology_thread.id), result_ids)
+
+    def test_topic_filter_treats_blank_primary_as_legacy_missing_primary(self):
+        claim, thread = self._create_thread("blank primary compatibility")
+        self._classify_claim(claim, "EDUCATION", primary_subject="")
+
+        response = self.client.get(self.url, {"topic": "EDUCATION"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn(str(thread.id), set(self._result_ids(response)))
 
     def test_topic_filter_groups_single_domain_authoritative_claims(self):
         expected = set()
