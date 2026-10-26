@@ -135,6 +135,8 @@ class ManagementApiTests(APITestCase):
     def management_urls(self):
         return (
             reverse("management_overview"),
+            reverse("management_platform_staff"),
+            reverse("management_platform_staff_candidates"),
             reverse("management_organizations"),
             reverse(
                 "management_organization_detail",
