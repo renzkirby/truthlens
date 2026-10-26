@@ -258,89 +258,105 @@ def create_and_send_platform_staff_invitation(*, email, actor):
     return invitation
 
 
-@transaction.atomic
 def resend_platform_staff_invitation(*, invitation, actor):
     _require_platform_admin(actor)
-    invitation = (
-        PlatformStaffInvitation.objects.select_for_update(of=("self",))
-        .select_related("invited_by")
-        .get(pk=invitation.pk)
-    )
-    if _materialize_expired(invitation):
-        raise PlatformStaffInvitationConflict("This invitation has expired.")
-    if invitation.status != PlatformStaffInvitation.Status.PENDING:
-        raise PlatformStaffInvitationConflict(
-            "Only pending Platform Staff invitations can be resent."
+    expired = False
+    updated_invitation = None
+
+    with transaction.atomic():
+        locked = (
+            PlatformStaffInvitation.objects.select_for_update(of=("self",))
+            .select_related("invited_by")
+            .get(pk=invitation.pk)
         )
+        if _materialize_expired(locked):
+            expired = True
+        else:
+            if locked.status != PlatformStaffInvitation.Status.PENDING:
+                raise PlatformStaffInvitationConflict(
+                    "Only pending Platform Staff invitations can be resent."
+                )
 
-    previous_state = {
-        "status": invitation.status,
-        "send_count": invitation.send_count,
-    }
-    raw_token = generate_invitation_token()
-    now = timezone.now()
-    invitation.token_digest = hash_invitation_token(raw_token)
-    invitation.expires_at = now + INVITATION_LIFETIME
-    invitation.last_sent_at = now
-    invitation.send_count += 1
-    invitation.save(
-        update_fields=[
-            "token_digest",
-            "expires_at",
-            "last_sent_at",
-            "send_count",
-            "updated_at",
-        ]
-    )
-    send_platform_staff_invitation_email(invitation, raw_token)
-    _record_platform_event(
-        invitation=invitation,
-        actor=actor,
-        action_type=AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_RESENT,
-        previous_state=previous_state,
-        new_state={
-            "status": invitation.status,
-            "send_count": invitation.send_count,
-        },
-    )
-    return invitation
+            previous_state = {
+                "status": locked.status,
+                "send_count": locked.send_count,
+            }
+            raw_token = generate_invitation_token()
+            now = timezone.now()
+            locked.token_digest = hash_invitation_token(raw_token)
+            locked.expires_at = now + INVITATION_LIFETIME
+            locked.last_sent_at = now
+            locked.send_count += 1
+            locked.save(
+                update_fields=[
+                    "token_digest",
+                    "expires_at",
+                    "last_sent_at",
+                    "send_count",
+                    "updated_at",
+                ]
+            )
+            send_platform_staff_invitation_email(locked, raw_token)
+            _record_platform_event(
+                invitation=locked,
+                actor=actor,
+                action_type=AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_RESENT,
+                previous_state=previous_state,
+                new_state={
+                    "status": locked.status,
+                    "send_count": locked.send_count,
+                },
+            )
+            updated_invitation = locked
+
+    if expired:
+        raise PlatformStaffInvitationConflict("This invitation has expired.")
+    return updated_invitation
 
 
-@transaction.atomic
 def cancel_platform_staff_invitation(*, invitation, actor):
     _require_platform_admin(actor)
-    invitation = PlatformStaffInvitation.objects.select_for_update(of=("self",)).get(
-        pk=invitation.pk
-    )
-    if _materialize_expired(invitation):
-        raise PlatformStaffInvitationConflict("This invitation has expired.")
-    if invitation.status != PlatformStaffInvitation.Status.PENDING:
-        raise PlatformStaffInvitationConflict(
-            "Only pending Platform Staff invitations can be cancelled."
-        )
+    expired = False
+    updated_invitation = None
 
-    previous_state = {"status": invitation.status}
-    invitation.status = PlatformStaffInvitation.Status.CANCELLED
-    invitation.cancelled_by = actor
-    invitation.cancelled_at = timezone.now()
-    invitation.token_digest = hash_invitation_token(generate_invitation_token())
-    invitation.save(
-        update_fields=[
-            "status",
-            "cancelled_by",
-            "cancelled_at",
-            "token_digest",
-            "updated_at",
-        ]
-    )
-    _record_platform_event(
-        invitation=invitation,
-        actor=actor,
-        action_type=AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_CANCELLED,
-        previous_state=previous_state,
-        new_state={"status": invitation.status},
-    )
-    return invitation
+    with transaction.atomic():
+        locked = PlatformStaffInvitation.objects.select_for_update(of=("self",)).get(
+            pk=invitation.pk
+        )
+        if _materialize_expired(locked):
+            expired = True
+        else:
+            if locked.status != PlatformStaffInvitation.Status.PENDING:
+                raise PlatformStaffInvitationConflict(
+                    "Only pending Platform Staff invitations can be cancelled."
+                )
+
+            previous_state = {"status": locked.status}
+            locked.status = PlatformStaffInvitation.Status.CANCELLED
+            locked.cancelled_by = actor
+            locked.cancelled_at = timezone.now()
+            locked.token_digest = hash_invitation_token(generate_invitation_token())
+            locked.save(
+                update_fields=[
+                    "status",
+                    "cancelled_by",
+                    "cancelled_at",
+                    "token_digest",
+                    "updated_at",
+                ]
+            )
+            _record_platform_event(
+                invitation=locked,
+                actor=actor,
+                action_type=AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_CANCELLED,
+                previous_state=previous_state,
+                new_state={"status": locked.status},
+            )
+            updated_invitation = locked
+
+    if expired:
+        raise PlatformStaffInvitationConflict("This invitation has expired.")
+    return updated_invitation
 
 
 def get_platform_staff_invitation_by_token(raw_token):
