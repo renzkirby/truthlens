@@ -11,7 +11,6 @@ import { useNotificationInbox } from "../hooks/useNotificationInbox";
 import { canAccessWorkspace } from "../utils/workspace";
 import { canAccessManagementConsole } from "../utils/management";
 
-const isModeratorRole = (role) => role === "MOD" || role === "MODERATOR";
 const ACCOUNT_PANEL_ID = "tl-app-nav-account-panel";
 
 function NavigationBar() {
@@ -66,9 +65,12 @@ function NavigationBar() {
       setNotificationsOpen(nextOpen);
       if (nextOpen) setIsOpen(false);
    }, []);
-   const isModeratorUser = isModeratorRole(user?.role);
    const canUseWorkspace = canAccessWorkspace(user);
    const canUseManagementConsole = canAccessManagementConsole(user);
+   const canParticipateInCommunity = user?.community_identity?.can_participate !== false;
+   const platformRole = user?.community_identity?.platform_role || null;
+   const platformRoleLabel = user?.community_identity?.platform_role_label || null;
+   const isPlatformStaff = user?.community_identity?.reputation_applicable === false;
    const displayTrustScore = Number(user?.trust_breakdown?.trust_score ?? user?.trust_score ?? 0);
    const isCommunityRoute =
       location.pathname === "/community" ||
@@ -106,14 +108,16 @@ function NavigationBar() {
                      <Icons name="scan-line" />
                      Verify
                   </Link>
-                  <Link
-                     to="/dashboard"
-                     className={`tl-app-nav__primary-link ${isDashboardRoute ? "active" : ""}`}
-                     aria-current={isDashboardRoute ? "page" : undefined}
-                  >
-                     <Icons name="dashboard" />
-                     Dashboard
-                  </Link>
+                  {canParticipateInCommunity && (
+                     <Link
+                        to="/dashboard"
+                        className={`tl-app-nav__primary-link ${isDashboardRoute ? "active" : ""}`}
+                        aria-current={isDashboardRoute ? "page" : undefined}
+                     >
+                        <Icons name="dashboard" />
+                        Dashboard
+                     </Link>
+                  )}
                   {canUseWorkspace && (
                      <Link
                         to="/workspace"
@@ -159,15 +163,22 @@ function NavigationBar() {
                      aria-controls={ACCOUNT_PANEL_ID}
                   >
                      <span className="tl-app-nav__account-avatar" aria-hidden="true">
-                        {isModeratorUser ? <Icons name="shield-user" /> : <Icons name="user" />}
+                        {isPlatformStaff ? <Icons name="shield-user" /> : <Icons name="user" />}
                      </span>
                      <span className="tl-app-nav__account-copy">
                         <span className="tl-app-nav__account-name">@{user?.username}</span>
-                        <span className="tl-app-nav__account-trust">Trust {displayTrustScore.toFixed(1)}</span>
+                        <span className="tl-app-nav__account-trust">
+                           {canParticipateInCommunity
+                              ? `Trust ${displayTrustScore.toFixed(1)}`
+                              : (platformRoleLabel || "Platform staff")}
+                        </span>
                      </span>
-                     {isModeratorUser && (
-                        <span className="tl-app-nav__platform-role" aria-label="Platform Safety moderator">
-                           Safety
+                     {isPlatformStaff && (
+                        <span
+                           className="tl-app-nav__platform-role"
+                           aria-label={platformRoleLabel || "Platform staff"}
+                        >
+                           {platformRole === "PLATFORM_ADMIN" ? "Admin" : "Safety"}
                         </span>
                      )}
                      <span className={`tl-app-nav__chevron ${isOpen ? "rotated" : ""}`} aria-hidden="true">
@@ -181,11 +192,14 @@ function NavigationBar() {
                            <span className="tl-app-nav__panel-username">@{user?.username}</span>
                            <span className="tl-app-nav__panel-email">{user?.email}</span>
                            <div className="tl-app-nav__account-metadata">
-                              <span className="tl-app-nav__panel-trust">
-                                 Trust {displayTrustScore.toFixed(1)}
-                              </span>
-                              {isModeratorUser && (
-                                 <span className="tl-app-nav__panel-role">Platform Safety moderator</span>
+                              {canParticipateInCommunity ? (
+                                 <span className="tl-app-nav__panel-trust">
+                                    Trust {displayTrustScore.toFixed(1)}
+                                 </span>
+                              ) : (
+                                 <span className="tl-app-nav__panel-role">
+                                    {platformRoleLabel || "Platform staff"}
+                                 </span>
                               )}
                            </div>
                         </div>
@@ -201,14 +215,16 @@ function NavigationBar() {
                                  Management Console
                               </Link>
                            )}
-                           <Link
-                              to="/profile"
-                              className={`tl-app-nav__account-link ${location.pathname === "/profile" ? "active" : ""}`}
-                              onClick={() => setIsOpen(false)}
-                           >
-                              <Icons name="user" />
-                              My Public Profile
-                           </Link>
+                           {canParticipateInCommunity && (
+                              <Link
+                                 to="/profile"
+                                 className={`tl-app-nav__account-link ${location.pathname === "/profile" ? "active" : ""}`}
+                                 onClick={() => setIsOpen(false)}
+                              >
+                                 <Icons name="user" />
+                                 My Public Profile
+                              </Link>
+                           )}
                            <Link
                               to="/settings"
                               className={`tl-app-nav__account-link ${location.pathname === "/settings" ? "active" : ""}`}
@@ -253,15 +269,35 @@ function NavigationBar() {
                <Icons name="globe" size={20} />
                <span>Community</span>
             </Link>
-            <Link
-               to="/dashboard"
-               className={`bottom-tab ${isDashboardRoute ? "active" : ""}`}
-               onClick={closeNavigationOverlays}
-               aria-current={isDashboardRoute ? "page" : undefined}
-            >
-               <Icons name="dashboard" size={20} />
-               <span>Dashboard</span>
-            </Link>
+            {canParticipateInCommunity ? (
+               <Link
+                  to="/dashboard"
+                  className={`bottom-tab ${isDashboardRoute ? "active" : ""}`}
+                  onClick={closeNavigationOverlays}
+                  aria-current={isDashboardRoute ? "page" : undefined}
+               >
+                  <Icons name="dashboard" size={20} />
+                  <span>Dashboard</span>
+               </Link>
+            ) : canUseManagementConsole ? (
+               <Link
+                  to="/management"
+                  className="bottom-tab"
+                  onClick={closeNavigationOverlays}
+               >
+                  <Icons name="landmark" size={20} />
+                  <span>Manage</span>
+               </Link>
+            ) : canUseWorkspace ? (
+               <Link
+                  to="/workspace"
+                  className="bottom-tab"
+                  onClick={closeNavigationOverlays}
+               >
+                  <Icons name="shield-check" size={20} />
+                  <span>Workspace</span>
+               </Link>
+            ) : null}
             <Link
                to="/verify"
                className={`bottom-tab bottom-tab--verify ${isVerifyRoute ? "active" : ""}`}
@@ -273,15 +309,17 @@ function NavigationBar() {
                </span>
                <span className="bottom-tab__verify-label">Verify</span>
             </Link>
-            <Link
-               to="/profile"
-               className={`bottom-tab ${isProfileRoute ? "active" : ""}`}
-               onClick={closeNavigationOverlays}
-               aria-current={isProfileRoute ? "page" : undefined}
-            >
-               <Icons name="user" size={20} />
-               <span>Profile</span>
-            </Link>
+            {canParticipateInCommunity && (
+               <Link
+                  to="/profile"
+                  className={`bottom-tab ${isProfileRoute ? "active" : ""}`}
+                  onClick={closeNavigationOverlays}
+                  aria-current={isProfileRoute ? "page" : undefined}
+               >
+                  <Icons name="user" size={20} />
+                  <span>Profile</span>
+               </Link>
+            )}
             <Link
                to="/settings"
                className={`bottom-tab ${isSettingsRoute ? "active" : ""}`}
