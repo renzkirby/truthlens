@@ -101,6 +101,7 @@ function ManagementPlatformStaffPage() {
 
    const resendInvitation = async (invitation) => {
       if (invitationActionPending) return;
+      setFeedback("");
       resetInvitationAction();
       const result = await manageInvitation(
          resolveApiEndpoint(
