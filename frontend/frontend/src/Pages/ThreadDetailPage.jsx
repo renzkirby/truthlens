@@ -1394,7 +1394,13 @@ export default function ThreadDetailPage() {
 
 
                         <div className="thread-detail-comment-list">
-                           {!commentTree.length && <p className="thread-detail-empty">No comments yet. Start the discussion.</p>}
+                           {!commentTree.length && (
+                              <p className="thread-detail-empty">
+                                 {canParticipateInCommunity
+                                    ? "No comments yet. Start the discussion."
+                                    : "No Community comments have been posted yet."}
+                              </p>
+                           )}
                            {commentTree.map((comment) => (
                               <CommentThread
                                  key={comment.id}
