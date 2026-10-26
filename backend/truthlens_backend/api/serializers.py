@@ -149,7 +149,8 @@ class PublicIdentityProfileSerializer(serializers.ModelSerializer):
 
     def get_following_count(self, obj):
         return exclude_platform_staff_identities(
-            obj.following_profiles.select_related("profile")
+            obj.following_profiles.select_related("user"),
+            "user",
         ).count()
 
     def get_is_following(self, obj):
@@ -346,7 +347,8 @@ class UserSerializer(serializers.ModelSerializer):
         if is_platform_staff_identity(obj):
             return 0
         return exclude_platform_staff_identities(
-            obj.following_profiles.select_related("profile")
+            obj.following_profiles.select_related("user"),
+            "user",
         ).count()
 
     def get_is_following(self, obj):
