@@ -155,6 +155,8 @@ class PublicIdentityProfileSerializer(serializers.ModelSerializer):
     def get_is_following(self, obj):
         request = self.context.get("request")
         if request and request.user and request.user.is_authenticated:
+            if is_platform_staff_identity(request.user):
+                return False
             return obj.profile.followers.filter(id=request.user.id).exists()
         return False
 
@@ -336,12 +338,16 @@ class UserSerializer(serializers.ModelSerializer):
     def get_followers_count(self, obj):
         if is_platform_staff_identity(obj):
             return 0
-        return obj.profile.followers.count()
+        return exclude_platform_staff_identities(
+            obj.profile.followers.select_related("profile")
+        ).count()
 
     def get_following_count(self, obj):
         if is_platform_staff_identity(obj):
             return 0
-        return obj.following_profiles.count()
+        return exclude_platform_staff_identities(
+            obj.following_profiles.select_related("profile")
+        ).count()
 
     def get_is_following(self, obj):
         request = self.context.get("request")
