@@ -764,12 +764,22 @@ function WorkspacePage() {
                   <span>Platform Safety · Platform-wide</span>
                </div>
             ) : memberships.length > 0 ? (
-               <div className="workspace-organization-context" aria-label="Current organization">
-                  <strong>{selectedOrganization?.name || "Partner organization"}</strong>
+               <div className="workspace-organization-context" aria-label="Current partner organization">
+                  <div className="workspace-organization-context-icon" aria-hidden="true">
+                     <Icons name="landmark" size={17} />
+                  </div>
 
-                  {selectedMembership && (
-                     <span>{formatRole(selectedMembership.role)}</span>
-                  )}
+                  <div className="workspace-organization-context-copy">
+                     <span className="workspace-organization-context-label">Partner organization</span>
+                     <strong>{selectedOrganization?.name || "Partner organization"}</strong>
+
+                     {selectedMembership && (
+                        <span className="workspace-organization-context-role">
+                           <Icons name="shield-user" size={13} />
+                           {formatRole(selectedMembership.role)}
+                        </span>
+                     )}
+                  </div>
                </div>
             ) : (
                <div className="workspace-platform-context">
