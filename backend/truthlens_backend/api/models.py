@@ -2209,6 +2209,26 @@ class AccountabilityEvent(models.Model):
             "PLATFORM_SAFETY_MODERATOR_REVOKED",
             "Platform Safety Moderator Revoked",
         )
+        PLATFORM_STAFF_INVITATION_CREATED = (
+            "PLATFORM_STAFF_INVITATION_CREATED",
+            "Platform Staff Invitation Created",
+        )
+        PLATFORM_STAFF_INVITATION_RESENT = (
+            "PLATFORM_STAFF_INVITATION_RESENT",
+            "Platform Staff Invitation Resent",
+        )
+        PLATFORM_STAFF_INVITATION_CANCELLED = (
+            "PLATFORM_STAFF_INVITATION_CANCELLED",
+            "Platform Staff Invitation Cancelled",
+        )
+        PLATFORM_STAFF_INVITATION_ACCEPTED = (
+            "PLATFORM_STAFF_INVITATION_ACCEPTED",
+            "Platform Staff Invitation Accepted",
+        )
+        PLATFORM_STAFF_INVITATION_EXPIRED = (
+            "PLATFORM_STAFF_INVITATION_EXPIRED",
+            "Platform Staff Invitation Expired",
+        )
         EVIDENCE_REOPENED = "EVIDENCE_REOPENED", "Evidence Reopened"
         EVIDENCE_VERIFIED = "EVIDENCE_VERIFIED", "Evidence Verified"
         EVIDENCE_REJECTED = "EVIDENCE_REJECTED", "Evidence Rejected"
@@ -2268,6 +2288,10 @@ class AccountabilityEvent(models.Model):
         MODERATION_CASE = "MODERATION_CASE", "Moderation Case"
         THREAD = "THREAD", "Thread"
         USER_ACCOUNT = "USER_ACCOUNT", "User Account"
+        PLATFORM_STAFF_INVITATION = (
+            "PLATFORM_STAFF_INVITATION",
+            "Platform Staff Invitation",
+        )
         EVIDENCE_SUBMISSION = "EVIDENCE_SUBMISSION", "Evidence Submission"
         ADJUDICATION_DECISION = (
             "ADJUDICATION_DECISION",
