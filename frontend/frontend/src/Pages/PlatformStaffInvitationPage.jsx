@@ -154,7 +154,7 @@ function PlatformStaffInvitationPage() {
       setActionMessage("");
       try {
          const result = await authFetch(acceptEndpoint, { method: "POST" });
-         await refreshUser();
+         await refreshUser().catch(() => null);
          setInvitation(result?.invitation || invitation);
          setAcceptanceState("accepted");
       } catch (error) {
