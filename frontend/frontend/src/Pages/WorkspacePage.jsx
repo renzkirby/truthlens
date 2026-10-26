@@ -769,7 +769,7 @@ function WorkspacePage() {
                   <PartnerLogo
                      logoUrl={selectedOrganization?.logo_url}
                      organizationName={selectedOrganization?.name || "Partner organization"}
-                     size="compact"
+                     size="workspace"
                   />
 
                   <div className="workspace-organization-context-copy">
