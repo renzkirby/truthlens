@@ -107,6 +107,13 @@ from .safety_review_service import (
     release_safety_case,
     schedule_safety_resolution_trust_updates,
 )
+from .platform_identity_service import (
+    can_participate_in_community,
+    can_review_platform_safety,
+    exclude_platform_staff_identities,
+    get_community_identity_context,
+    is_platform_staff_identity,
+)
 from .organization_service import (
     PartnerCapability,
     has_capability,
@@ -547,10 +554,7 @@ class IsVoterOrReadOnly(BasePermission):
 
 class CanReviewSafety(BasePermission):
     def has_permission(self, request, view):
-        return has_capability(
-            request.user,
-            PartnerCapability.REVIEW_SAFETY,
-        )
+        return can_review_platform_safety(request.user)
 
 
 def _authenticated_user_or_none(request):
