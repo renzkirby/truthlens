@@ -22,6 +22,7 @@ import ForgotPasswordPage from "./Pages/ForgotPasswordPage.jsx";
 import ResetPasswordPage from "./Pages/ResetPasswordPage.jsx";
 import RootRedirect from "./components/RootRedirect";
 import OrganizationInvitationPage from "./Pages/OrganizationInvitationPage.jsx";
+import PlatformStaffInvitationPage from "./Pages/PlatformStaffInvitationPage.jsx";
 import PartnersPage from "./Pages/PartnersPage.jsx";
 import PartnerProfilePage from "./Pages/PartnerProfilePage.jsx";
 import PublicFactCheckPage from "./Pages/PublicFactCheckPage.jsx";
@@ -84,6 +85,7 @@ function App() {
                <Route path="/verify-email" element={<VerifyEmailPage />} />
                <Route element={<AccountActionShell />}>
                   <Route path="/organization-invitations/:token" element={<OrganizationInvitationPage />} />
+                  <Route path="/platform-staff-invitations/:token" element={<PlatformStaffInvitationPage />} />
                </Route>
 
                {/* Protected Routes - accessible to any authenticated user */}
