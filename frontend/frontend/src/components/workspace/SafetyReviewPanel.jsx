@@ -764,7 +764,14 @@ function SafetyReviewPanel() {
       <div className="safety-review-panel">
          <div className="safety-toolbar">
             <div className="safety-toolbar-summary" role="status" aria-live="polite">
-               <span className="safety-toolbar-kicker">Platform Safety queue</span>
+               <h3
+                  id="safety-queue-heading"
+                  ref={queueHeadingRef}
+                  className="safety-toolbar-kicker"
+                  tabIndex="-1"
+               >
+                  Safety review queue
+               </h3>
                <strong>
                   {isInitialQueueLoading
                      ? "Loading active cases"
@@ -839,15 +846,6 @@ function SafetyReviewPanel() {
 
          <div className={`safety-workspace-grid ${selectedCaseId ? "has-selection" : ""}`}>
             <section className="safety-queue" aria-labelledby="safety-queue-heading" aria-busy={queueLoading}>
-               <div className="safety-section-heading">
-                  <div>
-                     <h3 id="safety-queue-heading" ref={queueHeadingRef} tabIndex="-1">
-                        Triage queue
-                     </h3>
-                     <p>Select a report case to inspect context and take a platform-safety action.</p>
-                  </div>
-               </div>
-
                {queueError && (
                   <div className="safety-contained-error" role="alert">
                      <strong>Safety queue unavailable</strong>
