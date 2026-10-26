@@ -77,6 +77,7 @@ from .tasks import (
 from .models import (
     Notification,
     Claim,
+    ClaimInvestigationClassification,
     ClaimCheckHistory,
     Thread,
     UserProfile,
