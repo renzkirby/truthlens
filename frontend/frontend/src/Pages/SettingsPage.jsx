@@ -289,13 +289,18 @@ function SettingsPage() {
    };
 
    const avatarFallback = formData.username.trim().charAt(0).toUpperCase() || "?";
+   const hasPublicCommunityProfile = user?.community_identity?.public_profile_available !== false;
 
    return (
       <main className="settings-page">
          <div className="settings-page__container">
             <header className="settings-page__header">
                <h1>Settings</h1>
-               <p>Manage your public profile and the security details tied to your account.</p>
+               <p>
+                  {hasPublicCommunityProfile
+                     ? "Manage your public profile and the security details tied to your account."
+                     : "Manage your platform account identity and security details."}
+               </p>
             </header>
 
             <div className="settings-page__layout">
@@ -415,7 +420,9 @@ function SettingsPage() {
                                  disabled={isSaving}
                               />
                               <p id="bio-hint" className="settings-field__hint">
-                                 Share a short introduction for people viewing your public profile.
+                                 {hasPublicCommunityProfile
+                                    ? "Share a short introduction for people viewing your public profile."
+                                    : "Add an internal account description. Platform staff accounts are not publicly profiled."}
                               </p>
                               {fieldErrors.bio ? (
                                  <p id="bio-error" className="settings-field__error">
