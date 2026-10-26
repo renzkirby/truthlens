@@ -42,9 +42,9 @@ function ManagementNavigation({ label, onNavigate, firstLinkRef }) {
                </div>
             ))}
          </nav>
-         <Link className="management-shell__back" to="/dashboard" onClick={onNavigate}>
-            <Icons name="arrow-left" size={17} />
-            Back to TruthLens
+         <Link className="management-shell__back" to="/community" onClick={onNavigate}>
+            <Icons name="globe" size={17} />
+            View Community
          </Link>
       </>
    );
