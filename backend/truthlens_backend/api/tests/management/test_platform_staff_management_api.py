@@ -278,6 +278,14 @@ class PlatformStaffManagementApiTests(APITestCase):
         self.assertEqual(invitation.status, PlatformStaffInvitation.Status.CANCELLED)
         self.assertEqual(invitation.cancelled_by, self.admin)
 
+        cancelled_link = self.client_for(None).get(
+            reverse(
+                "platform_staff_invitation_detail",
+                kwargs={"token": new_token},
+            )
+        )
+        self.assertEqual(cancelled_link.status_code, status.HTTP_404_NOT_FOUND)
+
     def test_platform_admin_can_revoke_safety_moderator_role_and_audit_it(self):
         response = self.client_for(self.admin).delete(
             reverse(
