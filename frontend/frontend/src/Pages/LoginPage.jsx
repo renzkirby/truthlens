@@ -23,8 +23,10 @@ import AuthRouteLoader from "../components/AuthRouteLoader.jsx";
 import { useNotification } from "../hooks/useNotification";
 // ── Utilities & Constants ──
 import { resolveApiEndpoint } from "../utils/api";
-import { canAccessWorkspace } from "../utils/workspace";
-import { resolveAuthDestination } from "../utils/authNavigation";
+import {
+   getDefaultAuthenticatedDestination,
+   resolveAuthDestination,
+} from "../utils/authNavigation";
 
 // ── Styles ──
 import "../components/account/AccountForm.css";
@@ -74,7 +76,7 @@ function LoginPage() {
 
          setJustLoggedIn(false);
 
-         const destination = from || (canAccessWorkspace(user) ? "/workspace" : "/community");
+         const destination = from || getDefaultAuthenticatedDestination(user);
 
          navigate(destination, {
             replace: true,
