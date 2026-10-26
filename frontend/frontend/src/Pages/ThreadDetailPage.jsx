@@ -1218,24 +1218,20 @@ export default function ThreadDetailPage() {
                   <span>Started {formatDate(thread.created_at, { hour: "numeric", minute: "2-digit" })} by <strong>@{authorUsername}</strong></span>
                </div>
                <div className="thread-detail-metadata">
+                  {!canParticipateInCommunity && (
+                     <span
+                        className="thread-detail-governance-chip"
+                        title="Platform staff can inspect and share Community content, but cannot participate or build Community reputation."
+                     >
+                        <Icons name="shield-check" size={13} aria-hidden="true" />
+                        Governance view · Read only
+                     </span>
+                  )}
                   <VerdictBadge verdict={assessmentVerdict} />
                   {thread.status && <span className="thread-detail-status">{thread.status}</span>}
                </div>
             </div>
          </header>
-
-         {!canParticipateInCommunity && (
-            <div className="thread-detail-governance-notice" role="note">
-               <Icons name="shield-check" size={18} aria-hidden="true" />
-               <div>
-                  <strong>Viewing this discussion in governance mode</strong>
-                  <span>
-                     Platform staff can inspect and share Community content, but this account does not
-                     comment, contribute evidence, vote, report, or build Community reputation.
-                  </span>
-               </div>
-            </div>
-         )}
 
          <section className={`thread-detail-hero thread-detail-hero--${String(assessmentVerdict || "UNVERIFIED").toLowerCase()}`} aria-labelledby="thread-detail-heading">
             <div className="thread-detail-hero-inner">
@@ -1354,17 +1350,19 @@ export default function ThreadDetailPage() {
                   </div>
                </article>
 
-               <button
-                  type="button"
-                  className="thread-detail-evidence-cta"
-                  onClick={() => {
-                     changeTab("evidence");
-                     setShowEvidenceForm(true);
-                     window.requestAnimationFrame(() => evidenceFormRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" }));
-                  }}
-               >
-                  <Icons name="paperclip" size={16} /> Submit Evidence for This Claim
-               </button>
+               {canParticipateInCommunity && (
+                  <button
+                     type="button"
+                     className="thread-detail-evidence-cta"
+                     onClick={() => {
+                        changeTab("evidence");
+                        setShowEvidenceForm(true);
+                        window.requestAnimationFrame(() => evidenceFormRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" }));
+                     }}
+                  >
+                     <Icons name="paperclip" size={16} /> Submit Evidence for This Claim
+                  </button>
+               )}
 
                <section className="thread-detail-discussion thread-detail-discussion--classic" aria-label="Thread discussion">
                   <div className="thread-detail-tabs" role="tablist" aria-label="Thread content">
