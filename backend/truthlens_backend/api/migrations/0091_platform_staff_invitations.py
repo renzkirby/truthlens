@@ -148,7 +148,6 @@ class Migration(migrations.Migration):
                     ("SAFETY_CASE_ESCALATED", "Safety Case Escalated"),
                     ("SAFETY_DISMISSED", "Safety Dismissed"),
                     ("SAFETY_CONTENT_REMOVED", "Safety Content Removed"),
-                    ("PLATFORM_SAFETY_MODERATOR_GRANTED", "Platform Safety Moderator Granted"),
                     ("PLATFORM_SAFETY_MODERATOR_REVOKED", "Platform Safety Moderator Revoked"),
                     ("PLATFORM_STAFF_INVITATION_CREATED", "Platform Staff Invitation Created"),
                     ("PLATFORM_STAFF_INVITATION_RESENT", "Platform Staff Invitation Resent"),
