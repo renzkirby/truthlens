@@ -565,6 +565,22 @@ class AccountabilityQueryServiceTests(TestCase):
         self.assertEqual(result["actor"]["username"], approver_username)
         self.assertNotEqual(result["actor"]["id"], str(publisher.pk))
 
+
+    def test_platform_admin_can_read_platform_safety_accountability(self):
+        self.make_event(
+            action_type=AccountabilityEvent.ActionType.SAFETY_CASE_CLAIMED,
+            authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+            actor=self.safety_moderator,
+            resource_type=AccountabilityEvent.ResourceType.MODERATION_CASE,
+            capability=PartnerCapability.REVIEW_SAFETY,
+        )
+
+        page = list_platform_accountability_events(actor=self.platform_admin)
+
+        self.assertEqual(page["scope"], "PLATFORM")
+        self.assertEqual(page["count"], 1)
+        self.assertEqual(page["results"][0]["domain"], AccountabilityDomain.SAFETY)
+
     def test_platform_feed_requires_safety_authority_and_is_platform_safety_only(self):
         safety = self.make_event(
             action_type=AccountabilityEvent.ActionType.SAFETY_CONTENT_REMOVED,
