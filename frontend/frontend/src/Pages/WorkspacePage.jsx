@@ -723,17 +723,11 @@ function WorkspacePage() {
                </div>
 
                <p className="workspace-description">
-                  Access operational tools according to your platform and partner organization permissions.
+                  Access professional verification tools according to your Partner Organization role.
                </p>
             </div>
 
-            {isPlatformSection ? (
-               <div className="workspace-platform-context">
-                  <Icons name="shield" size={15} />
-
-                  <span>Platform Safety · Platform-wide</span>
-               </div>
-            ) : memberships.length > 0 ? (
+            {memberships.length > 0 ? (
                <div className="workspace-organization-context" aria-label="Current partner organization">
                   <PartnerLogo
                      logoUrl={selectedOrganization?.logo_url}
@@ -753,13 +747,7 @@ function WorkspacePage() {
                      )}
                   </div>
                </div>
-            ) : (
-               <div className="workspace-platform-context">
-                  <Icons name="shield" size={15} />
-
-                  <span>Platform Safety</span>
-               </div>
-            )}
+            ) : null}
          </header>
 
          <div className="workspace-body">
