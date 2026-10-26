@@ -12,8 +12,8 @@ Keep public browsing simple without weakening institutional verification rules.
 TruthLens retains the existing **12 investigation subjects** and groups them into
 **eight public news categories** for the Community feed. **Campus Affairs**
 remains a separate planned context dimension, not a thirteenth subject, and is
-intentionally withheld from the live Topic control until authoritative
-claim-to-institution identity and campus-routing policy are implemented.
+intentionally withheld from the live Topic control until the reviewed
+campus-routing policy is implemented.
 
 The subject rubric and public group mapping live in
 `api/verification/subject_taxonomy.py`. The Community API currently projects a
@@ -188,6 +188,6 @@ Still excluded:
 - changes to `api/verification_domain_policy.py`, `api/services.py`, or
   `api/tasks.py`;
 - partner-routing or authorization changes;
-- Campus Affairs filtering before authoritative claim-to-institution identity
-  and campus-routing policy are implemented;
+- Campus Affairs filtering before the reviewed campus-routing policy is
+  implemented;
 - any claim that the synthetic fixture measures real classifier accuracy.
