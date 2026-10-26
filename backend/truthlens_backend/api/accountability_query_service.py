@@ -101,8 +101,10 @@ DOMAIN_ACTIONS = {
         AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CREATED,
         AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_RESENT,
         AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED,
-        AccountabilityEvent.ActionType.PLATFORM_SAFETY_MODERATOR_GRANTED,
         AccountabilityEvent.ActionType.PLATFORM_SAFETY_MODERATOR_REVOKED,
+        AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_CREATED,
+        AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_RESENT,
+        AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_CANCELLED,
     ),
 }
 
@@ -191,6 +193,7 @@ DOMAIN_RESOURCES = {
         AccountabilityEvent.ResourceType.ORGANIZATION,
         AccountabilityEvent.ResourceType.ORGANIZATION_INVITATION,
         AccountabilityEvent.ResourceType.USER_ACCOUNT,
+        AccountabilityEvent.ResourceType.PLATFORM_STAFF_INVITATION,
     },
 }
 
@@ -223,10 +226,16 @@ MANAGEMENT_GOVERNANCE_ACTION_CAPABILITIES = {
     AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED: (
         PROVISION_PARTNER_ORGANIZATION
     ),
-    AccountabilityEvent.ActionType.PLATFORM_SAFETY_MODERATOR_GRANTED: (
+    AccountabilityEvent.ActionType.PLATFORM_SAFETY_MODERATOR_REVOKED: (
         MANAGE_PLATFORM_STAFF
     ),
-    AccountabilityEvent.ActionType.PLATFORM_SAFETY_MODERATOR_REVOKED: (
+    AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_CREATED: (
+        MANAGE_PLATFORM_STAFF
+    ),
+    AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_RESENT: (
+        MANAGE_PLATFORM_STAFF
+    ),
+    AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_CANCELLED: (
         MANAGE_PLATFORM_STAFF
     ),
 }
@@ -512,11 +521,14 @@ def _management_governance_queryset():
             AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED,
         }:
             resource_type = AccountabilityEvent.ResourceType.ORGANIZATION_INVITATION
-        elif action_type in {
-            AccountabilityEvent.ActionType.PLATFORM_SAFETY_MODERATOR_GRANTED,
-            AccountabilityEvent.ActionType.PLATFORM_SAFETY_MODERATOR_REVOKED,
-        }:
+        elif action_type == AccountabilityEvent.ActionType.PLATFORM_SAFETY_MODERATOR_REVOKED:
             resource_type = AccountabilityEvent.ResourceType.USER_ACCOUNT
+        elif action_type in {
+            AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_CREATED,
+            AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_RESENT,
+            AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_CANCELLED,
+        }:
+            resource_type = AccountabilityEvent.ResourceType.PLATFORM_STAFF_INVITATION
         else:
             resource_type = AccountabilityEvent.ResourceType.ORGANIZATION
         governance_pairs |= Q(
