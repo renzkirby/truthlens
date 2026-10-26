@@ -112,6 +112,8 @@ export const MANAGEMENT_GOVERNANCE_ACTIONS = [
    ["ORGANIZATION_INVITATION_CREATED", "Organization Admin Invitation Created"],
    ["ORGANIZATION_INVITATION_RESENT", "Organization Admin Invitation Resent"],
    ["ORGANIZATION_INVITATION_CANCELLED", "Organization Admin Invitation Cancelled"],
+   ["PLATFORM_SAFETY_MODERATOR_GRANTED", "Platform Safety Moderator Granted"],
+   ["PLATFORM_SAFETY_MODERATOR_REVOKED", "Platform Safety Moderator Revoked"],
 ];
 
 const MANAGEMENT_GOVERNANCE_ACTION_LABELS = new Map(MANAGEMENT_GOVERNANCE_ACTIONS);
@@ -145,6 +147,8 @@ const AUDIT_VALUE_LABELS = {
    OWNER: "Administrator",
    MODERATOR: "Verification Reviewer",
    CONTRIBUTOR: "Former Contributor",
+   COMMUNITY_USER: "Community User",
+   PLATFORM_SAFETY_MODERATOR: "Platform Safety Moderator",
    CANCELLED: "Cancelled",
 };
 
@@ -160,5 +164,6 @@ export function formatManagementCapability(value) {
    if (value === "MANAGE_PARTNER_ORGANIZATION") return "Manage Partner Organization";
    if (value === "MANAGE_VERIFICATION_SPECIALIZATIONS") return "Manage Verification Specializations";
    if (value === "PROVISION_PARTNER_ORGANIZATION") return "Provision Partner Organization";
+   if (value === "MANAGE_PLATFORM_STAFF") return "Manage Platform Staff";
    return value || "Not recorded";
 }
