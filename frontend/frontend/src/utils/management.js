@@ -112,8 +112,10 @@ export const MANAGEMENT_GOVERNANCE_ACTIONS = [
    ["ORGANIZATION_INVITATION_CREATED", "Organization Admin Invitation Created"],
    ["ORGANIZATION_INVITATION_RESENT", "Organization Admin Invitation Resent"],
    ["ORGANIZATION_INVITATION_CANCELLED", "Organization Admin Invitation Cancelled"],
-   ["PLATFORM_SAFETY_MODERATOR_GRANTED", "Platform Safety Moderator Granted"],
    ["PLATFORM_SAFETY_MODERATOR_REVOKED", "Platform Safety Moderator Revoked"],
+   ["PLATFORM_STAFF_INVITATION_CREATED", "Platform Staff Invitation Created"],
+   ["PLATFORM_STAFF_INVITATION_RESENT", "Platform Staff Invitation Resent"],
+   ["PLATFORM_STAFF_INVITATION_CANCELLED", "Platform Staff Invitation Cancelled"],
 ];
 
 const MANAGEMENT_GOVERNANCE_ACTION_LABELS = new Map(MANAGEMENT_GOVERNANCE_ACTIONS);
