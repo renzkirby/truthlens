@@ -90,7 +90,7 @@ function getAssignmentLabel(caseItem, currentUserId) {
       return "Assigned to you";
    }
 
-   return assignedTo.username ? `Assigned to @${assignedTo.username}` : "Assigned to another moderator";
+   return assignedTo.username ? `Assigned to @${assignedTo.username}` : "Assigned to another reviewer";
 }
 
 function requiresServerReconciliation(error) {
