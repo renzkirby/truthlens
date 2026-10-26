@@ -44,6 +44,7 @@ from .organization_service import (
 )
 from .management_permissions import can_access_management_console
 from .platform_identity_service import (
+    exclude_platform_staff_identities,
     get_community_identity_context,
     is_platform_staff_identity,
 )
@@ -142,10 +143,14 @@ class PublicIdentityProfileSerializer(serializers.ModelSerializer):
         return obj.profile.trust_score
 
     def get_followers_count(self, obj):
-        return obj.profile.followers.count()
+        return exclude_platform_staff_identities(
+            obj.profile.followers.select_related("profile")
+        ).count()
 
     def get_following_count(self, obj):
-        return obj.following_profiles.count()
+        return exclude_platform_staff_identities(
+            obj.following_profiles.select_related("profile")
+        ).count()
 
     def get_is_following(self, obj):
         request = self.context.get("request")
@@ -380,7 +385,9 @@ class PublicUserSearchSerializer(serializers.ModelSerializer):
     )
 
     def get_followers_count(self, obj):
-        return obj.profile.followers.count()
+        return exclude_platform_staff_identities(
+            obj.profile.followers.select_related("profile")
+        ).count()
 
     class Meta:
         model = User
