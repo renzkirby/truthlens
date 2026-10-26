@@ -324,16 +324,22 @@ class UserSerializer(serializers.ModelSerializer):
     bio = serializers.CharField(source="profile.bio", read_only=True)
 
     def get_followers_count(self, obj):
+        if is_platform_staff_identity(obj):
+            return 0
         return obj.profile.followers.count()
 
     def get_following_count(self, obj):
-        # Counts how many profiles this specific user is following
+        if is_platform_staff_identity(obj):
+            return 0
         return obj.following_profiles.count()
 
     def get_is_following(self, obj):
-        # Checks if the CURRENT logged-in user is in the target user's followers list
         request = self.context.get("request")
+        if is_platform_staff_identity(obj):
+            return False
         if request and request.user.is_authenticated:
+            if is_platform_staff_identity(request.user):
+                return False
             return obj.profile.followers.filter(id=request.user.id).exists()
         return False
 
