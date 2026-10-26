@@ -68,17 +68,6 @@
    background: var(--bg-surface);
 }
 
-.workspace-organization-context-icon {
-   width: 34px;
-   height: 34px;
-   flex: 0 0 34px;
-   display: grid;
-   place-items: center;
-   border-radius: 9px;
-   background: var(--bg-subtle);
-   color: var(--brand-primary);
-}
-
 .workspace-organization-context-copy {
    min-width: 0;
    display: flex;
