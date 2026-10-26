@@ -1,7 +1,10 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { canAccessWorkspace } from "../utils/workspace";
-import { canAccessManagementConsole } from "../utils/management";
+import {
+   canAccessManagementConsole,
+   isPlatformSafetyModerator,
+} from "../utils/management";
 import AuthRouteLoader from "./AuthRouteLoader";
 
 function RootRedirect() {
@@ -17,9 +20,11 @@ function RootRedirect() {
 
    const destination = canAccessManagementConsole(user)
       ? "/management"
-      : canAccessWorkspace(user)
-        ? "/workspace"
-        : "/community";
+      : isPlatformSafetyModerator(user)
+        ? "/management/safety"
+        : canAccessWorkspace(user)
+          ? "/workspace"
+          : "/community";
 
    return <Navigate to={destination} replace />;
 }
