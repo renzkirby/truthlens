@@ -125,7 +125,7 @@ class PublicPartnerAffiliationsField(serializers.Field):
 
 
 class PublicIdentityProfileSerializer(serializers.ModelSerializer):
-    trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
+    trust_score = serializers.SerializerMethodField()
     role = serializers.CharField(source="profile.role", read_only=True)
     avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
     bio = serializers.CharField(source="profile.bio", read_only=True)
