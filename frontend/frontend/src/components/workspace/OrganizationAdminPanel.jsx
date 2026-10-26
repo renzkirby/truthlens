@@ -1648,7 +1648,15 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                            </dl>
 
                            <div className="org-member-actions">
-                              {manageable ? (
+                              {isCurrentUser ? (
+                                 <span
+                                    className="org-member-self-label"
+                                    title="Manage your personal account in Settings. Administrator succession is handled above."
+                                 >
+                                    <Icons name="user-check" size={14} />
+                                    You
+                                 </span>
+                              ) : manageable ? (
                                  <>
                                     <Button
                                        ref={(node) => {
