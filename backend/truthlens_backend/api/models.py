@@ -2201,10 +2201,6 @@ class AccountabilityEvent(models.Model):
             "SAFETY_CONTENT_REMOVED",
             "Safety Content Removed",
         )
-        PLATFORM_SAFETY_MODERATOR_GRANTED = (
-            "PLATFORM_SAFETY_MODERATOR_GRANTED",
-            "Platform Safety Moderator Granted",
-        )
         PLATFORM_SAFETY_MODERATOR_REVOKED = (
             "PLATFORM_SAFETY_MODERATOR_REVOKED",
             "Platform Safety Moderator Revoked",
