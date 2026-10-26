@@ -1,34 +1,4 @@
 
-.thread-detail-governance-notice {
-   width: min(1180px, calc(100% - 32px));
-   box-sizing: border-box;
-   display: flex;
-   align-items: flex-start;
-   gap: 10px;
-   margin: 16px auto 0;
-   padding: 12px 14px;
-   border: 1px solid var(--tl-color-status-info-border);
-   border-radius: 10px;
-   background: var(--tl-color-status-info-bg);
-   color: var(--tl-color-status-info-text);
-}
-
-.thread-detail-governance-notice > div {
-   min-width: 0;
-   display: flex;
-   flex-direction: column;
-   gap: 2px;
-}
-
-.thread-detail-governance-notice strong {
-   font-size: 0.82rem;
-}
-
-.thread-detail-governance-notice span {
-   font-size: 0.76rem;
-   line-height: 1.5;
-}
-
 .thread-detail-comment-like--readonly {
    cursor: default;
 }
@@ -130,6 +100,22 @@
 
 .thread-detail-back:hover { color: var(--tl-color-brand-primary-hover); }
 .thread-detail-metadata { flex: 0 0 auto; font-size: 11px; color: #64748b; }
+
+.thread-detail-governance-chip {
+   min-height: 28px;
+   display: inline-flex;
+   align-items: center;
+   gap: 5px;
+   padding: 4px 9px;
+   border: 1px solid #c7d2fe;
+   border-radius: 7px;
+   background: #eef2ff;
+   color: #4338ca;
+   font-size: 10px;
+   font-weight: 800;
+   white-space: nowrap;
+}
+
 .thread-detail-status {
    padding: 4px 9px;
    border: 1px solid #dbe3ee;
