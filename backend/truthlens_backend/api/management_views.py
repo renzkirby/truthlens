@@ -39,6 +39,9 @@ from .management_serializers import (
     ManagementOrganizationCreateSerializer,
     ManagementOrganizationDetailSerializer,
     ManagementOrganizationListSerializer,
+    ManagementPlatformStaffCandidateSerializer,
+    ManagementPlatformStaffMutationSerializer,
+    ManagementPlatformStaffSerializer,
     ManagementPlatformTrustUpdateSerializer,
     ManagementPrimaryAdminInvitationSerializer,
     ManagementPrimaryAdminProvisionSerializer,
@@ -50,6 +53,16 @@ from .models import (
     Organization,
     OrganizationInvitation,
     OrganizationMembership,
+)
+from .platform_staff_service import (
+    PlatformStaffAuthorizationError,
+    PlatformStaffConflict,
+    PlatformStaffNotFound,
+    PlatformStaffValidationError,
+    grant_platform_safety_moderator,
+    list_platform_staff,
+    list_platform_staff_candidates,
+    revoke_platform_safety_moderator,
 )
 from .organization_provisioning_service import (
     OrganizationProvisioningAuthorizationError,
@@ -92,6 +105,100 @@ def _filter_organization_id(queryset, params):
         raise ValidationError(
             {"organization_id": "Enter a valid organization ID."}
         ) from error
+
+
+def _platform_staff_error_response(error):
+    if isinstance(error, PlatformStaffAuthorizationError):
+        response_status = status.HTTP_403_FORBIDDEN
+    elif isinstance(error, PlatformStaffNotFound):
+        response_status = status.HTTP_404_NOT_FOUND
+    elif isinstance(error, PlatformStaffConflict):
+        response_status = status.HTTP_409_CONFLICT
+    else:
+        response_status = status.HTTP_400_BAD_REQUEST
+    return Response({"detail": str(error)}, status=response_status)
+
+
+class ManagementPlatformStaffListView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def get(self, request):
+        try:
+            queryset = list_platform_staff(
+                actor=request.user,
+                query=request.query_params.get("q", ""),
+            )
+        except PlatformStaffAuthorizationError as error:
+            return _platform_staff_error_response(error)
+
+        paginator = ManagementPagination()
+        page = paginator.paginate_queryset(queryset, request, view=self)
+        return paginator.get_paginated_response(
+            ManagementPlatformStaffSerializer(page, many=True).data
+        )
+
+    def post(self, request):
+        serializer = ManagementPlatformStaffMutationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            target_user = grant_platform_safety_moderator(
+                actor=request.user,
+                user_id=serializer.validated_data["user_id"],
+            )
+        except (
+            PlatformStaffAuthorizationError,
+            PlatformStaffConflict,
+            PlatformStaffNotFound,
+            PlatformStaffValidationError,
+        ) as error:
+            return _platform_staff_error_response(error)
+
+        return Response(
+            ManagementPlatformStaffSerializer(target_user).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class ManagementPlatformStaffCandidateListView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def get(self, request):
+        try:
+            queryset = list_platform_staff_candidates(
+                actor=request.user,
+                query=request.query_params.get("q", ""),
+            )
+        except PlatformStaffAuthorizationError as error:
+            return _platform_staff_error_response(error)
+
+        paginator = ManagementPagination()
+        page = paginator.paginate_queryset(queryset, request, view=self)
+        return paginator.get_paginated_response(
+            ManagementPlatformStaffCandidateSerializer(page, many=True).data
+        )
+
+
+class ManagementPlatformStaffDetailView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def delete(self, request, user_id):
+        try:
+            target_user = revoke_platform_safety_moderator(
+                actor=request.user,
+                user_id=user_id,
+            )
+        except (
+            PlatformStaffAuthorizationError,
+            PlatformStaffConflict,
+            PlatformStaffNotFound,
+            PlatformStaffValidationError,
+        ) as error:
+            return _platform_staff_error_response(error)
+
+        return Response(
+            ManagementPlatformStaffCandidateSerializer(target_user).data,
+            status=status.HTTP_200_OK,
+        )
 
 
 class ManagementOverviewView(APIView):
