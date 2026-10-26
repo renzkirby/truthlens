@@ -144,7 +144,7 @@ def _ensure_case_owner(case, actor):
 
     if case.assigned_to_id != actor.pk:
         raise SafetyCaseConflict(
-            "This Safety case is assigned to another moderator."
+            "This Safety case is assigned to another reviewer."
         )
 
 
@@ -160,7 +160,7 @@ def claim_safety_case(*, case, actor):
 
         if locked_case.assigned_to_id is not None:
             raise SafetyCaseConflict(
-                "This Safety case is assigned to another moderator."
+                "This Safety case is assigned to another reviewer."
             )
 
         claimed_case = assign_moderation_case(
