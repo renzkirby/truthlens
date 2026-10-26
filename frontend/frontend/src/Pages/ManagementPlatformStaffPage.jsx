@@ -178,7 +178,7 @@ function ManagementPlatformStaffPage() {
                         <th>Console access</th>
                         <th>Status</th>
                         <th>Community identity</th>
-                        <th><span className="sr-only">Actions</span></th>
+                        <th>Actions</th>
                      </tr>
                   </thead>
                   <tbody>
