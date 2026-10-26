@@ -6,6 +6,7 @@ from .models import (
     Organization,
     OrganizationInvitation,
     OrganizationMembership,
+    PlatformStaffInvitation,
     Claim,
     VerificationRun,
 )
@@ -214,14 +215,69 @@ class ManagementPlatformStaffSerializer(serializers.Serializer):
         return not obj.is_superuser
 
 
-class ManagementPlatformStaffCandidateSerializer(serializers.Serializer):
-    id = serializers.IntegerField(read_only=True)
-    username = serializers.CharField(read_only=True)
-    email = serializers.EmailField(read_only=True)
+class ManagementPlatformStaffInvitationCreateSerializer(StrictFieldsSerializer):
+    email = serializers.EmailField()
 
 
-class ManagementPlatformStaffMutationSerializer(StrictFieldsSerializer):
-    user_id = serializers.IntegerField(min_value=1)
+class ManagementPlatformStaffInvitationSerializer(serializers.ModelSerializer):
+    invited_by = ManagementUserSummarySerializer(read_only=True)
+    accepted_by = ManagementUserSummarySerializer(read_only=True)
+    cancelled_by = ManagementUserSummarySerializer(read_only=True)
+    platform_role_label = serializers.CharField(
+        source="get_platform_role_display",
+        read_only=True,
+    )
+
+    class Meta:
+        model = PlatformStaffInvitation
+        fields = (
+            "id",
+            "email",
+            "platform_role",
+            "platform_role_label",
+            "status",
+            "invited_by",
+            "expires_at",
+            "last_sent_at",
+            "send_count",
+            "accepted_by",
+            "accepted_at",
+            "cancelled_by",
+            "cancelled_at",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = fields
+
+
+class ManagementPlatformStaffInvitationPublicSerializer(serializers.ModelSerializer):
+    invited_by = ManagementUserSummarySerializer(read_only=True)
+    platform_role_label = serializers.CharField(
+        source="get_platform_role_display",
+        read_only=True,
+    )
+    recipient_matches_current_user = serializers.SerializerMethodField()
+
+    def get_recipient_matches_current_user(self, obj):
+        request = self.context.get("request")
+        actor = getattr(request, "user", None)
+        if not actor or not actor.is_authenticated:
+            return None
+        actor_email = str(actor.email or "").strip().casefold()
+        invited_email = str(obj.email or "").strip().casefold()
+        return bool(actor_email and actor_email == invited_email)
+
+    class Meta:
+        model = PlatformStaffInvitation
+        fields = (
+            "platform_role",
+            "platform_role_label",
+            "recipient_matches_current_user",
+            "status",
+            "expires_at",
+            "invited_by",
+        )
+        read_only_fields = fields
 
 
 class ManagementOrganizationListSerializer(serializers.ModelSerializer):
