@@ -147,8 +147,10 @@ def create_platform_staff_invitation(*, email, actor):
     normalized_email = normalize_invitation_email(email)
     expire_stale_platform_staff_invitations(email=normalized_email)
 
-    existing_users = User.objects.select_related("profile").filter(
-        email__iexact=normalized_email,
+    existing_users = list(
+        User.objects.select_related("profile").filter(
+            email__iexact=normalized_email,
+        )
     )
     for existing_user in existing_users:
         if existing_user.is_superuser:
@@ -160,6 +162,12 @@ def create_platform_staff_invitation(*, email, actor):
             raise PlatformStaffInvitationConflict(
                 "This email already belongs to a Platform Safety Moderator."
             )
+
+    if existing_users and not any(user.is_active for user in existing_users):
+        raise PlatformStaffInvitationConflict(
+            "This email belongs to an inactive TruthLens account. "
+            "Reactivate the account before issuing a Platform Staff invitation."
+        )
 
     if PlatformStaffInvitation.objects.filter(
         email=normalized_email,
