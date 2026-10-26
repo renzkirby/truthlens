@@ -1592,7 +1592,7 @@ export default function ThreadDetailPage() {
          <AccessibleDialog open={canParticipateInCommunity && reportDialogOpen} busy={reporting} labelledBy="thread-detail-report-title" describedBy="thread-detail-report-description" onClose={() => setReportDialogOpen(false)} fallbackFocusRef={pageRef}>
             <p className="thread-detail-dialog-kicker">Platform safety</p>
             <h2 id="thread-detail-report-title">Report this thread</h2>
-            <p id="thread-detail-report-description">Send this thread to platform moderators for a safety review.</p>
+            <p id="thread-detail-report-description">Send this thread to Platform Safety reviewers for a safety review.</p>
             <div className="thread-detail-field"><label htmlFor="thread-report-reason">Reason</label><select id="thread-report-reason" data-dialog-initial value={reportReason} onChange={(event) => setReportReason(event.target.value)} disabled={reporting}><option value="INAPPROPRIATE">Inappropriate</option><option value="SPAM">Spam</option><option value="HARASSMENT">Harassment</option><option value="OTHER">Other</option></select></div>
             <div className="thread-detail-field"><label htmlFor="thread-report-notes">Notes (optional)</label><textarea id="thread-report-notes" rows={4} value={reportNotes} onChange={(event) => setReportNotes(event.target.value)} disabled={reporting} /></div>
             <div className="thread-detail-dialog-actions"><button type="button" className="thread-detail-text-button" onClick={() => setReportDialogOpen(false)} disabled={reporting}>Cancel</button><button type="button" className="thread-detail-primary-button" onClick={submitReport} disabled={reporting}>{reporting ? "Submitting…" : "Submit report"}</button></div>
