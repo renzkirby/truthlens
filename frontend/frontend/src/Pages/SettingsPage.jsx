@@ -330,7 +330,11 @@ function SettingsPage() {
                      <section aria-labelledby="profile-settings-title">
                         <div className="settings-section__header">
                            <h2 id="profile-settings-title">Profile</h2>
-                           <p>Control how you appear to other people across TruthLens.</p>
+                           <p>
+                              {hasPublicCommunityProfile
+                                 ? "Control how you appear to other people across TruthLens."
+                                 : "Manage the identity used for platform governance and accountability."}
+                           </p>
                         </div>
 
                         <form className="settings-form" onSubmit={handleSaveProfile} noValidate>
@@ -395,7 +399,9 @@ function SettingsPage() {
                                  required
                               />
                               <p id="username-hint" className="settings-field__hint">
-                                 This is the name shown on your profile and contributions.
+                                 {hasPublicCommunityProfile
+                                    ? "This is the name shown on your profile and contributions."
+                                    : "This name identifies your account in governance records and administrative actions."}
                               </p>
                               {fieldErrors.username ? (
                                  <p id="username-error" className="settings-field__error">
