@@ -379,6 +379,16 @@
    outline: none;
 }
 
+.org-member-menu button:disabled {
+   opacity: 0.5;
+   cursor: not-allowed;
+}
+
+.org-member-menu button:disabled:hover,
+.org-member-menu button:disabled:focus-visible {
+   background: transparent;
+}
+
 .org-member-menu button.danger {
    color: var(--tl-color-status-critical-text);
 }
