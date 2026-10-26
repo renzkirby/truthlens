@@ -35,7 +35,12 @@ from .institution_affiliation_service import (
     create_institution,
     set_organization_institution_affiliation,
 )
+from .claim_institution_context_service import (
+    set_claim_institution_context,
+)
 from .management_serializers import (
+    ManagementClaimInstitutionContextSerializer,
+    ManagementClaimInstitutionContextUpdateSerializer,
     ManagementEmptyMutationSerializer,
     ManagementGovernanceAuditDetailQuerySerializer,
     ManagementGovernanceAuditQuerySerializer,
@@ -60,6 +65,7 @@ from .management_serializers import (
     ManagementPipelineRunListQuerySerializer,
 )
 from .models import (
+    ClaimInvestigationClassification,
     Institution,
     Organization,
     OrganizationInstitutionAffiliation,
@@ -449,6 +455,63 @@ def _provisioning_error_response(error):
         response_status = status.HTTP_400_BAD_REQUEST
 
     return Response({"detail": str(error)}, status=response_status)
+
+
+class ManagementClaimInstitutionContextView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def _classification(self, claim_id):
+        return (
+            ClaimInvestigationClassification.objects.select_related(
+                "campus_context_reviewed_by"
+            )
+            .prefetch_related(
+                "institution_associations__institution",
+                "institution_associations__assigned_by",
+            )
+            .filter(claim_id=claim_id)
+            .first()
+        )
+
+    def get(self, request, claim_id):
+        classification = self._classification(claim_id)
+        if classification is None:
+            return Response(
+                {"detail": "Investigation classification not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response(
+            ManagementClaimInstitutionContextSerializer(classification).data,
+            status=status.HTTP_200_OK,
+        )
+
+    def put(self, request, claim_id):
+        serializer = ManagementClaimInstitutionContextUpdateSerializer(
+            data=request.data
+        )
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            classification = set_claim_institution_context(
+                claim_id=claim_id,
+                actor=request.user,
+                **serializer.validated_data,
+            )
+        except ManagementGovernanceAuthorizationError as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except ManagementGovernanceValidationError as error:
+            return _governance_validation_response(error)
+        except ManagementGovernanceConflict as error:
+            return _governance_conflict_response(error)
+
+        return Response(
+            ManagementClaimInstitutionContextSerializer(classification).data,
+            status=status.HTTP_200_OK,
+        )
 
 
 class ManagementInstitutionListView(generics.ListCreateAPIView):

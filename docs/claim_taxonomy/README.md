@@ -118,11 +118,20 @@ illustrative only and **must not authorize intake**.
 The institution-affiliation foundation represents a student publication as
 organization type `NEWS` with subtype `STUDENT_PUBLICATION`. A platform-reviewed
 `OrganizationInstitutionAffiliation` links it to one canonical `Institution`
-with `INSTITUTION_WIDE` coverage. This identity contract does not yet affect
-partner intake: existing partner status, capability and all-required-domain
-checks still apply until a separate routing policy is reviewed and merged.
-Claim-to-institution identity is also still required before that exception can
-be applied. Conflict-of-interest review remains a separate future policy.
+with `INSTITUTION_WIDE` coverage.
+
+Claim institution identity is represented separately through
+`ClaimInstitutionAssociation`. A claim may have multiple canonical
+institutions, but institution associations are permitted only while its
+authoritative campus context is `CONFIRMED`. `CONFIRMED` may still have zero
+institution associations when campus relevance is clear but the exact
+institution is not yet established. `NOT_APPLICABLE`, `UNCERTAIN`, and
+unassessed campus context must have no institution associations.
+
+These identity contracts still do not affect partner intake: existing partner
+status, capability and all-required-domain checks remain in force until a
+separate routing policy is reviewed and merged. Conflict-of-interest review
+remains a separate future policy.
 
 ## Current Community controls
 
