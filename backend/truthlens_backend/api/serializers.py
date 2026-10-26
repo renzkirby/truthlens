@@ -323,6 +323,11 @@ class UserSerializer(serializers.ModelSerializer):
     avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
     bio = serializers.CharField(source="profile.bio", read_only=True)
 
+    def get_trust_score(self, obj):
+        if is_platform_staff_identity(obj):
+            return None
+        return obj.profile.trust_score
+
     def get_followers_count(self, obj):
         if is_platform_staff_identity(obj):
             return 0
