@@ -1,11 +1,7 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
-import {
-   canAccessManagementConsole,
-   canAccessPlatformSafetyConsole,
-} from "../utils/management";
-import { canAccessWorkspace } from "../utils/workspace";
+import { getDefaultAuthenticatedDestination } from "../utils/authNavigation";
 
 function CommunityParticipantRoute() {
    const { user } = useAuth();
@@ -15,13 +11,7 @@ function CommunityParticipantRoute() {
       return <Outlet />;
    }
 
-   const destination = canAccessManagementConsole(user)
-      ? "/management"
-      : canAccessPlatformSafetyConsole(user)
-        ? "/management/safety"
-        : canAccessWorkspace(user)
-          ? "/workspace"
-          : "/community";
+   const destination = getDefaultAuthenticatedDestination(user);
 
    return <Navigate to={destination} state={{ from: location }} replace />;
 }
