@@ -160,12 +160,22 @@ Included in this branch:
 - AI Analysis filtering that requires an actual AI verdict rather than merely
   the absence of human review.
 
+Persistence added in the follow-up taxonomy contract:
+
+- `ClaimInvestigationClassification.primary_subject` stores an explicit primary
+  subject when one has been authoritatively selected; it must also be present
+  in `domains`.
+- `ClaimInvestigationClassification.campus_context_state` stores
+  `CONFIRMED`, `NOT_APPLICABLE`, or `UNCERTAIN`; null means not assessed.
+- Existing rows are not guessed or backfilled.
+- Community public-topic projection may use an explicit primary subject while
+  preserving the legacy single-domain fallback.
+
 Still excluded:
 
 - changes to `api/investigation_classifier.py` or live provider prompts;
 - changes to `api/verification_domain_policy.py`, `api/services.py`, or
   `api/tasks.py`;
-- database models or migrations for explicit primary subject or campus context;
 - partner-routing or authorization changes;
 - Campus Affairs filtering before authoritative campus context and verified
   institution identity are persisted;
