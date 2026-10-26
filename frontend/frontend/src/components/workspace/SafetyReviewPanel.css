@@ -23,6 +23,7 @@
 }
 
 .safety-toolbar-kicker {
+   margin: 0;
    color: var(--brand-primary);
    font-size: 0.65rem;
    font-weight: 800;
