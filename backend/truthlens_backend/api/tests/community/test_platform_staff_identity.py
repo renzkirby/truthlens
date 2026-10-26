@@ -5,7 +5,13 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from api.models import UserProfile
+from api.models import (
+    Claim,
+    EvidenceSubmission,
+    Thread,
+    ThreadComment,
+    UserProfile,
+)
 from api.trust_service import recompute_user_trust_score
 
 
@@ -179,3 +185,65 @@ class PlatformStaffCommunityIdentityTests(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["followers_count"], 0)
+
+    def test_historical_platform_staff_activity_is_hidden_from_community_projection(self):
+        ordinary_claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="Ordinary community claim",
+        )
+        ordinary_thread = Thread.objects.create(
+            claim=ordinary_claim,
+            author=self.community_user,
+            caption="Ordinary discussion",
+            status=Thread.Status.OPEN,
+        )
+        EvidenceSubmission.objects.create(
+            thread=ordinary_thread,
+            contributor=self.platform_admin,
+            evidence_caption="Historical admin evidence",
+            evidence_type=EvidenceSubmission.EvidenceType.PROVIDES_CONTEXT,
+        )
+        ThreadComment.objects.create(
+            thread=ordinary_thread,
+            commenter=self.safety_moderator,
+            comment_text="Historical safety staff comment",
+        )
+
+        staff_claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="Historical staff-authored claim",
+        )
+        staff_thread = Thread.objects.create(
+            claim=staff_claim,
+            author=self.platform_admin,
+            caption="Historical staff-authored discussion",
+            status=Thread.Status.OPEN,
+        )
+
+        viewer = self._client_for(
+            User.objects.create_user(
+                username="projection-viewer",
+                password="test-password",
+            )
+        )
+
+        feed_response = viewer.get(reverse("thread-list"))
+        detail_response = viewer.get(
+            reverse("thread-detail", args=[ordinary_thread.id])
+        )
+        staff_detail_response = viewer.get(
+            reverse("thread-detail", args=[staff_thread.id])
+        )
+
+        self.assertEqual(feed_response.status_code, status.HTTP_200_OK)
+        feed_ids = {
+            str(item["id"])
+            for item in feed_response.data["results"]
+        }
+        self.assertIn(str(ordinary_thread.id), feed_ids)
+        self.assertNotIn(str(staff_thread.id), feed_ids)
+
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail_response.data["evidence_submissions"], [])
+        self.assertEqual(detail_response.data["comments"], [])
+        self.assertEqual(staff_detail_response.status_code, status.HTTP_404_NOT_FOUND)
