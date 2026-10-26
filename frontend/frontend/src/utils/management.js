@@ -133,6 +133,7 @@ const AUDIT_VALUE_LABELS = {
    OTHER: "Other",
    ORGANIZATION_ADMIN_ONBOARDING: "Organization Admin onboarding",
    PRIMARY_ADMIN_ONBOARDING: "Organization Admin onboarding",
+   ADMIN: "Administrator",
    OWNER: "Administrator",
    MODERATOR: "Verification Reviewer",
    CONTRIBUTOR: "Former Contributor",
