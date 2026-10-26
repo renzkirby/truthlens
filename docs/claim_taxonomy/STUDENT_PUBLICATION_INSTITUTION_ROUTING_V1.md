@@ -155,8 +155,11 @@ This phase does not:
 - create or rewrite claim classifications;
 - create multiple verification assignments;
 - change organization membership or capabilities;
-- change factual verdict reasoning;
-- enable the Campus Affairs Community filter.
+- change factual verdict reasoning.
+
+The Campus Affairs Community filter is implemented separately as a public
+browsing projection of confirmed campus context. It does not grant or modify
+partner routing authority.
 
 ## AI reasoning boundary
 

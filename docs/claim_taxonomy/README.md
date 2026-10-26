@@ -11,10 +11,9 @@ suggestions do not independently authorize partner intake.
 Keep public browsing simple without weakening institutional verification rules.
 TruthLens retains the existing **12 investigation subjects** and groups them into
 **eight public news categories** for the Community feed. **Campus Affairs**
-remains a separate context dimension, not a thirteenth subject. Its backend
-routing contract is reviewed separately from public browsing, and the live
-Topic control will remain unchanged until the dedicated Community Campus filter
-and UI are reviewed and enabled.
+remains a separate context dimension, not a thirteenth subject. The Community
+Topic control exposes it as a visually separated context filter while keeping
+the eight subject-topic groups unchanged.
 
 The subject rubric and public group mapping live in
 `api/verification/subject_taxonomy.py`. The Community API currently projects a
@@ -34,10 +33,13 @@ not guess a primary subject for multi-domain rows.
 | Sports | `SPORTS` |
 | Culture & Entertainment | `CULTURE` |
 
-The current Community Topic dropdown exposes **All Topics** plus these eight
-groups. **Campus Affairs is not exposed yet.** Unclassified claims and
-multi-domain claims without an explicit persisted primary subject remain
-discoverable under **All Topics** and must not be assigned a guessed topic.
+The Community Topic dropdown exposes **All Topics**, these eight subject-topic
+groups, and a separate **Context → Campus Affairs** option. Campus Affairs
+selects claims whose authoritative `campus_context_state` is `CONFIRMED`; it
+does not replace or rewrite the claim's normal public subject topic. Unclassified
+claims and multi-domain claims without an explicit persisted primary subject
+remain discoverable under **All Topics** and must not be assigned a guessed
+subject topic.
 
 ## Subject classification guidelines
 
@@ -140,7 +142,8 @@ rule. Conflict-of-interest review remains a separate future policy.
 
 **Desktop:** Topic · Review · Sort · Filters.
 
-- **Topic:** All Topics plus the eight public news categories above.
+- **Topic:** All Topics plus the eight public news categories above, followed
+  by a separate Context section containing Campus Affairs.
 - **Review:** All Reviews, Human Review, AI Analysis. Human means attributable
   human adjudication; AI means an actual AI assessment without such an
   authoritative human verdict.
@@ -151,8 +154,9 @@ rule. Conflict-of-interest review remains a separate future policy.
   grouped under a combined Sort & Filter control.
 
 Filtering happens **on the server before pagination**. Topic query parameters
-are preserved in cursor links. The API still rejects `CAMPUS_AFFAIRS` because
-the Community Campus filter has not been enabled yet.
+are preserved in cursor links. `topic=CAMPUS_AFFAIRS` filters authoritative
+`campus_context_state = CONFIRMED` claims across subject categories; all other
+unsupported topic codes still return a controlled bad request.
 
 ## Fixture and approval limitations
 
@@ -171,6 +175,8 @@ Included in this branch:
 - Phase 2 Community API projection/filtering for authoritative single-domain
   classifications.
 - Phase 2 Community Topic / Review / Sort / Content Format controls.
+- Campus Affairs Community filtering from authoritative confirmed campus
+  context, kept separate from public subject-topic projection.
 - AI Analysis filtering that requires an actual AI verdict rather than merely
   the absence of human review.
 
@@ -190,5 +196,4 @@ Still excluded:
 - changes to `api/investigation_classifier.py` or live provider prompts;
 - changes to `api/services.py` or `api/tasks.py`;
 - automatic institution inference;
-- Campus Affairs Community filtering;
 - any claim that the synthetic fixture measures real classifier accuracy.

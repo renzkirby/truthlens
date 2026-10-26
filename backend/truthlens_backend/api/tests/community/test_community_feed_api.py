@@ -466,8 +466,139 @@ class CommunityFeedApiTests(TestCase):
         self.assertNotIn(str(health_thread.id), result_ids)
         self.assertNotIn(str(multi_thread.id), result_ids)
 
-    def test_invalid_topic_returns_controlled_bad_request(self):
+    def test_campus_affairs_topic_filters_confirmed_context_across_subjects(self):
+        health_claim, health_thread = self._create_thread("campus health")
+        self._classify_claim(
+            health_claim,
+            "HEALTH",
+            campus_context_state=(
+                ClaimInvestigationClassification.CampusContextState.CONFIRMED
+            ),
+        )
+        election_claim, election_thread = self._create_thread("campus election")
+        self._classify_claim(
+            election_claim,
+            "ELECTIONS",
+            campus_context_state=(
+                ClaimInvestigationClassification.CampusContextState.CONFIRMED
+            ),
+        )
+
+        city_claim, city_thread = self._create_thread("city-wide suspension")
+        self._classify_claim(
+            city_claim,
+            "EDUCATION",
+            campus_context_state=(
+                ClaimInvestigationClassification.CampusContextState.NOT_APPLICABLE
+            ),
+        )
+        uncertain_claim, uncertain_thread = self._create_thread("uncertain campus")
+        self._classify_claim(
+            uncertain_claim,
+            "TECHNOLOGY",
+            campus_context_state=(
+                ClaimInvestigationClassification.CampusContextState.UNCERTAIN
+            ),
+        )
+        unassessed_claim, unassessed_thread = self._create_thread("unassessed campus")
+        self._classify_claim(unassessed_claim, "SCIENCE")
+
         response = self.client.get(self.url, {"topic": "CAMPUS_AFFAIRS"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        result_ids = set(self._result_ids(response))
+        self.assertEqual(
+            result_ids,
+            {str(health_thread.id), str(election_thread.id)},
+        )
+        self.assertNotIn(str(city_thread.id), result_ids)
+        self.assertNotIn(str(uncertain_thread.id), result_ids)
+        self.assertNotIn(str(unassessed_thread.id), result_ids)
+
+        health_item = next(
+            item
+            for item in response.data["results"]
+            if item["id"] == str(health_thread.id)
+        )
+        self.assertEqual(
+            health_item["claim"]["public_topic"]["code"],
+            "HEALTH_MEDICINE",
+        )
+
+    def test_campus_affairs_combines_with_existing_feed_filters(self):
+        matching_claim, matching_thread = self._create_thread(
+            "campus combined needle",
+            claim_type=Claim.ClaimType.URL,
+        )
+        self._classify_claim(
+            matching_claim,
+            "EDUCATION",
+            campus_context_state=(
+                ClaimInvestigationClassification.CampusContextState.CONFIRMED
+            ),
+        )
+        self._issue_human_decision(matching_claim, matching_thread)
+
+        wrong_type_claim, wrong_type_thread = self._create_thread(
+            "campus combined needle",
+            claim_type=Claim.ClaimType.TEXT,
+        )
+        self._classify_claim(
+            wrong_type_claim,
+            "EDUCATION",
+            campus_context_state=(
+                ClaimInvestigationClassification.CampusContextState.CONFIRMED
+            ),
+        )
+        self._issue_human_decision(wrong_type_claim, wrong_type_thread)
+
+        non_campus_claim, non_campus_thread = self._create_thread(
+            "campus combined needle",
+            claim_type=Claim.ClaimType.URL,
+        )
+        self._classify_claim(
+            non_campus_claim,
+            "EDUCATION",
+            campus_context_state=(
+                ClaimInvestigationClassification.CampusContextState.NOT_APPLICABLE
+            ),
+        )
+        self._issue_human_decision(non_campus_claim, non_campus_thread)
+
+        ai_claim, ai_thread = self._create_thread(
+            "campus combined needle",
+            claim_type=Claim.ClaimType.URL,
+        )
+        self._classify_claim(
+            ai_claim,
+            "EDUCATION",
+            campus_context_state=(
+                ClaimInvestigationClassification.CampusContextState.CONFIRMED
+            ),
+        )
+
+        response = self.client.get(
+            self.url,
+            {
+                "search": "campus combined needle",
+                "claim_type": Claim.ClaimType.URL,
+                "assessment_source": "human",
+                "sort": "oldest",
+                "topic": "CAMPUS_AFFAIRS",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(self._result_ids(response), [str(matching_thread.id)])
+        excluded_ids = {
+            str(wrong_type_thread.id),
+            str(non_campus_thread.id),
+            str(ai_thread.id),
+        }
+        self.assertTrue(excluded_ids.isdisjoint(set(self._result_ids(response))))
+
+    def test_invalid_topic_returns_controlled_bad_request(self):
+        response = self.client.get(self.url, {"topic": "UNKNOWN_TOPIC"})
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("topic", response.data)

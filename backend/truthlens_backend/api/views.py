@@ -3166,14 +3166,21 @@ class ThreadViewSet(viewsets.ModelViewSet):
             else None
         )
         topic_category = None
+        campus_affairs_filter = False
         if topic is not None:
-            from .verification.subject_taxonomy import public_category_for_code
+            from .verification.subject_taxonomy import (
+                CAMPUS_CONTEXT_CODE,
+                public_category_for_code,
+            )
 
-            topic_category = public_category_for_code(topic)
-            if topic_category is None:
-                raise ValidationError(
-                    {"topic": "Select a valid community topic."}
-                )
+            if topic == CAMPUS_CONTEXT_CODE:
+                campus_affairs_filter = True
+            else:
+                topic_category = public_category_for_code(topic)
+                if topic_category is None:
+                    raise ValidationError(
+                        {"topic": "Select a valid community topic."}
+                    )
 
         queryset = (
             Thread.objects.exclude(status=Thread.Status.REJECTED)
@@ -3207,8 +3214,16 @@ class ThreadViewSet(viewsets.ModelViewSet):
         if claim_type is not None:
             queryset = queryset.filter(claim__claim_type=claim_type)
 
-        if topic_category is not None:
-            classification_path = "claim__investigation_classification"
+        classification_path = "claim__investigation_classification"
+        if campus_affairs_filter:
+            queryset = queryset.filter(
+                **{
+                    f"{classification_path}__campus_context_state": (
+                        ClaimInvestigationClassification.CampusContextState.CONFIRMED
+                    )
+                }
+            )
+        elif topic_category is not None:
             topic_filter = Q(
                 **{
                     f"{classification_path}__primary_subject__in": (
