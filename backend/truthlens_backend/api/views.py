@@ -111,7 +111,6 @@ from .platform_identity_service import (
     can_participate_in_community,
     can_review_platform_safety,
     exclude_platform_staff_identities,
-    get_community_identity_context,
     is_platform_staff_identity,
 )
 from .organization_service import (
