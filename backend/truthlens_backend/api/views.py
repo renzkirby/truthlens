@@ -112,6 +112,7 @@ from .platform_identity_service import (
     can_review_platform_safety,
     exclude_platform_staff_identities,
     is_platform_staff_identity,
+    platform_staff_identity_q,
 )
 from .organization_service import (
     PartnerCapability,
@@ -3184,6 +3185,7 @@ class ThreadViewSet(viewsets.ModelViewSet):
             )
             .order_by(order_field)
         )
+        queryset = exclude_platform_staff_identities(queryset, "author")
         queryset = prefetch_public_partner_affiliations(queryset, "author")
 
         search_query = self.request.query_params.get("search", "").strip()[:120]
@@ -3229,13 +3231,28 @@ class ThreadViewSet(viewsets.ModelViewSet):
 
         if action == "list":
             queryset = queryset.annotate(
-                comment_count=Count("comments", distinct=True),
-                evidence_count=Count("evidence_submissions", distinct=True),
+                comment_count=Count(
+                    "comments",
+                    filter=~platform_staff_identity_q("comments__commenter"),
+                    distinct=True,
+                ),
+                evidence_count=Count(
+                    "evidence_submissions",
+                    filter=~platform_staff_identity_q(
+                        "evidence_submissions__contributor"
+                    ),
+                    distinct=True,
+                ),
                 verified_evidence_count=Count(
                     "claim__threads__evidence_submissions",
-                    filter=Q(
-                        claim__threads__evidence_submissions__evidence_status=(
-                            EvidenceSubmission.EvidenceStatus.VERIFIED
+                    filter=(
+                        Q(
+                            claim__threads__evidence_submissions__evidence_status=(
+                                EvidenceSubmission.EvidenceStatus.VERIFIED
+                            )
+                        )
+                        & ~platform_staff_identity_q(
+                            "claim__threads__evidence_submissions__contributor"
                         )
                     ),
                     distinct=True,
@@ -3245,29 +3262,45 @@ class ThreadViewSet(viewsets.ModelViewSet):
             queryset = queryset.annotate(
                 verified_evidence_count=Count(
                     "claim__threads__evidence_submissions",
-                    filter=Q(
-                        claim__threads__evidence_submissions__evidence_status=(
-                            EvidenceSubmission.EvidenceStatus.VERIFIED
+                    filter=(
+                        Q(
+                            claim__threads__evidence_submissions__evidence_status=(
+                                EvidenceSubmission.EvidenceStatus.VERIFIED
+                            )
+                        )
+                        & ~platform_staff_identity_q(
+                            "claim__threads__evidence_submissions__contributor"
                         )
                     ),
                     distinct=True,
                 ),
             )
             comment_queryset = prefetch_public_partner_affiliations(
-                ThreadComment.objects.select_related(
-                    "commenter__profile",
-                    "parent__commenter",
-                )
-                .prefetch_related("likes")
-                .order_by("-commented_at"),
+                exclude_platform_staff_identities(
+                    ThreadComment.objects.select_related(
+                        "commenter__profile",
+                        "parent__commenter",
+                    )
+                    .prefetch_related("likes")
+                    .order_by("-commented_at"),
+                    "commenter",
+                ),
                 "commenter",
             )
+            evidence_queryset = prefetch_public_partner_affiliations(
+                exclude_platform_staff_identities(
+                    EvidenceSubmission.objects.select_related(
+                        "contributor__profile",
+                        "verified_by__profile",
+                    ).prefetch_related("votes"),
+                    "contributor",
+                ),
+                "contributor",
+            )
             queryset = queryset.prefetch_related(
-                "evidence_submissions__votes",
-                "evidence_submissions__contributor__profile",
-                "evidence_submissions__verified_by__profile",
-                public_partner_affiliation_prefetch(
-                    "evidence_submissions__contributor"
+                Prefetch(
+                    "evidence_submissions",
+                    queryset=evidence_queryset,
                 ),
                 Prefetch(
                     "comments",
