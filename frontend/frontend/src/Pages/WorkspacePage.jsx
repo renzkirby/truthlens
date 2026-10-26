@@ -167,7 +167,7 @@ function formatRole(role) {
       return "Member";
    }
 
-   if (role === "OWNER") {
+   if (["ADMIN", "OWNER"].includes(role)) {
       return "Administrator";
    }
 
