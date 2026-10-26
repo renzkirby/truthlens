@@ -2,6 +2,14 @@ export function canAccessManagementConsole(user) {
    return user?.management_console?.can_access === true;
 }
 
+export function isPlatformSafetyModerator(user) {
+   return user?.community_identity?.platform_role === "PLATFORM_SAFETY_MODERATOR";
+}
+
+export function canAccessPlatformSafetyConsole(user) {
+   return canAccessManagementConsole(user) || isPlatformSafetyModerator(user);
+}
+
 export function formatManagementDate(value, { dateOnly = false } = {}) {
    if (!value) return "Not recorded";
 
