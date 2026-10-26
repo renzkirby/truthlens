@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
 import Icons from "../components/Icons.jsx";
+import PartnerLogo from "../components/partners/PartnerLogo.jsx";
 import {
    WorkspaceCapability,
    getDefaultWorkspaceOrganizationId,
@@ -765,9 +766,11 @@ function WorkspacePage() {
                </div>
             ) : memberships.length > 0 ? (
                <div className="workspace-organization-context" aria-label="Current partner organization">
-                  <div className="workspace-organization-context-icon" aria-hidden="true">
-                     <Icons name="landmark" size={17} />
-                  </div>
+                  <PartnerLogo
+                     logoUrl={selectedOrganization?.logo_url}
+                     organizationName={selectedOrganization?.name || "Partner organization"}
+                     size="compact"
+                  />
 
                   <div className="workspace-organization-context-copy">
                      <span className="workspace-organization-context-label">Partner organization</span>
