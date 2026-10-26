@@ -21,7 +21,7 @@
    align-items: center;
    justify-content: center;
    border-radius: var(--tl-radius-md);
-   background: var(--tl-color-brand-soft);
+   background: var(--tl-color-brand-soft, #eef2ff);
    color: var(--tl-color-brand-primary);
 }
 
