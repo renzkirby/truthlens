@@ -11,6 +11,7 @@ import "./ManagementConsole.css";
 const NAVIGATION_ITEMS = [
    { to: "/management", label: "Overview", icon: "dashboard", end: true },
    { to: "/management/pipeline", label: "Pipeline Health", icon: "activity", section: "Operations" },
+   { to: "/management/safety", label: "Safety Review", icon: "shield-check", section: "Platform Safety" },
    { to: "/management/organizations", label: "Organizations", icon: "landmark", section: "Governance" },
    { to: "/management/memberships", label: "Memberships", icon: "users" },
    { to: "/management/invitations", label: "Invitations", icon: "mail" },
