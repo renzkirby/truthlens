@@ -9,7 +9,7 @@ function ManagementSafetyReviewPage() {
       <div className="management-page management-safety-page">
          <ManagementPageHeader
             title="Safety Review"
-            subtitle="Triage reported Community content and record platform-safety decisions."
+            subtitle="Review reported Community content and record platform-safety decisions."
          />
 
          <section className="management-safety-boundary" aria-labelledby="management-safety-boundary-title">
@@ -23,9 +23,6 @@ function ManagementSafetyReviewPage() {
                   Safety actions do not determine whether a claim is factually true or false.
                </p>
             </div>
-            <span className="management-safety-boundary__separation">
-               Factual verification stays in the Verification Workspace
-            </span>
          </section>
 
          <SafetyReviewPanel />
