@@ -10,6 +10,7 @@ from .models import (
     AccountabilityEvent,
     AdjudicationDecision,
     Claim,
+    ClaimInvestigationClassification,
     EvidenceSubmission,
     FactualCorrectionRequest,
     ModerationCase,
@@ -23,8 +24,12 @@ from .organization_service import (
     has_capability,
 )
 from .verification_domain_policy import (
-    eligibility_reason,
-    organization_specializations,
+    INSTITUTION_AFFILIATION_NOT_VERIFIED,
+    NEEDS_CLASSIFICATION,
+    NEEDS_INSTITUTION_IDENTITY,
+    OUTSIDE_INSTITUTION_SCOPE,
+    OUTSIDE_SPECIALIZATIONS,
+    organization_claim_eligibility_reason,
     subject_eligibility_enforced,
 )
 
@@ -178,6 +183,7 @@ def get_available_verification_assignments():
         )
         .prefetch_related(
             "claim__threads",
+            "claim__investigation_classification__institution_associations",
         )
         .annotate(
             evidence_count=Count(
@@ -442,28 +448,45 @@ def claim_verification_assignment(
                 "already belong to an organization."
             )
 
-        # Subject-based intake authorization is a separately gated rollout.
-        # Off/shadow must preserve the pre-classification production workflow;
-        # shadow suggestions are diagnostic and cannot grant or deny work.
+        # Taxonomy routing is authoritative only in the separately gated
+        # enforce rollout. Off/shadow preserve the pre-classification workflow.
         if subject_eligibility_enforced():
             classification = (
-                locked_claim.investigation_classification
-                if hasattr(locked_claim, "investigation_classification")
-                else None
+                ClaimInvestigationClassification.objects.select_for_update()
+                .prefetch_related("institution_associations")
+                .filter(claim=locked_claim)
+                .first()
             )
             locked_organization = type(organization).objects.select_for_update().get(
                 pk=organization.pk,
             )
-            specializations = organization_specializations(locked_organization)
-            refusal = eligibility_reason(
+            refusal = organization_claim_eligibility_reason(
                 classification=classification,
-                specializations=specializations,
+                organization=locked_organization,
             )
             if refusal:
                 raise VerificationAssignmentAuthorizationError(
                     {
-                        "NEEDS_CLASSIFICATION": "This claim does not yet have a validated investigation subject classification.",
-                        "OUTSIDE_SPECIALIZATIONS": "The claim is outside this organization's selected verification specializations.",
+                        NEEDS_CLASSIFICATION: (
+                            "This claim does not yet have a validated "
+                            "investigation subject classification."
+                        ),
+                        NEEDS_INSTITUTION_IDENTITY: (
+                            "This claim does not yet have confirmed canonical "
+                            "institution identity for Student Publication routing."
+                        ),
+                        INSTITUTION_AFFILIATION_NOT_VERIFIED: (
+                            "This Student Publication does not have a verified "
+                            "institution-wide affiliation."
+                        ),
+                        OUTSIDE_INSTITUTION_SCOPE: (
+                            "This claim is outside this Student Publication's "
+                            "verified institution scope."
+                        ),
+                        OUTSIDE_SPECIALIZATIONS: (
+                            "The claim is outside this organization's selected "
+                            "verification specializations."
+                        ),
                     }[refusal]
                 )
 

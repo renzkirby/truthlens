@@ -129,10 +129,9 @@ This phase does not:
   article text;
 - enable the Campus Affairs Community filter.
 
-## Next routing contract
+## Routing contract
 
-After this phase, TruthLens can represent both sides of the future
-institution-wide eligibility match:
+TruthLens can represent both sides of the institution-wide eligibility match:
 
 ```text
 Claim
@@ -144,5 +143,7 @@ Student Publication
   Coverage = INSTITUTION_WIDE
 ```
 
-A separate reviewed routing PR will decide when that exact verified match may
-override subject-specialization requirements for Student Publications.
+The reviewed routing contract now uses that exact verified match, behind the
+existing taxonomy `enforce` gate, as the Student Publication authorization
+path instead of subject specializations. See
+`STUDENT_PUBLICATION_INSTITUTION_ROUTING_V1.md`.

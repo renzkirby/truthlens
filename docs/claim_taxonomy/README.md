@@ -1,19 +1,20 @@
 # TruthLens claim taxonomy and Community topics — v1
 
-**Status:** Phase 1 taxonomy rubric plus Phase 2 Community integration. The
-subject definitions and synthetic examples remain a design artifact, not an
-independently adjudicated benchmark. This branch does not authorize AI
-suggestions for partner eligibility and does not change live classifier or
-partner-routing authority.
+**Status:** Phase 1 taxonomy rubric plus Phase 2 Community integration, with
+reviewed backend institution-aware partner routing available behind the existing
+classification `enforce` gate. The subject definitions and synthetic examples
+remain a design artifact, not an independently adjudicated benchmark. AI
+suggestions do not independently authorize partner intake.
 
 ## Goals
 
 Keep public browsing simple without weakening institutional verification rules.
 TruthLens retains the existing **12 investigation subjects** and groups them into
 **eight public news categories** for the Community feed. **Campus Affairs**
-remains a separate planned context dimension, not a thirteenth subject, and is
-intentionally withheld from the live Topic control until the reviewed
-campus-routing policy is implemented.
+remains a separate context dimension, not a thirteenth subject. Its backend
+routing contract is reviewed separately from public browsing, and the live
+Topic control will remain unchanged until the dedicated Community Campus filter
+and UI are reviewed and enabled.
 
 The subject rubric and public group mapping live in
 `api/verification/subject_taxonomy.py`. The Community API currently projects a
@@ -52,9 +53,9 @@ discoverable under **All Topics** and must not be assigned a guessed topic.
    multi-domain row remains unresolved until primary-subject persistence exists.
 4. Add another **required** domain only if verifying the material proposition
    genuinely needs that specialist expertise. Incidental mentions do not
-   impose extra partner permissions. For now the existing backend still checks
-   **all authoritative required domains**. No change to that rule is proposed
-   in this patch.
+   impose extra partner permissions. Ordinary partners must cover **all
+   authoritative required domains**. A verified Student Publication instead
+   uses its reviewed `INSTITUTION_WIDE` institutional scope.
 5. When the proposition or subject is too vague, abstain. Do not present a
    suggested label as authoritative merely because it satisfies a JSON/quote
    structure check.
@@ -128,10 +129,12 @@ institution associations when campus relevance is clear but the exact
 institution is not yet established. `NOT_APPLICABLE`, `UNCERTAIN`, and
 unassessed campus context must have no institution associations.
 
-These identity contracts still do not affect partner intake: existing partner
-status, capability and all-required-domain checks remain in force until a
-separate routing policy is reviewed and merged. Conflict-of-interest review
-remains a separate future policy.
+When investigation routing is in `enforce` mode, these identity contracts now
+authorize verified Student Publications only for claims whose confirmed
+canonical institution set contains their verified affiliated institution.
+Student Publication subject specializations do not expand that institutional
+scope. Ordinary partners continue to use the all-required-domain specialization
+rule. Conflict-of-interest review remains a separate future policy.
 
 ## Current Community controls
 
@@ -148,8 +151,8 @@ remains a separate future policy.
   grouped under a combined Sort & Filter control.
 
 Filtering happens **on the server before pagination**. Topic query parameters
-are preserved in cursor links. The API rejects unsupported topic codes such as
-`CAMPUS_AFFAIRS` until campus-context persistence is implemented.
+are preserved in cursor links. The API still rejects `CAMPUS_AFFAIRS` because
+the Community Campus filter has not been enabled yet.
 
 ## Fixture and approval limitations
 
@@ -185,9 +188,7 @@ Persistence added in the follow-up taxonomy contract:
 Still excluded:
 
 - changes to `api/investigation_classifier.py` or live provider prompts;
-- changes to `api/verification_domain_policy.py`, `api/services.py`, or
-  `api/tasks.py`;
-- partner-routing or authorization changes;
-- Campus Affairs filtering before the reviewed campus-routing policy is
-  implemented;
+- changes to `api/services.py` or `api/tasks.py`;
+- automatic institution inference;
+- Campus Affairs Community filtering;
 - any claim that the synthetic fixture measures real classifier accuracy.

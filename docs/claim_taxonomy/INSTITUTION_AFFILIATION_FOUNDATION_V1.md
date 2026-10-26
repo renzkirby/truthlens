@@ -40,10 +40,10 @@ log.
 
 ## Meaning of INSTITUTION_WIDE
 
-The planned meaning is that a verified student publication may eventually
+The reviewed routing contract now allows a verified Student Publication to
 verify claims specifically **about its affiliated institution** regardless of
 the claim's subject category (for example Health, Sports, Elections, Education,
-or Technology).
+or Technology) when taxonomy routing is in `enforce` mode.
 
 This does not mean that every claim which merely affects students or is posted
 by a member of the institution becomes institution-specific.
@@ -59,29 +59,18 @@ Examples:
 - A national health claim reposted by a university student -> not automatically
   institution-specific.
 
-## Deliberate non-goals
+## Relationship to later routing
 
-This foundation does not:
+This file documents the affiliation persistence foundation. Claim institution
+identity was added separately, and the reviewed routing policy now compares the
+two canonical identities when taxonomy routing is in `enforce` mode.
 
-- add canonical institution identity to claims;
-- change `eligibility_reason()`;
-- bypass `verification_specializations`;
-- change verification assignment routing;
+The routing phase still does not:
+
 - change the investigation classifier or provider prompts;
 - change `services.py` or `tasks.py`;
 - infer institutions from text, logos, authors, or source domains;
 - enable the Campus Affairs Community filter.
 
-Until a later reviewed routing phase is merged, a verified student publication
-continues to follow the existing subject-specialization eligibility rule.
-
-## Planned next contract
-
-The next campus-routing prerequisite is authoritative claim institution
-identity. Only after a claim has both:
-
-1. `campus_context_state = CONFIRMED`, and
-2. a verified canonical institution identity,
-
-can a later routing policy safely compare that institution with a verified
-student-publication affiliation and apply the institution-wide exception.
+See `STUDENT_PUBLICATION_INSTITUTION_ROUTING_V1.md` for the active routing
+contract.
