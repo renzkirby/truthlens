@@ -434,6 +434,15 @@ class CommunityFeedApiTests(TestCase):
         self.assertIn(str(politics_thread.id), result_ids)
         self.assertNotIn(str(technology_thread.id), result_ids)
 
+    def test_topic_filter_treats_blank_primary_as_legacy_missing_primary(self):
+        claim, thread = self._create_thread("blank primary compatibility")
+        self._classify_claim(claim, "EDUCATION", primary_subject="")
+
+        response = self.client.get(self.url, {"topic": "EDUCATION"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn(str(thread.id), set(self._result_ids(response)))
+
     def test_topic_filter_groups_single_domain_authoritative_claims(self):
         expected = set()
         for domain in ("CIVICS", "ELECTIONS", "LAW"):

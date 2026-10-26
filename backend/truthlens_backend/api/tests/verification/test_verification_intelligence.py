@@ -235,6 +235,8 @@ class VerificationIntelligenceTests(TestCase):
             self.project(organization=self.other)
 
     def test_authorized_other_organization_cannot_see_assignment(self):
+        self.membership.status = OrganizationMembership.Status.LEFT
+        self.membership.save(update_fields=["status"])
         OrganizationMembership.objects.create(
             user=self.actor,
             organization=self.other,
@@ -257,13 +259,19 @@ class VerificationIntelligenceTests(TestCase):
         with self.assertRaises(VerificationIntelligenceNotFound):
             self.project(claim_id=uuid4())
 
-    def test_all_workload_roles_are_allowed(self):
-        for role in ("OWNER", "ADMIN", "LEAD_VERIFIER", "MODERATOR", "RESEARCHER"):
+    def test_operational_workload_roles_are_allowed(self):
+        for role in ("LEAD_VERIFIER", "VERIFICATION_REVIEWER", "RESEARCHER"):
             with self.subTest(role=role):
                 OrganizationMembership.objects.filter(pk=self.membership.pk).update(
                     role=role
                 )
                 self.assertEqual(self.get().status_code, 200)
+
+    def test_admin_management_role_is_forbidden(self):
+        OrganizationMembership.objects.filter(pk=self.membership.pk).update(
+            role=OrganizationMembership.Role.ADMIN,
+        )
+        self.assertEqual(self.get().status_code, 403)
 
     def test_inactive_membership_revokes_access(self):
         for status in ("SUSPENDED", "LEFT"):
@@ -693,6 +701,9 @@ class VerificationIntelligenceTests(TestCase):
         with patch(
             "api.knowledge_reuse_service.get_public_partner_fact_check_detail",
             side_effect=public_detail,
+        ), patch(
+            "api.verification.relatedness.accepted_reference",
+            return_value=True,
         ):
             result = self.project()
         knowledge = result["institutional_knowledge"]
@@ -740,8 +751,10 @@ class VerificationIntelligenceTests(TestCase):
         self.assertEqual(second.json(), first.json())
         self.assertEqual(state(), before)
         for query in queries:
+            sql = query["sql"].lstrip().upper()
             self.assertTrue(
-                query["sql"].lstrip().upper().startswith("SELECT"), query["sql"]
+                sql.startswith(("SELECT", "SAVEPOINT", "RELEASE SAVEPOINT")),
+                query["sql"],
             )
         self.assertFalse(KnowledgeReuseEvent.objects.exists())
         self.assertEqual(ClaimFactCheckReference.objects.count(), 1)

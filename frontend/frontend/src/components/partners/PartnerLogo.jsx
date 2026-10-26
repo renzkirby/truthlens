@@ -7,7 +7,9 @@ function PartnerLogo({ logoUrl, organizationName, size = "card" }) {
    const showImage = Boolean(logoUrl) && failedLogoUrl !== logoUrl;
 
    return (
-      <div className={`partner-logo partner-logo--${size}`}>
+      <div
+         className={`partner-logo partner-logo--${size} ${showImage ? "partner-logo--image" : "partner-logo--fallback"}`}
+      >
          {showImage ? (
             <img src={logoUrl} alt={`${organizationName} logo`} onError={() => setFailedLogoUrl(logoUrl)} />
          ) : (

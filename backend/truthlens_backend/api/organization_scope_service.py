@@ -1,4 +1,4 @@
-"""Primary Admin-owned investigation specializations, audited and domain-only."""
+"""Organization Admin-owned investigation specializations, audited and domain-only."""
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
@@ -29,21 +29,19 @@ def can_view_specializations(*, organization, actor):
             organization=organization,
             user=actor,
             status=OrganizationMembership.Status.ACTIVE,
-            role__in=[OrganizationMembership.Role.OWNER, OrganizationMembership.Role.ADMIN],
+            role=OrganizationMembership.Role.ADMIN,
         ).exists()
     )
 
 
 def can_manage_specializations(*, organization, actor):
-    # The Primary Admin alone controls institutional specialization; an Admin
-    # does not inherit this authority merely through MANAGE_ORGANIZATION.
     return bool(
         actor and actor.is_authenticated and actor.is_active
         and OrganizationMembership.objects.filter(
             organization=organization,
             user=actor,
             status=OrganizationMembership.Status.ACTIVE,
-            role=OrganizationMembership.Role.OWNER,
+            role=OrganizationMembership.Role.ADMIN,
         ).exists()
     )
 
@@ -51,7 +49,7 @@ def can_manage_specializations(*, organization, actor):
 def ensure_scope_manager(*, organization, actor):
     if not can_manage_specializations(organization=organization, actor=actor):
         raise OrganizationScopeForbidden(
-            "Only the active Primary Admin may manage verification specializations."
+            "Only an active Organization Admin may manage verification specializations."
         )
 
 

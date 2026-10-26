@@ -25,7 +25,6 @@ from .models import (
 from .accountability_service import record_accountability_event
 from .organization_service import (
     ADMIN_MANAGEABLE_MEMBERSHIP_ROLES,
-    OWNER_MANAGEABLE_MEMBERSHIP_ROLES,
     PartnerCapability,
     get_manageable_membership_roles,
     has_capability,
@@ -66,8 +65,6 @@ class InvalidOrganizationInvitationRole(OrganizationInvitationError):
     pass
 
 
-OWNER_INVITABLE_ROLES = set(OWNER_MANAGEABLE_MEMBERSHIP_ROLES)
-
 ADMIN_INVITABLE_ROLES = set(ADMIN_MANAGEABLE_MEMBERSHIP_ROLES)
 
 
@@ -104,12 +101,27 @@ def get_invitation_role_label(
 ):
     if (
         invitation.purpose
-        == OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
-        and invitation.invited_role == OrganizationMembership.Role.OWNER
+        in {
+            OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING,
+            "PRIMARY_ADMIN_ONBOARDING",
+        }
+        and invitation.invited_role
+        in {
+            OrganizationMembership.Role.ADMIN,
+            "OWNER",
+        }
     ):
-        return "Primary Admin"
+        return "Organization Admin"
 
-    return invitation.get_invited_role_display()
+    legacy_labels = {
+        "OWNER": "Administrator",
+        "MODERATOR": "Verification Reviewer",
+        "CONTRIBUTOR": "Former Contributor",
+    }
+    return legacy_labels.get(
+        invitation.invited_role,
+        invitation.get_invited_role_display(),
+    )
 
 
 def _normalize_invitation_token(
@@ -229,7 +241,7 @@ def accept_organization_invitation(
 
         if (
             preflight_invitation.purpose
-            == OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
+            == OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING
         ):
             locked_organization = Organization.objects.select_for_update(
                 of=("self",),
@@ -329,48 +341,58 @@ def accept_organization_invitation(
                     )
                 )
 
-            is_primary_admin_onboarding = (
-                invitation.purpose
-                == OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
-            )
+            is_admin_onboarding = invitation.purpose in {
+                OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING,
+                "PRIMARY_ADMIN_ONBOARDING",
+            }
 
-            if is_primary_admin_onboarding:
-                if invitation.invited_role != OrganizationMembership.Role.OWNER:
+            if is_admin_onboarding:
+                if invitation.invited_role not in {
+                    OrganizationMembership.Role.ADMIN,
+                    "OWNER",
+                }:
                     raise InvalidOrganizationInvitationRole(
-                        "This Primary Admin invitation contains an invalid role."
+                        "This Organization Admin invitation contains an invalid role."
                     )
 
-                current_owner = (
-                    OrganizationMembership.objects.select_for_update(
-                        of=("self",),
-                    )
+                current_admin = (
+                    OrganizationMembership.objects.select_for_update(of=("self",))
                     .filter(
                         organization=invitation.organization,
-                        role=OrganizationMembership.Role.OWNER,
-                    )
-                    .exclude(
-                        status=OrganizationMembership.Status.LEFT,
+                        role=OrganizationMembership.Role.ADMIN,
+                        status=OrganizationMembership.Status.ACTIVE,
                     )
                     .first()
                 )
 
-                if current_owner:
+                if current_admin:
                     raise OrganizationInvitationConflict(
-                        "This organization already has a current Primary Admin."
+                        "This organization already has an active Organization Admin."
                     )
 
             elif (
                 invitation.purpose
                 != OrganizationInvitation.InvitationPurpose.MEMBERSHIP
-                or invitation.invited_role not in OWNER_INVITABLE_ROLES
+                or invitation.invited_role not in ADMIN_INVITABLE_ROLES
             ):
-                # Defense in depth. Ordinary
-                # invitations must never produce
-                # organization ownership.
+                # Defense in depth: ordinary membership invitations may
+                # assign only currently supported organization roles.
                 raise (
                     InvalidOrganizationInvitationRole(
                         "This invitation contains " "an invalid organization " "role."
                     )
+                )
+
+            current_elsewhere = (
+                OrganizationMembership.objects.select_for_update()
+                .filter(user=actor)
+                .exclude(status=OrganizationMembership.Status.LEFT)
+                .exclude(organization=invitation.organization)
+                .first()
+            )
+            if current_elsewhere:
+                raise OrganizationInvitationConflict(
+                    "You already have a current membership in another Partner Organization."
                 )
 
             membership = (
@@ -650,14 +672,6 @@ def create_organization_invitation(
             "You cannot invite a member " "with this organization role."
         )
 
-    # Ownership changes need their own explicit
-    # transfer workflow and must never happen
-    # through an ordinary invitation.
-    if invited_role == OrganizationMembership.Role.OWNER:
-        raise InvalidOrganizationInvitationRole(
-            "Organization ownership cannot " "be assigned through an invitation."
-        )
-
     # Materialize stale PENDING records as EXPIRED
     # before checking for a live invitation.
     expire_stale_invitations(
@@ -670,23 +684,18 @@ def create_organization_invitation(
     ).first()
 
     if existing_user:
-        existing_membership = OrganizationMembership.objects.filter(
-            organization=organization,
-            user=existing_user,
-        ).first()
+        existing_membership = (
+            OrganizationMembership.objects.filter(user=existing_user)
+            .exclude(status=OrganizationMembership.Status.LEFT)
+            .first()
+        )
 
-        if (
-            existing_membership
-            and existing_membership.status != OrganizationMembership.Status.LEFT
-        ):
-            raise (
-                OrganizationInvitationConflict(
-                    "This user already has a " "current organization " "membership."
-                )
+        if existing_membership:
+            raise OrganizationInvitationConflict(
+                "This user already has a current Partner Organization membership."
             )
 
     if OrganizationInvitation.objects.filter(
-        organization=organization,
         email=normalized_email,
         status=(OrganizationInvitation.Status.PENDING),
     ).exists():
@@ -859,7 +868,7 @@ def resend_organization_invitation(
         != OrganizationInvitation.InvitationPurpose.MEMBERSHIP
     ):
         raise OrganizationInvitationAuthorizationError(
-            "Primary Admin onboarding invitations require Developer Console authority."
+            "Organization Admin onboarding invitations require Developer Console authority."
         )
 
     organization = invitation.organization
@@ -965,7 +974,7 @@ def cancel_organization_invitation(
         != OrganizationInvitation.InvitationPurpose.MEMBERSHIP
     ):
         raise OrganizationInvitationAuthorizationError(
-            "Primary Admin onboarding invitations require Developer Console authority."
+            "Organization Admin onboarding invitations require Developer Console authority."
         )
 
     organization = invitation.organization

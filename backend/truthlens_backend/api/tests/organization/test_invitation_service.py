@@ -151,16 +151,16 @@ class OrganizationInvitationServiceTests(TestCase):
             OrganizationMembership.Role.RESEARCHER,
         )
 
-    def test_admin_cannot_invite_admin(
+    def test_admin_can_invite_admin(
         self,
     ):
-        with self.assertRaises(InvalidOrganizationInvitationRole):
-            create_organization_invitation(
-                organization=(self.organization),
-                email=("another-admin@example.com"),
-                invited_role=(OrganizationMembership.Role.ADMIN),
-                actor=self.admin,
-            )
+        invitation, _ = create_organization_invitation(
+            organization=self.organization,
+            email="another-admin@example.com",
+            invited_role=OrganizationMembership.Role.ADMIN,
+            actor=self.admin,
+        )
+        self.assertEqual(invitation.invited_role, OrganizationMembership.Role.ADMIN)
 
     def test_owner_cannot_invite_owner(
         self,
@@ -180,7 +180,7 @@ class OrganizationInvitationServiceTests(TestCase):
             create_organization_invitation(
                 organization=(self.organization),
                 email=("member@example.com"),
-                invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
+                invited_role=(OrganizationMembership.Role.RESEARCHER),
                 actor=self.lead,
             )
 
@@ -190,7 +190,7 @@ class OrganizationInvitationServiceTests(TestCase):
         create_organization_invitation(
             organization=self.organization,
             email="pending@example.com",
-            invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
+            invited_role=(OrganizationMembership.Role.RESEARCHER),
             actor=self.owner,
         )
 
@@ -198,7 +198,7 @@ class OrganizationInvitationServiceTests(TestCase):
             create_organization_invitation(
                 organization=(self.organization),
                 email="PENDING@example.com",
-                invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
+                invited_role=(OrganizationMembership.Role.RESEARCHER),
                 actor=self.owner,
             )
 
@@ -219,7 +219,7 @@ class OrganizationInvitationServiceTests(TestCase):
         invitation, token = create_organization_invitation(
             organization=(self.organization),
             email="token@example.com",
-            invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
+            invited_role=(OrganizationMembership.Role.RESEARCHER),
             actor=self.owner,
         )
 
@@ -241,7 +241,7 @@ class OrganizationInvitationServiceTests(TestCase):
         invitation, _ = create_organization_invitation(
             organization=(self.organization),
             email="expiry@example.com",
-            invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
+            invited_role=(OrganizationMembership.Role.RESEARCHER),
             actor=self.owner,
         )
 
@@ -257,7 +257,7 @@ class OrganizationInvitationServiceTests(TestCase):
             create_organization_invitation(
                 organization=(self.organization),
                 email="   ",
-                invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
+                invited_role=(OrganizationMembership.Role.RESEARCHER),
                 actor=self.owner,
             )
 
@@ -268,7 +268,7 @@ class OrganizationInvitationServiceTests(TestCase):
             create_organization_invitation(
                 organization=(self.organization),
                 email="not-an-email",
-                invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
+                invited_role=(OrganizationMembership.Role.RESEARCHER),
                 actor=self.owner,
             )
 
@@ -278,7 +278,7 @@ class OrganizationInvitationServiceTests(TestCase):
         invitation = create_and_send_organization_invitation(
             organization=self.organization,
             email="recipient@example.com",
-            invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
+            invited_role=(OrganizationMembership.Role.RESEARCHER),
             actor=self.owner,
         )
 
@@ -319,7 +319,7 @@ class OrganizationInvitationServiceTests(TestCase):
             create_and_send_organization_invitation(
                 organization=self.organization,
                 email="failed@example.com",
-                invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
+                invited_role=(OrganizationMembership.Role.RESEARCHER),
                 actor=self.owner,
             )
 
@@ -336,7 +336,7 @@ class OrganizationInvitationServiceTests(TestCase):
         invitation = create_and_send_organization_invitation(
             organization=self.organization,
             email="resend@example.com",
-            invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
+            invited_role=(OrganizationMembership.Role.RESEARCHER),
             actor=self.owner,
         )
 
@@ -406,7 +406,7 @@ class OrganizationInvitationServiceTests(TestCase):
         invitation, _ = create_organization_invitation(
             organization=self.organization,
             email="expired@example.com",
-            invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
+            invited_role=(OrganizationMembership.Role.RESEARCHER),
             actor=self.owner,
         )
 
@@ -593,7 +593,7 @@ class OrganizationInvitationServiceTests(TestCase):
         _invitation, raw_token = create_organization_invitation(
             organization=self.organization,
             email=recipient.email,
-            invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
+            invited_role=(OrganizationMembership.Role.RESEARCHER),
             actor=self.owner,
         )
 
@@ -666,7 +666,7 @@ class OrganizationInvitationServiceTests(TestCase):
         membership = OrganizationMembership.objects.create(
             organization=self.organization,
             user=recipient,
-            role=(OrganizationMembership.Role.CONTRIBUTOR),
+            role=(OrganizationMembership.Role.RESEARCHER),
             status=(OrganizationMembership.Status.LEFT),
         )
 
@@ -746,7 +746,7 @@ class OrganizationInvitationServiceTests(TestCase):
         OrganizationMembership.objects.create(
             organization=self.organization,
             user=recipient,
-            role=(OrganizationMembership.Role.CONTRIBUTOR),
+            role=(OrganizationMembership.Role.RESEARCHER),
             status=(OrganizationMembership.Status.ACTIVE),
         )
 
@@ -775,7 +775,7 @@ class OrganizationInvitationServiceTests(TestCase):
         invitation, raw_token = create_organization_invitation(
             organization=self.organization,
             email=recipient.email,
-            invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
+            invited_role=(OrganizationMembership.Role.RESEARCHER),
             actor=self.owner,
         )
 
@@ -813,7 +813,7 @@ class OrganizationInvitationServiceTests(TestCase):
         _invitation, raw_token = create_organization_invitation(
             organization=self.organization,
             email="auth-required@example.com",
-            invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
+            invited_role=(OrganizationMembership.Role.RESEARCHER),
             actor=self.owner,
         )
 
@@ -839,7 +839,7 @@ class OrganizationInvitationServiceTests(TestCase):
         invitation, raw_token = create_organization_invitation(
             organization=self.organization,
             email=recipient.email,
-            invited_role=(OrganizationMembership.Role.CONTRIBUTOR),
+            invited_role=(OrganizationMembership.Role.RESEARCHER),
             actor=self.owner,
         )
 

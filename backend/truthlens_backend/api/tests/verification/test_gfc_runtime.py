@@ -646,6 +646,8 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             "Official Fact Check",
             cleaned_claim,
             ["persisted fact-check preview"],
+            related_proposition=cleaned_claim,
+            related_candidate=None,
         )
 
         requests_post.assert_called_once()
@@ -826,6 +828,8 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             "Live Web Search",
             cleaned_claim,
             ["persisted secondary preview"],
+            related_proposition=cleaned_claim,
+            related_candidate=None,
         )
 
         requests_get.assert_not_called()

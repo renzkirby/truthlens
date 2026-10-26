@@ -350,23 +350,23 @@ class ManagementPrimaryAdminResendView(APIView):
 
         has_current_primary_admin = (
             organization.memberships.filter(
-                role=OrganizationMembership.Role.OWNER,
+                role=OrganizationMembership.Role.ADMIN,
             )
             .exclude(status=OrganizationMembership.Status.LEFT)
             .exists()
         )
         if has_current_primary_admin:
             return Response(
-                {"detail": "This organization already has a current Primary Admin."},
+                {"detail": "This organization already has a current Organization Admin."},
                 status=status.HTTP_409_CONFLICT,
             )
 
         invitation = (
             organization.invitations.filter(
                 purpose=(
-                    OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
+                    OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING
                 ),
-                invited_role=OrganizationMembership.Role.OWNER,
+                invited_role=OrganizationMembership.Role.ADMIN,
                 status=OrganizationInvitation.Status.PENDING,
                 expires_at__gt=timezone.now(),
             )
@@ -377,7 +377,7 @@ class ManagementPrimaryAdminResendView(APIView):
             return Response(
                 {
                     "detail": (
-                        "There is no active Primary Admin invitation to resend. "
+                        "There is no active Organization Admin invitation to resend. "
                         "Issue a replacement invitation if the previous one expired."
                     )
                 },
@@ -408,23 +408,23 @@ class ManagementPrimaryAdminCancelView(APIView):
 
         has_current_primary_admin = (
             organization.memberships.filter(
-                role=OrganizationMembership.Role.OWNER,
+                role=OrganizationMembership.Role.ADMIN,
             )
             .exclude(status=OrganizationMembership.Status.LEFT)
             .exists()
         )
         if has_current_primary_admin:
             return Response(
-                {"detail": "This organization already has a current Primary Admin."},
+                {"detail": "This organization already has a current Organization Admin."},
                 status=status.HTTP_409_CONFLICT,
             )
 
         invitation = (
             organization.invitations.filter(
                 purpose=(
-                    OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
+                    OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING
                 ),
-                invited_role=OrganizationMembership.Role.OWNER,
+                invited_role=OrganizationMembership.Role.ADMIN,
                 status=OrganizationInvitation.Status.PENDING,
                 expires_at__gt=timezone.now(),
             )
@@ -433,7 +433,7 @@ class ManagementPrimaryAdminCancelView(APIView):
         )
         if invitation is None:
             return Response(
-                {"detail": "There is no active Primary Admin invitation to cancel."},
+                {"detail": "There is no active Organization Admin invitation to cancel."},
                 status=status.HTTP_409_CONFLICT,
             )
 

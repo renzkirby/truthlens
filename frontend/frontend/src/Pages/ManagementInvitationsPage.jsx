@@ -31,7 +31,7 @@ function ManagementInvitationsPage() {
 
    return (
       <div className="management-page">
-         <ManagementPageHeader title="Invitations" subtitle="Inspect organization membership and Primary Admin onboarding invitations." />
+         <ManagementPageHeader title="Invitations" subtitle="Inspect organization membership and Organization Admin onboarding invitations." />
          <section className="management-filter-panel" aria-label="Invitation filters">
             <form className="management-search" onSubmit={(event) => { event.preventDefault(); updateFilter("q", draftQuery.trim()); }}>
                <label htmlFor="invitation-search">Search invitations</label>
@@ -42,8 +42,8 @@ function ManagementInvitationsPage() {
             </form>
             <div className="management-filters">
                <label><span>Status</span><Select value={filters.status} onChange={(event) => updateFilter("status", event.target.value)}><option value="">All statuses</option><option value="PENDING">Pending</option><option value="ACCEPTED">Accepted</option><option value="CANCELLED">Cancelled</option><option value="EXPIRED">Expired</option></Select></label>
-               <label><span>Purpose</span><Select value={filters.purpose} onChange={(event) => updateFilter("purpose", event.target.value)}><option value="">All purposes</option><option value="MEMBERSHIP">Membership</option><option value="PRIMARY_ADMIN_ONBOARDING">Primary Admin onboarding</option></Select></label>
-               <label><span>Invited role</span><Select value={filters.invited_role} onChange={(event) => updateFilter("invited_role", event.target.value)}><option value="">All roles</option><option value="OWNER">Primary Admin</option><option value="ADMIN">Administrator</option><option value="LEAD_VERIFIER">Lead Verifier</option><option value="MODERATOR">Moderator</option><option value="RESEARCHER">Researcher</option><option value="CONTRIBUTOR">Contributor</option></Select></label>
+               <label><span>Purpose</span><Select value={filters.purpose} onChange={(event) => updateFilter("purpose", event.target.value)}><option value="">All purposes</option><option value="MEMBERSHIP">Membership</option><option value="ORGANIZATION_ADMIN_ONBOARDING">Organization Admin onboarding</option></Select></label>
+               <label><span>Invited role</span><Select value={filters.invited_role} onChange={(event) => updateFilter("invited_role", event.target.value)}><option value="">All roles</option><option value="ADMIN">Administrator</option><option value="LEAD_VERIFIER">Lead Verifier</option><option value="VERIFICATION_REVIEWER">Verification Reviewer</option><option value="RESEARCHER">Researcher</option></Select></label>
                <Button variant="ghost" density="compact" onClick={() => { setDraftQuery(""); setFilters({ q: "", status: "", purpose: "", invited_role: "" }); setPage(1); }}>Clear filters</Button>
             </div>
          </section>

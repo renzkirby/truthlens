@@ -28,8 +28,7 @@ WORKSPACE_VIEW_CAPABILITIES = frozenset(
         PartnerCapability.ADJUDICATE,
         PartnerCapability.CREATE_FACT_CHECK_DRAFT,
         PartnerCapability.PUBLISH_FACT_CHECK,
-        PartnerCapability.MANAGE_ORGANIZATION,
-    }
+        }
 )
 
 

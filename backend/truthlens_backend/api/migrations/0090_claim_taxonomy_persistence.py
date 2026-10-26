@@ -8,7 +8,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("api", "0088_claim_relatedness_context_nullable"),
+        ("api", "0089_simplify_partner_role_model"),
     ]
 
     operations = [

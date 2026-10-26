@@ -136,7 +136,7 @@ export default function OrganizationVerificationScopePanel({ organizationId }) {
          <div className="org-scope-panel__header">
             <div>
                <h3>Verification specializations</h3>
-               <p>The Primary Admin sets your organization's investigation subjects.
+               <p>The Organization Admin sets your organization's investigation subjects.
                   Partner status is managed separately by the platform.</p>
             </div>
          </div>
@@ -155,7 +155,7 @@ export default function OrganizationVerificationScopePanel({ organizationId }) {
                      <dt>Management permission</dt>
                      <dd>{scope.can_manage
                         ? "You can manage verification specializations."
-                        : "Only your organization's Primary Admin can edit specializations."}</dd>
+                        : "Only your organization's Organization Admin can edit specializations."}</dd>
                   </div>
                </dl>
                {scope.can_manage ? (

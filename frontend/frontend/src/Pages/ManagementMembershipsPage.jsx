@@ -50,12 +50,10 @@ function ManagementMembershipsPage() {
                   <span>Role</span>
                   <Select value={filters.role} onChange={(event) => updateFilter("role", event.target.value)}>
                      <option value="">All roles</option>
-                     <option value="OWNER">Primary Admin</option>
                      <option value="ADMIN">Administrator</option>
                      <option value="LEAD_VERIFIER">Lead Verifier</option>
-                     <option value="MODERATOR">Moderator</option>
+                     <option value="VERIFICATION_REVIEWER">Verification Reviewer</option>
                      <option value="RESEARCHER">Researcher</option>
-                     <option value="CONTRIBUTOR">Contributor</option>
                   </Select>
                </label>
                <label>

@@ -25,6 +25,7 @@ class WorkspaceAccessApiTests(APITestCase):
             organization_type=(Organization.OrganizationType.FACT_CHECKING),
             verification_status=(Organization.VerificationStatus.VERIFIED),
             partner_status=(Organization.PartnerStatus.ACTIVE),
+            logo_url="https://example.com/workspace-api-partner-logo.png",
         )
 
         self.unauthenticated_client = APIClient()
@@ -174,6 +175,11 @@ class WorkspaceAccessApiTests(APITestCase):
         self.assertEqual(
             membership["organization"]["slug"],
             self.organization.slug,
+        )
+
+        self.assertEqual(
+            membership["organization"]["logo_url"],
+            self.organization.logo_url,
         )
 
         self.assertEqual(

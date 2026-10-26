@@ -211,7 +211,7 @@ class OrganizationInvitationApiTests(APITestCase):
                 "email": "ordinary-purpose@example.com",
                 "invited_role": OrganizationMembership.Role.RESEARCHER,
                 "purpose": (
-                    OrganizationInvitation.InvitationPurpose.PRIMARY_ADMIN_ONBOARDING
+                    OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING
                 ),
             },
             format="json",
@@ -230,24 +230,18 @@ class OrganizationInvitationApiTests(APITestCase):
             OrganizationInvitation.InvitationPurpose.MEMBERSHIP,
         )
 
-    def test_admin_cannot_invite_admin(
+    def test_admin_can_invite_admin(
         self,
     ):
-        response = self.client_for(
-            self.admin,
-        ).post(
+        response = self.client_for(self.admin).post(
             self.list_url,
             {
                 "email": "new-admin@example.com",
-                "invited_role": (OrganizationMembership.Role.ADMIN),
+                "invited_role": OrganizationMembership.Role.ADMIN,
             },
             format="json",
         )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_400_BAD_REQUEST,
-        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_factual_role_cannot_manage_invitations(
         self,

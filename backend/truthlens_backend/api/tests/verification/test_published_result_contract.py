@@ -80,6 +80,12 @@ class PublishedResultContractTests(SimpleTestCase):
                 return_value=self.public_detail,
             )
         )
+        self.relatedness_eligibility = self.enterContext(
+            patch(
+                "api.verification.relatedness.accepted_reference",
+                return_value=True,
+            )
+        )
 
     def build(self):
         return build_published_fact_check_payload(self.match)

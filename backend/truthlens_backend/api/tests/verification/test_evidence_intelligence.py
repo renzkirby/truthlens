@@ -578,15 +578,35 @@ class EvidenceIntelligenceTests(TestCase):
         self.assertFalse(any('FROM "api_canonicalsource"' in item["sql"] for item in queries))
 
     def test_authorization_and_cross_organization_scoping_unchanged(self):
-        other = Organization.objects.create(name="Other evidence partner", slug="other-evidence-partner")
+        other = Organization.objects.create(
+            name="Other evidence partner",
+            slug="other-evidence-partner",
+            verification_status=Organization.VerificationStatus.VERIFIED,
+            partner_status=Organization.PartnerStatus.ACTIVE,
+        )
         self.assertEqual(self.get(other).status_code, 403)
         with self.assertRaises(VerificationIntelligenceAuthorizationError):
             self.project(organization=other)
-        OrganizationMembership.objects.create(user=self.actor, organization=other, role="OWNER", status="ACTIVE")
+        OrganizationMembership.objects.filter(pk=self.membership.pk).update(
+            status=OrganizationMembership.Status.LEFT,
+        )
+        OrganizationMembership.objects.create(
+            user=self.actor,
+            organization=other,
+            role=OrganizationMembership.Role.LEAD_VERIFIER,
+            status=OrganizationMembership.Status.ACTIVE,
+        )
         self.assertEqual(self.get(other).status_code, 404)
         with self.assertRaises(VerificationIntelligenceNotFound):
             self.project(organization=other)
-        OrganizationMembership.objects.filter(pk=self.membership.pk).update(role="CONTRIBUTOR")
+        OrganizationMembership.objects.filter(
+            user=self.actor,
+            organization=other,
+        ).update(status=OrganizationMembership.Status.LEFT)
+        OrganizationMembership.objects.filter(pk=self.membership.pk).update(
+            status=OrganizationMembership.Status.ACTIVE,
+            role="CONTRIBUTOR",
+        )
         self.assertEqual(self.get().status_code, 403)
         safety = User.objects.create_user(username="evidence-intelligence-safety")
         safety.profile.role = UserProfile.Role.MOD
@@ -623,7 +643,11 @@ class EvidenceIntelligenceTests(TestCase):
         self.assertEqual(first["schema_version"], "1.0")
         self.assertEqual(state(), before)
         for query in queries:
-            self.assertTrue(query["sql"].lstrip().upper().startswith("SELECT"), query["sql"])
+            sql = query["sql"].lstrip().upper()
+            self.assertTrue(
+                sql.startswith(("SELECT", "SAVEPOINT", "RELEASE SAVEPOINT")),
+                query["sql"],
+            )
         self.assertFalse(ModerationCase.objects.exists())
         self.assertFalse(AdjudicationDecision.objects.exists())
         self.assertFalse(ClaimFactCheckReference.objects.exists())

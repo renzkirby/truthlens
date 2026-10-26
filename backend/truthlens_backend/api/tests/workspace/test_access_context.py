@@ -20,6 +20,7 @@ class WorkspaceAccessContextTests(TestCase):
             organization_type=(Organization.OrganizationType.FACT_CHECKING),
             verification_status=(Organization.VerificationStatus.VERIFIED),
             partner_status=(Organization.PartnerStatus.ACTIVE),
+            logo_url="https://example.com/workspace-partner-logo.png",
         )
 
     def test_regular_user_has_no_workspace_access(
@@ -116,6 +117,11 @@ class WorkspaceAccessContextTests(TestCase):
         self.assertEqual(
             membership["organization"]["id"],
             str(self.organization.id),
+        )
+
+        self.assertEqual(
+            membership["organization"]["logo_url"],
+            self.organization.logo_url,
         )
 
         self.assertEqual(

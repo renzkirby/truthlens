@@ -202,6 +202,10 @@ class FactualCorrectionWorkflowApiTests(
                 )
 
         wrong_tenant = self.make_published_context(suffix="api-request-tenant")
+        OrganizationMembership.objects.filter(
+            organization=self.organization,
+            user=self.lead,
+        ).update(status=OrganizationMembership.Status.LEFT)
         OrganizationMembership.objects.create(
             organization=self.other_organization,
             user=self.lead,
@@ -219,6 +223,14 @@ class FactualCorrectionWorkflowApiTests(
             ).status_code,
             status.HTTP_404_NOT_FOUND,
         )
+        OrganizationMembership.objects.filter(
+            organization=self.other_organization,
+            user=self.lead,
+        ).update(status=OrganizationMembership.Status.LEFT)
+        OrganizationMembership.objects.filter(
+            organization=self.organization,
+            user=self.lead,
+        ).update(status=OrganizationMembership.Status.ACTIVE)
 
         duplicate = self.make_published_context(suffix="api-request-duplicate")
         first = self.client_for(self.lead).post(
@@ -303,6 +315,10 @@ class FactualCorrectionWorkflowApiTests(
             self.client_for(self.owner).get(self.detail_url(correction)).status_code,
             status.HTTP_403_FORBIDDEN,
         )
+        OrganizationMembership.objects.filter(
+            organization=self.organization,
+            user=self.lead,
+        ).update(status=OrganizationMembership.Status.LEFT)
         OrganizationMembership.objects.create(
             organization=self.other_organization,
             user=self.lead,
@@ -478,6 +494,10 @@ class FactualCorrectionWorkflowApiTests(
         self.assertEqual(denied.status_code, status.HTTP_403_FORBIDDEN)
         self.assertNotIn("eligible_verification_runs", denied.data)
 
+        OrganizationMembership.objects.filter(
+            organization=self.organization,
+            user=self.lead,
+        ).update(status=OrganizationMembership.Status.LEFT)
         OrganizationMembership.objects.create(
             organization=self.other_organization,
             user=self.lead,

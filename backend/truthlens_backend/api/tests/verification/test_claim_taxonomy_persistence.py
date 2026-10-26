@@ -37,6 +37,20 @@ class ClaimTaxonomyPersistenceTests(TestCase):
 
         self.assertIn("primary_subject", raised.exception.message_dict)
 
+    def test_blank_optional_context_values_normalize_to_null(self):
+        classification = ClaimInvestigationClassification(
+            claim=self._claim("blank optional fields"),
+            domains=["EDUCATION"],
+            primary_subject="",
+            campus_context_state="",
+            rationale="Blank form values should retain null persistence semantics.",
+        )
+
+        classification.full_clean()
+
+        self.assertIsNone(classification.primary_subject)
+        self.assertIsNone(classification.campus_context_state)
+
     def test_legacy_null_persistence_remains_valid(self):
         classification = ClaimInvestigationClassification(
             claim=self._claim("legacy null fields"),

@@ -35,10 +35,11 @@ PARTNER_SCOPED_CAPABILITIES = {
 
 
 MANAGEMENT_ROLE_CAPABILITIES = {
-    OrganizationMembership.Role.OWNER: {
+    OrganizationMembership.Role.ADMIN: {
         PartnerCapability.MANAGE_ORGANIZATION,
     },
-    OrganizationMembership.Role.ADMIN: {
+    # Legacy persisted value retained only for rollout compatibility.
+    "OWNER": {
         PartnerCapability.MANAGE_ORGANIZATION,
     },
 }
@@ -52,7 +53,13 @@ VERIFIED_PARTNER_ROLE_CAPABILITIES = {
         PartnerCapability.CREATE_FACT_CHECK_DRAFT,
         PartnerCapability.PUBLISH_FACT_CHECK,
     },
-    OrganizationMembership.Role.MODERATOR: {
+    OrganizationMembership.Role.VERIFICATION_REVIEWER: {
+        PartnerCapability.REVIEW_EVIDENCE,
+        PartnerCapability.ADJUDICATE,
+        PartnerCapability.CREATE_FACT_CHECK_DRAFT,
+    },
+    # Legacy persisted value retained only for rollout compatibility.
+    "MODERATOR": {
         PartnerCapability.REVIEW_EVIDENCE,
         PartnerCapability.ADJUDICATE,
         PartnerCapability.CREATE_FACT_CHECK_DRAFT,
@@ -60,9 +67,10 @@ VERIFIED_PARTNER_ROLE_CAPABILITIES = {
     OrganizationMembership.Role.RESEARCHER: {
         PartnerCapability.CREATE_FACT_CHECK_DRAFT,
     },
-    OrganizationMembership.Role.CONTRIBUTOR: set(),
-    OrganizationMembership.Role.OWNER: set(),
     OrganizationMembership.Role.ADMIN: set(),
+    # Removed roles intentionally have no partner verification authority.
+    "CONTRIBUTOR": set(),
+    "OWNER": set(),
 }
 
 CASE_TYPE_CAPABILITIES = {
@@ -77,22 +85,12 @@ CASE_TYPE_CAPABILITIES = {
     },
 }
 
-OWNER_MANAGEABLE_MEMBERSHIP_ROLES = frozenset(
+ADMIN_MANAGEABLE_MEMBERSHIP_ROLES = frozenset(
     {
         OrganizationMembership.Role.ADMIN,
         OrganizationMembership.Role.LEAD_VERIFIER,
-        OrganizationMembership.Role.MODERATOR,
+        OrganizationMembership.Role.VERIFICATION_REVIEWER,
         OrganizationMembership.Role.RESEARCHER,
-        OrganizationMembership.Role.CONTRIBUTOR,
-    }
-)
-
-ADMIN_MANAGEABLE_MEMBERSHIP_ROLES = frozenset(
-    {
-        OrganizationMembership.Role.LEAD_VERIFIER,
-        OrganizationMembership.Role.MODERATOR,
-        OrganizationMembership.Role.RESEARCHER,
-        OrganizationMembership.Role.CONTRIBUTOR,
     }
 )
 
@@ -103,10 +101,10 @@ def get_manageable_membership_roles(
     if not membership or membership.status != OrganizationMembership.Status.ACTIVE:
         return set()
 
-    if membership.role == OrganizationMembership.Role.OWNER:
-        return set(OWNER_MANAGEABLE_MEMBERSHIP_ROLES)
-
-    if membership.role == OrganizationMembership.Role.ADMIN:
+    if membership.role in {
+        OrganizationMembership.Role.ADMIN,
+        "OWNER",  # Legacy rollout compatibility.
+    }:
         return set(ADMIN_MANAGEABLE_MEMBERSHIP_ROLES)
 
     return set()
@@ -351,6 +349,7 @@ def get_workspace_access_context(user):
                     "id": str(organization.id),
                     "name": organization.name,
                     "slug": organization.slug,
+                    "logo_url": organization.logo_url,
                     "verification_status": (organization.verification_status),
                     "partner_status": (organization.partner_status),
                 },

@@ -165,12 +165,6 @@ class PublicationTransactionSafetyTests(
     def test_assignment_organization_change_blocks_draft_submission(self):
         context = self.make_decided_context()
         draft = self.make_draft(context, suffix="assignment-change")
-        OrganizationMembership.objects.create(
-            organization=self.other_organization,
-            user=self.lead,
-            role=OrganizationMembership.Role.LEAD_VERIFIER,
-            status=OrganizationMembership.Status.ACTIVE,
-        )
         VerificationAssignment.objects.filter(pk=context["assignment"].pk).update(
             organization=self.other_organization
         )
@@ -192,9 +186,13 @@ class PublicationTransactionSafetyTests(
 
     def test_other_organization_capability_does_not_authorize_drafting(self):
         context = self.make_decided_context()
+        other_author = User.objects.create_user(
+            username="other-organization-author",
+            password="test-password",
+        )
         OrganizationMembership.objects.create(
             organization=self.other_organization,
-            user=self.author,
+            user=other_author,
             role=OrganizationMembership.Role.LEAD_VERIFIER,
             status=OrganizationMembership.Status.ACTIVE,
         )
@@ -202,7 +200,7 @@ class PublicationTransactionSafetyTests(
         with self.assertRaises(PublishingAuthorizationError):
             create_fact_check_draft(
                 decision=context["decision"],
-                actor=self.author,
+                actor=other_author,
                 organization_id=self.organization.id,
                 expected_decision_revision=context["decision"].revision_number,
                 headline="Cross-organization draft",

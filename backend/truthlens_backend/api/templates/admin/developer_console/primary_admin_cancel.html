@@ -7,7 +7,7 @@
   &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
   &rsaquo; <a href="{% url 'admin:api_organization_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
   &rsaquo; <a href="{{ change_url }}">{{ organization }}</a>
-  &rsaquo; Cancel Primary Admin Invitation
+  &rsaquo; Cancel Organization Admin Invitation
 </div>
 {% endblock %}
 
@@ -19,7 +19,7 @@
 
   <p>
     This immediately invalidates the current onboarding link. The organization
-    will return to having no assigned Primary Admin until a new invitation is
+    will return to having no assigned Organization Admin until a new invitation is
     issued.
   </p>
 
