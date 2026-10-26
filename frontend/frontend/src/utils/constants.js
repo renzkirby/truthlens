@@ -87,6 +87,10 @@ export const NOTIFICATION_SSE_ENABLED =
 export const API_ENDPOINTS = {
    // Management Console governance
    MANAGEMENT_OVERVIEW: "management/overview/",
+   MANAGEMENT_PLATFORM_STAFF: "management/platform-staff/",
+   MANAGEMENT_PLATFORM_STAFF_CANDIDATES: "management/platform-staff/candidates/",
+   MANAGEMENT_PLATFORM_STAFF_DETAIL: (userId) =>
+      `management/platform-staff/${encodeURIComponent(userId)}/`,
    MANAGEMENT_PIPELINE_OVERVIEW: "management/pipeline/overview/",
    MANAGEMENT_PIPELINE_RUNS: "management/pipeline/runs/",
    MANAGEMENT_PIPELINE_RUN_DETAIL: (runId) =>
