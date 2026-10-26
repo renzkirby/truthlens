@@ -125,6 +125,12 @@ ACTION_DOMAINS.update(
         AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED: (
             AccountabilityDomain.ORGANIZATION_ADMIN
         ),
+        AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_ACCEPTED: (
+            AccountabilityDomain.PLATFORM_GOVERNANCE
+        ),
+        AccountabilityEvent.ActionType.PLATFORM_STAFF_INVITATION_EXPIRED: (
+            AccountabilityDomain.PLATFORM_GOVERNANCE
+        ),
     }
 )
 
