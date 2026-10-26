@@ -9,6 +9,7 @@ from .management_permissions import can_access_management_console
 from .models import AccountabilityEvent
 from .organization_provisioning_service import PROVISION_PARTNER_ORGANIZATION
 from .organization_service import PartnerCapability, has_capability
+from .platform_identity_service import can_review_platform_safety
 
 
 class AccountabilityDomain:
@@ -669,7 +670,7 @@ def list_platform_accountability_events(
         limit=limit,
         offset=offset,
     )
-    if not has_capability(actor, PartnerCapability.REVIEW_SAFETY):
+    if not can_review_platform_safety(actor):
         raise AccountabilityQueryAuthorizationError(
             "You do not have permission to view Platform Safety accountability history."
         )
