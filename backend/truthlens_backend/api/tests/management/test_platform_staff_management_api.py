@@ -237,7 +237,7 @@ class PlatformStaffManagementApiTests(APITestCase):
         self.assertEqual(self.unverified.profile.role, UserProfile.Role.USER)
 
     def test_platform_admin_can_resend_and_cancel_pending_invitation(self):
-        _response, invitation, _token = self.create_invitation("lifecycle@example.com")
+        _response, invitation, old_token = self.create_invitation("lifecycle@example.com")
         old_digest = invitation.token_digest
         mail.outbox.clear()
 
@@ -254,6 +254,16 @@ class PlatformStaffManagementApiTests(APITestCase):
         self.assertNotEqual(invitation.token_digest, old_digest)
         self.assertEqual(invitation.send_count, 2)
         self.assertEqual(len(mail.outbox), 1)
+
+        old_link = self.client_for(None).get(
+            reverse(
+                "platform_staff_invitation_detail",
+                kwargs={"token": old_token},
+            )
+        )
+        self.assertEqual(old_link.status_code, status.HTTP_404_NOT_FOUND)
+        new_token = self.invitation_token_from_latest_email()
+        self.assertNotEqual(new_token, old_token)
 
         cancel = self.client_for(self.admin).post(
             reverse(
