@@ -138,6 +138,23 @@ class PlatformStaffManagementApiTests(APITestCase):
         self.assertEqual(moderator_response.status_code, status.HTTP_409_CONFLICT)
         self.assertEqual(admin_response.status_code, status.HTTP_409_CONFLICT)
 
+    def test_invitation_rejects_email_owned_only_by_inactive_account(self):
+        inactive = User.objects.create_user(
+            username="inactive-user",
+            email="inactive@example.com",
+            password="test-password",
+            is_active=False,
+        )
+        UserProfile.objects.get_or_create(user=inactive)
+
+        response = self.client_for(self.admin).post(
+            reverse("management_platform_staff_invitations"),
+            {"email": inactive.email},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+
     def test_public_invitation_detail_does_not_expose_email(self):
         _response, _invitation, token = self.create_invitation(self.ordinary.email)
 
