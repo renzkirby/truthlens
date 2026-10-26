@@ -6,6 +6,10 @@ os.environ["APP_ENV"] = "test"
 
 from .settings import *
 
+# Test settings must not depend on an ignored local .env file. This value is
+# intentionally test-only and must never be used by development/staging/production.
+SECRET_KEY = os.environ.get("SECRET_KEY") or "truthlens-offline-test-secret-key"
+
 # Use a local SQLite DB for isolated/offline test runs.
 DATABASES = {
     "default": {
