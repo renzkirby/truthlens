@@ -30,6 +30,11 @@ class SafetyCaseApiTests(APITestCase):
         self.reporter_two = self._user("safety-reporter-two")
         self.moderator = self._moderator("safety-moderator")
         self.other_moderator = self._moderator("safety-other-moderator")
+        self.platform_admin = User.objects.create_superuser(
+            username="safety-platform-admin",
+            email="safety-platform-admin@example.com",
+            password="test-password",
+        )
         self.ordinary_user = self._user("safety-ordinary")
 
         self.partner_organization = Organization.objects.create(
@@ -200,6 +205,24 @@ class SafetyCaseApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["id"], str(self.case.id))
+
+    def test_platform_admin_can_read_and_claim_safety_case(self):
+        client = self._client_for(self.platform_admin)
+
+        queue_response = client.get(self._url("safety_case_queue"))
+        claim_response = client.post(
+            self._url("safety_case_claim", self.case),
+            {},
+            format="json",
+        )
+
+        self.assertEqual(queue_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(queue_response.data["count"], 1)
+        self.assertEqual(claim_response.status_code, status.HTTP_200_OK)
+
+        self.case.refresh_from_db()
+        self.assertEqual(self.case.assigned_to, self.platform_admin)
+
 
     def test_queue_contains_only_active_safety_cases(self):
         active_statuses = [
