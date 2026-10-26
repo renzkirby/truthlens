@@ -166,7 +166,7 @@ function ManagementPlatformStaffPage() {
             actions={(
                <Button
                   ref={inviteButtonRef}
-                  leadingIcon={<Icons name="mail-plus" size={17} />}
+                  leadingIcon={<Icons name="mail" size={17} />}
                   onClick={openInvite}
                >
                   Invite Safety Moderator
