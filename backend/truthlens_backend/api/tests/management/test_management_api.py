@@ -320,6 +320,8 @@ class ManagementApiTests(APITestCase):
                 "slug",
                 "organization_type",
                 "organization_type_label",
+                "organization_subtype",
+                "organization_subtype_label",
                 "verification_status",
                 "verification_status_label",
                 "partner_status",
