@@ -136,7 +136,7 @@ class ManagementApiTests(APITestCase):
         return (
             reverse("management_overview"),
             reverse("management_platform_staff"),
-            reverse("management_platform_staff_candidates"),
+            reverse("management_platform_staff_invitations"),
             reverse("management_organizations"),
             reverse(
                 "management_organization_detail",
@@ -166,8 +166,8 @@ class ManagementApiTests(APITestCase):
         requests = (
             (
                 "post",
-                reverse("management_platform_staff"),
-                {"user_id": self.ordinary_user.id},
+                reverse("management_platform_staff_invitations"),
+                {"email": "unauthorized-safety@example.com"},
             ),
             (
                 "delete",
