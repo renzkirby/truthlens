@@ -277,7 +277,6 @@ def has_case_capability(
 
 
 WORKSPACE_CAPABILITIES = {
-    PartnerCapability.REVIEW_SAFETY,
     PartnerCapability.CLAIM_VERIFICATION_WORK,
     PartnerCapability.REVIEW_EVIDENCE,
     PartnerCapability.ADJUDICATE,
