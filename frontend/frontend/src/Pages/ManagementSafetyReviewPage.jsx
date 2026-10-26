@@ -1,25 +1,34 @@
 import SafetyReviewPanel from "../components/workspace/SafetyReviewPanel.jsx";
 import { ManagementPageHeader } from "../components/management/ManagementUi";
+import Icons from "../components/Icons.jsx";
+
+import "./ManagementSafetyReviewPage.css";
 
 function ManagementSafetyReviewPage() {
    return (
-      <div className="management-page">
+      <div className="management-page management-safety-page">
          <ManagementPageHeader
             title="Safety Review"
-            subtitle="Review reported Community content and apply platform-safety actions."
+            subtitle="Triage reported Community content and record platform-safety decisions."
          />
 
-         <section className="management-section" aria-labelledby="management-safety-boundary">
-            <div className="management-section__heading">
-               <h2 id="management-safety-boundary">Community safety governance</h2>
+         <section className="management-safety-boundary" aria-labelledby="management-safety-boundary-title">
+            <span className="management-safety-boundary__icon" aria-hidden="true">
+               <Icons name="shield-check" size={20} />
+            </span>
+            <div>
+               <h2 id="management-safety-boundary-title">Platform policy review</h2>
                <p>
-                  Safety actions address platform-policy violations. Factual verification
-                  and partner adjudication remain separate in the Verification Workspace.
+                  Review reports for abuse, spam, harassment, and other platform-policy concerns.
+                  Safety actions do not determine whether a claim is factually true or false.
                </p>
             </div>
-
-            <SafetyReviewPanel />
+            <span className="management-safety-boundary__separation">
+               Factual verification stays in the Verification Workspace
+            </span>
          </section>
+
+         <SafetyReviewPanel />
       </div>
    );
 }
