@@ -729,6 +729,94 @@ class OrganizationInvitation(models.Model):
         return f"{self.email} → " f"{self.organization.name} " f"({self.invited_role})"
 
 
+class PlatformStaffInvitation(models.Model):
+    class PlatformRole(models.TextChoices):
+        PLATFORM_SAFETY_MODERATOR = (
+            "PLATFORM_SAFETY_MODERATOR",
+            "Platform Safety Moderator",
+        )
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        ACCEPTED = "ACCEPTED", "Accepted"
+        CANCELLED = "CANCELLED", "Cancelled"
+        EXPIRED = "EXPIRED", "Expired"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    email = models.EmailField(max_length=254, db_index=True)
+    platform_role = models.CharField(
+        max_length=40,
+        choices=PlatformRole.choices,
+        default=PlatformRole.PLATFORM_SAFETY_MODERATOR,
+    )
+    invited_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sent_platform_staff_invitations",
+    )
+    token_digest = models.CharField(
+        max_length=64,
+        unique=True,
+        editable=False,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
+    expires_at = models.DateTimeField(db_index=True)
+    last_sent_at = models.DateTimeField()
+    send_count = models.PositiveIntegerField(default=1)
+    accepted_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="accepted_platform_staff_invitations",
+    )
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cancelled_platform_staff_invitations",
+    )
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["email"],
+                condition=Q(status="PENDING"),
+                name="unique_pending_platform_staff_invite_email",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["email", "status"],
+                name="platform_staff_inv_email_status_idx",
+            ),
+            models.Index(
+                fields=["status", "expires_at"],
+                name="platform_staff_inv_status_exp_idx",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        self.email = str(self.email or "").strip().lower()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.email} → {self.get_platform_role_display()}"
+
+
 class Claim(models.Model):
     class VerificationSource(models.TextChoices):
         AI_EXTENSION = "AI_EXTENSION", "AI Extension"
