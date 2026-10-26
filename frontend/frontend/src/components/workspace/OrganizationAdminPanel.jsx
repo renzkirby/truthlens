@@ -1586,6 +1586,10 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                   const isAdministrator = ["ADMIN", "OWNER"].includes(membership.role);
                   const canPromoteToAdministrator =
                      membership.status === "ACTIVE" && !isAdministrator;
+                  const isFinalActiveAdministrator =
+                     membership.status === "ACTIVE" &&
+                     isAdministrator &&
+                     activeAdministrators.length === 1;
 
                   return (
                      <li key={membership.id} className="org-member-list-item">
@@ -1743,7 +1747,17 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                                              </button>
                                           )}
 
-                                          <button type="button" role="menuitem" onClick={() => openRoleDialog(membership)}>
+                                          <button
+                                             type="button"
+                                             role="menuitem"
+                                             onClick={() => openRoleDialog(membership)}
+                                             disabled={isFinalActiveAdministrator}
+                                             title={
+                                                isFinalActiveAdministrator
+                                                   ? "Add or promote another active Administrator before changing this role."
+                                                   : undefined
+                                             }
+                                          >
                                              <Icons name="pencil" size={14} />
                                              {isCurrentUser && isAdministrator ? "Change your role" : "Change role"}
                                           </button>
@@ -1753,6 +1767,12 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                                                 type="button"
                                                 role="menuitem"
                                                 onClick={() => openSuspendDialog(membership)}
+                                                disabled={isFinalActiveAdministrator}
+                                                title={
+                                                   isFinalActiveAdministrator
+                                                      ? "The final active Administrator cannot be suspended."
+                                                      : undefined
+                                                }
                                              >
                                                 <Icons name="user-minus" size={14} />
                                                 Suspend membership
@@ -1776,6 +1796,12 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                                                 role="menuitem"
                                                 className="danger"
                                                 onClick={() => openRemoveDialog(membership)}
+                                                disabled={isFinalActiveAdministrator}
+                                                title={
+                                                   isFinalActiveAdministrator
+                                                      ? "The final active Administrator cannot be removed."
+                                                      : undefined
+                                                }
                                              >
                                                 <Icons name="trash" size={14} />
                                                 Remove from organization
