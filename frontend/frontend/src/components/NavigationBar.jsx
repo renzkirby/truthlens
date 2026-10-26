@@ -9,7 +9,10 @@ import Button from "./ui/Button.jsx";
 import { useAuth } from "../hooks/useAuth";
 import { useNotificationInbox } from "../hooks/useNotificationInbox";
 import { canAccessWorkspace } from "../utils/workspace";
-import { canAccessManagementConsole } from "../utils/management";
+import {
+   canAccessManagementConsole,
+   canAccessPlatformSafetyConsole,
+} from "../utils/management";
 
 const ACCOUNT_PANEL_ID = "tl-app-nav-account-panel";
 
@@ -67,6 +70,8 @@ function NavigationBar() {
    }, []);
    const canUseWorkspace = canAccessWorkspace(user);
    const canUseManagementConsole = canAccessManagementConsole(user);
+   const canUsePlatformSafetyConsole = canAccessPlatformSafetyConsole(user);
+   const managementDestination = canUseManagementConsole ? "/management" : "/management/safety";
    const canParticipateInCommunity = user?.community_identity?.can_participate !== false;
    const platformRole = user?.community_identity?.platform_role || null;
    const platformRoleLabel = user?.community_identity?.platform_role_label || null;
@@ -205,14 +210,14 @@ function NavigationBar() {
                         </div>
 
                         <div className="tl-app-nav__account-links">
-                           {canUseManagementConsole && (
+                           {canUsePlatformSafetyConsole && (
                               <Link
-                                 to="/management"
+                                 to={managementDestination}
                                  className="tl-app-nav__account-link"
                                  onClick={() => setIsOpen(false)}
                               >
                                  <Icons name="landmark" />
-                                 Management Console
+                                 {canUseManagementConsole ? "Management Console" : "Platform Safety Console"}
                               </Link>
                            )}
                            {canParticipateInCommunity && (
@@ -279,14 +284,14 @@ function NavigationBar() {
                   <Icons name="dashboard" size={20} />
                   <span>Dashboard</span>
                </Link>
-            ) : canUseManagementConsole ? (
+            ) : canUsePlatformSafetyConsole ? (
                <Link
-                  to="/management"
+                  to={managementDestination}
                   className="bottom-tab"
                   onClick={closeNavigationOverlays}
                >
                   <Icons name="landmark" size={20} />
-                  <span>Manage</span>
+                  <span>{canUseManagementConsole ? "Manage" : "Safety"}</span>
                </Link>
             ) : canUseWorkspace ? (
                <Link
