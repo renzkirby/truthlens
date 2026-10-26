@@ -11,19 +11,22 @@
 .org-scope-summary dd { margin: 8px 0 0; overflow-wrap: anywhere; }
 .org-scope-panel__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
 .org-scope-dialog {
-   border: 1px solid var(--tl-color-border-default, #cbd5e1);
-   border-radius: 16px;
    width: min(800px, calc(100vw - 30px));
    max-height: 88vh;
+   display: flex;
+   flex-direction: column;
+   overflow: hidden;
    padding: 0;
+   border: 1px solid var(--tl-color-border-default, #cbd5e1);
+   border-radius: 16px;
    background: var(--tl-color-bg-surface, #fff);
    color: var(--tl-color-text-primary, #0f172a);
 }
 .org-scope-dialog::backdrop { background: rgb(12 19 40 / 70%); }
-.org-scope-dialog__heading { display: flex; justify-content: space-between; gap: 20px; padding: 20px 24px; border-bottom: 1px solid #e2e8f0; }
+.org-scope-dialog__heading { display: flex; flex: 0 0 auto; justify-content: space-between; gap: 20px; padding: 20px 24px; border-bottom: 1px solid #e2e8f0; }
 .org-scope-dialog__heading p { color: #475569; line-height: 1.5; }
 .org-scope-dialog__heading button { background: transparent; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px; cursor: pointer; align-self: flex-start; }
-.org-scope-dialog__form { padding: 24px; display: grid; gap: 18px; max-height: calc(88vh - 140px); overflow-y: auto; }
+.org-scope-dialog__form { min-height: 0; padding: 24px; display: grid; gap: 18px; overflow-y: auto; overscroll-behavior: contain; }
 .org-scope-dialog__form fieldset { border: 0; padding: 0; margin: 0; }
 .org-scope-dialog__form legend, .org-scope-input-label { font-weight: 700; color: #0f172a; }
 .org-scope-dialog__form fieldset > p, .org-scope-input-label small, .org-scope-note { display: block; color: #475569; font-weight: 450; line-height: 1.5; }

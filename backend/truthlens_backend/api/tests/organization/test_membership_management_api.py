@@ -610,6 +610,63 @@ class OrganizationMembershipManagementApiTests(APITestCase):
             status.HTTP_400_BAD_REQUEST,
         )
 
+    def test_admin_can_step_down_when_another_active_admin_remains(
+        self,
+    ):
+        response = self.client_for(
+            self.owner,
+        ).patch(
+            self.role_url(
+                self.owner_membership,
+            ),
+            {
+                "role": (OrganizationMembership.Role.LEAD_VERIFIER),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.owner_membership.refresh_from_db()
+
+        self.assertEqual(
+            self.owner_membership.role,
+            OrganizationMembership.Role.LEAD_VERIFIER,
+        )
+
+    def test_final_active_admin_cannot_step_down(
+        self,
+    ):
+        self.admin_membership.status = OrganizationMembership.Status.SUSPENDED
+        self.admin_membership.save(update_fields=["status"])
+
+        response = self.client_for(
+            self.owner,
+        ).patch(
+            self.role_url(
+                self.owner_membership,
+            ),
+            {
+                "role": (OrganizationMembership.Role.LEAD_VERIFIER),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_409_CONFLICT,
+        )
+
+        self.owner_membership.refresh_from_db()
+
+        self.assertEqual(
+            self.owner_membership.role,
+            OrganizationMembership.Role.ADMIN,
+        )
+
     def test_final_active_admin_cannot_suspend_self(
         self,
     ):

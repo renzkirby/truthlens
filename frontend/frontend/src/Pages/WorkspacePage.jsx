@@ -3,8 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
 import Icons from "../components/Icons.jsx";
-import Select from "../components/ui/Select.jsx";
-
+import PartnerLogo from "../components/partners/PartnerLogo.jsx";
 import {
    WorkspaceCapability,
    getDefaultWorkspaceOrganizationId,
@@ -168,7 +167,7 @@ function formatRole(role) {
       return "Member";
    }
 
-   if (role === "OWNER") {
+   if (["ADMIN", "OWNER"].includes(role)) {
       return "Administrator";
    }
 
@@ -218,8 +217,6 @@ function WorkspacePage() {
    const defaultOrganizationId = useMemo(() => getDefaultWorkspaceOrganizationId(user), [user]);
 
    const [requestedSectionId, setRequestedSectionId] = useState(null);
-
-   const [requestedOrganizationId, setRequestedOrganizationId] = useState(null);
 
    const [draftingHandoff, setDraftingHandoff] = useState(null);
 
@@ -292,7 +289,7 @@ function WorkspacePage() {
          return null;
       }
 
-      const requestedId = routeOrganizationId || requestedOrganizationId;
+      const requestedId = routeOrganizationId;
       const requestedMembership = requestedId
          ? memberships.find((membership) => {
               const isRequested = String(membership?.organization?.id) === String(requestedId);
@@ -328,7 +325,7 @@ function WorkspacePage() {
       const firstOrganizationId = eligibleMemberships[0]?.organization?.id;
 
       return firstOrganizationId ? String(firstOrganizationId) : null;
-   }, [defaultOrganizationId, isCorrectionRoute, memberships, requestedOrganizationId, routeOrganizationId]);
+   }, [defaultOrganizationId, isCorrectionRoute, memberships, routeOrganizationId]);
 
    const selectedMembership = useMemo(
       () => getWorkspaceMembership(user, selectedOrganizationId),
@@ -343,17 +340,6 @@ function WorkspacePage() {
 
    const canAccessFactualCorrections = FACTUAL_CORRECTION_CAPABILITIES.some((capability) =>
       organizationCapabilities.includes(capability),
-   );
-
-   const organizationOptions = useMemo(
-      () =>
-         isCorrectionRoute
-            ? memberships.filter((membership) => {
-                 const capabilities = Array.isArray(membership?.capabilities) ? membership.capabilities : [];
-                 return FACTUAL_CORRECTION_CAPABILITIES.some((capability) => capabilities.includes(capability));
-              })
-            : memberships,
-      [isCorrectionRoute, memberships],
    );
 
    const visibleSections = useMemo(
@@ -737,30 +723,6 @@ function WorkspacePage() {
       );
    };
 
-   const handleOrganizationChange = (nextOrganizationId) => {
-      withCorrectionDirtyGuard(() => {
-         setRequestedOrganizationId(nextOrganizationId);
-         if (isCorrectionRoute) {
-            const query = new URLSearchParams({ organization_id: nextOrganizationId, status: "ACTIVE", offset: "0" });
-            navigateWithOneShotAllowance(`/workspace/factual-corrections?${query.toString()}`);
-            return;
-         }
-
-         const nextQuery = new URLSearchParams(location.search);
-         nextQuery.set("organization_id", nextOrganizationId);
-         [
-            "case_id",
-            "resource_type",
-            "resource_id",
-            "fact_check_id",
-            "publication_id",
-            "from_assignment",
-            "from_adjudication_case",
-         ].forEach((key) => nextQuery.delete(key));
-         navigateWithOneShotAllowance(`${location.pathname}?${nextQuery.toString()}`, { replace: true });
-      });
-   };
-
    const handleSectionChange = (sectionId) => {
       if (sectionId === "factual-corrections") {
          if (!isCorrectionRoute) {
@@ -803,25 +765,24 @@ function WorkspacePage() {
                   <span>Platform Safety · Platform-wide</span>
                </div>
             ) : memberships.length > 0 ? (
-               <div className="workspace-organization-control">
-                  <label htmlFor="workspace-organization">Organization</label>
+               <div className="workspace-organization-context" aria-label="Current partner organization">
+                  <PartnerLogo
+                     logoUrl={selectedOrganization?.logo_url}
+                     organizationName={selectedOrganization?.name || "Partner organization"}
+                     size="workspace"
+                  />
 
-                  <Select
-                     id="workspace-organization"
-                     density="standard"
-                     value={selectedOrganizationId ?? ""}
-                     onChange={(event) => handleOrganizationChange(event.target.value)}
-                  >
-                     {organizationOptions.map((membership) => (
-                        <option key={membership.organization.id} value={membership.organization.id}>
-                           {membership.organization.name}
-                        </option>
-                     ))}
-                  </Select>
+                  <div className="workspace-organization-context-copy">
+                     <span className="workspace-organization-context-label">Partner organization</span>
+                     <strong>{selectedOrganization?.name || "Partner organization"}</strong>
 
-                  {selectedMembership && (
-                     <span className="workspace-role-label">Your role: {formatRole(selectedMembership.role)}</span>
-                  )}
+                     {selectedMembership && (
+                        <span className="workspace-organization-context-role">
+                           <Icons name="shield-user" size={13} />
+                           {formatRole(selectedMembership.role)}
+                        </span>
+                     )}
+                  </div>
                </div>
             ) : (
                <div className="workspace-platform-context">

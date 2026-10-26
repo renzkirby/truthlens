@@ -30,6 +30,26 @@
    padding: 4px;
 }
 
+.partner-logo--workspace {
+   width: 46px;
+   height: 46px;
+   border-radius: 10px;
+}
+
+.partner-logo--workspace.partner-logo--image {
+   border: 0;
+   background: transparent;
+}
+
+.partner-logo--workspace.partner-logo--image img {
+   padding: 0;
+   background: transparent;
+}
+
+.partner-logo--workspace.partner-logo--fallback {
+   border-radius: 10px;
+}
+
 .partner-logo img {
    width: 100%;
    height: 100%;

@@ -20,7 +20,7 @@ function formatLabel(value) {
       return "Unknown";
    }
 
-   if (value === "OWNER") {
+   if (["ADMIN", "OWNER"].includes(value)) {
       return "Administrator";
    }
 
@@ -333,7 +333,7 @@ function AdminConfirmDialog({
 }
 
 function OrganizationAdminPanel({ organizationId, membershipRole }) {
-   const { authFetch } = useAuth();
+   const { user: currentUser, authFetch, refreshUser } = useAuth();
    const { addToast } = useNotification();
 
    const dialogRef = useRef(null);
@@ -389,6 +389,28 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
    const invitableRoles = useMemo(() => getInvitableRoles(membershipRole), [membershipRole]);
 
    const manageableRoles = useMemo(() => getManageableRoles(membershipRole), [membershipRole]);
+
+   const activeAdministrators = useMemo(
+      () =>
+         roster.results.filter(
+            (membership) =>
+               membership.status === "ACTIVE" && ["ADMIN", "OWNER"].includes(membership.role),
+         ),
+      [roster.results],
+   );
+
+   const currentMembership = useMemo(
+      () =>
+         roster.results.find(
+            (membership) => String(membership?.user?.id) === String(currentUser?.id),
+         ) || null,
+      [currentUser?.id, roster.results],
+   );
+
+   const currentUserIsAdministrator =
+      currentMembership?.status === "ACTIVE" && ["ADMIN", "OWNER"].includes(currentMembership?.role);
+
+   const canCurrentUserStepDown = currentUserIsAdministrator && activeAdministrators.length > 1;
 
    const invitationsUrl = useMemo(() => {
       if (!organizationId) {
@@ -805,6 +827,33 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
       setCancelTarget(invitation);
    };
 
+   const openInviteFormForRole = (role = "") => {
+      setInviteForm((current) => ({
+         ...current,
+         invited_role: role,
+      }));
+      setInviteError("");
+      setShowInviteForm(true);
+   };
+
+   const openAdministratorPromotion = (membership) => {
+      rememberMemberDialogTrigger(membership.id);
+      setMemberMenuId(null);
+      setRoleValue("ADMIN");
+      setRoleTarget(membership);
+   };
+
+   const openAdministratorStepDown = () => {
+      if (!currentMembership || !canCurrentUserStepDown) {
+         return;
+      }
+
+      rememberMemberDialogTrigger(currentMembership.id);
+      setMemberMenuId(null);
+      setRoleValue("");
+      setRoleTarget(currentMembership);
+   };
+
    const handleInviteSubmit = async (event) => {
       event.preventDefault();
 
@@ -1030,8 +1079,17 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
 
          showWorkspaceSuccess(addToast, {
             title: "Role updated",
-            message: `@${getUsername(membership)} is now ${formatLabel(updatedMembership.role)}.`,
+            message:
+               String(membership?.user?.id) === String(currentUser?.id) &&
+               ["ADMIN", "OWNER"].includes(membership.role) &&
+               !["ADMIN", "OWNER"].includes(updatedMembership.role)
+                  ? `You stepped down as Administrator and are now ${formatLabel(updatedMembership.role)}.`
+                  : `@${getUsername(membership)} is now ${formatLabel(updatedMembership.role)}.`,
          });
+
+         if (String(membership?.user?.id) === String(currentUser?.id)) {
+            await refreshUser?.().catch(() => null);
+         }
       } catch (error) {
          replaceRosterMembership(snapshot);
 
@@ -1081,6 +1139,10 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
             title: "Membership suspended",
             message: `@${getUsername(membership)} no longer has active organization authority.`,
          });
+
+         if (String(membership?.user?.id) === String(currentUser?.id)) {
+            await refreshUser?.().catch(() => null);
+         }
       } catch (error) {
          replaceRosterMembership(snapshot);
 
@@ -1171,6 +1233,10 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
             title: "Member removed",
             message: `@${getUsername(membership)} was removed from the organization.`,
          });
+
+         if (String(membership?.user?.id) === String(currentUser?.id)) {
+            await refreshUser?.().catch(() => null);
+         }
       } catch (error) {
          restoreRosterMembership(snapshot, originalIndex);
 
@@ -1242,7 +1308,7 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
             <div>
                <h3>Organization members</h3>
 
-               <span>Manage institutional memberships and invite new members.</span>
+               <span>Manage members, roles, and shared Administrator coverage.</span>
             </div>
 
             <div className="org-admin-toolbar-actions">
@@ -1250,8 +1316,25 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                   type="button"
                   variant="primary"
                   density="standard"
+                  leadingIcon={<Icons name="shield-user" size={15} />}
+                  onClick={() => openInviteFormForRole("ADMIN")}
+               >
+                  Add administrator
+               </Button>
+
+               <Button
+                  type="button"
+                  variant="secondary"
+                  density="standard"
                   leadingIcon={<Icons name="user-plus" size={15} />}
-                  onClick={() => setShowInviteForm((current) => !current)}
+                  onClick={() => {
+                     if (showInviteForm) {
+                        setShowInviteForm(false);
+                        setInviteError("");
+                     } else {
+                        openInviteFormForRole("");
+                     }
+                  }}
                >
                   Invite member
                </Button>
@@ -1269,13 +1352,64 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
             </div>
          </div>
 
+         {!loading && !errorMessage && (
+            <section className="org-admin-coverage" aria-labelledby="org-admin-coverage-title">
+               <div className="org-admin-coverage-icon" aria-hidden="true">
+                  <Icons name="shield-user" size={19} />
+               </div>
+
+               <div className="org-admin-coverage-copy">
+                  <div className="org-admin-coverage-heading">
+                     <div>
+                        <span className="org-admin-coverage-kicker">Administrator coverage</span>
+                        <strong id="org-admin-coverage-title">
+                           {activeAdministrators.length === 1
+                              ? "1 active Administrator"
+                              : `${activeAdministrators.length} active Administrators`}
+                        </strong>
+                     </div>
+
+                     {currentUserIsAdministrator && (
+                        <Button
+                           type="button"
+                           variant="secondary"
+                           density="compact"
+                           leadingIcon={<Icons name="arrow-right" size={14} />}
+                           onClick={openAdministratorStepDown}
+                           disabled={!canCurrentUserStepDown || Boolean(memberActionId)}
+                           title={
+                              canCurrentUserStepDown
+                                 ? "Choose another organization role and give up Administrator authority."
+                                 : "Add or promote another active Administrator before stepping down."
+                           }
+                        >
+                           Step down as Administrator
+                        </Button>
+                     )}
+                  </div>
+
+                  <p>
+                     {activeAdministrators.length > 1
+                        ? "Administration is shared. Any Administrator may manage members and organization settings, and one may step down while another active Administrator remains."
+                        : "This organization currently has one active Administrator. Add or promote another Administrator before the current Administrator can step down, be suspended, or be removed."}
+                  </p>
+               </div>
+            </section>
+         )}
+
          {showInviteForm && (
             <form className="org-invite-admin-form" onSubmit={handleInviteSubmit}>
                <div className="org-invite-admin-form-header">
                   <div>
-                     <strong>Invite organization member</strong>
+                     <strong>
+                        {inviteForm.invited_role === "ADMIN" ? "Add an Administrator" : "Invite organization member"}
+                     </strong>
 
-                     <span>TruthLens will email an invitation link to this address.</span>
+                     <span>
+                        {inviteForm.invited_role === "ADMIN"
+                           ? "The recipient will receive organization governance authority after accepting the invitation."
+                           : "TruthLens will email an invitation link to this address."}
+                     </span>
                   </div>
 
                   <IconButton
@@ -1344,8 +1478,9 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                   <Icons name="info" size={16} />
 
                   <span>
-                     Membership is activated only after the recipient signs in with the invited email address, verifies
-                     that email, and explicitly accepts the invitation.
+                     {inviteForm.invited_role === "ADMIN"
+                        ? "Administrators manage organization governance, members, verification scope, and public settings. Administrator status does not grant verification-operational capabilities."
+                        : "Membership is activated only after the recipient signs in with the invited email address, verifies that email, and explicitly accepts the invitation."}
                   </span>
                </div>
 
@@ -1447,6 +1582,14 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                   const manageable = canManageMembership(membershipRole, membership);
                   const busy = memberActionId === membership.id;
                   const menuOpen = memberMenuId === membership.id;
+                  const isCurrentUser = String(user.id) === String(currentUser?.id);
+                  const isAdministrator = ["ADMIN", "OWNER"].includes(membership.role);
+                  const canPromoteToAdministrator =
+                     membership.status === "ACTIVE" && !isAdministrator;
+                  const isFinalActiveAdministrator =
+                     membership.status === "ACTIVE" &&
+                     isAdministrator &&
+                     activeAdministrators.length === 1;
 
                   return (
                      <li key={membership.id} className="org-member-list-item">
@@ -1460,7 +1603,10 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                               </div>
 
                               <div>
-                                 <strong>@{user.username || "unknown"}</strong>
+                                 <strong>
+                                    @{user.username || "unknown"}
+                                    {isCurrentUser && <span className="org-member-you-badge">You</span>}
+                                 </strong>
 
                                  <span>{user.email || "No email available"}</span>
                               </div>
@@ -1502,7 +1648,15 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                            </dl>
 
                            <div className="org-member-actions">
-                              {manageable ? (
+                              {isCurrentUser ? (
+                                 <span
+                                    className="org-member-self-label"
+                                    title="Manage your personal account in Settings. Administrator succession is handled above."
+                                 >
+                                    <Icons name="user-check" size={14} />
+                                    You
+                                 </span>
+                              ) : manageable ? (
                                  <>
                                     <Button
                                        ref={(node) => {
@@ -1590,9 +1744,30 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                                              items[nextIndex].focus();
                                           }}
                                        >
-                                          <button type="button" role="menuitem" onClick={() => openRoleDialog(membership)}>
+                                          {canPromoteToAdministrator && (
+                                             <button
+                                                type="button"
+                                                role="menuitem"
+                                                onClick={() => openAdministratorPromotion(membership)}
+                                             >
+                                                <Icons name="shield-user" size={14} />
+                                                Promote to Administrator
+                                             </button>
+                                          )}
+
+                                          <button
+                                             type="button"
+                                             role="menuitem"
+                                             onClick={() => openRoleDialog(membership)}
+                                             disabled={isFinalActiveAdministrator}
+                                             title={
+                                                isFinalActiveAdministrator
+                                                   ? "Add or promote another active Administrator before changing this role."
+                                                   : undefined
+                                             }
+                                          >
                                              <Icons name="pencil" size={14} />
-                                             Change role
+                                             {isCurrentUser && isAdministrator ? "Change your role" : "Change role"}
                                           </button>
 
                                           {membership.status === "ACTIVE" && (
@@ -1600,6 +1775,12 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                                                 type="button"
                                                 role="menuitem"
                                                 onClick={() => openSuspendDialog(membership)}
+                                                disabled={isFinalActiveAdministrator}
+                                                title={
+                                                   isFinalActiveAdministrator
+                                                      ? "The final active Administrator cannot be suspended."
+                                                      : undefined
+                                                }
                                              >
                                                 <Icons name="user-minus" size={14} />
                                                 Suspend membership
@@ -1623,6 +1804,12 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                                                 role="menuitem"
                                                 className="danger"
                                                 onClick={() => openRemoveDialog(membership)}
+                                                disabled={isFinalActiveAdministrator}
+                                                title={
+                                                   isFinalActiveAdministrator
+                                                      ? "The final active Administrator cannot be removed."
+                                                      : undefined
+                                                }
                                              >
                                                 <Icons name="trash" size={14} />
                                                 Remove from organization
@@ -1788,12 +1975,35 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                   </div>
 
                   <div className="org-admin-confirm-copy">
-                     <h3 id="change-member-role-title">Change organization role</h3>
+                     <h3 id="change-member-role-title">
+                        {roleValue === "ADMIN" && !["ADMIN", "OWNER"].includes(roleTarget.role)
+                           ? "Promote to Administrator"
+                           : String(roleTarget?.user?.id) === String(currentUser?.id) &&
+                               ["ADMIN", "OWNER"].includes(roleTarget.role)
+                             ? "Step down as Administrator"
+                             : "Change organization role"}
+                     </h3>
 
                      <p id="change-member-role-description">
-                        Change <strong>@{getUsername(roleTarget)}</strong> from{" "}
-                        <strong>{formatLabel(roleTarget.role)}</strong>. Role changes take effect immediately and may
-                        grant or revoke organization-scoped verification capabilities.
+                        {roleValue === "ADMIN" && !["ADMIN", "OWNER"].includes(roleTarget.role) ? (
+                           <>
+                              Promote <strong>@{getUsername(roleTarget)}</strong> to Administrator. They will gain
+                              organization governance authority, including membership and organization-setting
+                              management.
+                           </>
+                        ) : String(roleTarget?.user?.id) === String(currentUser?.id) &&
+                          ["ADMIN", "OWNER"].includes(roleTarget.role) ? (
+                           <>
+                              Choose your new organization role. Your Administrator authority will end immediately,
+                              while the other active Administrator continues organization governance.
+                           </>
+                        ) : (
+                           <>
+                              Change <strong>@{getUsername(roleTarget)}</strong> from{" "}
+                              <strong>{formatLabel(roleTarget.role)}</strong>. Role changes take effect immediately and
+                              may grant or revoke organization-scoped capabilities.
+                           </>
+                        )}
                      </p>
                   </div>
 
@@ -1823,8 +2033,9 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                   <div className="org-admin-authority-note">
                      <Icons name="shield" size={16} />
                      <span>
-                        This changes institutional authority only. It does not alter the person's TruthLens account,
-                        password, profile, or trust score.
+                        {roleValue === "ADMIN"
+                           ? "Administrator is a governance role. It does not automatically grant claim verification, evidence review, adjudication, drafting, or publishing authority."
+                           : "This changes institutional authority only. It does not alter the person's TruthLens account, password, profile, or trust score."}
                      </span>
                   </div>
 
@@ -1850,7 +2061,12 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                         onClick={handleRoleChange}
                         disabled={!roleValue || Boolean(memberActionId)}
                      >
-                        Update role
+                        {roleValue === "ADMIN" && !["ADMIN", "OWNER"].includes(roleTarget.role)
+                           ? "Promote to Administrator"
+                           : String(roleTarget?.user?.id) === String(currentUser?.id) &&
+                               ["ADMIN", "OWNER"].includes(roleTarget.role)
+                             ? "Step down"
+                             : "Update role"}
                      </Button>
                   </div>
                </div>
