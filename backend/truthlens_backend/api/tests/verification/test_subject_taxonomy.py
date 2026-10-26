@@ -11,6 +11,7 @@ from api.verification.subject_taxonomy import (
     PUBLIC_CATEGORIES,
     SUBJECT_RULES,
     TAXONOMY_VERSION,
+    public_category_for_classification,
     public_category_for_code,
     public_category_for_domains,
     public_category_for_primary_subject,
@@ -83,6 +84,27 @@ class ProposedSubjectTaxonomyTests(TestCase):
         self.assertEqual(governance.label, "Politics, Governance & Law")
         self.assertIsNone(public_category_for_code("CAMPUS_AFFAIRS"))
         self.assertIsNone(public_category_for_code("UNKNOWN"))
+
+    def test_classification_projection_prefers_explicit_primary_subject(self):
+        class PersistedClassification:
+            domains = ["ELECTIONS", "TECHNOLOGY"]
+            primary_subject = "TECHNOLOGY"
+
+        category = public_category_for_classification(PersistedClassification())
+        self.assertEqual(category.code, "SCIENCE_TECHNOLOGY")
+
+        class LegacySingleDomain:
+            domains = ["EDUCATION"]
+            primary_subject = None
+
+        legacy = public_category_for_classification(LegacySingleDomain())
+        self.assertEqual(legacy.code, "EDUCATION")
+
+        class LegacyMultiDomain:
+            domains = ["ELECTIONS", "TECHNOLOGY"]
+            primary_subject = None
+
+        self.assertIsNone(public_category_for_classification(LegacyMultiDomain()))
 
     def test_examples_cover_every_code_and_campus_boundaries(self):
         rows = json.loads(_EXAMPLES.read_text(encoding="utf-8"))
