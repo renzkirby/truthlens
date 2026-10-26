@@ -1,7 +1,10 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
-import { canAccessManagementConsole } from "../utils/management";
+import {
+   canAccessManagementConsole,
+   canAccessPlatformSafetyConsole,
+} from "../utils/management";
 import { canAccessWorkspace } from "../utils/workspace";
 
 function CommunityParticipantRoute() {
@@ -14,9 +17,11 @@ function CommunityParticipantRoute() {
 
    const destination = canAccessManagementConsole(user)
       ? "/management"
-      : canAccessWorkspace(user)
-        ? "/workspace"
-        : "/community";
+      : canAccessPlatformSafetyConsole(user)
+        ? "/management/safety"
+        : canAccessWorkspace(user)
+          ? "/workspace"
+          : "/community";
 
    return <Navigate to={destination} state={{ from: location }} replace />;
 }
