@@ -49,7 +49,7 @@ class WorkspaceAccessContextTests(TestCase):
 
         self.assertIsNone(context["default_organization_id"])
 
-    def test_platform_safety_moderator_gets_only_safety_workspace_access(
+    def test_platform_safety_moderator_does_not_get_verification_workspace_access(
         self,
     ):
         user = User.objects.create_user(
@@ -63,15 +63,13 @@ class WorkspaceAccessContextTests(TestCase):
 
         context = get_workspace_access_context(user)
 
-        self.assertTrue(context["can_access"])
+        self.assertFalse(context["can_access"])
 
         self.assertTrue(context["is_platform_safety_moderator"])
 
         self.assertEqual(
             context["platform_capabilities"],
-            [
-                PartnerCapability.REVIEW_SAFETY,
-            ],
+            [],
         )
 
         self.assertEqual(
@@ -213,9 +211,7 @@ class WorkspaceAccessContextTests(TestCase):
 
         self.assertEqual(
             context["platform_capabilities"],
-            [
-                PartnerCapability.REVIEW_SAFETY,
-            ],
+            [],
         )
 
         partner_capabilities = context["memberships"][0]["capabilities"]
