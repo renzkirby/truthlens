@@ -47,6 +47,7 @@ import ManagementPipelineHealthPage from "./Pages/ManagementPipelineHealthPage.j
 import ManagementPipelineRunDetailPage from "./Pages/ManagementPipelineRunDetailPage.jsx";
 import ManagementSafetyReviewPage from "./Pages/ManagementSafetyReviewPage.jsx";
 import ManagementSafetyAuditPage from "./Pages/ManagementSafetyAuditPage.jsx";
+import ManagementPlatformStaffPage from "./Pages/ManagementPlatformStaffPage.jsx";
 
 
 function CommunityFactCheckPage() {
@@ -90,6 +91,7 @@ function App() {
                   <Route element={<ManagementRoute />}>
                      <Route element={<ManagementConsoleShell />}>
                         <Route path="/management" element={<ManagementOverviewPage />} />
+                        <Route path="/management/platform-staff" element={<ManagementPlatformStaffPage />} />
                         <Route path="/management/organizations" element={<ManagementOrganizationsPage />} />
                         <Route path="/management/organizations/new" element={<ManagementOrganizationCreatePage />} />
                         <Route
