@@ -762,7 +762,6 @@ function SafetyReviewPanel() {
 
    return (
       <div className="safety-review-panel">
-         {!selectedCaseId && (
          <div className="safety-toolbar">
             <div className="safety-toolbar-summary" role="status" aria-live="polite">
                <span className="safety-toolbar-kicker">Platform Safety queue</span>
@@ -820,7 +819,6 @@ function SafetyReviewPanel() {
                </Button>
             </div>
          </div>
-         )}
 
          {notice && (
             <div className="safety-notice" role="status" aria-live="polite">
