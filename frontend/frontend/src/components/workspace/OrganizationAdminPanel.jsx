@@ -333,7 +333,7 @@ function AdminConfirmDialog({
 }
 
 function OrganizationAdminPanel({ organizationId, membershipRole }) {
-   const { user: currentUser, authFetch } = useAuth();
+   const { user: currentUser, authFetch, refreshUser } = useAuth();
    const { addToast } = useNotification();
 
    const dialogRef = useRef(null);
@@ -1079,8 +1079,17 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
 
          showWorkspaceSuccess(addToast, {
             title: "Role updated",
-            message: `@${getUsername(membership)} is now ${formatLabel(updatedMembership.role)}.`,
+            message:
+               String(membership?.user?.id) === String(currentUser?.id) &&
+               ["ADMIN", "OWNER"].includes(membership.role) &&
+               !["ADMIN", "OWNER"].includes(updatedMembership.role)
+                  ? `You stepped down as Administrator and are now ${formatLabel(updatedMembership.role)}.`
+                  : `@${getUsername(membership)} is now ${formatLabel(updatedMembership.role)}.`,
          });
+
+         if (String(membership?.user?.id) === String(currentUser?.id)) {
+            await refreshUser?.().catch(() => null);
+         }
       } catch (error) {
          replaceRosterMembership(snapshot);
 
@@ -1130,6 +1139,10 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
             title: "Membership suspended",
             message: `@${getUsername(membership)} no longer has active organization authority.`,
          });
+
+         if (String(membership?.user?.id) === String(currentUser?.id)) {
+            await refreshUser?.().catch(() => null);
+         }
       } catch (error) {
          replaceRosterMembership(snapshot);
 
@@ -1220,6 +1233,10 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
             title: "Member removed",
             message: `@${getUsername(membership)} was removed from the organization.`,
          });
+
+         if (String(membership?.user?.id) === String(currentUser?.id)) {
+            await refreshUser?.().catch(() => null);
+         }
       } catch (error) {
          restoreRosterMembership(snapshot, originalIndex);
 
