@@ -100,7 +100,7 @@ class StudentPublicationInstitutionRoutingTests(TestCase):
             status
             != OrganizationInstitutionAffiliation.VerificationStatus.PENDING
         )
-        return OrganizationInstitutionAffiliation.objects.create(
+        affiliation = OrganizationInstitutionAffiliation.objects.create(
             organization=self.student_publication,
             institution=self.institution_a,
             coverage_scope=(
@@ -115,6 +115,9 @@ class StudentPublicationInstitutionRoutingTests(TestCase):
             reviewed_by=self.platform_admin if reviewed else None,
             reviewed_at=timezone.now() if reviewed else None,
         )
+        # Clear reverse OneToOne relation caches before the next policy read.
+        self.student_publication.refresh_from_db()
+        return affiliation
 
     def _make_claim(
         self,
@@ -233,6 +236,25 @@ class StudentPublicationInstitutionRoutingTests(TestCase):
                 organization=self.student_publication,
             ),
             OUTSIDE_INSTITUTION_SCOPE,
+        )
+
+    def test_missing_affiliation_never_authorizes(self):
+        OrganizationInstitutionAffiliation.objects.filter(
+            organization=self.student_publication
+        ).delete()
+        self.student_publication.refresh_from_db()
+        _claim, classification, _assignment = self._make_claim(
+            suffix="missing-affiliation",
+            campus_state=ClaimInvestigationClassification.CampusContextState.CONFIRMED,
+            institutions=(self.institution_a,),
+        )
+
+        self.assertEqual(
+            organization_claim_eligibility_reason(
+                classification=classification,
+                organization=self.student_publication,
+            ),
+            INSTITUTION_AFFILIATION_NOT_VERIFIED,
         )
 
     def test_pending_or_rejected_affiliation_never_authorizes(self):
