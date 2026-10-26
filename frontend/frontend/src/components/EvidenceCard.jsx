@@ -76,6 +76,7 @@ export default function EvidenceCard({
    setEditingId,
    setEditingText,
    setEditingVerdict,
+   readOnly = false,
 }) {
    const verdict = (evidence.evidence_verdict || "UNVERIFIED").toUpperCase();
    const verdictMeta = EVIDENCE_VERDICT_META[verdict] || EVIDENCE_VERDICT_META.UNVERIFIED;
@@ -109,7 +110,7 @@ export default function EvidenceCard({
             </div>
             <div className="evidence-card-header-actions">
                {isTop && <span className="evidence-card-rank"><Icons name="star" size={12} /> Top ranked</span>}
-               {isOwner && !isEditing && (
+               {isOwner && !isEditing && !readOnly && (
                   <>
                      <button
                         type="button"
@@ -178,34 +179,49 @@ export default function EvidenceCard({
 
          <footer className="evidence-card-votes">
             <div className="evidence-card-vote-cluster" role="group" aria-label="Community evidence voting">
-               <button
-                  type="button"
-                  className={`evidence-card-vote evidence-card-vote--up ${evidence.my_vote?.vote_value === true ? "is-selected" : ""}`}
-                  aria-pressed={evidence.my_vote?.vote_value === true}
-                  onClick={() => onVote?.(evidence, true)}
-                  disabled={isVoting || isOwnEvidence}
-                  title={isOwnEvidence ? "You cannot vote on your own evidence." : "Upvote evidence"}
-               >
-                  <Icons name="chevron-up" size={15} /> <span className="sr-only">Upvote</span>{upvotes}
-               </button>
-               <button
-                  type="button"
-                  className={`evidence-card-vote evidence-card-vote--down ${evidence.my_vote?.vote_value === false ? "is-selected" : ""}`}
-                  aria-pressed={evidence.my_vote?.vote_value === false}
-                  onClick={() => onVote?.(evidence, false)}
-                  disabled={isVoting || isOwnEvidence}
-                  title={isOwnEvidence ? "You cannot vote on your own evidence." : "Downvote evidence"}
-               >
-                  <Icons name="chevron-down" size={15} /> <span className="sr-only">Downvote</span>{downvotes}
-               </button>
+               {readOnly ? (
+                  <>
+                     <span className="evidence-card-vote evidence-card-vote--up" aria-label={`${upvotes} upvotes`}>
+                        <Icons name="chevron-up" size={15} /> {upvotes}
+                     </span>
+                     <span className="evidence-card-vote evidence-card-vote--down" aria-label={`${downvotes} downvotes`}>
+                        <Icons name="chevron-down" size={15} /> {downvotes}
+                     </span>
+                  </>
+               ) : (
+                  <>
+                     <button
+                        type="button"
+                        className={`evidence-card-vote evidence-card-vote--up ${evidence.my_vote?.vote_value === true ? "is-selected" : ""}`}
+                        aria-pressed={evidence.my_vote?.vote_value === true}
+                        onClick={() => onVote?.(evidence, true)}
+                        disabled={isVoting || isOwnEvidence}
+                        title={isOwnEvidence ? "You cannot vote on your own evidence." : "Upvote evidence"}
+                     >
+                        <Icons name="chevron-up" size={15} /> <span className="sr-only">Upvote</span>{upvotes}
+                     </button>
+                     <button
+                        type="button"
+                        className={`evidence-card-vote evidence-card-vote--down ${evidence.my_vote?.vote_value === false ? "is-selected" : ""}`}
+                        aria-pressed={evidence.my_vote?.vote_value === false}
+                        onClick={() => onVote?.(evidence, false)}
+                        disabled={isVoting || isOwnEvidence}
+                        title={isOwnEvidence ? "You cannot vote on your own evidence." : "Downvote evidence"}
+                     >
+                        <Icons name="chevron-down" size={15} /> <span className="sr-only">Downvote</span>{downvotes}
+                     </button>
+                  </>
+               )}
                <span className="evidence-card-weighted"><Icons name="hash" size={12} /> Weighted: {weightedLabel}</span>
             </div>
             <span className="evidence-card-vote-hint">
-               {isOwnEvidence
-                  ? "Your own evidence is not votable."
-                  : isVoting
-                    ? "Syncing vote…"
-                    : "Votes are recorded now; trust impact applies after thread resolution."}
+               {readOnly
+                  ? "Voting is unavailable to platform staff identities."
+                  : isOwnEvidence
+                    ? "Your own evidence is not votable."
+                    : isVoting
+                      ? "Syncing vote…"
+                      : "Votes are recorded now; trust impact applies after thread resolution."}
             </span>
          </footer>
       </article>
