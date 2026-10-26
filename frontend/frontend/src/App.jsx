@@ -31,6 +31,7 @@ import AccountActionShell from "./components/account/AccountActionShell.jsx";
 import OnboardingShell from "./components/account/OnboardingShell.jsx";
 import WorkspaceShell from "./components/workspace/WorkspaceShell.jsx";
 import ManagementRoute from "./components/ManagementRoute.jsx";
+import CommunityParticipantRoute from "./components/CommunityParticipantRoute.jsx";
 import ManagementConsoleShell from "./components/management/ManagementConsoleShell.jsx";
 import ManagementOverviewPage from "./Pages/ManagementOverviewPage.jsx";
 import ManagementOrganizationsPage from "./Pages/ManagementOrganizationsPage.jsx";
@@ -44,6 +45,7 @@ import ManagementGovernanceAuditPage from "./Pages/ManagementGovernanceAuditPage
 import ManagementGovernanceAuditDetailPage from "./Pages/ManagementGovernanceAuditDetailPage.jsx";
 import ManagementPipelineHealthPage from "./Pages/ManagementPipelineHealthPage.jsx";
 import ManagementPipelineRunDetailPage from "./Pages/ManagementPipelineRunDetailPage.jsx";
+import ManagementSafetyReviewPage from "./Pages/ManagementSafetyReviewPage.jsx";
 
 
 function CommunityFactCheckPage() {
@@ -103,6 +105,7 @@ function App() {
                            path="/management/invitations/:invitationId"
                            element={<ManagementInvitationDetailPage />}
                         />
+                        <Route path="/management/safety" element={<ManagementSafetyReviewPage />} />
                         <Route path="/management/audit" element={<ManagementGovernanceAuditPage />} />
                         <Route
                            path="/management/audit/:eventId"
@@ -127,10 +130,12 @@ function App() {
                         path="/community/partners/:slug/fact-checks/:publicationId"
                         element={<CommunityFactCheckPage />}
                      />
-                     <Route path="/dashboard" element={<UserHub />} />
+                     <Route element={<CommunityParticipantRoute />}>
+                        <Route path="/dashboard" element={<UserHub />} />
+                        <Route path="/thread/create" element={<CreateThreadPage />} />
+                        <Route path="/profile" element={<UserProfile />} />
+                     </Route>
                      <Route path="/verify" element={<VerifyPage />} />
-                     <Route path="/thread/create" element={<CreateThreadPage />} />
-                     <Route path="/profile" element={<UserProfile />} />
                      <Route path="/thread/detail/:threadId" element={<ThreadDetailPage />} />
                      <Route path="/analysis/:claimId" element={<DeepAnalysisPage />} />
                      <Route path="/user/:username" element={<UserProfile />} />
