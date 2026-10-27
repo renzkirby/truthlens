@@ -730,6 +730,11 @@ def review_correction_evidence(
                 "This Evidence case is not owned by the organization responsible "
                 "for the correction."
             )
+        previous_resolved_case = None
+        if case is not None and case.status == ModerationCase.Status.RESOLVED:
+            previous_resolved_case = case
+            case = None
+
         if case is None or case.status == ModerationCase.Status.CANCELLED:
             try:
                 case = create_moderation_case(
@@ -739,6 +744,20 @@ def review_correction_evidence(
                     evidence_submission=locked_evidence,
                     organization=context["organization"],
                 )
+                if previous_resolved_case is not None:
+                    ModerationEvent.objects.create(
+                        case=case,
+                        actor=actor,
+                        event_type=ModerationEvent.EventType.EVIDENCE_REOPENED,
+                        from_status=ModerationCase.Status.RESOLVED,
+                        to_status=ModerationCase.Status.OPEN,
+                        reason_code="CORRECTION_REVIEW",
+                        metadata={
+                            "previous_case_id": str(previous_resolved_case.pk),
+                            "correction_request_id": str(correction_request.pk),
+                            "correction_case_id": str(correction_case.pk),
+                        },
+                    )
             except DuplicateActiveModerationCase as error:
                 if _is_expected_active_evidence_case_conflict(error):
                     raise EvidenceReviewConflict(
@@ -770,7 +789,7 @@ def review_correction_evidence(
             case,
             actor=actor,
             claim_id=context["claim"].pk,
-            allow_reopen=True,
+            allow_reopen=False,
         )
         previous_status = locked_evidence.evidence_status
         reviewed_at = timezone.now()
