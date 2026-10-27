@@ -17,6 +17,7 @@ from .moderation_service import (
     DuplicateActiveModerationCase,
     create_moderation_case,
 )
+from .management_governance_service import MANAGE_PARTNER_ORGANIZATION
 from .organization_service import PartnerCapability
 from .publishing_service import (
     ACTIVE_DRAFT_STATUSES,
@@ -405,7 +406,7 @@ def request_factual_correction(
         }
 
 
-def cancel_factual_correction(
+def _cancel_factual_correction(
     *,
     correction_request_id,
     actor,
@@ -414,6 +415,8 @@ def cancel_factual_correction(
     expected_predecessor_version,
     expected_decision_revision,
     cancellation_reason,
+    platform_management_override=False,
+    accountability_reason_code="FACTUAL_CORRECTION_CANCELLED",
 ):
     """Atomically cancel active correction work without changing authority."""
 
@@ -469,6 +472,7 @@ def cancel_factual_correction(
                 identity=lock_identity,
                 actor=actor,
                 capability=PartnerCapability.ADJUDICATE,
+                platform_management_override=platform_management_override,
             )
         except PublishingAuthorizationError as error:
             raise FactualCorrectionAuthorizationError(
@@ -611,7 +615,7 @@ def cancel_factual_correction(
             event_type=ModerationEvent.EventType.CASE_CANCELLED,
             from_status=previous_case_status,
             to_status=ModerationCase.Status.CANCELLED,
-            reason_code="FACTUAL_CORRECTION_CANCELLED",
+            reason_code=accountability_reason_code,
             notes=reason,
             metadata={
                 "correction_request_id": str(correction_request.id),
@@ -637,11 +641,21 @@ def cancel_factual_correction(
             action_type=AccountabilityEvent.ActionType.FACTUAL_CORRECTION_CANCELLED,
             resource_type=AccountabilityEvent.ResourceType.FACTUAL_CORRECTION_REQUEST,
             resource_id=correction_request.pk,
-            authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+            authority_scope=(
+                AccountabilityEvent.AuthorityScope.PLATFORM
+                if platform_management_override
+                else AccountabilityEvent.AuthorityScope.ORGANIZATION
+            ),
             actor=actor,
-            authority_organization=context["organization"],
+            authority_organization=(
+                None if platform_management_override else context["organization"]
+            ),
             subject_organization=context["organization"],
-            capability=PartnerCapability.ADJUDICATE,
+            capability=(
+                MANAGE_PARTNER_ORGANIZATION
+                if platform_management_override
+                else PartnerCapability.ADJUDICATE
+            ),
             previous_state={
                 "status": FactualCorrectionRequest.Status.ACTIVE,
                 "case_status": previous_case_status,
@@ -650,13 +664,14 @@ def cancel_factual_correction(
                 "status": correction_request.status,
                 "case_status": correction_case.status,
             },
-            reason_code="FACTUAL_CORRECTION_CANCELLED",
+            reason_code=accountability_reason_code,
             notes=reason,
             context={
                 "proposal_id": str(proposal.pk) if proposal is not None else None,
                 "proposal_version": actual_proposal_version,
                 "predecessor_decision_id": str(decision.pk),
                 "predecessor_fact_check_id": str(predecessor.pk),
+                "platform_governance": platform_management_override,
             },
         )
         return {
@@ -665,3 +680,85 @@ def cancel_factual_correction(
             "proposal": proposal,
             "event": event,
         }
+
+
+
+def cancel_factual_correction(
+    *,
+    correction_request_id,
+    actor,
+    organization_id,
+    expected_proposal_version,
+    expected_predecessor_version,
+    expected_decision_revision,
+    cancellation_reason,
+):
+    return _cancel_factual_correction(
+        correction_request_id=correction_request_id,
+        actor=actor,
+        organization_id=organization_id,
+        expected_proposal_version=expected_proposal_version,
+        expected_predecessor_version=expected_predecessor_version,
+        expected_decision_revision=expected_decision_revision,
+        cancellation_reason=cancellation_reason,
+    )
+
+
+def cancel_factual_correction_for_partner_retirement(
+    *,
+    correction_request_id,
+    actor,
+    organization_id,
+):
+    """Cancel active correction work under explicit Platform Governance authority."""
+
+    if not (
+        actor
+        and actor.is_authenticated
+        and actor.is_active
+        and actor.is_superuser
+    ):
+        raise FactualCorrectionAuthorizationError(
+            "Platform management administrator access is required."
+        )
+
+    correction = (
+        FactualCorrectionRequest.objects.filter(
+            pk=correction_request_id,
+            organization_id=organization_id,
+            status=FactualCorrectionRequest.Status.ACTIVE,
+        )
+        .select_related(
+            "predecessor_fact_check",
+            "predecessor_decision",
+        )
+        .first()
+    )
+    if correction is None:
+        raise FactualCorrectionConflict(
+            "The active factual correction request is no longer available."
+        )
+
+    proposal = (
+        FactualCorrectionProposal.objects.filter(
+            correction_request=correction,
+        )
+        .order_by("-version", "-created_at", "-id")
+        .first()
+    )
+
+    return _cancel_factual_correction(
+        correction_request_id=correction.id,
+        actor=actor,
+        organization_id=organization_id,
+        expected_proposal_version=proposal.version if proposal is not None else 0,
+        expected_predecessor_version=correction.predecessor_fact_check.version,
+        expected_decision_revision=correction.predecessor_decision.revision_number,
+        cancellation_reason=(
+            "Cancelled by Platform Governance because the Partner Organization "
+            "is being retired. The current published fact-check remains the "
+            "authoritative historical publication."
+        ),
+        platform_management_override=True,
+        accountability_reason_code="PARTNERSHIP_ENDED",
+    )
