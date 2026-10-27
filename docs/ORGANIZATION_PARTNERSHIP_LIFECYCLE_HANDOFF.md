@@ -1107,3 +1107,25 @@ That internal Developer Console pathway remains unchanged for now.
 The normal Management frontend no longer renders the legacy raw-status editor. The old frontend endpoint constant remains temporarily to support backend-first rollout compatibility and may be removed in a later cleanup release after the new frontend is deployed everywhere.
 
 This hardening requires a focused backend regression rerun before the branch is considered review-ready.
+
+
+### Final hardening gate follow-up
+
+The first focused hardening rerun found one failing assertion in the legacy platform-trust compatibility test.
+
+Cause:
+
+- the fixture named `pending_organization` starts as `PENDING + SUSPENDED`;
+- requesting `VERIFIED + ACTIVE` from that state correctly executes:
+  - `ORGANIZATION_VERIFIED`;
+  - `PARTNERSHIP_REINSTATED`.
+- the test incorrectly expected `PARTNERSHIP_ACTIVATED`, which is reserved for `NONE -> ACTIVE`.
+
+Fix:
+
+- corrected the suspended compatibility expectation to `PARTNERSHIP_REINSTATED`;
+- added a separate `PENDING + NONE` organization regression proving that true onboarding produces:
+  - `ORGANIZATION_VERIFIED`;
+  - `PARTNERSHIP_ACTIVATED`.
+
+No production implementation changed in this follow-up.
