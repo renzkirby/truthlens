@@ -888,6 +888,13 @@
   line-height: 1.45;
 }
 
+.management-governance-status-grid article .tl-badge {
+  width: fit-content;
+  max-width: 100%;
+  justify-self: start;
+}
+
+
 .management-governance-action {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
