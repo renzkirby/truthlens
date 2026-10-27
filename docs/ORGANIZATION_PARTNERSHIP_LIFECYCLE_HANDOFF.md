@@ -937,3 +937,29 @@ Deployment/submission order is important:
 8. submit `0.1.6` to the Chrome Web Store for review.
 
 Do not submit the updated extension before the compatible backend is deployed, because the new extension expects the new publication-availability field.
+
+
+### Clean cross-surface validation checkpoint
+
+After the 333-test follow-up fixes, the user confirmed that all requested validation gates pass:
+
+- combined backend lifecycle/publication regression suite: PASS;
+- Django `manage.py check`: PASS;
+- `makemigrations --check --dry-run`: no changes;
+- frontend lint: PASS;
+- frontend build: PASS;
+- Browser Extension lint: PASS;
+- Browser Extension build: PASS.
+
+This establishes a clean validated checkpoint for:
+
+- explicit organization lifecycle actions;
+- Management Console governance UI;
+- legacy `RETIREMENT_REQUIRED` handling;
+- historical publication readability after Partner retirement/suspension;
+- public-reach instrumentation split;
+- Browser Extension 0.1.6 publication-link compatibility.
+
+No PR or merge has been created for this feature branch.
+
+The principal unresolved lifecycle issue is the handling of an ACTIVE `FactualCorrectionRequest` when ending a partnership. CSG is intentionally blocked from End Partnership until that policy is implemented or its active correction is resolved through an explicit governed action.
