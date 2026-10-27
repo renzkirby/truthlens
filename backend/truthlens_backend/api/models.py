@@ -2114,10 +2114,10 @@ class EvidenceReviewDecision(models.Model):
         on_delete=models.PROTECT,
         related_name="evidence_review_decisions",
     )
-    moderation_case = models.OneToOneField(
+    moderation_case = models.ForeignKey(
         ModerationCase,
         on_delete=models.PROTECT,
-        related_name="evidence_review_decision",
+        related_name="evidence_review_decisions",
     )
     reviewed_by = models.ForeignKey(
         "auth.User",
