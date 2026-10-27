@@ -82,7 +82,11 @@ def backfill_institutional_evidence_reviews(apps, schema_editor):
             ),
             reviewed_at=(
                 case.resolved_at
-                or (review_event.created_at if review_event is not None else case.updated_at)
+                or (
+                    review_event.created_at
+                    if review_event is not None
+                    else case.updated_at
+                )
             ),
         )
 
