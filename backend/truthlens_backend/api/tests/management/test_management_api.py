@@ -197,6 +197,65 @@ class ManagementApiTests(APITestCase):
             (
                 "post",
                 reverse(
+                    "management_organization_verify",
+                    kwargs={"organization_id": self.organization.id},
+                ),
+                {},
+            ),
+            (
+                "post",
+                reverse(
+                    "management_organization_reject_verification",
+                    kwargs={"organization_id": self.organization.id},
+                ),
+                {},
+            ),
+            (
+                "post",
+                reverse(
+                    "management_organization_activate_partnership",
+                    kwargs={"organization_id": self.organization.id},
+                ),
+                {},
+            ),
+            (
+                "post",
+                reverse(
+                    "management_organization_suspend_partnership",
+                    kwargs={"organization_id": self.organization.id},
+                ),
+                {},
+            ),
+            (
+                "post",
+                reverse(
+                    "management_organization_reinstate_partnership",
+                    kwargs={"organization_id": self.organization.id},
+                ),
+                {},
+            ),
+            (
+                "post",
+                reverse(
+                    "management_organization_factual_correction_retirement_cancel",
+                    kwargs={
+                        "organization_id": self.organization.id,
+                        "correction_request_id": uuid4(),
+                    },
+                ),
+                {},
+            ),
+            (
+                "post",
+                reverse(
+                    "management_organization_end_partnership",
+                    kwargs={"organization_id": self.organization.id},
+                ),
+                {},
+            ),
+            (
+                "post",
+                reverse(
                     "management_primary_admin_provision",
                     kwargs={"organization_id": self.pending_organization.id},
                 ),
@@ -611,43 +670,31 @@ class ManagementApiTests(APITestCase):
                 self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
                 self.assertIn(field, response.data)
 
-    def test_platform_trust_partial_and_combined_updates_are_audited(self):
+    def test_platform_trust_compatibility_endpoint_routes_valid_targets_through_lifecycle_actions(self):
         url = reverse(
             "management_organization_platform_trust",
             kwargs={"organization_id": self.pending_organization.id},
         )
         client = self.client_for(self.superuser)
 
-        verification_response = client.patch(
-            url,
-            {"verification_status": Organization.VerificationStatus.VERIFIED},
-            format="json",
-        )
-        partner_response = client.patch(
-            url,
-            {"partner_status": Organization.PartnerStatus.ACTIVE},
-            format="json",
-        )
-        combined_response = client.patch(
+        response = client.patch(
             url,
             {
-                "verification_status": Organization.VerificationStatus.REJECTED,
-                "partner_status": Organization.PartnerStatus.FORMER,
+                "verification_status": Organization.VerificationStatus.VERIFIED,
+                "partner_status": Organization.PartnerStatus.ACTIVE,
             },
             format="json",
         )
 
-        self.assertEqual(verification_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(partner_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(combined_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.pending_organization.refresh_from_db()
         self.assertEqual(
             self.pending_organization.verification_status,
-            Organization.VerificationStatus.REJECTED,
+            Organization.VerificationStatus.VERIFIED,
         )
         self.assertEqual(
             self.pending_organization.partner_status,
-            Organization.PartnerStatus.FORMER,
+            Organization.PartnerStatus.ACTIVE,
         )
         events = AccountabilityEvent.objects.filter(
             action_type=(
@@ -655,23 +702,118 @@ class ManagementApiTests(APITestCase):
             ),
             subject_organization=self.pending_organization,
         ).order_by("created_at")
-        self.assertEqual(events.count(), 3)
+        self.assertEqual(events.count(), 2)
         self.assertEqual(
-            events.last().previous_state,
+            [event.reason_code for event in events],
+            ["ORGANIZATION_VERIFIED", "PARTNERSHIP_REINSTATED"],
+        )
+        self.assertTrue(
+            all(event.capability == MANAGE_PARTNER_ORGANIZATION for event in events)
+        )
+
+        suspended = client.patch(
+            url,
+            {"partner_status": Organization.PartnerStatus.SUSPENDED},
+            format="json",
+        )
+        self.assertEqual(suspended.status_code, status.HTTP_200_OK)
+        self.pending_organization.refresh_from_db()
+        self.assertEqual(
+            self.pending_organization.partner_status,
+            Organization.PartnerStatus.SUSPENDED,
+        )
+
+    def test_platform_trust_compatibility_endpoint_activates_true_onboarding_organization(
+        self,
+    ):
+        onboarding = Organization.objects.create(
+            name="Legacy Compatibility Onboarding",
+            slug="legacy-compatibility-onboarding",
+            organization_type=Organization.OrganizationType.RESEARCH,
+            verification_status=Organization.VerificationStatus.PENDING,
+            partner_status=Organization.PartnerStatus.NONE,
+        )
+
+        response = self.client_for(self.superuser).patch(
+            reverse(
+                "management_organization_platform_trust",
+                kwargs={"organization_id": onboarding.id},
+            ),
             {
                 "verification_status": Organization.VerificationStatus.VERIFIED,
                 "partner_status": Organization.PartnerStatus.ACTIVE,
             },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        onboarding.refresh_from_db()
+        self.assertEqual(
+            onboarding.verification_status,
+            Organization.VerificationStatus.VERIFIED,
         )
         self.assertEqual(
-            events.last().new_state,
-            {
-                "verification_status": Organization.VerificationStatus.REJECTED,
-                "partner_status": Organization.PartnerStatus.FORMER,
-            },
+            onboarding.partner_status,
+            Organization.PartnerStatus.ACTIVE,
         )
-        self.assertEqual(events.last().actor, self.superuser)
-        self.assertEqual(events.last().capability, MANAGE_PARTNER_ORGANIZATION)
+        events = AccountabilityEvent.objects.filter(
+            action_type=(
+                AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED
+            ),
+            subject_organization=onboarding,
+        ).order_by("created_at")
+        self.assertEqual(
+            [event.reason_code for event in events],
+            ["ORGANIZATION_VERIFIED", "PARTNERSHIP_ACTIVATED"],
+        )
+
+    def test_platform_trust_compatibility_endpoint_rejects_unsafe_raw_targets(self):
+        client = self.client_for(self.superuser)
+
+        for organization, payload in (
+            (
+                self.organization,
+                {"partner_status": Organization.PartnerStatus.FORMER},
+            ),
+            (
+                self.organization,
+                {"partner_status": Organization.PartnerStatus.NONE},
+            ),
+            (
+                self.organization,
+                {"verification_status": Organization.VerificationStatus.UNVERIFIED},
+            ),
+            (
+                self.organization,
+                {
+                    "verification_status": Organization.VerificationStatus.REJECTED,
+                    "partner_status": Organization.PartnerStatus.ACTIVE,
+                },
+            ),
+        ):
+            with self.subTest(payload=payload):
+                before = (
+                    organization.verification_status,
+                    organization.partner_status,
+                )
+                response = client.patch(
+                    reverse(
+                        "management_organization_platform_trust",
+                        kwargs={"organization_id": organization.id},
+                    ),
+                    payload,
+                    format="json",
+                )
+                self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+                organization.refresh_from_db()
+                self.assertEqual(
+                    (
+                        organization.verification_status,
+                        organization.partner_status,
+                    ),
+                    before,
+                )
+
 
     def test_platform_trust_rejects_unsupported_empty_and_invalid_payloads(self):
         url = reverse(

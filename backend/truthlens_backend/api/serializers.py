@@ -12,6 +12,7 @@ from .models import (
     Claim,
     Thread,
     UserProfile,
+    EvidenceReviewDecision,
     EvidenceSubmission,
     Vote,
     ThreadComment,
@@ -1862,14 +1863,21 @@ class EvidenceCaseQueueFilterSerializer(serializers.Serializer):
 
 
 class EvidenceCaseActionSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(
+        choices=["REVIEW", "ACCEPT_PRIOR_REVIEW"],
+        required=False,
+        default="REVIEW",
+    )
     decision = serializers.ChoiceField(
         choices=[
             EvidenceSubmission.EvidenceStatus.VERIFIED,
             EvidenceSubmission.EvidenceStatus.REJECTED,
-        ]
+        ],
+        required=False,
     )
+    source_review_id = serializers.UUIDField(required=False)
     expected_status = serializers.ChoiceField(
-        choices=[EvidenceSubmission.EvidenceStatus.UNVERIFIED],
+        choices=EvidenceSubmission.EvidenceStatus.choices,
     )
     moderator_notes = serializers.CharField(
         required=False,
@@ -1886,7 +1894,9 @@ class EvidenceCaseActionSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         supported_fields = {
+            "action",
             "decision",
+            "source_review_id",
             "expected_status",
             "moderator_notes",
             "rejection_reason",
@@ -1900,8 +1910,38 @@ class EvidenceCaseActionSerializer(serializers.Serializer):
                 }
             )
 
-        decision = attrs["decision"]
+        action = attrs["action"]
+        decision = attrs.get("decision")
+        source_review_id = attrs.get("source_review_id")
         rejection_reason = attrs.get("rejection_reason")
+
+        if action == "ACCEPT_PRIOR_REVIEW":
+            if source_review_id is None:
+                raise serializers.ValidationError(
+                    {
+                        "source_review_id": (
+                            "The prior institutional review is required."
+                        )
+                    }
+                )
+            if decision is not None:
+                raise serializers.ValidationError(
+                    {"decision": "Do not supply a new disposition when accepting a prior review."}
+                )
+            if rejection_reason is not None:
+                raise serializers.ValidationError(
+                    {"rejection_reason": "Do not supply a new rejection reason when accepting a prior review."}
+                )
+            return attrs
+
+        if decision is None:
+            raise serializers.ValidationError(
+                {"decision": "An evidence disposition is required."}
+            )
+        if source_review_id is not None:
+            raise serializers.ValidationError(
+                {"source_review_id": "A new independent review cannot accept a prior review."}
+            )
         if (
             decision == EvidenceSubmission.EvidenceStatus.REJECTED
             and not rejection_reason
@@ -1929,9 +1969,20 @@ class EvidenceCaseActionSerializer(serializers.Serializer):
 
 
 class EvidenceReviewOrganizationSerializer(serializers.ModelSerializer):
+    partner_status_label = serializers.CharField(
+        source="get_partner_status_display",
+        read_only=True,
+    )
+
     class Meta:
         model = Organization
-        fields = ["id", "name", "slug"]
+        fields = [
+            "id",
+            "name",
+            "slug",
+            "partner_status",
+            "partner_status_label",
+        ]
         read_only_fields = fields
 
 
@@ -2040,13 +2091,104 @@ class EvidenceModerationEventSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class EvidenceInstitutionalReviewSerializer(serializers.ModelSerializer):
+    organization = EvidenceReviewOrganizationSerializer(read_only=True)
+    reviewed_by = EvidenceReviewUserSummarySerializer(read_only=True)
+    decision_type_label = serializers.CharField(
+        source="get_decision_type_display",
+        read_only=True,
+    )
+    disposition_label = serializers.CharField(
+        source="get_disposition_display",
+        read_only=True,
+    )
+    source_organization = serializers.SerializerMethodField()
+
+    def get_source_organization(self, obj):
+        if obj.source_review is None:
+            return None
+        payload = EvidenceReviewOrganizationSerializer(
+            obj.source_review.organization
+        ).data
+        payload["name_snapshot"] = obj.source_review.organization_name_snapshot
+        return payload
+
+    class Meta:
+        model = EvidenceReviewDecision
+        fields = [
+            "id",
+            "decision_type",
+            "decision_type_label",
+            "disposition",
+            "disposition_label",
+            "organization",
+            "reviewed_by",
+            "organization_name_snapshot",
+            "reviewer_username_snapshot",
+            "notes",
+            "rejection_reason",
+            "reviewed_at",
+            "created_at",
+            "source_review_id",
+            "source_organization",
+        ]
+        read_only_fields = fields
+
+
 class EvidenceCaseSummarySerializer(serializers.ModelSerializer):
     evidence = serializers.SerializerMethodField()
+    review_context = serializers.SerializerMethodField()
     thread = EvidenceReviewThreadSummarySerializer(
         source="evidence_submission.thread",
         read_only=True,
     )
     organization = EvidenceReviewOrganizationSerializer(read_only=True)
+
+    def get_review_context(self, obj):
+        organization = self.context.get("organization")
+        if organization is None or obj.evidence_submission_id is None:
+            return {
+                "requires_successor_action": False,
+                "prior_review": None,
+                "current_organization_review": None,
+            }
+
+        decisions = list(
+            obj.evidence_submission.review_decisions.all()
+        )
+        current = next(
+            (
+                decision
+                for decision in reversed(decisions)
+                if decision.organization_id == organization.id
+            ),
+            None,
+        )
+        prior = next(
+            (
+                decision
+                for decision in reversed(decisions)
+                if decision.organization_id != organization.id
+            ),
+            None,
+        )
+        return {
+            "requires_successor_action": bool(
+                obj.status in ACTIVE_CASE_STATUSES
+                and current is None
+                and prior is not None
+            ),
+            "prior_review": (
+                EvidenceInstitutionalReviewSerializer(prior).data
+                if prior is not None
+                else None
+            ),
+            "current_organization_review": (
+                EvidenceInstitutionalReviewSerializer(current).data
+                if current is not None
+                else None
+            ),
+        }
 
     def get_evidence(self, obj):
         return EvidenceReviewEvidenceSerializer(
@@ -2067,6 +2209,7 @@ class EvidenceCaseSummarySerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "evidence",
+            "review_context",
             "thread",
             "organization",
         ]
@@ -2949,6 +3092,13 @@ class AdjudicationCaseDetailEvidenceSerializer(serializers.ModelSerializer):
         read_only=True,
         allow_null=True,
     )
+    review_basis = serializers.SerializerMethodField()
+
+    def get_review_basis(self, obj):
+        basis = getattr(obj, "adjudication_institutional_review_basis", None)
+        if basis is None:
+            return None
+        return EvidenceInstitutionalReviewSerializer(basis).data
 
     def get_is_current_user_contributor(self, obj):
         request = self.context.get("request")
@@ -2964,6 +3114,7 @@ class AdjudicationCaseDetailEvidenceSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "evidence_case_id",
+            "review_basis",
             "thread_id",
             "evidence_caption",
             "evidence_type",
@@ -3133,12 +3284,21 @@ class AdjudicationCaseDetailSerializer(serializers.ModelSerializer):
             item.evidence_status == EvidenceSubmission.EvidenceStatus.UNVERIFIED
             for item in evidence
         )
+        institutional_basis_count = sum(
+            getattr(item, "adjudication_institutional_review_basis", None) is not None
+            and item.adjudication_institutional_review_basis.disposition == item.evidence_status
+            for item in evidence
+        )
         return {
             "basis": "CURRENT_EVIDENCE_RECORDS",
             "total": len(evidence),
             "verified": verified,
             "rejected": rejected,
             "unreviewed": unreviewed,
+            "institutional_basis_count": institutional_basis_count,
+            "institutional_basis_complete": bool(
+                evidence and institutional_basis_count == len(evidence)
+            ),
             "active_evidence_cases": (
                 obj.adjudication_active_evidence_case_count
             ),

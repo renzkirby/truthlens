@@ -1,6 +1,6 @@
 from django.db.models import Q
 
-from .models import Organization
+from .models import OfficialFactCheck, Organization
 
 
 PUBLIC_PARTNER_ELIGIBILITY = {
@@ -53,3 +53,29 @@ def get_public_partner_by_slug(slug):
     return get_public_partner_organizations().filter(
         slug=slug,
     ).first()
+
+
+def get_publication_organization_by_slug(slug):
+    """
+    Resolve an organization for historical public publication routes.
+
+    Unlike Partner Directory/profile eligibility, this lookup is based on
+    durable sealed published work. A former or suspended organization may lose
+    its current public Partner profile while its published fact-checks remain
+    readable and attributable.
+    """
+
+    return (
+        Organization.objects.filter(
+            slug=slug,
+            official_fact_checks__publication_status=(
+                OfficialFactCheck.PublicationStatus.PUBLISHED
+            ),
+            official_fact_checks__published_at__isnull=False,
+            official_fact_checks__publication_snapshot__isnull=False,
+            official_fact_checks__claim__isnull=False,
+            official_fact_checks__adjudication_decision__isnull=False,
+        )
+        .distinct()
+        .first()
+    )

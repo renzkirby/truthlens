@@ -156,6 +156,7 @@ from .public_reach_service import (
 from .organization_public_presence_service import (
     get_public_partner_by_slug,
     get_public_partner_directory,
+    get_publication_organization_by_slug,
 )
 from .organization_follow_service import (
     PublicPartnerFollowUnavailable,
@@ -191,6 +192,7 @@ from .evidence_review_service import (
     EvidenceReviewAuthorizationError,
     EvidenceReviewConflict,
     EvidenceReviewError,
+    accept_prior_evidence_review,
     ensure_can_review_evidence,
     ensure_evidence_case,
     get_evidence_case_queue,
@@ -1252,7 +1254,10 @@ def _evidence_case_detail_response(case_id, *, organization, request):
     return Response(
         EvidenceCaseDetailSerializer(
             case,
-            context={"request": request},
+            context={
+                "request": request,
+                "organization": organization,
+            },
         ).data,
         status=status.HTTP_200_OK,
     )
@@ -1287,7 +1292,10 @@ def evidence_case_queue(request):
             "results": EvidenceCaseSummarySerializer(
                 cases,
                 many=True,
-                context={"request": request},
+                context={
+                    "request": request,
+                    "organization": organization,
+                },
             ).data,
         },
         status=status.HTTP_200_OK,
@@ -1328,17 +1336,27 @@ def evidence_case_action(request, case_id):
     )
 
     try:
-        result = review_evidence_submission(
-            evidence=case.evidence_submission,
-            actor=request.user,
-            evidence_status=payload.validated_data["decision"],
-            expected_status=payload.validated_data["expected_status"],
-            moderator_notes=payload.validated_data["moderator_notes"],
-            rejection_reason=payload.validated_data.get("rejection_reason"),
-            expected_case_id=case.id,
-            expected_organization_id=organization.id,
-            allow_reopen=False,
-        )
+        if payload.validated_data["action"] == "ACCEPT_PRIOR_REVIEW":
+            result = accept_prior_evidence_review(
+                evidence=case.evidence_submission,
+                actor=request.user,
+                source_review_id=payload.validated_data["source_review_id"],
+                expected_status=payload.validated_data["expected_status"],
+                expected_case_id=case.id,
+                expected_organization_id=organization.id,
+            )
+        else:
+            result = review_evidence_submission(
+                evidence=case.evidence_submission,
+                actor=request.user,
+                evidence_status=payload.validated_data["decision"],
+                expected_status=payload.validated_data["expected_status"],
+                moderator_notes=payload.validated_data["moderator_notes"],
+                rejection_reason=payload.validated_data.get("rejection_reason"),
+                expected_case_id=case.id,
+                expected_organization_id=organization.id,
+                allow_reopen=False,
+            )
     except EvidenceReviewAuthorizationError as error:
         raise PermissionDenied(str(error)) from error
     except (EvidenceReviewConflict, ModerationCaseError) as error:
@@ -1352,7 +1370,8 @@ def evidence_case_action(request, case_id):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    schedule_evidence_review_trust_updates(result)
+    if payload.validated_data["action"] == "REVIEW":
+        schedule_evidence_review_trust_updates(result)
     return _evidence_case_detail_response(
         case_id,
         organization=organization,
@@ -4670,12 +4689,13 @@ def toggle_public_partner_follow_view(request, slug):
 @permission_classes([AllowAny])
 @throttle_classes([PublicPartnerRateThrottle])
 def public_partner_fact_checks(request, slug):
-    organization = get_public_partner_by_slug(slug)
+    query_serializer = PublicFactCheckQuerySerializer(data=request.query_params)
+    query_serializer.is_valid(raise_exception=True)
+
+    organization = get_publication_organization_by_slug(slug)
     if organization is None:
         raise NotFound()
 
-    query_serializer = PublicFactCheckQuerySerializer(data=request.query_params)
-    query_serializer.is_valid(raise_exception=True)
     result = list_public_partner_fact_checks(
         organization=organization,
         limit=query_serializer.validated_data["limit"],
@@ -4691,7 +4711,7 @@ def public_partner_fact_checks(request, slug):
 @permission_classes([AllowAny])
 @throttle_classes([PublicPartnerRateThrottle])
 def public_partner_fact_check_detail(request, slug, publication_id):
-    organization = get_public_partner_by_slug(slug)
+    organization = get_publication_organization_by_slug(slug)
     if organization is None:
         raise NotFound()
 
@@ -4715,13 +4735,18 @@ def public_reach_events(request):
     serializer = PublicReachRequestSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     payload = serializer.validated_data
-    organization = get_public_partner_by_slug(payload["organization_slug"])
+    publication_id = payload.get("publication_id")
+    organization = (
+        get_publication_organization_by_slug(payload["organization_slug"])
+        if publication_id is not None
+        else get_public_partner_by_slug(payload["organization_slug"])
+    )
     if organization is None:
         raise NotFound()
     fact_check = None
-    if payload.get("publication_id") is not None:
+    if publication_id is not None:
         fact_check = OfficialFactCheck.objects.filter(
-            pk=payload["publication_id"],
+            pk=publication_id,
             organization=organization,
         ).first()
         if fact_check is None:

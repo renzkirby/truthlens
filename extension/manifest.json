@@ -1,7 +1,7 @@
 {
    "manifest_version": 3,
    "name": "TruthLens",
-   "version": "0.1.5",
+   "version": "0.1.6",
    "description": "AI-driven misinformation detection",
    "icons": {
       "16": "truthlens_logo.png",

@@ -8,6 +8,7 @@ from api.adjudication_service import (
 )
 from api.evidence_review_service import (
     ensure_evidence_case,
+    review_evidence_submission,
 )
 from api.models import (
     AdjudicationDecision,
@@ -191,8 +192,20 @@ class VerificationAssignmentServiceTests(TestCase):
         self,
     ):
         assignment = self._claim_for_organization_a()
-        self._create_evidence(
-            status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+        evidence = self._create_evidence()
+        evidence_case = ensure_evidence_case(
+            evidence=evidence,
+            actor=self.community_user,
+            organization=self.organization_a,
+        )
+        review_evidence_submission(
+            evidence=evidence,
+            actor=self.lead_a,
+            evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            expected_status=EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+            expected_case_id=evidence_case.pk,
+            expected_organization_id=self.organization_a.pk,
+            allow_reopen=False,
         )
         case = ensure_adjudication_case(
             claim=self.claim,
@@ -217,8 +230,20 @@ class VerificationAssignmentServiceTests(TestCase):
         self,
     ):
         assignment = self._claim_for_organization_a()
-        self._create_evidence(
-            status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+        evidence = self._create_evidence()
+        evidence_case = ensure_evidence_case(
+            evidence=evidence,
+            actor=self.community_user,
+            organization=self.organization_a,
+        )
+        review_evidence_submission(
+            evidence=evidence,
+            actor=self.lead_a,
+            evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            expected_status=EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+            expected_case_id=evidence_case.pk,
+            expected_organization_id=self.organization_a.pk,
+            allow_reopen=False,
         )
         case = ensure_adjudication_case(
             claim=self.claim,
@@ -390,6 +415,31 @@ class VerificationAssignmentServiceTests(TestCase):
             self.organization_a.id,
         )
 
+    def test_idempotent_claim_repairs_missing_legacy_evidence_case(self):
+        assignment = self._claim_for_organization_a()
+        evidence = self._create_evidence()
+
+        self.assertFalse(
+            ModerationCase.objects.filter(
+                case_type=ModerationCase.CaseType.EVIDENCE,
+                evidence_submission=evidence,
+            ).exists()
+        )
+
+        claimed_again = claim_verification_assignment(
+            assignment=assignment,
+            organization=self.organization_a,
+            actor=self.lead_a,
+        )
+
+        self.assertEqual(claimed_again.pk, assignment.pk)
+        case = ModerationCase.objects.get(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            evidence_submission=evidence,
+        )
+        self.assertEqual(case.status, ModerationCase.Status.OPEN)
+        self.assertEqual(case.organization_id, self.organization_a.id)
+
     def test_second_organization_cannot_take_active_assignment(
         self,
     ):
@@ -416,6 +466,57 @@ class VerificationAssignmentServiceTests(TestCase):
             assignment.status,
             VerificationAssignment.Status.ACTIVE,
         )
+
+    def test_claiming_creates_missing_case_for_legacy_unverified_evidence(
+        self,
+    ):
+        evidence = self._create_evidence()
+        self.assertFalse(
+            ModerationCase.objects.filter(
+                case_type=ModerationCase.CaseType.EVIDENCE,
+                evidence_submission=evidence,
+            ).exists()
+        )
+
+        self._claim_for_organization_a()
+
+        case = ModerationCase.objects.get(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            evidence_submission=evidence,
+        )
+        self.assertEqual(case.status, ModerationCase.Status.OPEN)
+        self.assertEqual(case.organization_id, self.organization_a.id)
+        self.assertEqual(
+            case.source,
+            ModerationCase.Source.EVIDENCE_SUBMISSION,
+        )
+        self.assertTrue(
+            case.events.filter(
+                event_type="CASE_CREATED",
+            ).exists()
+        )
+
+    def test_claiming_does_not_recreate_terminal_legacy_evidence_case(self):
+        evidence = self._create_evidence()
+        terminal = ModerationCase.objects.create(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            evidence_submission=evidence,
+            source=ModerationCase.Source.EVIDENCE_SUBMISSION,
+            status=ModerationCase.Status.CANCELLED,
+        )
+
+        self._claim_for_organization_a()
+
+        self.assertEqual(
+            ModerationCase.objects.filter(
+                case_type=ModerationCase.CaseType.EVIDENCE,
+                evidence_submission=evidence,
+            ).count(),
+            1,
+        )
+        terminal.refresh_from_db()
+        self.assertEqual(terminal.status, ModerationCase.Status.CANCELLED)
+        self.assertIsNone(terminal.organization_id)
 
     def test_claiming_attaches_only_factual_cases(
         self,
@@ -548,8 +649,20 @@ class VerificationAssignmentServiceTests(TestCase):
     ):
         self._claim_for_organization_a()
 
-        self._create_evidence(
-            status=(EvidenceSubmission.EvidenceStatus.VERIFIED),
+        evidence = self._create_evidence()
+        evidence_case = ensure_evidence_case(
+            evidence=evidence,
+            actor=self.community_user,
+            organization=self.organization_a,
+        )
+        review = review_evidence_submission(
+            evidence=evidence,
+            actor=self.lead_a,
+            evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            expected_status=EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+            expected_case_id=evidence_case.pk,
+            expected_organization_id=self.organization_a.pk,
+            allow_reopen=False,
         )
 
         case = ensure_claim_adjudication_readiness(
@@ -557,6 +670,7 @@ class VerificationAssignmentServiceTests(TestCase):
             actor=self.lead_a,
             organization=self.organization_a,
         )
+        self.assertEqual(case.pk, review["adjudication_case"].pk)
 
         self.assertIsNotNone(case)
 

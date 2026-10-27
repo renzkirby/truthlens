@@ -177,3 +177,27 @@ class OrganizationProvisioningServiceTests(TestCase):
 
         invitation.refresh_from_db()
         self.assertEqual(invitation.status, OrganizationInvitation.Status.PENDING)
+
+    def test_left_membership_in_other_org_does_not_block_admin_provisioning(self):
+        former = Organization.objects.create(
+            name="Former Provisioning Partner",
+            slug="former-provisioning-partner",
+        )
+        OrganizationMembership.objects.create(
+            organization=former,
+            user=self.recipient,
+            role=OrganizationMembership.Role.ADMIN,
+            status=OrganizationMembership.Status.LEFT,
+        )
+
+        invitation = self.provision()
+
+        self.assertEqual(
+            invitation.status,
+            OrganizationInvitation.Status.PENDING,
+        )
+        self.assertEqual(
+            invitation.invited_role,
+            OrganizationMembership.Role.ADMIN,
+        )
+

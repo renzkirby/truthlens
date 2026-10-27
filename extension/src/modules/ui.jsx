@@ -290,7 +290,7 @@ function relatedPublicationsHTML(claim) {
       const headline = nonblankText(publication.headline);
       const organizationName = nonblankText(organization.name);
       if (
-         organization.public_profile_available !== true ||
+         organization.public_fact_check_available !== true ||
          !headline ||
          !organizationName ||
          !/^[a-zA-Z0-9_-]+$/.test(rawSlug) ||
@@ -361,11 +361,15 @@ function displayPublishedResultCard(claim, publication) {
    const organization = isRecord(publication.organization) ? publication.organization : {};
    const organizationName = nonblankText(organization.name);
    const publicProfileAvailable = organization.public_profile_available === true;
+   const publicFactCheckAvailable = organization.public_fact_check_available === true;
    const baseUrl = communityBaseUrl();
    const slug = pathComponent(organization.slug);
    const publicationId = pathComponent(publication.fact_check_id);
    const profileUrl = publicProfileAvailable && baseUrl && slug ? `${baseUrl}/partners/${slug}` : null;
-   const articleUrl = profileUrl && publicationId ? `${profileUrl}/fact-checks/${publicationId}` : null;
+   const articleUrl =
+      publicFactCheckAvailable && baseUrl && slug && publicationId
+         ? `${baseUrl}/partners/${slug}/fact-checks/${publicationId}`
+         : null;
    const logoUrl = publicProfileAvailable ? safeHttpUrl(organization.logo_url) : null;
 
    // The publication is authoritative; top-level values are legacy transport fallbacks.

@@ -11,6 +11,7 @@ from .models import (
     AdjudicationDecision,
     Claim,
     ClaimInvestigationClassification,
+    EvidenceReviewDecision,
     EvidenceSubmission,
     FactualCorrectionRequest,
     ModerationCase,
@@ -18,7 +19,11 @@ from .models import (
     VerificationAssignment,
 )
 from .accountability_service import record_accountability_event
-from .moderation_service import ACTIVE_CASE_STATUSES
+from .moderation_service import (
+    ACTIVE_CASE_STATUSES,
+    DuplicateActiveModerationCase,
+    create_moderation_case,
+)
 from .organization_service import (
     PartnerCapability,
     has_capability,
@@ -348,6 +353,105 @@ def ensure_verification_assignment(
         return assignment
 
 
+def _ensure_missing_unverified_evidence_cases(
+    *,
+    claim,
+    organization,
+):
+    """
+    Reconcile legacy unverified evidence that predates Evidence-case creation.
+
+    Only evidence that has never had an Evidence moderation case is repaired.
+    Resolved/cancelled/history-bearing cases are intentionally left untouched.
+    The caller holds the Claim lock, matching evidence submission's Claim-first
+    coordination and preventing a concurrent submission race.
+    """
+
+    evidence_rows = list(
+        EvidenceSubmission.objects.select_for_update(of=("self",))
+        .filter(
+            thread__claim=claim,
+            evidence_status=EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+        )
+        .order_by("submitted_at", "id")
+    )
+
+    for evidence in evidence_rows:
+        if ModerationCase.objects.filter(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            evidence_submission=evidence,
+        ).exists():
+            continue
+
+        try:
+            create_moderation_case(
+                case_type=ModerationCase.CaseType.EVIDENCE,
+                actor=None,
+                source=ModerationCase.Source.EVIDENCE_SUBMISSION,
+                evidence_submission=evidence,
+                organization=organization,
+            )
+        except DuplicateActiveModerationCase:
+            # A concurrent creator that follows the same Claim-first lock order
+            # has already restored the invariant.
+            pass
+
+
+def _ensure_successor_evidence_review_handoffs(
+    *,
+    claim,
+    organization,
+):
+    """
+    Require the newly responsible organization to establish its own basis for
+    evidence that was already reviewed under another institutional authority.
+
+    Historical resolved cases and decisions are preserved. A fresh active
+    Evidence case represents only the successor organization's choice to accept
+    the prior review or conduct an independent re-review.
+    """
+
+    reviewed_evidence = list(
+        EvidenceSubmission.objects.select_for_update(of=("self",))
+        .filter(thread__claim=claim)
+        .exclude(evidence_status=EvidenceSubmission.EvidenceStatus.UNVERIFIED)
+        .order_by("submitted_at", "id")
+    )
+
+    for evidence in reviewed_evidence:
+        current_basis = (
+            EvidenceReviewDecision.objects.filter(
+                evidence_submission=evidence,
+                organization=organization,
+            )
+            .order_by("-reviewed_at", "-id")
+            .first()
+        )
+        if (
+            current_basis is not None
+            and current_basis.disposition == evidence.evidence_status
+        ):
+            continue
+
+        if ModerationCase.objects.filter(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            evidence_submission=evidence,
+            status__in=ACTIVE_CASE_STATUSES,
+        ).exists():
+            continue
+
+        try:
+            create_moderation_case(
+                case_type=ModerationCase.CaseType.EVIDENCE,
+                actor=None,
+                source=ModerationCase.Source.EVIDENCE_SUBMISSION,
+                evidence_submission=evidence,
+                organization=organization,
+            )
+        except DuplicateActiveModerationCase:
+            pass
+
+
 def _attach_active_cases_to_organization(
     *,
     claim,
@@ -435,6 +539,18 @@ def claim_verification_assignment(
             locked_assignment.status == VerificationAssignment.Status.ACTIVE
             and locked_assignment.organization_id == organization.id
         ):
+            _ensure_missing_unverified_evidence_cases(
+                claim=locked_claim,
+                organization=organization,
+            )
+            _attach_active_cases_to_organization(
+                claim=locked_claim,
+                organization=organization,
+            )
+            _ensure_successor_evidence_review_handoffs(
+                claim=locked_claim,
+                organization=organization,
+            )
             return locked_assignment
 
         if locked_assignment.status != VerificationAssignment.Status.AVAILABLE:
@@ -509,7 +625,15 @@ def claim_verification_assignment(
             ]
         )
 
+        _ensure_missing_unverified_evidence_cases(
+            claim=locked_claim,
+            organization=organization,
+        )
         _attach_active_cases_to_organization(
+            claim=locked_claim,
+            organization=organization,
+        )
+        _ensure_successor_evidence_review_handoffs(
             claim=locked_claim,
             organization=organization,
         )

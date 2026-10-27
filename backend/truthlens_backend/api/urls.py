@@ -97,6 +97,44 @@ urlpatterns = [
         name="management_organization_platform_trust",
     ),
     path(
+        "management/organizations/<uuid:organization_id>/verification/verify/",
+        management_views.ManagementOrganizationVerifyView.as_view(),
+        name="management_organization_verify",
+    ),
+    path(
+        "management/organizations/<uuid:organization_id>/verification/reject/",
+        management_views.ManagementOrganizationRejectVerificationView.as_view(),
+        name="management_organization_reject_verification",
+    ),
+    path(
+        "management/organizations/<uuid:organization_id>/partnership/activate/",
+        management_views.ManagementOrganizationActivatePartnershipView.as_view(),
+        name="management_organization_activate_partnership",
+    ),
+    path(
+        "management/organizations/<uuid:organization_id>/partnership/suspend/",
+        management_views.ManagementOrganizationSuspendPartnershipView.as_view(),
+        name="management_organization_suspend_partnership",
+    ),
+    path(
+        "management/organizations/<uuid:organization_id>/partnership/reinstate/",
+        management_views.ManagementOrganizationReinstatePartnershipView.as_view(),
+        name="management_organization_reinstate_partnership",
+    ),
+    path(
+        (
+            "management/organizations/<uuid:organization_id>/"
+            "factual-corrections/<uuid:correction_request_id>/cancel-for-retirement/"
+        ),
+        management_views.ManagementOrganizationFactualCorrectionRetirementCancelView.as_view(),
+        name="management_organization_factual_correction_retirement_cancel",
+    ),
+    path(
+        "management/organizations/<uuid:organization_id>/partnership/end/",
+        management_views.ManagementOrganizationEndPartnershipView.as_view(),
+        name="management_organization_end_partnership",
+    ),
+    path(
         "management/organizations/<uuid:organization_id>/primary-admin/",
         management_views.ManagementPrimaryAdminProvisionView.as_view(),
         name="management_primary_admin_provision",

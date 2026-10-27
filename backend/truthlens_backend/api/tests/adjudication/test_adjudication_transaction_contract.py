@@ -5,6 +5,7 @@ from django.contrib.auth.models import User
 from django.db import close_old_connections, connection, transaction
 from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -15,9 +16,14 @@ from api.adjudication_service import (
     ensure_adjudication_case,
     issue_adjudication_decision,
 )
+from api.evidence_review_service import (
+    ensure_evidence_case,
+    review_evidence_submission,
+)
 from api.models import (
     AdjudicationDecision,
     Claim,
+    EvidenceReviewDecision,
     EvidenceSubmission,
     ModerationCase,
     ModerationEvent,
@@ -100,18 +106,51 @@ class AdjudicationContractFixtures:
         )
         evidence = []
         for index, evidence_status in enumerate(evidence_statuses):
-            evidence.append(
-                EvidenceSubmission.objects.create(
-                    thread=thread,
-                    contributor=self.contributor,
-                    evidence_caption=f"Evidence submission {index}.",
-                    evidence_url=f"https://example.com/evidence-{claim.id}-{index}",
-                    evidence_type=(
-                        EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION
-                    ),
-                    evidence_status=evidence_status,
-                )
+            reviewed_at = (
+                timezone.now()
+                if evidence_status != EvidenceSubmission.EvidenceStatus.UNVERIFIED
+                else None
             )
+            item = EvidenceSubmission.objects.create(
+                thread=thread,
+                contributor=self.contributor,
+                evidence_caption=f"Evidence submission {index}.",
+                evidence_url=f"https://example.com/evidence-{claim.id}-{index}",
+                evidence_type=(
+                    EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION
+                ),
+                evidence_status=evidence_status,
+                rejection_reason=(
+                    EvidenceSubmission.RejectionReason.OTHER
+                    if evidence_status == EvidenceSubmission.EvidenceStatus.REJECTED
+                    else None
+                ),
+            )
+            evidence.append(item)
+            if reviewed_at is not None:
+                evidence_case = ModerationCase.objects.create(
+                    case_type=ModerationCase.CaseType.EVIDENCE,
+                    evidence_submission=item,
+                    organization=self.organization,
+                    source=ModerationCase.Source.EVIDENCE_SUBMISSION,
+                    status=ModerationCase.Status.RESOLVED,
+                    resolution_code=evidence_status,
+                    resolved_by=self.moderator,
+                    resolved_at=reviewed_at,
+                )
+                EvidenceReviewDecision.objects.create(
+                    evidence_submission=item,
+                    organization=self.organization,
+                    moderation_case=evidence_case,
+                    reviewed_by=self.moderator,
+                    disposition=evidence_status,
+                    rejection_reason=(
+                        EvidenceSubmission.RejectionReason.OTHER
+                        if evidence_status == EvidenceSubmission.EvidenceStatus.REJECTED
+                        else None
+                    ),
+                    reviewed_at=reviewed_at,
+                )
         case = ensure_adjudication_case(
             claim=claim,
             actor=self.lead,
@@ -659,12 +698,26 @@ class AdjudicationActionApiContractTests(
                 EvidenceSubmission.EvidenceStatus.REJECTED,
             ]
         )
-        EvidenceSubmission.objects.create(
+        extra_evidence = EvidenceSubmission.objects.create(
             thread=context["thread"],
             contributor=self.second_contributor,
             evidence_caption="A second contributor's reviewed evidence.",
             evidence_type=EvidenceSubmission.EvidenceType.PROVIDES_CONTEXT,
+            evidence_status=EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+        )
+        extra_case = ensure_evidence_case(
+            evidence=extra_evidence,
+            actor=self.moderator,
+            organization=self.organization,
+        )
+        review_evidence_submission(
+            evidence=extra_evidence,
+            actor=self.moderator,
             evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            expected_status=EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+            expected_case_id=extra_case.pk,
+            expected_organization_id=self.organization.pk,
+            allow_reopen=False,
         )
 
         with patch(

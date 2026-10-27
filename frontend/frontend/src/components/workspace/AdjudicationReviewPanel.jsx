@@ -253,7 +253,6 @@ function EvidenceRecord({
    const rejected = evidence?.evidence_status === "REJECTED";
    const canOpenEvidenceReview =
       canReviewEvidence &&
-      evidence?.evidence_status === "UNVERIFIED" &&
       evidence?.evidence_case_id &&
       organizationId &&
       adjudicationCaseId &&
@@ -306,6 +305,26 @@ function EvidenceRecord({
                <dd><FormattedDateTime value={evidence?.reviewed_at} fallback="Review date not recorded" /></dd>
             </div>
          </dl>
+
+         {evidence?.review_basis && (
+            <div className="adjudication-evidence-basis">
+               <Icons name="info" size={16} aria-hidden="true" />
+               <div>
+                  <strong>Institutional evidence basis</strong>
+                  <span>
+                     {evidence.review_basis.decision_type === "PRIOR_REVIEW_ACCEPTED"
+                        ? `${evidence.review_basis.organization?.name || "This organization"} accepted the prior ${(evidence.review_basis.disposition_label || formatLabel(evidence.review_basis.disposition)).toLowerCase()} review from ${evidence.review_basis.source_organization?.name_snapshot || evidence.review_basis.source_organization?.name || "another Partner Organization"}.`
+                        : `${evidence.review_basis.organization?.name || "This organization"} independently reviewed this evidence as ${(evidence.review_basis.disposition_label || formatLabel(evidence.review_basis.disposition)).toLowerCase()}.`}
+                  </span>
+                  <small>
+                     {evidence.review_basis.reviewed_by?.username
+                        ? `Recorded by @${evidence.review_basis.reviewed_by.username} · `
+                        : ""}
+                     {formatDateTime(evidence.review_basis.reviewed_at)}
+                  </small>
+               </div>
+            </div>
+         )}
 
          {evidence?.is_current_user_contributor && (
             <p className="adjudication-inline-warning">
@@ -1649,10 +1668,8 @@ function AdjudicationReviewContent({
    const isResolvedCase = detail?.status === "RESOLVED";
    const currentDecision = detail?.current_decision || null;
    const evidenceTotal = normalizeNonnegativeNumber(evidenceReview.total);
-   const evidenceVerified = normalizeNonnegativeNumber(evidenceReview.verified);
-   const evidenceRejected = normalizeNonnegativeNumber(evidenceReview.rejected);
-   const evidenceUnreviewed = normalizeNonnegativeNumber(evidenceReview.unreviewed);
-   const reviewedEvidenceCount = evidenceVerified + evidenceRejected;
+   const institutionalBasisCount = normalizeNonnegativeNumber(evidenceReview.institutional_basis_count);
+   const institutionalBasisComplete = evidenceReview.institutional_basis_complete === true;
    const isUrlClaim = String(detailClaim.claim_type || "").toUpperCase() === "URL";
    const originalClaimUrl = isUrlClaim ? getSafeHttpUrl(detailClaim.url_link) : null;
    const draftingHandoff = detail?.drafting_handoff || null;
@@ -2088,14 +2105,14 @@ function AdjudicationReviewContent({
                                  </div>
 
                                  <div className="adjudication-summary-item">
-                                    <span className="adjudication-summary-label">Evidence reviewed</span>
+                                    <span className="adjudication-summary-label">Institutional evidence basis</span>
                                     <strong className="adjudication-summary-value">
-                                       {reviewedEvidenceCount}/{evidenceTotal}
+                                       {institutionalBasisCount}/{evidenceTotal}
                                     </strong>
                                     <span className="adjudication-summary-meta">
-                                       {evidenceReview.all_reviewed
-                                          ? "All submitted evidence has a review disposition."
-                                          : `${evidenceUnreviewed} evidence ${evidenceUnreviewed === 1 ? "item remains" : "items remain"} unreviewed.`}
+                                       {institutionalBasisComplete
+                                          ? "This organization has established a basis for every evidence item."
+                                          : "Accept or independently review inherited evidence before adjudication."}
                                     </span>
                                  </div>
 
@@ -2336,6 +2353,11 @@ function AdjudicationReviewContent({
                                        </span>
                                        <span className="adjudication-evidence-metric adjudication-evidence-metric--info">
                                           Active Evidence cases <strong>{normalizeNonnegativeNumber(evidenceReview.active_evidence_cases)}</strong>
+                                       </span>
+                                       <span
+                                          className={`adjudication-evidence-metric adjudication-evidence-metric--${institutionalBasisComplete ? "success" : "info"}`}
+                                       >
+                                          Institutional basis <strong>{institutionalBasisCount}/{evidenceTotal}</strong>
                                        </span>
                                        <span
                                           className={`adjudication-evidence-metric adjudication-evidence-metric--${evidenceReview.all_reviewed ? "success" : "info"}`}
@@ -2722,8 +2744,8 @@ function AdjudicationReviewContent({
                                        <span>Claim being adjudicated</span>
                                        <strong>{detailClaim.context_text || "Claim text unavailable."}</strong>
                                        <p>
-                                          Evidence reviewed: {reviewedEvidenceCount}/{evidenceTotal}
-                                          {evidenceReview.all_reviewed ? " · All evidence reviewed" : ` · ${evidenceUnreviewed} unreviewed`}
+                                          Evidence basis: {institutionalBasisCount}/{evidenceTotal}
+                                          {institutionalBasisComplete ? " · Current organization basis complete" : " · Evidence handoff still pending"}
                                        </p>
                                     </div>
 

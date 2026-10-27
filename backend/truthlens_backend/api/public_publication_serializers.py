@@ -30,6 +30,9 @@ class PublicFactCheckOrganizationSerializer(serializers.Serializer):
     logo_url = serializers.URLField(allow_null=True)
     organization_type = serializers.CharField()
     organization_type_label = serializers.CharField()
+    partner_status = serializers.CharField()
+    partner_status_label = serializers.CharField()
+    public_profile_available = serializers.BooleanField()
 
 
 class PublicFactCheckDecisionSerializer(serializers.Serializer):

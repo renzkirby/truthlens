@@ -259,7 +259,7 @@ function ResolutionContext({ statusData }) {
       const publishedVerdict = normalizeVerdict(factCheck.verdict || statusData.verdict, null);
       const publishedDate = formatDate(factCheck.published_at);
       const canOpenPublication = Boolean(
-         organization?.public_profile_available && organization?.slug && factCheck.fact_check_id,
+         organization?.public_fact_check_available && organization?.slug && factCheck.fact_check_id,
       );
 
       return (
@@ -798,7 +798,7 @@ function DeepAnalysisPage() {
                            const publishedDate = formatDate(factCheck?.published_at);
                            const relatedVerdict = normalizeVerdict(factCheck?.verdict, null);
                            const canOpenFactCheck = Boolean(
-                              organization?.public_profile_available && organization?.slug && factCheck?.fact_check_id,
+                              organization?.public_fact_check_available && organization?.slug && factCheck?.fact_check_id,
                            );
 
                            return (

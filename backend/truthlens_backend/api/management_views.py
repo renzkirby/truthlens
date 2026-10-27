@@ -9,6 +9,11 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .factual_correction_service import (
+    FactualCorrectionAuthorizationError,
+    FactualCorrectionConflict,
+    cancel_factual_correction_for_partner_retirement,
+)
 from .accountability_query_service import (
     AccountabilityQueryAuthorizationError,
     AccountabilityQueryInputError,
@@ -29,7 +34,17 @@ from .management_governance_service import (
     ManagementGovernanceConflict,
     ManagementGovernanceValidationError,
     create_partner_organization,
-    update_organization_platform_trust,
+)
+from .organization_partnership_lifecycle_service import (
+    OrganizationPartnershipLifecycleAuthorizationError,
+    OrganizationPartnershipLifecycleConflict,
+    activate_partner_organization_partnership,
+    apply_legacy_platform_trust_transition,
+    end_partner_organization_partnership,
+    reinstate_partner_organization_partnership,
+    reject_partner_organization_verification,
+    suspend_partner_organization_partnership,
+    verify_partner_organization,
 )
 from .institution_affiliation_service import (
     create_institution,
@@ -720,7 +735,7 @@ class ManagementOrganizationPlatformTrustView(APIView):
         serializer.is_valid(raise_exception=True)
 
         try:
-            organization = update_organization_platform_trust(
+            organization = apply_legacy_platform_trust_transition(
                 organization_id=organization_id,
                 actor=request.user,
                 **serializer.validated_data,
@@ -737,9 +752,181 @@ class ManagementOrganizationPlatformTrustView(APIView):
             )
         except ManagementGovernanceValidationError as error:
             return _governance_validation_response(error)
+        except OrganizationPartnershipLifecycleAuthorizationError as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except OrganizationPartnershipLifecycleConflict as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_409_CONFLICT,
+            )
 
         return Response(
             _serialize_management_organization(organization),
+            status=status.HTTP_200_OK,
+        )
+
+
+class ManagementOrganizationLifecycleTransitionView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+    transition = None
+
+    def post(self, request, organization_id):
+        serializer = ManagementEmptyMutationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        transitions = {
+            "verify": verify_partner_organization,
+            "reject_verification": reject_partner_organization_verification,
+            "activate_partnership": activate_partner_organization_partnership,
+            "suspend_partnership": suspend_partner_organization_partnership,
+            "reinstate_partnership": reinstate_partner_organization_partnership,
+        }
+        transition_function = transitions[self.transition]
+
+        try:
+            organization = transition_function(
+                organization_id=organization_id,
+                actor=request.user,
+            )
+        except Organization.DoesNotExist:
+            return Response(
+                {"detail": "Organization not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except OrganizationPartnershipLifecycleAuthorizationError as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except OrganizationPartnershipLifecycleConflict as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response(
+            {
+                "organization": _serialize_management_organization(organization),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ManagementOrganizationVerifyView(ManagementOrganizationLifecycleTransitionView):
+    transition = "verify"
+
+
+class ManagementOrganizationRejectVerificationView(
+    ManagementOrganizationLifecycleTransitionView
+):
+    transition = "reject_verification"
+
+
+class ManagementOrganizationActivatePartnershipView(
+    ManagementOrganizationLifecycleTransitionView
+):
+    transition = "activate_partnership"
+
+
+class ManagementOrganizationSuspendPartnershipView(
+    ManagementOrganizationLifecycleTransitionView
+):
+    transition = "suspend_partnership"
+
+
+class ManagementOrganizationReinstatePartnershipView(
+    ManagementOrganizationLifecycleTransitionView
+):
+    transition = "reinstate_partnership"
+
+
+class ManagementOrganizationFactualCorrectionRetirementCancelView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def post(self, request, organization_id, correction_request_id):
+        serializer = ManagementEmptyMutationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        if not Organization.objects.filter(pk=organization_id).exists():
+            return Response(
+                {"detail": "Organization not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            result = cancel_factual_correction_for_partner_retirement(
+                correction_request_id=correction_request_id,
+                organization_id=organization_id,
+                actor=request.user,
+            )
+        except FactualCorrectionAuthorizationError as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except FactualCorrectionConflict as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        organization = Organization.objects.get(pk=organization_id)
+        return Response(
+            {
+                "organization": _serialize_management_organization(organization),
+                "correction": {
+                    "id": str(result["request"].pk),
+                    "status": result["request"].status,
+                    "case_status": result["case"].status,
+                    "proposal_preserved": result["proposal"] is not None,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ManagementOrganizationEndPartnershipView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def post(self, request, organization_id):
+        serializer = ManagementEmptyMutationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            result = end_partner_organization_partnership(
+                organization_id=organization_id,
+                actor=request.user,
+            )
+        except Organization.DoesNotExist:
+            return Response(
+                {"detail": "Organization not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except OrganizationPartnershipLifecycleAuthorizationError as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except OrganizationPartnershipLifecycleConflict as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response(
+            {
+                "organization": _serialize_management_organization(
+                    result["organization"]
+                ),
+                "transition": {
+                    "ended_memberships": result["ended_memberships"],
+                    "cancelled_invitations": result["cancelled_invitations"],
+                    "requeued_investigations": result["requeued_investigations"],
+                },
+            },
             status=status.HTTP_200_OK,
         )
 

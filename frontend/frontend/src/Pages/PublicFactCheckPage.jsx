@@ -353,6 +353,11 @@ function PublicFactCheckPage() {
       isCommunity,
    );
    const organizationRoute = partnerProfileRoute(organization.slug, isCommunity);
+   const organizationProfileAvailable = organization.public_profile_available === true;
+   const organizationStandingLabel =
+      organization.partner_status === "FORMER"
+         ? "Former TruthLens Partner"
+         : organization.organization_type_label;
 
    const markHistoryNavigation = (item) => {
       if (item?.publication_id) {
@@ -372,7 +377,11 @@ function PublicFactCheckPage() {
                   </li>
                   <li aria-hidden="true">/</li>
                   <li>
-                     <Link to={organizationRoute}>{organization.name}</Link>
+                     {organizationProfileAvailable ? (
+                        <Link to={organizationRoute}>{organization.name}</Link>
+                     ) : (
+                        <span>{organization.name}</span>
+                     )}
                   </li>
                </ol>
             </nav>
@@ -399,16 +408,26 @@ function PublicFactCheckPage() {
                   <div className="public-fact-check-attribution">
                      <p className="public-fact-check-micro-label">Published by</p>
                      <div className="public-fact-check-attribution__row">
-                        <Link
-                           className="public-fact-check-attribution__identity"
-                           to={organizationRoute}
-                        >
-                           <PartnerLogo logoUrl={organization.logo_url} organizationName={organization.name} />
-                           <span>
-                              <strong>{organization.name}</strong>
-                              <span>{organization.organization_type_label}</span>
-                           </span>
-                        </Link>
+                        {organizationProfileAvailable ? (
+                           <Link
+                              className="public-fact-check-attribution__identity"
+                              to={organizationRoute}
+                           >
+                              <PartnerLogo logoUrl={organization.logo_url} organizationName={organization.name} />
+                              <span>
+                                 <strong>{organization.name}</strong>
+                                 <span>{organizationStandingLabel}</span>
+                              </span>
+                           </Link>
+                        ) : (
+                           <div className="public-fact-check-attribution__identity">
+                              <PartnerLogo logoUrl={organization.logo_url} organizationName={organization.name} />
+                              <span>
+                                 <strong>{organization.name}</strong>
+                                 <span>{organizationStandingLabel}</span>
+                              </span>
+                           </div>
+                        )}
                         <time dateTime={detail.published_at}>Published {formatDateTime(detail.published_at)}</time>
                      </div>
                   </div>

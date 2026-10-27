@@ -365,7 +365,13 @@ def _get_editorial_replacement_identity(
     }
 
 
-def _lock_publication_context(*, identity, actor, capability):
+def _lock_publication_context(
+    *,
+    identity,
+    actor,
+    capability,
+    platform_management_override=False,
+):
     """Lock a publication mutation using the shared Claim-first protocol.
 
     The canonical order is Claim, open Assignment, Organization, actor
@@ -403,11 +409,22 @@ def _lock_publication_context(*, identity, actor, capability):
             code="ASSIGNMENT_CONFLICT",
         )
 
-    _require_locked_capability(
-        actor,
-        capability,
-        organization=organization,
-    )
+    if platform_management_override:
+        if not (
+            actor
+            and actor.is_authenticated
+            and actor.is_active
+            and actor.is_superuser
+        ):
+            raise PublishingAuthorizationError(
+                "Platform management administrator access is required."
+            )
+    else:
+        _require_locked_capability(
+            actor,
+            capability,
+            organization=organization,
+        )
 
     current_decision = (
         AdjudicationDecision.objects.select_for_update(of=("self",))
