@@ -246,6 +246,20 @@ def get_evidence_case_queryset(*, include_events=False):
         "evidence_submission__thread__claim",
     )
 
+    queryset = queryset.prefetch_related(
+        Prefetch(
+            "evidence_submission__review_decisions",
+            queryset=(
+                EvidenceReviewDecision.objects.select_related(
+                    "organization",
+                    "reviewed_by",
+                    "source_review",
+                    "source_review__organization",
+                ).order_by("created_at", "id")
+            ),
+        )
+    )
+
     if include_events:
         queryset = queryset.prefetch_related(
             Prefetch(
@@ -273,7 +287,6 @@ def get_evidence_case_queue(*, actor, organization, evidence_status):
     if evidence_status == EvidenceSubmission.EvidenceStatus.UNVERIFIED:
         queryset = queryset.filter(
             status__in=ACTIVE_CASE_STATUSES,
-            evidence_submission__evidence_status=evidence_status,
         )
     else:
         queryset = queryset.filter(
