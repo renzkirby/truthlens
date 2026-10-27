@@ -1969,9 +1969,20 @@ class EvidenceCaseActionSerializer(serializers.Serializer):
 
 
 class EvidenceReviewOrganizationSerializer(serializers.ModelSerializer):
+    partner_status_label = serializers.CharField(
+        source="get_partner_status_display",
+        read_only=True,
+    )
+
     class Meta:
         model = Organization
-        fields = ["id", "name", "slug"]
+        fields = [
+            "id",
+            "name",
+            "slug",
+            "partner_status",
+            "partner_status_label",
+        ]
         read_only_fields = fields
 
 
