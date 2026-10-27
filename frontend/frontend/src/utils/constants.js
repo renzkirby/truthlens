@@ -108,6 +108,8 @@ export const API_ENDPOINTS = {
       `management/organizations/${encodeURIComponent(organizationId)}/`,
    MANAGEMENT_ORGANIZATION_PLATFORM_TRUST: (organizationId) =>
       `management/organizations/${encodeURIComponent(organizationId)}/platform-trust/`,
+   MANAGEMENT_ORGANIZATION_END_PARTNERSHIP: (organizationId) =>
+      `management/organizations/${encodeURIComponent(organizationId)}/partnership/end/`,
    ORGANIZATION_VERIFICATION_SCOPE: (organizationId) =>
       `organizations/${encodeURIComponent(organizationId)}/verification-scope/`,
    MANAGEMENT_PRIMARY_ADMIN_PROVISION: (organizationId) =>
