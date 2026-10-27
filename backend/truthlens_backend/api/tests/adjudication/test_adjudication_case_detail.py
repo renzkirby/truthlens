@@ -467,6 +467,8 @@ class AdjudicationCaseDetailApiTests(APITestCase):
             (2, 0, 2),
         )
         self.assertEqual(review["unreviewed"], 0)
+        self.assertEqual(review["institutional_basis_count"], 2)
+        self.assertTrue(review["institutional_basis_complete"])
         self.assertTrue(review["all_reviewed"])
         self.assertTrue(response.data["action_state"]["can_issue_first_decision"])
         evidence_item = review["items"][0]
@@ -525,6 +527,13 @@ class AdjudicationCaseDetailApiTests(APITestCase):
             item["code"] for item in response.data["action_state"]["blockers"]
         }
         self.assertIn("MISSING_EVIDENCE_REVIEW_BASIS", blockers)
+        self.assertEqual(
+            response.data["evidence_review"]["institutional_basis_count"],
+            0,
+        )
+        self.assertFalse(
+            response.data["evidence_review"]["institutional_basis_complete"]
+        )
         self.assertFalse(
             response.data["action_state"]["can_issue_first_decision"]
         )
