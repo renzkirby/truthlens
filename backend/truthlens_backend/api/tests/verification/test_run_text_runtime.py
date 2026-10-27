@@ -442,7 +442,16 @@ class VerificationRunTextRuntimeTests(TestCase):
         self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
         self.save_claim.assert_called_once_with(
             self.claim.id, self.verdict, "TruthLens Verified Vault",
-            "Verified summary.", ["https://example.com/vault"],
+            self.cleaned["cleaned_claim"], ["https://example.com/vault"],
+        )
+        self.claim.refresh_from_db()
+        self.assertEqual(
+            self.claim.context_text,
+            self.cleaned["cleaned_claim"],
+        )
+        self.assertNotEqual(
+            self.claim.context_text,
+            self.vault.return_value["summary"],
         )
         self.retrieve_gfc.assert_not_called()
         self.retrieve_tavily.assert_not_called()
