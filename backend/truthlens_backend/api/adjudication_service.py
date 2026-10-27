@@ -348,8 +348,14 @@ def get_adjudication_case_detail(
             evidence_submission__thread__claim=claim,
             organization=organization,
         )
+        .select_related(
+            "organization",
+            "reviewed_by",
+            "source_review",
+            "source_review__organization",
+            "source_review__reviewed_by",
+        )
         .order_by("evidence_submission_id", "-reviewed_at", "-id")
-        .only("id", "evidence_submission_id", "disposition", "reviewed_at")
     )
     latest_institutional_basis = {}
     for review_decision in institutional_basis_decisions:
