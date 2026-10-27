@@ -82,6 +82,78 @@ def _record_platform_event(
     )
 
 
+def get_partner_organization_lifecycle_projection(organization):
+    """Return derived governance state without mutating organization records."""
+
+    current_memberships = organization.memberships.exclude(
+        status=OrganizationMembership.Status.LEFT
+    ).count()
+    pending_invitations = organization.invitations.filter(
+        status=OrganizationInvitation.Status.PENDING
+    ).count()
+    active_investigations = organization.verification_assignments.filter(
+        status=VerificationAssignment.Status.ACTIVE
+    ).count()
+    active_factual_corrections = organization.factual_correction_requests.filter(
+        status=FactualCorrectionRequest.Status.ACTIVE
+    ).count()
+
+    if organization.partner_status == Organization.PartnerStatus.ACTIVE:
+        lifecycle_state = "ACTIVE_PARTNER"
+        operational_access = "ENABLED"
+    elif organization.partner_status == Organization.PartnerStatus.SUSPENDED:
+        lifecycle_state = "SUSPENDED_PARTNER"
+        operational_access = "DISABLED"
+    elif organization.partner_status == Organization.PartnerStatus.FORMER:
+        lifecycle_state = "FORMER_PARTNER"
+        operational_access = "DISABLED"
+    elif organization.verification_status == Organization.VerificationStatus.REJECTED:
+        lifecycle_state = "REJECTED"
+        operational_access = "DISABLED"
+    else:
+        lifecycle_state = "ONBOARDING"
+        operational_access = "SETUP_ONLY"
+
+    end_partnership_eligible = organization.partner_status in {
+        Organization.PartnerStatus.ACTIVE,
+        Organization.PartnerStatus.SUSPENDED,
+    }
+    blockers = []
+    if active_factual_corrections:
+        blockers.append(
+            {
+                "code": "ACTIVE_FACTUAL_CORRECTION",
+                "count": active_factual_corrections,
+                "message": (
+                    "Resolve or cancel active factual corrections before ending "
+                    "this partnership."
+                ),
+            }
+        )
+
+    if not end_partnership_eligible:
+        blockers.append(
+            {
+                "code": "PARTNERSHIP_NOT_ENDABLE",
+                "count": 0,
+                "message": "Only active or suspended partnerships can be ended.",
+            }
+        )
+
+    return {
+        "state": lifecycle_state,
+        "operational_access": operational_access,
+        "can_end_partnership": end_partnership_eligible and not blockers,
+        "end_partnership_blockers": blockers,
+        "impact": {
+            "current_memberships": current_memberships,
+            "pending_invitations": pending_invitations,
+            "active_investigations": active_investigations,
+            "active_factual_corrections": active_factual_corrections,
+        },
+    }
+
+
 def _ensure_endable_partnership(organization):
     if organization.partner_status == Organization.PartnerStatus.FORMER:
         raise OrganizationPartnershipLifecycleConflict(
