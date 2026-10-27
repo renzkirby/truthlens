@@ -85,7 +85,9 @@ retroactive authority. It does not itself assign subjects.
    are configured; classification is a separate provider operation.
 2. Analyze a fresh TEXT claim **without creating a thread** and inspect its
    `InvestigationClassificationAssessment`. For supported claims, expect
-   `SUGGESTED` with candidate subject codes and `candidate_jurisdiction=""`;
+   `SUGGESTED` with candidate subject codes, an explicit
+   `candidate_primary_subject` contained in those codes, and
+   `candidate_jurisdiction=""`;
    for insufficient/ambiguous claims expect `ABSTAINED` or `FAILED`.
    There must be **no** `ClaimInvestigationClassification` row in shadow and
    no new eligibility in partner intake.
@@ -100,7 +102,8 @@ retroactive authority. It does not itself assign subjects.
    across all 12 subjects, multi-subject claims, ambiguous/nonfactual inputs,
    adversarial prompt-injection content, Philippine and international
    examples, and all persisted input types. Compare exact subject-set match,
-   per-subject precision/recall, unsupported quote rate, and abstention and
+   explicit primary-subject accuracy, per-subject precision/recall,
+   unsupported quote rate, and abstention and
    provider-failure rates. Record disagreements and model version. **Do not
    infer classifier accuracy from mocked unit tests or a few demos.**
 6. Require a separate explicit accuracy-review and rollout decision before
