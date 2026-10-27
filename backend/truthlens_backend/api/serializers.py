@@ -3090,6 +3090,13 @@ class AdjudicationCaseDetailEvidenceSerializer(serializers.ModelSerializer):
         read_only=True,
         allow_null=True,
     )
+    review_basis = serializers.SerializerMethodField()
+
+    def get_review_basis(self, obj):
+        basis = getattr(obj, "adjudication_review_basis", None)
+        if basis is None:
+            return None
+        return EvidenceInstitutionalReviewSerializer(basis).data
 
     def get_is_current_user_contributor(self, obj):
         request = self.context.get("request")
@@ -3105,6 +3112,7 @@ class AdjudicationCaseDetailEvidenceSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "evidence_case_id",
+            "review_basis",
             "thread_id",
             "evidence_caption",
             "evidence_type",
