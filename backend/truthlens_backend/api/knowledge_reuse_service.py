@@ -514,7 +514,6 @@ def build_related_published_fact_check_payload(reference):
     if (
         fact_check.publication_status != OfficialFactCheck.PublicationStatus.PUBLISHED
         or partner is None
-        or not is_public_partner_eligible(partner)
         or not (partner.slug or "").strip()
     ):
         return None
@@ -540,7 +539,8 @@ def build_related_published_fact_check_payload(reference):
         "organization": {
             "name": public_organization["name"],
             "slug": public_organization["slug"],
-            "public_profile_available": True,
+            "public_profile_available": is_public_partner_eligible(partner),
+            "public_fact_check_available": True,
             "logo_url": public_organization.get("logo_url"),
         },
     }
@@ -1031,11 +1031,29 @@ def build_published_fact_check_payload(
     if fact_check.organization:
         partner = fact_check.organization
         public_profile_available = is_public_partner_eligible(partner)
+        public_fact_check_available = False
+        if (partner.slug or "").strip():
+            try:
+                get_public_partner_fact_check_detail(
+                    organization=partner,
+                    publication_id=fact_check.id,
+                )
+            except PublicPublicationNotFound:
+                public_fact_check_available = False
+            except Exception:
+                logger.warning(
+                    "Published fact-check public link validation failed.",
+                    exc_info=True,
+                )
+            else:
+                public_fact_check_available = True
+
         organization = {
             "id": str(partner.id),
             "name": partner.name,
             "slug": partner.slug,
             "public_profile_available": public_profile_available,
+            "public_fact_check_available": public_fact_check_available,
             "logo_url": (
                 partner.logo_url
                 if public_profile_available and partner.public_logo_enabled
