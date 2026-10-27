@@ -7,9 +7,10 @@ from django.utils.dateparse import parse_datetime
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from api.adjudication_service import (
-    ensure_adjudication_case,
-    issue_adjudication_decision,
+from api.adjudication_service import issue_adjudication_decision
+from api.evidence_review_service import (
+    ensure_evidence_case,
+    review_evidence_submission,
 )
 from api.models import (
     AdjudicationDecision,
@@ -79,24 +80,33 @@ class CommunityFeedApiTests(TestCase):
         return claim, thread
 
     def _issue_human_decision(self, claim, thread):
-        EvidenceSubmission.objects.create(
-            thread=thread,
-            contributor=self.author,
-            evidence_caption="Reviewed source evidence.",
-            evidence_type=EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
-            evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
-        )
         VerificationAssignment.objects.create(
             claim=claim,
             organization=self.organization,
             claimed_by=self.reviewer,
             status=VerificationAssignment.Status.ACTIVE,
         )
-        case = ensure_adjudication_case(
-            claim=claim,
-            actor=self.reviewer,
+        evidence = EvidenceSubmission.objects.create(
+            thread=thread,
+            contributor=self.author,
+            evidence_caption="Reviewed source evidence.",
+            evidence_type=EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
+        )
+        evidence_case = ensure_evidence_case(
+            evidence=evidence,
+            actor=self.author,
             organization=self.organization,
         )
+        review = review_evidence_submission(
+            evidence=evidence,
+            actor=self.reviewer,
+            evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            expected_status=EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+            expected_case_id=evidence_case.pk,
+            expected_organization_id=self.organization.pk,
+            allow_reopen=False,
+        )
+        case = review["adjudication_case"]
         result = issue_adjudication_decision(
             case_id=case.id,
             organization_id=self.organization.id,
