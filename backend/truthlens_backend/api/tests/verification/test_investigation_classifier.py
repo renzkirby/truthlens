@@ -165,6 +165,7 @@ class AutomaticInvestigationClassificationTests(TestCase):
             resource_id=str(self.claim.pk),
         )
         self.assertEqual(event.authority_scope, AccountabilityEvent.AuthorityScope.SYSTEM)
+        self.assertEqual(event.new_state["primary_subject"], "SCIENCE")
         self.assertEqual(classify_investigation_claim(self.claim.pk), "ALREADY_CLASSIFIED")
         mock_provider.assert_called_once()
 
@@ -303,6 +304,24 @@ class AutomaticInvestigationClassificationTests(TestCase):
         self.assertEqual(image.context_text, self.claim.context_text)
         self.assertIsNone(image.ai_verdict)
         delay.assert_called_once_with(str(image.pk))
+
+    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="off")
+    @patch("api.tasks.classify_investigation_claim_task.delay")
+    def test_off_mode_does_not_early_persist_or_queue_classification(self, delay):
+        from api.tasks import _persist_subject_classification_input
+
+        claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="Original submitted text.",
+        )
+        persisted = _persist_subject_classification_input(
+            claim.pk,
+            "Normalized text that should not be written while classification is off.",
+        )
+        self.assertFalse(persisted)
+        claim.refresh_from_db()
+        self.assertEqual(claim.context_text, "Original submitted text.")
+        delay.assert_not_called()
 
     @override_settings(INVESTIGATION_CLASSIFICATION_MODE="shadow")
     @patch("api.tasks.classify_investigation_claim_task.delay")
