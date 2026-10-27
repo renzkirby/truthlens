@@ -314,7 +314,7 @@ function EvidenceRecord({
                   <strong>Institutional evidence basis</strong>
                   <span>
                      {evidence.review_basis.decision_type === "PRIOR_REVIEW_ACCEPTED"
-                        ? `${evidence.review_basis.organization?.name || "This organization"} accepted the prior ${(evidence.review_basis.disposition_label || formatLabel(evidence.review_basis.disposition)).toLowerCase()} review from ${evidence.review_basis.source_organization?.name || "another Partner Organization"}.`
+                        ? `${evidence.review_basis.organization?.name || "This organization"} accepted the prior ${(evidence.review_basis.disposition_label || formatLabel(evidence.review_basis.disposition)).toLowerCase()} review from ${evidence.review_basis.source_organization?.name_snapshot || evidence.review_basis.source_organization?.name || "another Partner Organization"}.`
                         : `${evidence.review_basis.organization?.name || "This organization"} independently reviewed this evidence as ${(evidence.review_basis.disposition_label || formatLabel(evidence.review_basis.disposition)).toLowerCase()}.`}
                   </span>
                   <small>
