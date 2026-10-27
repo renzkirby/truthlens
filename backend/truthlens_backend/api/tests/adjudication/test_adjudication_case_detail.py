@@ -472,6 +472,18 @@ class AdjudicationCaseDetailApiTests(APITestCase):
         evidence_item = review["items"][0]
         self.assertIsNone(evidence_item["evidence_case_id"])
         self.assertEqual(evidence_item["reviewed_by"]["id"], self.reviewer.id)
+        self.assertEqual(
+            evidence_item["review_basis"]["organization"]["id"],
+            str(self.organization.pk),
+        )
+        self.assertEqual(
+            evidence_item["review_basis"]["decision_type"],
+            EvidenceReviewDecision.DecisionType.INDEPENDENT_REVIEW,
+        )
+        self.assertEqual(
+            evidence_item["review_basis"]["disposition"],
+            EvidenceReviewDecision.Disposition.REJECTED,
+        )
         self.assertEqual(evidence_item["rejection_reason"], "IRRELEVANT")
         self.assertFalse(evidence_item["is_current_user_contributor"])
 
