@@ -7,6 +7,7 @@ from django.utils import timezone
 from .models import (
     AccountabilityEvent,
     Claim,
+    EvidenceReviewDecision,
     EvidenceSubmission,
     FactualCorrectionProposal,
     FactualCorrectionRequest,
@@ -168,6 +169,57 @@ def _get_correction_review_identity(*, correction_request_id, evidence_id):
         "decision_id": request_identity["predecessor_decision_id"],
         "fact_check_id": request_identity["predecessor_fact_check_id"],
     }
+
+
+def get_latest_evidence_review_decision(
+    *,
+    evidence,
+    organization=None,
+    exclude_organization=None,
+    lock=False,
+):
+    queryset = EvidenceReviewDecision.objects.filter(
+        evidence_submission=evidence,
+    ).select_related(
+        "organization",
+        "reviewed_by",
+        "source_review",
+        "source_review__organization",
+    )
+    if organization is not None:
+        queryset = queryset.filter(organization=organization)
+    if exclude_organization is not None:
+        queryset = queryset.exclude(organization=exclude_organization)
+    if lock:
+        queryset = queryset.select_for_update(of=("self",))
+    return queryset.order_by("-created_at", "-id").first()
+
+
+def _record_independent_evidence_review_decision(
+    *,
+    evidence,
+    case,
+    organization,
+    actor,
+    disposition,
+    moderator_notes,
+    rejection_reason,
+):
+    return EvidenceReviewDecision.objects.create(
+        evidence_submission=evidence,
+        organization=organization,
+        moderation_case=case,
+        reviewed_by=actor,
+        decision_type=EvidenceReviewDecision.DecisionType.INDEPENDENT_REVIEW,
+        disposition=disposition,
+        source_review=None,
+        notes=moderator_notes or "",
+        rejection_reason=(
+            rejection_reason
+            if disposition == EvidenceSubmission.EvidenceStatus.REJECTED
+            else None
+        ),
+    )
 
 
 def ensure_can_review_evidence(actor, organization):
@@ -766,6 +818,16 @@ def review_correction_evidence(
                 "evidence_record": evidence_record,
             },
         )
+        institutional_review = _record_independent_evidence_review_decision(
+            evidence=locked_evidence,
+            case=case,
+            organization=organization,
+            actor=actor,
+            disposition=evidence_status,
+            moderator_notes=moderator_notes,
+            rejection_reason=rejection_reason,
+        )
+
         if previous_status != evidence_status:
             dispatch_after_commit(
                 notify_evidence_reviewed,
@@ -1129,6 +1191,202 @@ def review_evidence_submission(
             "case": case,
             "contributor_id": (locked_evidence.contributor_id),
             "adjudication_case": adjudication_case,
+        }
+
+
+def accept_prior_evidence_review(
+    *,
+    evidence,
+    actor,
+    source_review_id,
+    expected_status,
+    expected_case_id,
+    expected_organization_id,
+):
+    if not actor or not actor.is_authenticated:
+        raise EvidenceReviewAuthorizationError(
+            "Authentication is required to accept a prior evidence review."
+        )
+
+    claim_id = evidence.thread.claim_id
+    with transaction.atomic():
+        locked_claim = Claim.objects.select_for_update().get(pk=claim_id)
+        organization = get_claim_verification_organization(
+            locked_claim,
+            lock=True,
+        )
+        if organization is None:
+            raise EvidenceReviewConflict(
+                "This claim no longer has an active organization verification assignment."
+            )
+        if organization.pk != expected_organization_id:
+            raise EvidenceReviewConflict(
+                "The organization responsible for this claim changed after the review was opened."
+            )
+
+        locked_evidence = (
+            EvidenceSubmission.objects.select_for_update(of=("self",))
+            .select_related("contributor", "thread")
+            .get(pk=evidence.pk)
+        )
+        if locked_evidence.thread.claim_id != locked_claim.pk:
+            raise EvidenceReviewConflict(
+                "This evidence no longer belongs to the expected claim."
+            )
+        if locked_evidence.contributor_id == actor.id:
+            raise EvidenceReviewAuthorizationError(
+                "You cannot accept an evidence review for your own contribution."
+            )
+        if locked_evidence.evidence_status != expected_status:
+            raise EvidenceReviewConflict(
+                "This evidence changed after the prior review was opened. Refresh it before continuing."
+            )
+        if get_current_adjudication_decision(locked_claim, lock=True):
+            raise EvidenceReviewConflict(
+                "This claim has already been adjudicated. An explicit revision workflow is required."
+            )
+
+        try:
+            case = ModerationCase.objects.select_for_update(of=("self",)).get(
+                pk=expected_case_id,
+                case_type=ModerationCase.CaseType.EVIDENCE,
+                evidence_submission=locked_evidence,
+                organization=organization,
+                status__in=ACTIVE_CASE_STATUSES,
+            )
+        except ModerationCase.DoesNotExist as error:
+            raise EvidenceReviewConflict(
+                "This Evidence case is no longer current."
+            ) from error
+
+        if not has_case_capability(
+            actor,
+            case,
+            PartnerCapability.REVIEW_EVIDENCE,
+        ):
+            raise EvidenceReviewAuthorizationError(
+                "You do not have permission to accept prior evidence review for this organization."
+            )
+        if EvidenceReviewDecision.objects.filter(
+            evidence_submission=locked_evidence,
+            organization=organization,
+        ).exists():
+            raise EvidenceReviewConflict(
+                "This organization has already established its evidence review basis."
+            )
+
+        try:
+            source_review = (
+                EvidenceReviewDecision.objects.select_for_update(of=("self",))
+                .select_related("organization", "reviewed_by")
+                .get(
+                    pk=source_review_id,
+                    evidence_submission=locked_evidence,
+                )
+            )
+        except EvidenceReviewDecision.DoesNotExist as error:
+            raise EvidenceReviewConflict(
+                "The prior institutional evidence review is no longer available."
+            ) from error
+
+        if source_review.organization_id == organization.pk:
+            raise EvidenceReviewConflict(
+                "A Partner Organization cannot accept its own prior review as a successor handoff."
+            )
+
+        latest_prior = get_latest_evidence_review_decision(
+            evidence=locked_evidence,
+            exclude_organization=organization,
+            lock=True,
+        )
+        if latest_prior is None or latest_prior.pk != source_review.pk:
+            raise EvidenceReviewConflict(
+                "A newer prior institutional evidence review is available. Refresh before continuing."
+            )
+
+        case = _prepare_evidence_case_for_review(
+            case,
+            actor=actor,
+            claim_id=locked_claim.pk,
+            allow_reopen=False,
+        )
+        accepted = EvidenceReviewDecision.objects.create(
+            evidence_submission=locked_evidence,
+            organization=organization,
+            moderation_case=case,
+            reviewed_by=actor,
+            decision_type=(
+                EvidenceReviewDecision.DecisionType.PRIOR_REVIEW_ACCEPTED
+            ),
+            disposition=source_review.disposition,
+            source_review=source_review,
+            notes=(
+                f"Accepted prior evidence review by "
+                f"{source_review.organization_name_snapshot}."
+            ),
+            rejection_reason=source_review.rejection_reason,
+        )
+
+        record_accountability_event(
+            action_type=(
+                AccountabilityEvent.ActionType.EVIDENCE_PRIOR_REVIEW_ACCEPTED
+            ),
+            resource_type=AccountabilityEvent.ResourceType.EVIDENCE_SUBMISSION,
+            resource_id=locked_evidence.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+            actor=actor,
+            authority_organization=organization,
+            subject_organization=organization,
+            capability=PartnerCapability.REVIEW_EVIDENCE,
+            previous_state={
+                "organization_review_basis": None,
+            },
+            new_state={
+                "organization_review_basis": str(accepted.pk),
+                "disposition": accepted.disposition,
+                "decision_type": accepted.decision_type,
+            },
+            reason_code="PRIOR_REVIEW_ACCEPTED",
+            context={
+                "claim_id": str(locked_claim.pk),
+                "evidence_case_id": str(case.pk),
+                "source_review_id": str(source_review.pk),
+                "source_organization_id": str(source_review.organization_id),
+            },
+        )
+
+        case = transition_moderation_case(
+            case,
+            next_status=ModerationCase.Status.RESOLVED,
+            actor=actor,
+            reason_code="PRIOR_REVIEW_ACCEPTED",
+            notes=(
+                "Accepted the prior institutional evidence review for use "
+                "in this organization's adjudication."
+            ),
+            resolution_code=accepted.disposition,
+            resolution_summary=(
+                f"Accepted prior {accepted.disposition.lower()} review by "
+                f"{source_review.organization_name_snapshot}."
+            ),
+            metadata={
+                "review_decision_id": str(accepted.pk),
+                "source_review_id": str(source_review.pk),
+            },
+        )
+
+        adjudication_case = ensure_claim_adjudication_readiness(
+            claim=locked_claim,
+            actor=actor,
+            organization=organization,
+        )
+
+        return {
+            "evidence": locked_evidence,
+            "case": case,
+            "review_decision": accepted,
+            "adjudication_case": adjudication_case,
+            "contributor_id": None,
         }
 
 
