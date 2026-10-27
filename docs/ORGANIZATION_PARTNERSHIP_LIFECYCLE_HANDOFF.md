@@ -586,6 +586,20 @@ Do not assume Vercel frontend deployment implies backend code/migrations are cur
 
 ---
 
+## Regression checkpoint commits
+
+The first preservation-only regression tests were added before lifecycle implementation:
+
+- `4303e6d2` — `test: checkpoint workspace partner access invariants`
+  - active verified Organization Admin retains the existing organization-management Workspace context;
+  - an active Lead Verifier loses factual Workspace access when the organization is suspended.
+- `1f24069d` — `test: checkpoint organization onboarding membership invariant`
+  - a historical `LEFT` membership in another organization does not block initial Organization Admin provisioning.
+
+These tests intentionally avoid encoding the CSG Admin-access bug as expected behavior.
+
+No lifecycle production logic was changed by these commits.
+
 ## Current checkpoint / next step
 
 As of this document's creation:
