@@ -55,7 +55,7 @@ decisions.
 
 The classification pipeline is distinct from factual-verdict generation and
 does not modify factual confidence, evidence, adjudication, publication, or
-provenance. Classifier `v4-primary-subject` requires exact supporting quotations,
+provenance. Classifier `v5-primary-unique-domains` requires 1-3 unique subject domains, exact supporting quotations,
 an explicit primary subject contained in the selected domains, abstains on
 uncertain/unsupported subjects, and reads persisted `Claim.context_text`
 from TEXT, URL, IMAGE, and FILE claims. URL/IMAGE/FILE inputs are eligible only
