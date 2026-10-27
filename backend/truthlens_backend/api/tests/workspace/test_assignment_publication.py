@@ -2,9 +2,10 @@ from django.contrib.auth.models import User
 
 from django.test import TestCase
 
-from api.adjudication_service import (
-    ensure_adjudication_case,
-    issue_adjudication_decision,
+from api.adjudication_service import issue_adjudication_decision
+from api.evidence_review_service import (
+    ensure_evidence_case,
+    review_evidence_submission,
 )
 from api.models import (
     AdjudicationDecision,
@@ -93,18 +94,26 @@ class VerificationAssignmentPublicationTests(TestCase):
             actor=self.lead_verifier,
         )
 
-        EvidenceSubmission.objects.create(
+        evidence = EvidenceSubmission.objects.create(
             thread=self.thread,
             contributor=self.community_user,
             evidence_caption="Reviewed source for publication.",
-            evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
         )
-
-        case = ensure_adjudication_case(
-            claim=self.claim,
+        evidence_case = ensure_evidence_case(
+            evidence=evidence,
             actor=self.community_user,
             organization=self.organization,
         )
+        review = review_evidence_submission(
+            evidence=evidence,
+            actor=self.lead_verifier,
+            evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            expected_status=EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+            expected_case_id=evidence_case.pk,
+            expected_organization_id=self.organization.pk,
+            allow_reopen=False,
+        )
+        case = review["adjudication_case"]
 
         result = issue_adjudication_decision(
             case_id=case.id,
