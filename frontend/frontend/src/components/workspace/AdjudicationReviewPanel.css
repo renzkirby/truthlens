@@ -2353,3 +2353,42 @@
       min-height: 44px;
    }
 }
+
+
+.adjudication-evidence-basis {
+   display: flex;
+   align-items: flex-start;
+   gap: var(--tl-space-2);
+   margin-top: var(--tl-space-3);
+   padding: var(--tl-space-3);
+   border: 1px solid var(--tl-color-border-subtle);
+   border-radius: var(--tl-radius-md);
+   background: var(--tl-color-bg-subtle);
+   color: var(--tl-color-text-body);
+}
+
+.adjudication-evidence-basis > svg {
+   flex: 0 0 auto;
+   margin-top: 2px;
+}
+
+.adjudication-evidence-basis > div {
+   display: grid;
+   gap: 3px;
+   min-width: 0;
+}
+
+.adjudication-evidence-basis strong {
+   color: var(--tl-color-text-main);
+   font-size: var(--tl-text-sm);
+}
+
+.adjudication-evidence-basis span {
+   font-size: var(--tl-text-sm);
+   line-height: 1.5;
+}
+
+.adjudication-evidence-basis small {
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-xs);
+}
