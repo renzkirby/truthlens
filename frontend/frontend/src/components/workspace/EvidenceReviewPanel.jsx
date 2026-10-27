@@ -689,8 +689,9 @@ function EvidenceReviewContent({
          authorityGeneration: authorityGenerationRef.current,
       };
       const payload = {
+         action: "REVIEW",
          decision,
-         expected_status: "UNVERIFIED",
+         expected_status: evidence?.evidence_status || "UNVERIFIED",
          moderator_notes: moderatorNotes.trim(),
       };
 
@@ -777,6 +778,104 @@ function EvidenceReviewContent({
          }
       }
    };
+   const handleAcceptPriorReview = async () => {
+      const priorReview = detail?.review_context?.prior_review;
+      if (
+         authorityRevokedRef.current
+         || !detail?.id
+         || !priorReview?.id
+         || mutation
+      ) {
+         return;
+      }
+
+      const operation = {
+         organizationId,
+         caseId: detail.id,
+         decision: priorReview.disposition,
+         kind: "ACCEPT_PRIOR_REVIEW",
+         authIdentity,
+         authorityGeneration: authorityGenerationRef.current,
+      };
+      const payload = {
+         action: "ACCEPT_PRIOR_REVIEW",
+         source_review_id: priorReview.id,
+         expected_status: evidence?.evidence_status || priorReview.disposition,
+      };
+
+      setMutation(operation);
+      setValidationError("");
+      setActionError("");
+      setNotice("");
+
+      try {
+         const query = new URLSearchParams({ organization_id: operation.organizationId });
+         const url = `${resolveApiEndpoint("EVIDENCE_CASE_ACTION", operation.caseId)}?${query.toString()}`;
+         const updatedCase = await authFetch(url, { method: "POST", body: payload });
+
+         if (
+            operation.authIdentity !== authIdentity
+            || !isAuthorityGenerationCurrent(operation.authorityGeneration)
+         ) {
+            return;
+         }
+
+         if (selectedCaseIdRef.current === operation.caseId) {
+            setDetail(updatedCase);
+            setDetailError("");
+            setDetailUnavailable(false);
+            setDecision(null);
+            setModeratorNotes("");
+            setRejectionReason("");
+         }
+
+         showWorkspaceSuccess(addToast, {
+            title: "Prior review accepted",
+            message: "Your organization explicitly adopted the prior institutional evidence review for this investigation.",
+         });
+         onWorkflowChanged?.({
+            stage: "EVIDENCE_REVIEW",
+            caseId: operation.caseId,
+            decision: operation.decision,
+            reviewBasis: "PRIOR_REVIEW_ACCEPTED",
+            updatedCase,
+         });
+         if (!guidedMode) {
+            requestQueueRefresh();
+         }
+      } catch (error) {
+         if (
+            !mountedRef.current
+            || operation.authIdentity !== authIdentity
+            || !isAuthorityGenerationCurrent(operation.authorityGeneration)
+         ) {
+            return;
+         }
+         if (error?.status === 401 || error?.status === 403) {
+            revokeAuthority(error);
+            return;
+         }
+         if (error?.status === 409) {
+            reconcileMutationConflict(operation.caseId, error);
+         } else {
+            focusActionErrorRef.current = true;
+            setActionError(
+               error?.message || "Unable to accept the prior institutional review.",
+            );
+         }
+      } finally {
+         if (
+            mountedRef.current
+            && operation.authIdentity === authIdentity
+            && isAuthorityGenerationCurrent(operation.authorityGeneration)
+         ) {
+            setMutation((current) =>
+               current?.caseId === operation.caseId ? null : current,
+            );
+         }
+      }
+   };
+
 
    const handleAuthorityRetry = () => {
       authorityGenerationRef.current += 1;
@@ -826,6 +925,9 @@ function EvidenceReviewContent({
 
    const evidence = detail?.evidence;
    const claim = detail?.thread?.claim;
+   const reviewContext = detail?.review_context || {};
+   const priorReview = reviewContext.prior_review || null;
+   const requiresSuccessorAction = Boolean(reviewContext.requires_successor_action);
    const isActiveCase = ACTIVE_CASE_STATUSES.has(detail?.status);
    const totalPages = Math.max(1, Math.ceil(queue.count / PAGE_SIZE));
    const currentPage = queue.count === 0 ? 1 : Math.floor(offset / PAGE_SIZE) + 1;
@@ -1197,6 +1299,47 @@ function EvidenceReviewContent({
                            </div>
                         </div>
 
+                        {priorReview && (
+                           <div className="evidence-prior-review-card">
+                              <div className="evidence-prior-review-card__header">
+                                 <div>
+                                    <span>Prior institutional review</span>
+                                    <strong>{priorReview.disposition_label || formatLabel(priorReview.disposition)}</strong>
+                                 </div>
+                                 <span className="evidence-prior-review-card__type">
+                                    {priorReview.organization_name_snapshot || priorReview.organization?.name || "Previous Partner Organization"}
+                                 </span>
+                              </div>
+                              <dl>
+                                 <div>
+                                    <dt>Reviewed by</dt>
+                                    <dd>
+                                       {priorReview.reviewer_username_snapshot
+                                          ? `@${priorReview.reviewer_username_snapshot}`
+                                          : "Reviewer unavailable"}
+                                    </dd>
+                                 </div>
+                                 <div>
+                                    <dt>Reviewed</dt>
+                                    <dd><FormattedDateTime value={priorReview.created_at} /></dd>
+                                 </div>
+                                 <div>
+                                    <dt>Review basis</dt>
+                                    <dd>{priorReview.decision_type_label || "Independent review"}</dd>
+                                 </div>
+                              </dl>
+                              {priorReview.notes && <p>{priorReview.notes}</p>}
+                              {requiresSuccessorAction && (
+                                 <div className="evidence-prior-review-card__notice">
+                                    <Icons name="info" size={16} aria-hidden="true" />
+                                    <span>
+                                       This review remains attributed to the previous organization. Your organization must explicitly accept it or conduct an independent re-review before adjudication.
+                                    </span>
+                                 </div>
+                              )}
+                           </div>
+                        )}
+
                         {notice && String(noticeCaseId) === String(detail.id) && (
                            <div
                               className="evidence-local-outcome"
@@ -1234,7 +1377,7 @@ function EvidenceReviewContent({
                            </div>
                         )}
 
-                        {!isActiveCase || evidence?.evidence_status !== "UNVERIFIED" ? (
+                        {!isActiveCase ? (
                            <div className="evidence-readonly-state" role="status">
                               <Icons name="info" size={18} aria-hidden="true" />
                               <div>
@@ -1260,24 +1403,44 @@ function EvidenceReviewContent({
                            </div>
                         ) : !decision ? (
                            <div className="evidence-decision-options">
-                              <Button
-                                 type="button"
-                                 variant="primary"
-                                 density="comfortable"
-                                 disabled={Boolean(mutation)}
-                                 onClick={(event) => handleOpenDecision("VERIFIED", event.currentTarget)}
-                              >
-                                 Verify evidence
-                              </Button>
-                              <Button
-                                 type="button"
-                                 variant="destructive"
-                                 density="comfortable"
-                                 disabled={Boolean(mutation)}
-                                 onClick={(event) => handleOpenDecision("REJECTED", event.currentTarget)}
-                              >
-                                 Reject evidence
-                              </Button>
+                              {requiresSuccessorAction && priorReview && (
+                                 <div className="evidence-successor-actions">
+                                    <Button
+                                       type="button"
+                                       variant="primary"
+                                       density="comfortable"
+                                       loading={mutation?.kind === "ACCEPT_PRIOR_REVIEW" && isMutatingSelectedCase}
+                                       loadingLabel="Accepting prior review…"
+                                       disabled={Boolean(mutation)}
+                                       onClick={handleAcceptPriorReview}
+                                    >
+                                       Accept prior review
+                                    </Button>
+                                    <span>
+                                       Or conduct an independent re-review for {organizationName || "this organization"}:
+                                    </span>
+                                 </div>
+                              )}
+                              <div className="evidence-independent-review-actions">
+                                 <Button
+                                    type="button"
+                                    variant={requiresSuccessorAction ? "secondary" : "primary"}
+                                    density="comfortable"
+                                    disabled={Boolean(mutation)}
+                                    onClick={(event) => handleOpenDecision("VERIFIED", event.currentTarget)}
+                                 >
+                                    {requiresSuccessorAction ? "Verify independently" : "Verify evidence"}
+                                 </Button>
+                                 <Button
+                                    type="button"
+                                    variant="destructive"
+                                    density="comfortable"
+                                    disabled={Boolean(mutation)}
+                                    onClick={(event) => handleOpenDecision("REJECTED", event.currentTarget)}
+                                 >
+                                    {requiresSuccessorAction ? "Reject independently" : "Reject evidence"}
+                                 </Button>
+                              </div>
                            </div>
                         ) : (
                            <form className="evidence-decision-form" onSubmit={handleDecisionSubmit} aria-busy={isMutatingSelectedCase}>
