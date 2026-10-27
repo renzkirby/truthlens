@@ -110,6 +110,7 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
                 },
                 "can_end_partnership": True,
                 "end_partnership_blockers": [],
+                "active_factual_corrections": [],
                 "impact": {
                     "current_memberships": 1,
                     "pending_invitations": 1,
@@ -160,6 +161,7 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
                         "message": "Only active or suspended partnerships can be ended.",
                     }
                 ],
+                "active_factual_corrections": [],
                 "impact": {
                     "current_memberships": 0,
                     "pending_invitations": 0,
