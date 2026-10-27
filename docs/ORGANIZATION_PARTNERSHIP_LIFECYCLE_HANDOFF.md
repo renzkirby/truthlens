@@ -729,3 +729,35 @@ NONE + persisted Partner verification work
 An ACTIVE factual-correction request remains an explicit blocker. Therefore CSG will project as retirement-required but still cannot complete End Partnership until its active factual correction is resolved or an explicit correction-handoff policy is implemented.
 
 This compatibility logic intentionally avoids treating every `UNVERIFIED + NONE` organization as retired, which preserves the Organization Admin onboarding flow.
+
+
+### Management Console governance UI slice
+
+After the legacy-retirement backend gate passed, the Management organization detail page was migrated to a lifecycle-aware governance presentation.
+
+Implemented commits:
+
+- `7068b691` — add frontend endpoint constant for dedicated End Partnership action;
+- `94e0d35b` — replace the old Platform Trust presentation with Organization Governance;
+- `deb2f4dd` — preserve confirmation for high-impact remaining status changes;
+- `0093ef21` — add responsive governance panel styling;
+- `188d489c` — constrain the temporary compatibility status editor.
+
+Current UI behavior:
+
+- The primary section is now **Organization Governance**, not **Platform Trust**.
+- It displays derived lifecycle state, verification state, partnership state, and operational access.
+- End Partnership uses the dedicated lifecycle endpoint and shows impact counts before confirmation.
+- Active factual-correction blockers are surfaced and disable the End Partnership action.
+- `RETIREMENT_REQUIRED` organizations are explicitly called out and do not expose the raw compatibility editor.
+- Former organizations no longer expose the compatibility editor.
+- `FORMER` is not selectable through the temporary raw status controls.
+- Current Active/Suspended partners cannot be changed back to `NONE` through the UI.
+- Onboarding `NONE` organizations can only remain `NONE` or move to `ACTIVE` through the temporary partner-status selector.
+- Active/Suspended organizations can only move between `ACTIVE` and `SUSPENDED` through that selector.
+- Reject/Suspend compatibility changes retain a destructive confirmation step.
+- Completed work/provenance retention is explained in the End Partnership confirmation.
+
+The legacy platform-trust backend mutation remains temporarily available for compatibility (including Developer Console paths). It should be retired only after dedicated Verify / Reject / Activate / Suspend / Reinstate transitions have their own backend services and regression gates.
+
+Frontend lint/build still need to be run locally for this slice.
