@@ -2179,6 +2179,22 @@ class EvidenceReviewDecision(models.Model):
 
     def clean(self):
         super().clean()
+        if self.moderation_case_id is not None:
+            if self.moderation_case.case_type != ModerationCase.CaseType.EVIDENCE:
+                raise ValidationError(
+                    {"moderation_case": "Evidence review decisions require an Evidence case."}
+                )
+            if (
+                self.moderation_case.evidence_submission_id
+                != self.evidence_submission_id
+            ):
+                raise ValidationError(
+                    {"moderation_case": "The Evidence case must target the same evidence."}
+                )
+            if self.moderation_case.organization_id != self.organization_id:
+                raise ValidationError(
+                    {"moderation_case": "The Evidence case must belong to the reviewing organization."}
+                )
         if (
             self.decision_type == self.DecisionType.PRIOR_REVIEW_ACCEPTED
             and self.source_review_id is None
@@ -2193,14 +2209,18 @@ class EvidenceReviewDecision(models.Model):
             raise ValidationError(
                 {"source_review": "Independent reviews cannot reference a prior review."}
             )
-        if (
-            self.source_review_id is not None
-            and self.source_review.evidence_submission_id
-            != self.evidence_submission_id
-        ):
-            raise ValidationError(
-                {"source_review": "The source review must concern the same evidence."}
-            )
+        if self.source_review_id is not None:
+            if (
+                self.source_review.evidence_submission_id
+                != self.evidence_submission_id
+            ):
+                raise ValidationError(
+                    {"source_review": "The source review must concern the same evidence."}
+                )
+            if self.source_review.organization_id == self.organization_id:
+                raise ValidationError(
+                    {"source_review": "A prior review must come from another organization."}
+                )
         if (
             self.decision_type == self.DecisionType.INDEPENDENT_REVIEW
             and self.disposition == self.Disposition.REJECTED
@@ -2967,6 +2987,13 @@ class AdjudicationDecisionEvidenceReviewBasis(models.Model):
         ):
             raise ValidationError(
                 "The evidence review basis must match its evidence submission."
+            )
+        if (
+            self.evidence_submission.thread.claim_id
+            != self.decision.claim_id
+        ):
+            raise ValidationError(
+                "The evidence review basis must belong to the adjudicated claim."
             )
         if self.review_decision.organization_id != self.decision.organization_id:
             raise ValidationError(
