@@ -148,19 +148,36 @@ class VerificationRunTextRuntimeTests(TestCase):
     def _execute(self):
         terminal_count = self._terminal_count()
         tavily_before = self.retrieve_tavily.call_count
+        run_ids_before = set(
+            self.claim.verification_runs.values_list("pk", flat=True)
+        )
         try:
             tasks.execute_core_text_pipeline(self.claim.context_text, self.claim.id)
         finally:
             self.assertLessEqual(self._terminal_count() - terminal_count, 1)
             self.assertEqual(VerificationEvidence.objects.count(), self.evidence_count)
-            if self.retrieve_tavily.call_count > tavily_before:
-                self.assertEqual(self.retrieve_tavily.call_count - tavily_before, 1)
-                self.retrieve_tavily.assert_called_with(
-                    self.cleaned["search_query"], self.claim.pk,
-                    verification_run=self.claim.verification_runs.latest("created_at"),
-                )
+
+        new_runs = list(
+            self.claim.verification_runs.exclude(pk__in=run_ids_before)
+        )
+        self.assertEqual(len(new_runs), 1)
+        run = new_runs[0]
+
+        if self.retrieve_tavily.call_count > tavily_before:
+            self.assertEqual(self.retrieve_tavily.call_count - tavily_before, 1)
+            call = self.retrieve_tavily.call_args
+            self.assertEqual(
+                call.args[:2],
+                (self.cleaned["search_query"], self.claim.pk),
+            )
+            self.assertEqual(
+                call.kwargs["verification_run"].pk,
+                run.pk,
+            )
+
         self.assertEqual(self._terminal_count() - terminal_count, 1)
-        return self.claim.verification_runs.latest("created_at")
+        run.refresh_from_db()
+        return run
 
     def _assert_terminal(self, run, status):
         self.assertEqual(run.status, status)
