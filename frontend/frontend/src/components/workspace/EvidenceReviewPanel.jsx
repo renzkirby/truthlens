@@ -1308,6 +1308,9 @@ function EvidenceReviewContent({
                                  </div>
                                  <span className="evidence-prior-review-card__type">
                                     {priorReview.organization_name_snapshot || priorReview.organization?.name || "Previous Partner Organization"}
+                                    {priorReview.organization?.partner_status_label
+                                       ? ` · ${priorReview.organization.partner_status_label}`
+                                       : ""}
                                  </span>
                               </div>
                               <dl>
