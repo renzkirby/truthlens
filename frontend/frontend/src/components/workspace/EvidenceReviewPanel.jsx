@@ -1321,7 +1321,7 @@ function EvidenceReviewContent({
                                  </div>
                                  <div>
                                     <dt>Reviewed</dt>
-                                    <dd><FormattedDateTime value={priorReview.created_at} /></dd>
+                                    <dd><FormattedDateTime value={priorReview.reviewed_at || priorReview.created_at} /></dd>
                                  </div>
                                  <div>
                                     <dt>Review basis</dt>
