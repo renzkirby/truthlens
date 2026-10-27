@@ -2,6 +2,7 @@ from copy import deepcopy
 
 from django.contrib.auth.models import User
 from django.urls import reverse
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -18,6 +19,7 @@ from api.tests.workspace.test_factual_correction_proposal import (
 
 class PlatformFactualCorrectionRetirementApiTests(
     FactualCorrectionProposalFixtures,
+    TestCase,
 ):
     def setUp(self):
         super().setUp()
