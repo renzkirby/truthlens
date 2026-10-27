@@ -167,9 +167,10 @@ normalization rules invalidates evaluation fingerprints tied to the older
 configuration. Re-run reviewed evaluation rather than comparing incompatible
 scores.
 
-Classifier `v4-primary-subject` intentionally changes the provider response
-contract and prompt, so historical v3 prompt hashes/canary captures cannot be
-treated as v4 accuracy evidence.
+Classifier `v5-primary-unique-domains` keeps the v4 primary-subject contract
+and strengthens the prompt so CLASSIFY responses contain 1-3 unique domain
+objects with one strongest exact quote per domain. Historical v3/v4 prompt
+hashes and canary captures cannot be treated as v5 accuracy evidence.
 
 The existing repository quality-audit corpus was designed primarily for
 **domain-set** accuracy and does not provide reviewed primary-subject labels for
@@ -184,6 +185,7 @@ additional gate.
 Previous development evaluation has observed:
 - overclassification, for example a CIVICS claim also receiving LAW;
 - duplicate-domain output from a model, correctly rejected by the contract;
+  v5 now explicitly forbids repeated domain objects in the provider prompt;
 - deliberate ambiguity that should produce `ABSTAIN`;
 - Gemini billing/quota rejection in the development account;
 - intermittent Cloudflare read timeouts;
