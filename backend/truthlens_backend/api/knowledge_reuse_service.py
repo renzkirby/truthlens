@@ -10,7 +10,7 @@ from django.contrib.postgres.search import (
     SearchVector,
 )
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import F, Q
 from pgvector.django import CosineDistance
 
@@ -741,33 +741,34 @@ def find_published_fact_check_candidates(
                 )
                 return []
 
-    search_query = SearchQuery(query_text, search_type="plain")
-    full_text_candidates = list(
-        queryset.exclude(search_vector__isnull=True)
-        .annotate(
-            search_rank=SearchRank(
-                F("search_vector"),
-                search_query,
+    if connection.vendor == "postgresql":
+        search_query = SearchQuery(query_text, search_type="plain")
+        full_text_candidates = list(
+            queryset.exclude(search_vector__isnull=True)
+            .annotate(
+                search_rank=SearchRank(
+                    F("search_vector"),
+                    search_query,
+                )
             )
+            .filter(search_rank__gte=full_text_rank_threshold)
+            .order_by("-search_rank", "-published_at", "-created_at", "pk")[
+                : max_candidates + 1
+            ]
         )
-        .filter(search_rank__gte=full_text_rank_threshold)
-        .order_by("-search_rank", "-published_at", "-created_at", "pk")[
-            : max_candidates + 1
-        ]
-    )
-    for fact_check in full_text_candidates:
-        if not add_match(
-            PublishedFactCheckMatch(
-                fact_check=fact_check,
-                match_method=KnowledgeReuseEvent.MatchMethod.FULL_TEXT,
-                similarity_score=None,
-            )
-        ):
-            logger.info(
-                "Published equivalence candidate set exceeded the bounded limit; "
-                "refusing authoritative resolution."
-            )
-            return []
+        for fact_check in full_text_candidates:
+            if not add_match(
+                PublishedFactCheckMatch(
+                    fact_check=fact_check,
+                    match_method=KnowledgeReuseEvent.MatchMethod.FULL_TEXT,
+                    similarity_score=None,
+                )
+            ):
+                logger.info(
+                    "Published equivalence candidate set exceeded the bounded limit; "
+                    "refusing authoritative resolution."
+                )
+                return []
 
     return matches
 
@@ -927,37 +928,38 @@ def find_published_fact_check_match(
     # 3. PostgreSQL full-text fallback
     # ---------------------------------
 
-    search_query = SearchQuery(
-        query_text,
-        search_type="plain",
-    )
+    if connection.vendor == "postgresql":
+        search_query = SearchQuery(
+            query_text,
+            search_type="plain",
+        )
 
-    full_text_match = (
-        queryset.exclude(search_vector__isnull=True)
-        .annotate(
-            search_rank=SearchRank(
-                F("search_vector"),
-                search_query,
+        full_text_match = (
+            queryset.exclude(search_vector__isnull=True)
+            .annotate(
+                search_rank=SearchRank(
+                    F("search_vector"),
+                    search_query,
+                )
             )
+            .filter(search_rank__gte=(full_text_rank_threshold))
+            .order_by(
+                "-search_rank",
+                "-published_at",
+                "-created_at",
+            )
+            .first()
         )
-        .filter(search_rank__gte=(full_text_rank_threshold))
-        .order_by(
-            "-search_rank",
-            "-published_at",
-            "-created_at",
-        )
-        .first()
-    )
 
-    if full_text_match:
-        return PublishedFactCheckMatch(
-            fact_check=full_text_match,
-            match_method=(KnowledgeReuseEvent.MatchMethod.FULL_TEXT),
-            # PostgreSQL SearchRank is not a
-            # cosine similarity score and should
-            # not be represented as one.
-            similarity_score=None,
-        )
+        if full_text_match:
+            return PublishedFactCheckMatch(
+                fact_check=full_text_match,
+                match_method=(KnowledgeReuseEvent.MatchMethod.FULL_TEXT),
+                # PostgreSQL SearchRank is not a
+                # cosine similarity score and should
+                # not be represented as one.
+                similarity_score=None,
+            )
 
     return None
 
