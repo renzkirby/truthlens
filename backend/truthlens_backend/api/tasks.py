@@ -108,7 +108,9 @@ def _persist_subject_classification_input(claim_id, context_text):
     Factual verification continues immediately; classification is a separate
     Celery job and never blocks or changes the verdict path.
     """
-    if not isinstance(context_text, str):
+    from .investigation_classifier import classification_mode
+
+    if classification_mode() == "off" or not isinstance(context_text, str):
         return False
     normalized_text = context_text.strip()
     if not normalized_text or normalized_text == "OUT_OF_SCOPE":
