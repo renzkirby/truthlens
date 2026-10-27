@@ -11,6 +11,7 @@ from .models import (
     ModerationCase,
     ModerationEvent,
     OfficialFactCheck,
+    Organization,
 )
 from .moderation_service import (
     ACTIVE_CASE_STATUSES,
@@ -720,6 +721,20 @@ def cancel_factual_correction_for_partner_retirement(
     ):
         raise FactualCorrectionAuthorizationError(
             "Platform management administrator access is required."
+        )
+
+    organization = Organization.objects.filter(pk=organization_id).first()
+    if organization is None:
+        raise FactualCorrectionConflict(
+            "The Partner Organization is no longer available."
+        )
+    if organization.partner_status not in {
+        Organization.PartnerStatus.ACTIVE,
+        Organization.PartnerStatus.SUSPENDED,
+        Organization.PartnerStatus.NONE,
+    }:
+        raise FactualCorrectionConflict(
+            "This Partner Organization is not in a retirement-eligible state."
         )
 
     correction = (
