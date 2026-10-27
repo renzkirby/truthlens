@@ -13,6 +13,7 @@ from api.adjudication_provenance import AdjudicationProvenance
 from api.models import (
     AdjudicationDecision,
     Claim,
+    EvidenceReviewDecision,
     EvidenceSubmission,
     ModerationCase,
     ModerationEvent,
@@ -108,43 +109,59 @@ class AdjudicationCaseDetailApiTests(APITestCase):
         )
         evidence = []
         for index, evidence_status in enumerate(evidence_statuses):
-            evidence.append(
-                EvidenceSubmission.objects.create(
-                    thread=thread,
-                    contributor=contributor or self.contributor,
-                    evidence_caption=f"Operational evidence {index}.",
-                    evidence_url=f"https://example.com/evidence-{index}",
-                    evidence_type=(
-                        EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION
-                    ),
-                    evidence_status=evidence_status,
-                    verified_by=(
-                        self.reviewer
-                        if evidence_status
-                        != EvidenceSubmission.EvidenceStatus.UNVERIFIED
-                        else None
-                    ),
-                    verified_at=(
-                        timezone.now()
-                        if evidence_status
-                        != EvidenceSubmission.EvidenceStatus.UNVERIFIED
-                        else None
-                    ),
-                    moderator_notes=(
-                        "Evidence review notes."
-                        if evidence_status
-                        != EvidenceSubmission.EvidenceStatus.UNVERIFIED
-                        else None
-                    ),
+            reviewed_at = (
+                timezone.now()
+                if evidence_status != EvidenceSubmission.EvidenceStatus.UNVERIFIED
+                else None
+            )
+            item = EvidenceSubmission.objects.create(
+                thread=thread,
+                contributor=contributor or self.contributor,
+                evidence_caption=f"Operational evidence {index}.",
+                evidence_url=f"https://example.com/evidence-{index}",
+                evidence_type=(
+                    EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION
+                ),
+                evidence_status=evidence_status,
+                verified_by=(self.reviewer if reviewed_at is not None else None),
+                verified_at=reviewed_at,
+                moderator_notes=(
+                    "Evidence review notes." if reviewed_at is not None else None
+                ),
+                rejection_reason=(
+                    EvidenceSubmission.RejectionReason.IRRELEVANT
+                    if evidence_status == EvidenceSubmission.EvidenceStatus.REJECTED
+                    else None
+                ),
+                contributor_trust_snapshot=99.0,
+            )
+            evidence.append(item)
+            if reviewed_at is not None:
+                evidence_case = ModerationCase.objects.create(
+                    case_type=ModerationCase.CaseType.EVIDENCE,
+                    evidence_submission=item,
+                    organization=organization,
+                    source=ModerationCase.Source.EVIDENCE_SUBMISSION,
+                    status=ModerationCase.Status.RESOLVED,
+                    resolution_code=evidence_status,
+                    resolution_summary="Evidence review notes.",
+                    resolved_by=self.reviewer,
+                    resolved_at=reviewed_at,
+                )
+                EvidenceReviewDecision.objects.create(
+                    evidence_submission=item,
+                    organization=organization,
+                    moderation_case=evidence_case,
+                    reviewed_by=self.reviewer,
+                    disposition=evidence_status,
+                    notes="Evidence review notes.",
                     rejection_reason=(
                         EvidenceSubmission.RejectionReason.IRRELEVANT
-                        if evidence_status
-                        == EvidenceSubmission.EvidenceStatus.REJECTED
+                        if evidence_status == EvidenceSubmission.EvidenceStatus.REJECTED
                         else None
                     ),
-                    contributor_trust_snapshot=99.0,
+                    reviewed_at=reviewed_at,
                 )
-            )
         assignment = None
         if assigned:
             assignment = VerificationAssignment.objects.create(
