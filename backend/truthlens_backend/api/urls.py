@@ -97,6 +97,11 @@ urlpatterns = [
         name="management_organization_platform_trust",
     ),
     path(
+        "management/organizations/<uuid:organization_id>/partnership/end/",
+        management_views.ManagementOrganizationEndPartnershipView.as_view(),
+        name="management_organization_end_partnership",
+    ),
+    path(
         "management/organizations/<uuid:organization_id>/primary-admin/",
         management_views.ManagementPrimaryAdminProvisionView.as_view(),
         name="management_primary_admin_provision",
