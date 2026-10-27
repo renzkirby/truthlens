@@ -24,6 +24,7 @@ from api.organization_partnership_lifecycle_service import (
     OrganizationPartnershipLifecycleAuthorizationError,
     OrganizationPartnershipLifecycleConflict,
     activate_partner_organization_partnership,
+    apply_legacy_platform_trust_transition,
     end_partner_organization_partnership,
     reinstate_partner_organization_partnership,
     reject_partner_organization_verification,
@@ -575,4 +576,55 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
         self.assertEqual(
             self.organization.verification_status,
             Organization.VerificationStatus.UNVERIFIED,
+        )
+
+
+    def test_legacy_trust_adapter_rolls_back_combined_transition_when_second_step_fails(
+        self,
+    ):
+        onboarding = Organization.objects.create(
+            name="Legacy Atomic Candidate",
+            slug="legacy-atomic-candidate",
+            verification_status=Organization.VerificationStatus.PENDING,
+            partner_status=Organization.PartnerStatus.NONE,
+        )
+
+        with self.assertRaises(OrganizationPartnershipLifecycleConflict):
+            apply_legacy_platform_trust_transition(
+                organization_id=onboarding.pk,
+                actor=self.platform_admin,
+                verification_status=Organization.VerificationStatus.VERIFIED,
+                partner_status=Organization.PartnerStatus.SUSPENDED,
+            )
+
+        onboarding.refresh_from_db()
+        self.assertEqual(
+            onboarding.verification_status,
+            Organization.VerificationStatus.PENDING,
+        )
+        self.assertEqual(
+            onboarding.partner_status,
+            Organization.PartnerStatus.NONE,
+        )
+        self.assertFalse(
+            AccountabilityEvent.objects.filter(
+                subject_organization=onboarding,
+                action_type=(
+                    AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED
+                ),
+            ).exists()
+        )
+
+    def test_legacy_trust_adapter_rejects_direct_former_transition(self):
+        with self.assertRaises(OrganizationPartnershipLifecycleConflict):
+            apply_legacy_platform_trust_transition(
+                organization_id=self.organization.pk,
+                actor=self.platform_admin,
+                partner_status=Organization.PartnerStatus.FORMER,
+            )
+
+        self.organization.refresh_from_db()
+        self.assertEqual(
+            self.organization.partner_status,
+            Organization.PartnerStatus.ACTIVE,
         )
