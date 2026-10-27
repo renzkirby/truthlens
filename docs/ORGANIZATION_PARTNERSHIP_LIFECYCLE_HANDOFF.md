@@ -1156,3 +1156,64 @@ Earlier validation in this branch also confirmed:
 The branch is therefore considered **review-ready**.
 
 No pull request has been created and nothing has been merged. Per project workflow, PR creation and merging remain blocked until explicit user authorization.
+
+
+### Post-review bugfix — missing historical Evidence Review case
+
+A real local data inconsistency was reproduced from the Verification Workspace:
+
+- investigation/thread showed **2** EvidenceSubmission rows;
+- Evidence Review showed only **1** pending Evidence case.
+
+Concrete inspected claim:
+
+- thread: `9b1bf2f9-4518-4bb5-a35c-664cc5ead66f`;
+- claim: `c469a718-e0a6-4544-bb4a-ece9e0603c9c`;
+- active assignment: `4eeff170-5941-4f4b-9c5f-3d5d7bbc8a02`;
+- organization: Cavite State University - Bacoor.
+
+Evidence state:
+
+- May 6 evidence `0e3d77fd-0504-4508-9aa8-8b5e6e051932`
+  - status: UNVERIFIED;
+  - Evidence moderation cases: **none**.
+- Oct 27 evidence `876a964f-320e-4a8b-97b9-150d796d4d15`
+  - status: UNVERIFIED;
+  - active OPEN Evidence case exists and is owned by the current organization.
+
+Diagnosis:
+
+- Investigation/community counts are EvidenceSubmission counts.
+- Evidence Review intentionally lists organization-owned Evidence moderation cases.
+- Current evidence creation correctly creates a case and attaches it to the current verification organization.
+- Historical evidence created before that invariant could remain UNVERIFIED with no Evidence case at all.
+- Loosening the Evidence Review queue would violate organization authority and was rejected.
+
+Fix:
+
+1. **Runtime claim reconciliation**
+   - when an investigation is claimed, every UNVERIFIED evidence item that has never had any Evidence case now gets an OPEN Evidence case;
+   - the case is attached to the claiming organization;
+   - evidence with any existing Evidence case history, including CANCELLED/RESOLVED history, is never recreated;
+   - idempotent same-organization claim calls also run the reconciliation as a defensive self-heal.
+
+2. **Data migration 0095**
+   - `0095_reconcile_missing_evidence_cases.py`;
+   - repairs only UNVERIFIED evidence belonging to claims with an ACTIVE organization-owned VerificationAssignment;
+   - creates a case only when no Evidence case has ever existed for that evidence;
+   - creates a CASE_CREATED ModerationEvent with explicit legacy-repair metadata;
+   - leaves unclaimed community evidence untouched;
+   - leaves all existing review history untouched.
+
+3. **Regression coverage**
+   - claim-time missing-case creation;
+   - idempotent claim self-heal;
+   - no terminal-case resurrection;
+   - migration repairs active organization-owned work;
+   - migration skips unclaimed evidence;
+   - migration skips reviewed evidence;
+   - migration preserves existing terminal history.
+
+No frontend or Browser Extension code changed for this bugfix.
+
+The branch requires a focused backend/migration revalidation before returning to review-ready status.
