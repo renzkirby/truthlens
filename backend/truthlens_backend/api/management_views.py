@@ -40,6 +40,7 @@ from .organization_partnership_lifecycle_service import (
     OrganizationPartnershipLifecycleAuthorizationError,
     OrganizationPartnershipLifecycleConflict,
     activate_partner_organization_partnership,
+    apply_legacy_platform_trust_transition,
     end_partner_organization_partnership,
     reinstate_partner_organization_partnership,
     reject_partner_organization_verification,
@@ -735,7 +736,7 @@ class ManagementOrganizationPlatformTrustView(APIView):
         serializer.is_valid(raise_exception=True)
 
         try:
-            organization = update_organization_platform_trust(
+            organization = apply_legacy_platform_trust_transition(
                 organization_id=organization_id,
                 actor=request.user,
                 **serializer.validated_data,
@@ -752,6 +753,16 @@ class ManagementOrganizationPlatformTrustView(APIView):
             )
         except ManagementGovernanceValidationError as error:
             return _governance_validation_response(error)
+        except OrganizationPartnershipLifecycleAuthorizationError as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except OrganizationPartnershipLifecycleConflict as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_409_CONFLICT,
+            )
 
         return Response(
             _serialize_management_organization(organization),
