@@ -1129,3 +1129,30 @@ Fix:
   - `PARTNERSHIP_ACTIVATED`.
 
 No production implementation changed in this follow-up.
+
+
+### Review-ready lifecycle checkpoint
+
+The final focused hardening gate is green.
+
+Confirmed by the user:
+
+- organization lifecycle service tests: PASS;
+- Management API tests: PASS;
+- Management governance service tests: PASS;
+- factual-correction retirement cancellation service tests: PASS;
+- factual-correction retirement Management API tests: PASS;
+- Developer Console tests: PASS;
+- Django system check: PASS;
+- `makemigrations --check --dry-run`: no changes.
+
+Earlier validation in this branch also confirmed:
+
+- the combined lifecycle/publication backend regression suite is green;
+- frontend lint/build are green;
+- Browser Extension lint/build are green;
+- Browser Extension version is prepared as 0.1.6.
+
+The branch is therefore considered **review-ready**.
+
+No pull request has been created and nothing has been merged. Per project workflow, PR creation and merging remain blocked until explicit user authorization.
