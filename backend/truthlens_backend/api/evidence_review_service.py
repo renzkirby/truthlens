@@ -219,6 +219,7 @@ def _record_independent_evidence_review_decision(
             if disposition == EvidenceSubmission.EvidenceStatus.REJECTED
             else None
         ),
+        reviewed_at=evidence.verified_at or timezone.now(),
     )
 
 
@@ -1385,6 +1386,12 @@ def accept_prior_evidence_review(
         if source_review.organization_id == organization.pk:
             raise EvidenceReviewConflict(
                 "A Partner Organization cannot accept its own prior review as a successor handoff."
+            )
+
+        if source_review.disposition != locked_evidence.evidence_status:
+            raise EvidenceReviewConflict(
+                "The prior institutional review no longer matches the current "
+                "evidence disposition. Conduct an independent re-review instead."
             )
 
         if source_review.disposition != locked_evidence.evidence_status:
