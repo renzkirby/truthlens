@@ -23,8 +23,10 @@ from .accountability_service import record_accountability_event
 from .models import (
     AccountabilityEvent,
     AdjudicationDecision,
+    AdjudicationDecisionEvidenceReviewBasis,
     AdjudicationDecisionEvidenceSnapshot,
     Claim,
+    EvidenceReviewDecision,
     EvidenceSubmission,
     FactualCorrectionRequest,
     ModerationCase,
@@ -337,6 +339,10 @@ def get_adjudication_case_detail(
         )
         .order_by("submitted_at", "id")
     )
+    institutional_basis_count = EvidenceReviewDecision.objects.filter(
+        evidence_submission__thread__claim=claim,
+        organization=organization,
+    ).values("evidence_submission_id").distinct().count()
     active_evidence_case_count = ModerationCase.objects.filter(
         case_type=ModerationCase.CaseType.EVIDENCE,
         evidence_submission__thread__claim=claim,
@@ -423,6 +429,10 @@ def get_adjudication_case_detail(
         blockers.append(_adjudication_blocker("NO_EVIDENCE"))
     elif unreviewed_count:
         blockers.append(_adjudication_blocker("UNREVIEWED_EVIDENCE"))
+    if institutional_basis_count != len(evidence):
+        blockers.append(
+            _adjudication_blocker("INSTITUTIONAL_EVIDENCE_BASIS_REQUIRED")
+        )
     if active_evidence_case_count:
         blockers.append(_adjudication_blocker("ACTIVE_EVIDENCE_CASE"))
 
@@ -673,6 +683,7 @@ def has_adjudication_conflict(
 
 def is_claim_ready_for_adjudication(
     claim,
+    organization=None,
 ):
     evidence = EvidenceSubmission.objects.filter(thread__claim=claim)
 
@@ -687,6 +698,19 @@ def is_claim_ready_for_adjudication(
         evidence_status=(EvidenceSubmission.EvidenceStatus.UNVERIFIED)
     ).exists():
         return False
+
+    if organization is not None:
+        reviewed_evidence_ids = set(
+            EvidenceReviewDecision.objects.filter(
+                evidence_submission__thread__claim=claim,
+                organization=organization,
+            ).values_list("evidence_submission_id", flat=True)
+        )
+        required_evidence_ids = set(
+            evidence.values_list("id", flat=True)
+        )
+        if reviewed_evidence_ids != required_evidence_ids:
+            return False
 
     # Defensive check: no Evidence case
     # may still be operationally active.
@@ -712,7 +736,10 @@ def ensure_claim_adjudication_readiness(
     ).exists():
         return None
 
-    if not is_claim_ready_for_adjudication(claim):
+    if not is_claim_ready_for_adjudication(
+        claim,
+        organization=organization,
+    ):
         return None
 
     # Already has an authoritative human
@@ -813,6 +840,15 @@ def _lock_adjudication_context(*, case_id, organization_id, actor):
         .filter(thread__claim=locked_claim)
         .order_by("pk")
     )
+    evidence_review_decisions = list(
+        EvidenceReviewDecision.objects.select_for_update(of=("self",))
+        .filter(
+            evidence_submission__thread__claim=locked_claim,
+            organization=organization,
+        )
+        .select_related("source_review", "organization", "reviewed_by")
+        .order_by("evidence_submission_id", "-created_at", "-id")
+    )
     evidence_cases = list(
         ModerationCase.objects.select_for_update(of=("self",))
         .filter(
@@ -830,6 +866,7 @@ def _lock_adjudication_context(*, case_id, organization_id, actor):
         "case": case,
         "threads": threads,
         "evidence": evidence,
+        "evidence_review_decisions": evidence_review_decisions,
         "evidence_cases": evidence_cases,
     }
 
@@ -847,6 +884,20 @@ def _ensure_locked_readiness(context):
         raise AdjudicationConflict(
             "Every evidence submission must be reviewed before adjudication."
         )
+    latest_basis_by_evidence = {}
+    for review_decision in context["evidence_review_decisions"]:
+        latest_basis_by_evidence.setdefault(
+            review_decision.evidence_submission_id,
+            review_decision,
+        )
+    if set(latest_basis_by_evidence) != {
+        item.pk for item in evidence
+    }:
+        raise AdjudicationConflict(
+            "This organization must accept or independently review every "
+            "evidence item before adjudication."
+        )
+    context["latest_evidence_review_basis"] = latest_basis_by_evidence
     if context["evidence_cases"]:
         raise AdjudicationConflict("An Evidence case is still active for this claim.")
 
@@ -1016,6 +1067,17 @@ def issue_adjudication_decision(
             decision=decision,
             claim_id=locked_claim.pk,
             evidence_records=_build_decision_evidence_records(context["evidence"]),
+        )
+
+        AdjudicationDecisionEvidenceReviewBasis.objects.bulk_create(
+            [
+                AdjudicationDecisionEvidenceReviewBasis(
+                    decision=decision,
+                    evidence_submission=item,
+                    review_decision=context["latest_evidence_review_basis"][item.pk],
+                )
+                for item in context["evidence"]
+            ]
         )
 
         locked_claim.final_verdict = verdict
