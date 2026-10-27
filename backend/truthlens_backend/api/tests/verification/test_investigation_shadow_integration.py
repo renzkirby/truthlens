@@ -27,11 +27,13 @@ CLAIM_TEXT = (
 )
 SCIENCE_RESULT = json.dumps({
     "decision": "CLASSIFY",
+    "primary_subject": "SCIENCE",
     "domains": [{"code": "SCIENCE", "evidence": "science experiment"}],
 })
-ABSTAIN_RESULT = '{"decision":"ABSTAIN","domains":[]}'
+ABSTAIN_RESULT = '{"decision":"ABSTAIN","primary_subject":null,"domains":[]}'
 INVALID_DUPLICATE = json.dumps({
     "decision": "CLASSIFY",
+    "primary_subject": "SCIENCE",
     "domains": [
         {"code": "SCIENCE", "evidence": "science experiment"},
         {"code": "SCIENCE", "evidence": "science experiment"},
@@ -208,6 +210,7 @@ class InvestigationClassificationShadowIntegrationTests(TestCase):
         self.gemini.models.generate_content.return_value = SimpleNamespace(
             text=json.dumps({
                 "decision": "CLASSIFY",
+                "primary_subject": "SCIENCE",
                 "domains": [
                     {"code": "SCIENCE", "evidence": "science experiment"},
                     {"code": "LAW", "evidence": "court hearing"},
