@@ -15,10 +15,20 @@ from api.models import (
 )
 from api.organization_invitation_service import hash_invitation_token
 from api.organization_partnership_lifecycle_service import (
+    ORGANIZATION_VERIFICATION_REJECTED_REASON,
+    ORGANIZATION_VERIFIED_REASON,
+    PARTNERSHIP_ACTIVATED_REASON,
     PARTNERSHIP_ENDED_REASON,
+    PARTNERSHIP_REINSTATED_REASON,
+    PARTNERSHIP_SUSPENDED_REASON,
     OrganizationPartnershipLifecycleAuthorizationError,
     OrganizationPartnershipLifecycleConflict,
+    activate_partner_organization_partnership,
     end_partner_organization_partnership,
+    reinstate_partner_organization_partnership,
+    reject_partner_organization_verification,
+    suspend_partner_organization_partnership,
+    verify_partner_organization,
 )
 
 
@@ -347,3 +357,202 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
             self.organization.partner_status,
             Organization.PartnerStatus.FORMER,
         )
+
+
+    def test_verify_transition_is_explicit_and_audited(self):
+        onboarding = Organization.objects.create(
+            name="Verification Candidate",
+            slug="verification-candidate",
+            verification_status=Organization.VerificationStatus.PENDING,
+            partner_status=Organization.PartnerStatus.NONE,
+        )
+
+        verify_partner_organization(
+            organization_id=onboarding.pk,
+            actor=self.platform_admin,
+        )
+
+        onboarding.refresh_from_db()
+        self.assertEqual(
+            onboarding.verification_status,
+            Organization.VerificationStatus.VERIFIED,
+        )
+        event = AccountabilityEvent.objects.get(
+            action_type=AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED,
+            subject_organization=onboarding,
+            reason_code=ORGANIZATION_VERIFIED_REASON,
+        )
+        self.assertEqual(
+            event.previous_state["verification_status"],
+            Organization.VerificationStatus.PENDING,
+        )
+        self.assertEqual(
+            event.new_state["verification_status"],
+            Organization.VerificationStatus.VERIFIED,
+        )
+
+    def test_reject_verification_is_limited_to_onboarding_state(self):
+        onboarding = Organization.objects.create(
+            name="Rejected Candidate",
+            slug="rejected-candidate",
+            verification_status=Organization.VerificationStatus.UNVERIFIED,
+            partner_status=Organization.PartnerStatus.NONE,
+        )
+
+        reject_partner_organization_verification(
+            organization_id=onboarding.pk,
+            actor=self.platform_admin,
+        )
+
+        onboarding.refresh_from_db()
+        self.assertEqual(
+            onboarding.verification_status,
+            Organization.VerificationStatus.REJECTED,
+        )
+        self.assertTrue(
+            AccountabilityEvent.objects.filter(
+                subject_organization=onboarding,
+                reason_code=ORGANIZATION_VERIFICATION_REJECTED_REASON,
+            ).exists()
+        )
+
+        with self.assertRaises(OrganizationPartnershipLifecycleConflict):
+            reject_partner_organization_verification(
+                organization_id=self.organization.pk,
+                actor=self.platform_admin,
+            )
+
+    def test_activate_requires_verified_onboarding_without_prior_partner_work(self):
+        onboarding = Organization.objects.create(
+            name="Activation Candidate",
+            slug="activation-candidate",
+            verification_status=Organization.VerificationStatus.VERIFIED,
+            partner_status=Organization.PartnerStatus.NONE,
+        )
+
+        activate_partner_organization_partnership(
+            organization_id=onboarding.pk,
+            actor=self.platform_admin,
+        )
+
+        onboarding.refresh_from_db()
+        self.assertEqual(
+            onboarding.partner_status,
+            Organization.PartnerStatus.ACTIVE,
+        )
+        self.assertTrue(
+            AccountabilityEvent.objects.filter(
+                subject_organization=onboarding,
+                reason_code=PARTNERSHIP_ACTIVATED_REASON,
+            ).exists()
+        )
+
+        self.organization.partner_status = Organization.PartnerStatus.NONE
+        self.organization.save(update_fields=["partner_status"])
+        with self.assertRaises(OrganizationPartnershipLifecycleConflict):
+            activate_partner_organization_partnership(
+                organization_id=self.organization.pk,
+                actor=self.platform_admin,
+            )
+
+    def test_suspend_disables_partnership_without_dropping_current_work(self):
+        suspend_partner_organization_partnership(
+            organization_id=self.organization.pk,
+            actor=self.platform_admin,
+        )
+
+        self.organization.refresh_from_db()
+        self.admin_membership.refresh_from_db()
+        self.active_assignment.refresh_from_db()
+
+        self.assertEqual(
+            self.organization.partner_status,
+            Organization.PartnerStatus.SUSPENDED,
+        )
+        self.assertEqual(
+            self.admin_membership.status,
+            OrganizationMembership.Status.ACTIVE,
+        )
+        self.assertEqual(
+            self.active_assignment.status,
+            VerificationAssignment.Status.ACTIVE,
+        )
+        self.assertEqual(
+            self.active_assignment.organization_id,
+            self.organization.pk,
+        )
+        self.assertTrue(
+            AccountabilityEvent.objects.filter(
+                subject_organization=self.organization,
+                reason_code=PARTNERSHIP_SUSPENDED_REASON,
+            ).exists()
+        )
+
+    def test_reinstate_suspended_partner_preserves_current_memberships(self):
+        self.organization.partner_status = Organization.PartnerStatus.SUSPENDED
+        self.organization.save(update_fields=["partner_status"])
+
+        reinstate_partner_organization_partnership(
+            organization_id=self.organization.pk,
+            actor=self.platform_admin,
+        )
+
+        self.organization.refresh_from_db()
+        self.admin_membership.refresh_from_db()
+        self.assertEqual(
+            self.organization.partner_status,
+            Organization.PartnerStatus.ACTIVE,
+        )
+        self.assertEqual(
+            self.admin_membership.status,
+            OrganizationMembership.Status.ACTIVE,
+        )
+        self.assertTrue(
+            AccountabilityEvent.objects.filter(
+                subject_organization=self.organization,
+                reason_code=PARTNERSHIP_REINSTATED_REASON,
+            ).exists()
+        )
+
+    def test_reinstate_former_partner_never_reactivates_historical_memberships(self):
+        end_partner_organization_partnership(
+            organization_id=self.organization.pk,
+            actor=self.platform_admin,
+        )
+
+        self.admin_membership.refresh_from_db()
+        self.lead_membership.refresh_from_db()
+        self.assertEqual(
+            self.admin_membership.status,
+            OrganizationMembership.Status.LEFT,
+        )
+
+        reinstate_partner_organization_partnership(
+            organization_id=self.organization.pk,
+            actor=self.platform_admin,
+        )
+
+        self.organization.refresh_from_db()
+        self.admin_membership.refresh_from_db()
+        self.lead_membership.refresh_from_db()
+        self.assertEqual(
+            self.organization.partner_status,
+            Organization.PartnerStatus.ACTIVE,
+        )
+        self.assertEqual(
+            self.admin_membership.status,
+            OrganizationMembership.Status.LEFT,
+        )
+        self.assertEqual(
+            self.lead_membership.status,
+            OrganizationMembership.Status.LEFT,
+        )
+
+    def test_non_platform_admin_cannot_use_explicit_governance_transition(self):
+        with self.assertRaises(
+            OrganizationPartnershipLifecycleAuthorizationError
+        ):
+            suspend_partner_organization_partnership(
+                organization_id=self.organization.pk,
+                actor=self.ordinary_user,
+            )
