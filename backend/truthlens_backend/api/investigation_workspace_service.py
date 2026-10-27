@@ -152,12 +152,19 @@ def _evidence_context(claim, organization):
         )
         .order_by("submitted_at", "id")
     )
-    organization_reviewed_evidence_ids = set(
+    organization_review_basis = {}
+    for review_decision in (
         EvidenceReviewDecision.objects.filter(
             evidence_submission__thread__claim=claim,
             organization=organization,
-        ).values_list("evidence_submission_id", flat=True)
-    )
+        )
+        .order_by("evidence_submission_id", "-reviewed_at", "-id")
+        .values("evidence_submission_id", "disposition")
+    ):
+        organization_review_basis.setdefault(
+            review_decision["evidence_submission_id"],
+            review_decision["disposition"],
+        )
     active_cases = list(
         ModerationCase.objects.filter(
             case_type=ModerationCase.CaseType.EVIDENCE,
@@ -186,7 +193,7 @@ def _evidence_context(claim, organization):
             ),
             "inherited_review_pending": sum(
                 item.evidence_status != EvidenceSubmission.EvidenceStatus.UNVERIFIED
-                and item.pk not in organization_reviewed_evidence_ids
+                and organization_review_basis.get(item.pk) != item.evidence_status
                 for item in evidence
             ),
             "active_case_count": len(active_cases),
