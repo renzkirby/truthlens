@@ -2176,12 +2176,6 @@ class EvidenceReviewDecision(models.Model):
                 name="evrev_org_time_idx",
             ),
         ]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["moderation_case"],
-                name="uniq_evidence_review_decision_case",
-            ),
-        ]
 
     def clean(self):
         super().clean()
