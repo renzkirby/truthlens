@@ -4671,12 +4671,13 @@ def toggle_public_partner_follow_view(request, slug):
 @permission_classes([AllowAny])
 @throttle_classes([PublicPartnerRateThrottle])
 def public_partner_fact_checks(request, slug):
+    query_serializer = PublicFactCheckQuerySerializer(data=request.query_params)
+    query_serializer.is_valid(raise_exception=True)
+
     organization = get_publication_organization_by_slug(slug)
     if organization is None:
         raise NotFound()
 
-    query_serializer = PublicFactCheckQuerySerializer(data=request.query_params)
-    query_serializer.is_valid(raise_exception=True)
     result = list_public_partner_fact_checks(
         organization=organization,
         limit=query_serializer.validated_data["limit"],
