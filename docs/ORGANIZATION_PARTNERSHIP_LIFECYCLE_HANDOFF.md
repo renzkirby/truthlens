@@ -1252,3 +1252,144 @@ This restores the intended invariant for the investigation:
 > every current UNVERIFIED evidence submission that belongs to an ACTIVE organization-owned investigation has an organization-owned active Evidence Review case, unless terminal Evidence review history already exists.
 
 The branch returns to review-ready status after this validation.
+
+
+### Successor organization evidence-review handoff
+
+A governance gap was identified after partnership retirement/reassignment:
+
+- Organization A can complete Evidence Review;
+- Organization A can later become a former Partner;
+- the unfinished investigation can return to shared intake;
+- Organization B can claim the replacement assignment;
+- previously, global `EvidenceSubmission.evidence_status` made Organization B appear immediately ready for Adjudication even though B had never explicitly adopted or independently assessed Organization A's review.
+
+Accepted principle:
+
+> Evidence is shared; evidence judgments are institutional. Historical judgments persist, successor organizations may rely on them, but reliance must be explicit and accountable.
+
+The successor workflow is now:
+
+```text
+Organization A reviews evidence
+        ↓
+A's resolved case + institutional review decision remain immutable
+        ↓
+A partnership ends
+        ↓
+Organization B claims replacement investigation
+        ↓
+fresh B-owned Evidence handoff case
+        ↓
+B chooses:
+  Accept prior review
+      OR
+  Re-review independently
+        ↓
+B has explicit evidence basis
+        ↓
+Adjudication becomes eligible
+```
+
+#### Durable institutional evidence review provenance
+
+New `EvidenceReviewDecision` model:
+
+- evidence submission;
+- reviewing organization;
+- reviewing moderation case;
+- reviewer;
+- decision type:
+  - `INDEPENDENT_REVIEW`;
+  - `PRIOR_REVIEW_ACCEPTED`;
+- disposition:
+  - `VERIFIED`;
+  - `REJECTED`;
+- optional source-review lineage;
+- notes/rejection reason;
+- frozen organization/reviewer snapshots;
+- original `reviewed_at`;
+- immutable after creation.
+
+A prior-review acceptance creates a new decision for the successor organization and links it to the source institutional decision. It does **not** rewrite the original reviewer, organization, review date, or prior case.
+
+Independent re-review creates a fresh Evidence case and a new institutional decision. The prior resolved case remains untouched. This applies both to successor organizations and legacy same-organization re-review paths.
+
+#### Successor handoff at claim time
+
+When an organization claims an investigation:
+
+- unreviewed historical evidence still receives the missing-case reconciliation introduced in 0095;
+- already-reviewed evidence is checked for a review basis belonging to the claiming organization;
+- if none exists and no active Evidence case exists, a fresh organization-owned Evidence case is created;
+- resolved prior cases remain historical;
+- the successor case represents only the current organization's choice to accept or re-review.
+
+Same-organization idempotent claim calls also reconcile missing successor handoff cases defensively.
+
+#### Evidence Review API/UI
+
+The existing Evidence Review action endpoint now supports:
+
+- `REVIEW` — independent Verify/Reject;
+- `ACCEPT_PRIOR_REVIEW` — explicit adoption of the latest prior institutional review.
+
+Evidence Review payloads expose:
+
+- whether successor action is required;
+- the latest prior institutional review;
+- current-organization review basis;
+- prior organization and current partnership standing;
+- reviewer snapshot;
+- original review time;
+- disposition and review type.
+
+The Workspace UI displays a **Prior institutional review** card and offers:
+
+- **Accept prior review**;
+- **Verify independently**;
+- **Reject independently**.
+
+A successor acceptance does not trigger contributor-trust recomputation because no new source-quality judgment is being authored. Independent re-review preserves the existing trust-update behavior.
+
+#### Adjudication integrity
+
+Organization-aware adjudication readiness now requires every evidence item to have an institutional review basis for the adjudicating organization.
+
+The basis must:
+
+- exist for every evidence item;
+- belong to the adjudicating organization;
+- match the evidence item's current disposition;
+- have no active Evidence case remaining.
+
+These checks exist in:
+
+- Workspace readiness;
+- Adjudication case detail/blockers;
+- the locked adjudication transaction.
+
+New immutable `AdjudicationDecisionEvidenceReviewBasis` records capture the exact current-organization review decision relied on for each evidence item when a verdict is issued.
+
+The existing sealed evidence snapshot schema remains v1 for backward compatibility; institutional review provenance is captured in this separate immutable sidecar instead of rewriting old sealed snapshots.
+
+#### Factual-correction compatibility
+
+Factual-correction Evidence Review keeps its existing correction-specific sealed event/snapshot provenance and does not create ordinary `EvidenceReviewDecision` rows.
+
+However, correction re-review no longer reopens a resolved Evidence case in place. A fresh case is created after validating the expected predecessor case. This preserves any ordinary institutional review decision already anchored to the historical resolved case.
+
+Stale correction case IDs now fail closed: when no active case exists, `expected_case_id` must identify the latest Evidence case.
+
+#### Migration 0096
+
+`0096_institutional_evidence_review_provenance.py`:
+
+- creates `EvidenceReviewDecision`;
+- creates `AdjudicationDecisionEvidenceReviewBasis`;
+- adds `EVIDENCE_PRIOR_REVIEW_ACCEPTED` accountability action;
+- backfills existing resolved organization-owned Evidence cases into immutable institutional review decisions;
+- preserves original review time, organization and reviewer snapshots;
+- never fabricates a missing historical rejection reason.
+
+This slice is implemented but requires focused backend tests, migration checks, and frontend lint/build before being considered review-ready.
