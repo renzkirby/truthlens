@@ -7,6 +7,7 @@ os.environ["APP_ENV"] = "test"
 os.environ["GROQ_API_KEY"] = "truthlens-offline-test-groq-key"
 os.environ["GEMINI_API_KEY"] = "truthlens-offline-test-gemini-key"
 os.environ["INVESTIGATION_CLASSIFICATION_MODE"] = "off"
+os.environ["INVESTIGATION_ROUTING_MODE"] = "off"
 
 from .settings import *
 
