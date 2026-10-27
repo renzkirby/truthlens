@@ -831,6 +831,142 @@
   padding: var(--tl-space-6);
 }
 
+.management-governance-section {
+  display: grid;
+  gap: var(--tl-space-6);
+}
+
+.management-governance-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--tl-space-5);
+}
+
+.management-governance-heading > div {
+  min-width: 0;
+}
+
+.management-governance-eyebrow {
+  display: block;
+  margin-bottom: var(--tl-space-2);
+  color: var(--tl-color-text-muted);
+  font-size: var(--tl-text-xs);
+  font-weight: 750;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.management-governance-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  background: var(--tl-color-border-default);
+  border: 1px solid var(--tl-color-border-default);
+  border-radius: var(--tl-radius-lg);
+}
+
+.management-governance-status-grid article {
+  display: grid;
+  align-content: start;
+  gap: var(--tl-space-3);
+  padding: var(--tl-space-4);
+  background: var(--tl-color-bg-subtle);
+}
+
+.management-governance-status-grid article > span {
+  color: var(--tl-color-text-muted);
+  font-size: var(--tl-text-xs);
+  font-weight: 700;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.management-governance-status-grid article > strong {
+  color: var(--tl-color-text-main);
+  font-size: var(--tl-text-ui);
+  line-height: 1.45;
+}
+
+.management-governance-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--tl-space-6);
+  padding: var(--tl-space-5);
+  border: 1px solid var(--tl-color-status-critical-border);
+  border-radius: var(--tl-radius-lg);
+  background: color-mix(
+    in srgb,
+    var(--tl-color-status-critical-bg) 48%,
+    var(--tl-color-bg-surface)
+  );
+}
+
+.management-governance-action > div {
+  min-width: 0;
+}
+
+.management-governance-action > div > strong,
+.management-governance-legacy__heading strong {
+  color: var(--tl-color-text-main);
+  font-size: var(--tl-text-base);
+}
+
+.management-governance-action > div > p,
+.management-governance-legacy__heading p {
+  max-width: 78ch;
+  margin: var(--tl-space-2) 0 0;
+  color: var(--tl-color-text-muted);
+  font-size: var(--tl-text-sm);
+  line-height: 1.55;
+}
+
+.management-governance-action .management-detail-list {
+  margin-bottom: 0;
+}
+
+.management-governance-blockers {
+  display: grid;
+  gap: var(--tl-space-2);
+  margin-top: var(--tl-space-4);
+  padding: var(--tl-space-3) var(--tl-space-4);
+  color: var(--tl-color-status-warning-text);
+  background: var(--tl-color-status-warning-bg);
+  border: 1px solid var(--tl-color-status-warning-border);
+  border-radius: var(--tl-radius-md);
+  font-size: var(--tl-text-sm);
+  line-height: 1.5;
+}
+
+.management-governance-blockers p {
+  margin: 0;
+}
+
+.management-governance-legacy {
+  padding-top: var(--tl-space-5);
+  border-top: 1px solid var(--tl-color-border-light);
+}
+
+.management-governance-legacy__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--tl-space-5);
+}
+
+.management-governance-legacy .management-trust-editor {
+  margin-top: var(--tl-space-5);
+}
+
+.management-governance-inline-warning {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--tl-color-status-warning-text);
+  font-size: var(--tl-text-sm);
+  line-height: 1.5;
+}
+
 .management-detail-section--trust {
   display: grid;
   grid-template-columns: minmax(180px, 0.45fr) minmax(0, 1fr);
@@ -1463,6 +1599,14 @@
     grid-template-columns: 1fr;
   }
 
+  .management-governance-status-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .management-governance-action {
+    grid-template-columns: 1fr;
+  }
+
   .management-trust-editor {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1527,14 +1671,18 @@
   .management-page-header__content,
   .management-empty-action,
   .management-record-actions,
-  .management-record-actions .management-inline-actions {
+  .management-record-actions .management-inline-actions,
+  .management-governance-heading,
+  .management-governance-legacy__heading {
     align-items: stretch;
     flex-direction: column;
   }
 
   .management-page-header__actions .tl-button,
   .management-empty-action .tl-button,
-  .management-record-actions .tl-button {
+  .management-record-actions .tl-button,
+  .management-governance-action > .tl-button,
+  .management-governance-legacy__heading .tl-button {
     width: 100%;
   }
 
