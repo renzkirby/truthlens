@@ -282,13 +282,44 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
             Organization.PartnerStatus.ACTIVE,
         )
 
-    def test_not_a_partner_cannot_be_ended(self):
+    def test_legacy_none_partner_with_prior_work_can_be_ended(self):
         self.organization.partner_status = Organization.PartnerStatus.NONE
-        self.organization.save(update_fields=["partner_status"])
+        self.organization.verification_status = Organization.VerificationStatus.UNVERIFIED
+        self.organization.save(
+            update_fields=["partner_status", "verification_status"]
+        )
+
+        end_partner_organization_partnership(
+            organization_id=self.organization.pk,
+            actor=self.platform_admin,
+        )
+
+        self.organization.refresh_from_db()
+        self.admin_membership.refresh_from_db()
+        self.assertEqual(
+            self.organization.partner_status,
+            Organization.PartnerStatus.FORMER,
+        )
+        self.assertEqual(
+            self.organization.verification_status,
+            Organization.VerificationStatus.UNVERIFIED,
+        )
+        self.assertEqual(
+            self.admin_membership.status,
+            OrganizationMembership.Status.LEFT,
+        )
+
+    def test_new_onboarding_organization_without_partner_work_cannot_be_ended(self):
+        onboarding = Organization.objects.create(
+            name="Lifecycle New Onboarding",
+            slug="lifecycle-new-onboarding",
+            verification_status=Organization.VerificationStatus.UNVERIFIED,
+            partner_status=Organization.PartnerStatus.NONE,
+        )
 
         with self.assertRaises(OrganizationPartnershipLifecycleConflict):
             end_partner_organization_partnership(
-                organization_id=self.organization.pk,
+                organization_id=onboarding.pk,
                 actor=self.platform_admin,
             )
 
