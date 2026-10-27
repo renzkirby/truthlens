@@ -14,11 +14,15 @@ from api.models import (
     ModerationEvent,
     Organization,
     Thread,
+    VerificationAssignment,
 )
 
 
 migration_module = import_module(
     "api.migrations.0096_institutional_evidence_review_provenance"
+)
+handoff_migration_module = import_module(
+    "api.migrations.0097_reconcile_active_successor_evidence_handoffs"
 )
 
 
@@ -160,5 +164,151 @@ class InstitutionalEvidenceReviewMigrationTests(TestCase):
         self.assertFalse(
             EvidenceReviewDecision.objects.filter(
                 moderation_case=case,
+            ).exists()
+        )
+
+
+class ActiveSuccessorEvidenceHandoffMigrationTests(TestCase):
+    def setUp(self):
+        self.contributor = User.objects.create_user(
+            username="handoff-migration-contributor",
+        )
+        self.reviewer_a = User.objects.create_user(
+            username="handoff-migration-reviewer-a",
+        )
+        self.reviewer_b = User.objects.create_user(
+            username="handoff-migration-reviewer-b",
+        )
+        self.org_a = Organization.objects.create(
+            name="Handoff Migration Partner A",
+            slug="handoff-migration-partner-a",
+            verification_status=Organization.VerificationStatus.VERIFIED,
+            partner_status=Organization.PartnerStatus.ENDED,
+        )
+        self.org_b = Organization.objects.create(
+            name="Handoff Migration Partner B",
+            slug="handoff-migration-partner-b",
+            verification_status=Organization.VerificationStatus.VERIFIED,
+            partner_status=Organization.PartnerStatus.ACTIVE,
+        )
+        self.claim = Claim.objects.create(
+            context_text="Pre-feature successor assignment claim.",
+        )
+        self.thread = Thread.objects.create(
+            claim=self.claim,
+            author=self.contributor,
+            caption="Historical successor handoff discussion",
+        )
+        self.assignment = VerificationAssignment.objects.create(
+            claim=self.claim,
+            organization=self.org_b,
+            claimed_by=self.reviewer_b,
+            status=VerificationAssignment.Status.ACTIVE,
+        )
+
+    def _reviewed_evidence(self, *, organization, reviewer, status="VERIFIED"):
+        reviewed_at = timezone.now() - timedelta(days=2)
+        evidence = EvidenceSubmission.objects.create(
+            thread=self.thread,
+            contributor=self.contributor,
+            evidence_status=status,
+            verified_by=reviewer,
+            verified_at=reviewed_at,
+            rejection_reason=(
+                EvidenceSubmission.RejectionReason.OTHER
+                if status == EvidenceSubmission.EvidenceStatus.REJECTED
+                else None
+            ),
+        )
+        case = ModerationCase.objects.create(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            evidence_submission=evidence,
+            organization=organization,
+            source=ModerationCase.Source.EVIDENCE_SUBMISSION,
+            status=ModerationCase.Status.RESOLVED,
+            resolution_code=status,
+            resolved_by=reviewer,
+            resolved_at=reviewed_at,
+        )
+        EvidenceReviewDecision.objects.create(
+            evidence_submission=evidence,
+            organization=organization,
+            moderation_case=case,
+            reviewed_by=reviewer,
+            disposition=status,
+            rejection_reason=(
+                EvidenceSubmission.RejectionReason.OTHER
+                if status == EvidenceSubmission.EvidenceStatus.REJECTED
+                else None
+            ),
+            reviewed_at=reviewed_at,
+        )
+        return evidence
+
+    def test_repairs_preexisting_active_successor_assignment(self):
+        evidence = self._reviewed_evidence(
+            organization=self.org_a,
+            reviewer=self.reviewer_a,
+        )
+
+        handoff_migration_module.reconcile_active_successor_evidence_handoffs(
+            apps,
+            None,
+        )
+
+        handoff = ModerationCase.objects.get(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            evidence_submission=evidence,
+            organization=self.org_b,
+            status=ModerationCase.Status.OPEN,
+        )
+        event = ModerationEvent.objects.get(
+            case=handoff,
+            event_type=ModerationEvent.EventType.CASE_CREATED,
+        )
+        self.assertEqual(
+            event.metadata["legacy_repair"],
+            "0097_reconcile_active_successor_evidence_handoffs",
+        )
+
+        handoff_migration_module.reconcile_active_successor_evidence_handoffs(
+            apps,
+            None,
+        )
+        self.assertEqual(
+            ModerationCase.objects.filter(
+                case_type=ModerationCase.CaseType.EVIDENCE,
+                evidence_submission=evidence,
+                status__in=[
+                    ModerationCase.Status.OPEN,
+                    ModerationCase.Status.IN_REVIEW,
+                    ModerationCase.Status.ESCALATED,
+                    ModerationCase.Status.REOPENED,
+                ],
+            ).count(),
+            1,
+        )
+
+    def test_does_not_create_handoff_when_current_basis_matches(self):
+        evidence = self._reviewed_evidence(
+            organization=self.org_b,
+            reviewer=self.reviewer_b,
+        )
+
+        handoff_migration_module.reconcile_active_successor_evidence_handoffs(
+            apps,
+            None,
+        )
+
+        self.assertFalse(
+            ModerationCase.objects.filter(
+                case_type=ModerationCase.CaseType.EVIDENCE,
+                evidence_submission=evidence,
+                status__in=[
+                    ModerationCase.Status.OPEN,
+                    ModerationCase.Status.IN_REVIEW,
+                    ModerationCase.Status.ESCALATED,
+                    ModerationCase.Status.REOPENED,
+                ],
             ).exists()
         )
