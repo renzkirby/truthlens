@@ -963,3 +963,43 @@ This establishes a clean validated checkpoint for:
 No PR or merge has been created for this feature branch.
 
 The principal unresolved lifecycle issue is the handling of an ACTIVE `FactualCorrectionRequest` when ending a partnership. CSG is intentionally blocked from End Partnership until that policy is implemented or its active correction is resolved through an explicit governed action.
+
+
+### Platform-governed factual-correction retirement cancellation
+
+The active factual-correction blocker is now being resolved through an explicit, separate Platform Governance action rather than by silently cancelling corrections inside End Partnership.
+
+Accepted policy:
+
+> Ending a partnership must not transfer another publisher's institutional correction authorship. Platform Governance may explicitly cancel unfinished correction work for retirement; the existing sealed publication remains authoritative historical work, and all correction-request/proposal provenance is retained.
+
+Concurrency/locking reason for keeping this separate from End Partnership:
+
+- factual-correction publication mutations use the canonical **Claim → Assignment → Organization** locking order;
+- End Partnership currently locks the Organization first;
+- combining correction cancellation inside End Partnership would introduce lock-order inversion/deadlock risk.
+
+Implementation checkpoint:
+
+- shared publication locking now supports a narrowly scoped active-superuser Platform-management override;
+- normal Partner publication/correction callers still use the existing membership-capability path;
+- factual-correction cancellation was internally refactored so both normal Partner cancellation and Platform retirement cancellation use the same integrity checks/mutation logic;
+- new `cancel_factual_correction_for_partner_retirement()`:
+  - requires active authenticated superuser;
+  - derives current optimistic versions from the active request/proposal;
+  - cancels the correction request and its dedicated adjudication case;
+  - preserves proposal rows, current decision, published predecessor, evidence snapshot and publication seal;
+  - records ModerationEvent `CASE_CANCELLED` with reason `PARTNERSHIP_ENDED`;
+  - records AccountabilityEvent `FACTUAL_CORRECTION_CANCELLED` under PLATFORM authority;
+  - uses capability `MANAGE_PARTNER_ORGANIZATION`;
+  - keeps `authority_organization = null` and the affected organization as `subject_organization`.
+
+New focused tests:
+
+- `api.tests.management.test_factual_correction_retirement_cancellation`
+  - Platform cancellation preserves current publication/decision/seals/proposals;
+  - cancellation works before a proposal exists;
+  - non-Platform actors are denied;
+  - wrong-organization and terminal requests fail closed.
+
+This service is not yet exposed through a Management API endpoint or frontend action. Validate the focused service/refactor gate before wiring the UI.
