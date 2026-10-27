@@ -847,7 +847,7 @@ def _lock_adjudication_context(*, case_id, organization_id, actor):
             organization=organization,
         )
         .select_related("source_review", "organization", "reviewed_by")
-        .order_by("evidence_submission_id", "-created_at", "-id")
+        .order_by("evidence_submission_id", "-reviewed_at", "-id")
     )
     evidence_cases = list(
         ModerationCase.objects.select_for_update(of=("self",))
