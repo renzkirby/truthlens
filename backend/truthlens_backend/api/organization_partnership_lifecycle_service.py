@@ -20,6 +20,11 @@ from .organization_invitation_service import (
 
 MANAGE_PARTNER_ORGANIZATION = "MANAGE_PARTNER_ORGANIZATION"
 PARTNERSHIP_ENDED_REASON = "PARTNERSHIP_ENDED"
+ORGANIZATION_VERIFIED_REASON = "ORGANIZATION_VERIFIED"
+ORGANIZATION_VERIFICATION_REJECTED_REASON = "ORGANIZATION_VERIFICATION_REJECTED"
+PARTNERSHIP_ACTIVATED_REASON = "PARTNERSHIP_ACTIVATED"
+PARTNERSHIP_SUSPENDED_REASON = "PARTNERSHIP_SUSPENDED"
+PARTNERSHIP_REINSTATED_REASON = "PARTNERSHIP_REINSTATED"
 
 ACTIVE_FACTUAL_CASE_STATUSES = {
     ModerationCase.Status.OPEN,
@@ -65,6 +70,7 @@ def _record_platform_event(
     previous_state=None,
     new_state=None,
     context=None,
+    reason_code=PARTNERSHIP_ENDED_REASON,
 ):
     return record_accountability_event(
         action_type=action_type,
@@ -77,7 +83,7 @@ def _record_platform_event(
         capability=MANAGE_PARTNER_ORGANIZATION,
         previous_state=previous_state or {},
         new_state=new_state or {},
-        reason_code=PARTNERSHIP_ENDED_REASON,
+        reason_code=reason_code,
         context=context or {},
     )
 
@@ -164,9 +170,46 @@ def get_partner_organization_lifecycle_projection(organization):
             }
         )
 
+    can_verify = (
+        organization.verification_status != Organization.VerificationStatus.VERIFIED
+    )
+    can_reject_verification = (
+        organization.partner_status == Organization.PartnerStatus.NONE
+        and not _has_prior_partner_work(organization)
+        and organization.verification_status
+        in {
+            Organization.VerificationStatus.UNVERIFIED,
+            Organization.VerificationStatus.PENDING,
+        }
+    )
+    can_activate_partnership = (
+        organization.partner_status == Organization.PartnerStatus.NONE
+        and organization.verification_status == Organization.VerificationStatus.VERIFIED
+        and not _has_prior_partner_work(organization)
+    )
+    can_suspend_partnership = (
+        organization.partner_status == Organization.PartnerStatus.ACTIVE
+    )
+    can_reinstate_partnership = (
+        organization.partner_status
+        in {
+            Organization.PartnerStatus.SUSPENDED,
+            Organization.PartnerStatus.FORMER,
+        }
+        and organization.verification_status == Organization.VerificationStatus.VERIFIED
+    )
+
     return {
         "state": lifecycle_state,
         "operational_access": operational_access,
+        "actions": {
+            "can_verify": can_verify,
+            "can_reject_verification": can_reject_verification,
+            "can_activate_partnership": can_activate_partnership,
+            "can_suspend_partnership": can_suspend_partnership,
+            "can_reinstate_partnership": can_reinstate_partnership,
+            "can_end_partnership": end_partnership_eligible and not blockers,
+        },
         "can_end_partnership": end_partnership_eligible and not blockers,
         "end_partnership_blockers": blockers,
         "impact": {
@@ -176,6 +219,171 @@ def get_partner_organization_lifecycle_projection(organization):
             "active_factual_corrections": active_factual_corrections,
         },
     }
+
+
+def _organization_status_state(organization):
+    return {
+        "verification_status": organization.verification_status,
+        "partner_status": organization.partner_status,
+    }
+
+
+def _record_organization_transition(*, organization, actor, previous_state, reason_code):
+    return _record_platform_event(
+        action_type=AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED,
+        resource_type=AccountabilityEvent.ResourceType.ORGANIZATION,
+        resource_id=organization.pk,
+        actor=actor,
+        organization=organization,
+        previous_state=previous_state,
+        new_state=_organization_status_state(organization),
+        reason_code=reason_code,
+        context={"transition": reason_code},
+    )
+
+
+@transaction.atomic
+def verify_partner_organization(*, organization_id, actor):
+    _require_platform_management_authority(actor)
+    organization = Organization.objects.select_for_update(of=("self",)).get(
+        pk=organization_id
+    )
+    if organization.verification_status == Organization.VerificationStatus.VERIFIED:
+        raise OrganizationPartnershipLifecycleConflict(
+            "This organization is already verified."
+        )
+
+    previous_state = _organization_status_state(organization)
+    organization.verification_status = Organization.VerificationStatus.VERIFIED
+    organization.save(update_fields=["verification_status", "updated_at"])
+    _record_organization_transition(
+        organization=organization,
+        actor=actor,
+        previous_state=previous_state,
+        reason_code=ORGANIZATION_VERIFIED_REASON,
+    )
+    return organization
+
+
+@transaction.atomic
+def reject_partner_organization_verification(*, organization_id, actor):
+    _require_platform_management_authority(actor)
+    organization = Organization.objects.select_for_update(of=("self",)).get(
+        pk=organization_id
+    )
+    if organization.partner_status != Organization.PartnerStatus.NONE:
+        raise OrganizationPartnershipLifecycleConflict(
+            "End or resolve the current partnership lifecycle before rejecting "
+            "verification."
+        )
+    if _has_prior_partner_work(organization):
+        raise OrganizationPartnershipLifecycleConflict(
+            "This organization has prior Partner verification work and must use "
+            "the governed retirement flow instead."
+        )
+    if organization.verification_status not in {
+        Organization.VerificationStatus.UNVERIFIED,
+        Organization.VerificationStatus.PENDING,
+    }:
+        raise OrganizationPartnershipLifecycleConflict(
+            "Only unverified or pending organizations can be rejected."
+        )
+
+    previous_state = _organization_status_state(organization)
+    organization.verification_status = Organization.VerificationStatus.REJECTED
+    organization.save(update_fields=["verification_status", "updated_at"])
+    _record_organization_transition(
+        organization=organization,
+        actor=actor,
+        previous_state=previous_state,
+        reason_code=ORGANIZATION_VERIFICATION_REJECTED_REASON,
+    )
+    return organization
+
+
+@transaction.atomic
+def activate_partner_organization_partnership(*, organization_id, actor):
+    _require_platform_management_authority(actor)
+    organization = Organization.objects.select_for_update(of=("self",)).get(
+        pk=organization_id
+    )
+    if organization.partner_status != Organization.PartnerStatus.NONE:
+        raise OrganizationPartnershipLifecycleConflict(
+            "Only an organization that is not currently a Partner can be activated."
+        )
+    if organization.verification_status != Organization.VerificationStatus.VERIFIED:
+        raise OrganizationPartnershipLifecycleConflict(
+            "Verify this organization before activating its partnership."
+        )
+    if _has_prior_partner_work(organization):
+        raise OrganizationPartnershipLifecycleConflict(
+            "This organization has prior Partner verification work and must complete "
+            "the governed retirement flow before any later reinstatement."
+        )
+
+    previous_state = _organization_status_state(organization)
+    organization.partner_status = Organization.PartnerStatus.ACTIVE
+    organization.save(update_fields=["partner_status", "updated_at"])
+    _record_organization_transition(
+        organization=organization,
+        actor=actor,
+        previous_state=previous_state,
+        reason_code=PARTNERSHIP_ACTIVATED_REASON,
+    )
+    return organization
+
+
+@transaction.atomic
+def suspend_partner_organization_partnership(*, organization_id, actor):
+    _require_platform_management_authority(actor)
+    organization = Organization.objects.select_for_update(of=("self",)).get(
+        pk=organization_id
+    )
+    if organization.partner_status != Organization.PartnerStatus.ACTIVE:
+        raise OrganizationPartnershipLifecycleConflict(
+            "Only an active Partner Organization can be suspended."
+        )
+
+    previous_state = _organization_status_state(organization)
+    organization.partner_status = Organization.PartnerStatus.SUSPENDED
+    organization.save(update_fields=["partner_status", "updated_at"])
+    _record_organization_transition(
+        organization=organization,
+        actor=actor,
+        previous_state=previous_state,
+        reason_code=PARTNERSHIP_SUSPENDED_REASON,
+    )
+    return organization
+
+
+@transaction.atomic
+def reinstate_partner_organization_partnership(*, organization_id, actor):
+    _require_platform_management_authority(actor)
+    organization = Organization.objects.select_for_update(of=("self",)).get(
+        pk=organization_id
+    )
+    if organization.partner_status not in {
+        Organization.PartnerStatus.SUSPENDED,
+        Organization.PartnerStatus.FORMER,
+    }:
+        raise OrganizationPartnershipLifecycleConflict(
+            "Only suspended or former Partner Organizations can be reinstated."
+        )
+    if organization.verification_status != Organization.VerificationStatus.VERIFIED:
+        raise OrganizationPartnershipLifecycleConflict(
+            "Verify this organization before reinstating its partnership."
+        )
+
+    previous_state = _organization_status_state(organization)
+    organization.partner_status = Organization.PartnerStatus.ACTIVE
+    organization.save(update_fields=["partner_status", "updated_at"])
+    _record_organization_transition(
+        organization=organization,
+        actor=actor,
+        previous_state=previous_state,
+        reason_code=PARTNERSHIP_REINSTATED_REASON,
+    )
+    return organization
 
 
 def _ensure_endable_partnership(organization):
