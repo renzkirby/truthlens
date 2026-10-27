@@ -163,6 +163,7 @@ class ClassificationProviderHierarchyTests(SimpleTestCase):
         self.gemini.models.generate_content.return_value = SimpleNamespace(
             text=json.dumps({
                 "decision": "CLASSIFY",
+                "primary_subject": "SCIENCE",
                 "domains": [{"code": "SCIENCE", "evidence": "imaginary quote"}],
             }),
         )
