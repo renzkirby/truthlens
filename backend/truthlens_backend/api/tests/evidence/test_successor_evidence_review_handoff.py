@@ -174,6 +174,7 @@ class SuccessorEvidenceReviewHandoffTests(TestCase):
     def test_successor_can_accept_prior_review_without_rewriting_original_review(self):
         _assignment, first = self.establish_org_a_review()
         original_review = first["review_decision"]
+        self.evidence.refresh_from_db()
         original_reviewer_id = self.evidence.verified_by_id
         original_reviewed_at = self.evidence.verified_at
 
