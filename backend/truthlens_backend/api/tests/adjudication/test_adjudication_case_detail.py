@@ -488,6 +488,35 @@ class AdjudicationCaseDetailApiTests(APITestCase):
         }
         self.assertFalse(forbidden & self._all_mapping_keys(response.data))
 
+    def test_reviewed_evidence_without_organization_basis_blocks_adjudication(self):
+        context = self._create_context(evidence_statuses=())
+        contributor = User.objects.create_user(username="detail-missing-basis-contributor")
+        thread = Thread.objects.create(
+            claim=context["claim"],
+            author=contributor,
+            caption="Reviewed evidence missing institutional basis.",
+        )
+        EvidenceSubmission.objects.create(
+            thread=thread,
+            contributor=contributor,
+            evidence_caption="Reviewed source without a persisted organization basis.",
+            evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            verified_by=self.reviewer,
+            verified_at=timezone.now(),
+        )
+
+        self._authenticate()
+        response = self.client.get(self._detail_url(context))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        blockers = {
+            item["code"] for item in response.data["action_state"]["blockers"]
+        }
+        self.assertIn("MISSING_EVIDENCE_REVIEW_BASIS", blockers)
+        self.assertFalse(
+            response.data["action_state"]["can_issue_first_decision"]
+        )
+
     def test_action_state_tracks_lifecycle_readiness_assignment_and_conflicts(self):
         lifecycle_expectations = {
             ModerationCase.Status.OPEN: None,
