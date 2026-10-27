@@ -1217,3 +1217,38 @@ Fix:
 No frontend or Browser Extension code changed for this bugfix.
 
 The branch requires a focused backend/migration revalidation before returning to review-ready status.
+
+
+### Missing Evidence Review case repair validated
+
+The historical Evidence Review inconsistency repair is confirmed green.
+
+User-validated backend gate:
+
+- 62 focused tests: PASS;
+- Django system check: PASS;
+- `makemigrations --check --dry-run`: no changes.
+
+The test log included intentional fault-injection messages for post-commit trust recomputation/broker failure; these were expected test-path logs and did not represent failures.
+
+Migration application:
+
+```text
+Applying api.0095_reconcile_missing_evidence_cases... OK
+```
+
+Concrete repaired production-like local data:
+
+- claim `c469a718-e0a6-4544-bb4a-ece9e0603c9c`;
+- organization: Cavite State University - Bacoor;
+- May 6 evidence `0e3d77fd-0504-4508-9aa8-8b5e6e051932` now has:
+  - Evidence case `fe5d78e4-a318-4b8e-be44-09929b03db2f`;
+  - status `OPEN`;
+  - organization `57ce9bcd-2784-4ccd-ae45-f3a1c5e97fe6` / Cavite State University - Bacoor.
+- Oct 27 evidence `876a964f-320e-4a8b-97b9-150d796d4d15` retains its existing OPEN organization-owned Evidence case.
+
+This restores the intended invariant for the investigation:
+
+> every current UNVERIFIED evidence submission that belongs to an ACTIVE organization-owned investigation has an organization-owned active Evidence Review case, unless terminal Evidence review history already exists.
+
+The branch returns to review-ready status after this validation.
