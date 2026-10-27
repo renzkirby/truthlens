@@ -107,9 +107,14 @@ def get_partner_organization_lifecycle_projection(organization):
     active_investigations = organization.verification_assignments.filter(
         status=VerificationAssignment.Status.ACTIVE
     ).count()
-    active_factual_corrections = organization.factual_correction_requests.filter(
-        status=FactualCorrectionRequest.Status.ACTIVE
-    ).count()
+    active_factual_correction_rows = list(
+        organization.factual_correction_requests.filter(
+            status=FactualCorrectionRequest.Status.ACTIVE
+        )
+        .select_related("predecessor_fact_check")
+        .order_by("requested_at", "id")
+    )
+    active_factual_corrections = len(active_factual_correction_rows)
     has_prior_partner_work = _has_prior_partner_work(organization)
 
     if organization.partner_status == Organization.PartnerStatus.ACTIVE:
@@ -217,6 +222,18 @@ def get_partner_organization_lifecycle_projection(organization):
         },
         "can_end_partnership": end_partnership_eligible and not blockers,
         "end_partnership_blockers": blockers,
+        "active_factual_corrections": [
+            {
+                "id": str(correction.id),
+                "predecessor_fact_check_id": str(
+                    correction.predecessor_fact_check_id
+                ),
+                "predecessor_headline": correction.predecessor_fact_check.headline,
+                "correction_reason": correction.correction_reason,
+                "requested_at": correction.requested_at.isoformat(),
+            }
+            for correction in active_factual_correction_rows
+        ],
         "impact": {
             "current_memberships": current_memberships,
             "pending_invitations": pending_invitations,
