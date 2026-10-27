@@ -50,6 +50,16 @@ def backfill_institutional_evidence_reviews(apps, schema_editor):
             .order_by("-created_at", "-id")
             .first()
         )
+        if (
+            review_event is not None
+            and isinstance(review_event.metadata, dict)
+            and review_event.metadata.get("correction_request_id")
+        ):
+            # Factual-correction reviews already carry their own sealed
+            # correction provenance and must not be recast as ordinary
+            # assignment evidence-review authority.
+            continue
+
         rejection_reason = None
         if (
             case.resolution_code == "REJECTED"
