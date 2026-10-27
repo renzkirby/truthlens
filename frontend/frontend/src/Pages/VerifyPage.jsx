@@ -192,7 +192,7 @@ const ResultCard = ({ result }) => {
    const officialFactCheck = isOfficial ? result.official_fact_check : null;
    const organization = officialFactCheck?.organization;
    const officialRoute =
-      organization?.public_profile_available && organization?.slug && officialFactCheck?.fact_check_id
+      organization?.public_fact_check_available && organization?.slug && officialFactCheck?.fact_check_id
          ? `/partners/${encodeURIComponent(organization.slug)}/fact-checks/${encodeURIComponent(officialFactCheck.fact_check_id)}`
          : null;
    const displayedVerdict = isAdjudication
