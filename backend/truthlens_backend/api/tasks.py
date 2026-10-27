@@ -212,7 +212,9 @@ def _render_bounded_persisted_evidence_context(groups, claim_text, stance):
     )
 
 
-def _resolve_exact_published_claim(claim, cleaned_claim):
+def _resolve_exact_published_claim(
+    claim, cleaned_claim, *, schedule_classification=True,
+):
     """Resolve cleaned factual text without storing AI/human verdict copies."""
     if claim is None:
         return False
@@ -230,8 +232,10 @@ def _resolve_exact_published_claim(claim, cleaned_claim):
                 return False
             claim.context_text = cleaned_claim
             claim.save(update_fields=["context_text", "last_updated"])
-            # Do not couple publication authority to classifier availability.
-            _schedule_subject_classification(claim.pk)
+            if schedule_classification:
+                # Fallback for authority paths reached before normal ClaimGate
+                # normalization/early dispatch.
+                _schedule_subject_classification(claim.pk)
     except Exception as exc:
         raise ClaimPersistenceError(
             f"Published resolution persistence failed for claim {claim.pk}."
@@ -239,7 +243,9 @@ def _resolve_exact_published_claim(claim, cleaned_claim):
     return True
 
 
-def _resolve_equivalent_published_claim(claim, cleaned_claim, vault_match):
+def _resolve_equivalent_published_claim(
+    claim, cleaned_claim, vault_match, *, schedule_classification=True,
+):
     """A Vault candidate only opens the strict multi-candidate authority gate."""
     if claim is None or not vault_match:
         return False
@@ -255,8 +261,10 @@ def _resolve_equivalent_published_claim(claim, cleaned_claim, vault_match):
                 return False
             claim.context_text = cleaned_claim
             claim.save(update_fields=["context_text", "last_updated"])
-            # Do not couple publication authority to classifier availability.
-            _schedule_subject_classification(claim.pk)
+            if schedule_classification:
+                # Fallback for authority paths reached before normal ClaimGate
+                # normalization/early dispatch.
+                _schedule_subject_classification(claim.pk)
     except LLMProviderUnavailableError:
         raise
     except Exception as exc:
@@ -1198,7 +1206,11 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 target_claim is not None
                 and target_claim.claim_type == Claim.ClaimType.IMAGE
             ):
-                if _resolve_exact_published_claim(target_claim, cleaned_claim):
+                if _resolve_exact_published_claim(
+                    target_claim,
+                    cleaned_claim,
+                    schedule_classification=False,
+                ):
                     published_resolution = True
                     return
 
@@ -1209,7 +1221,10 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 if vault_match:
                     logger.info("Vault match found for claim %s!", claim_id)
                     if _resolve_equivalent_published_claim(
-                        target_claim, cleaned_claim, vault_match
+                        target_claim,
+                        cleaned_claim,
+                        vault_match,
+                        schedule_classification=False,
                     ):
                         published_resolution = True
                         return
@@ -1846,7 +1861,11 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
         target_claim = Claim.objects.filter(id=claim_id).first()
 
         # Human publication authority precedes automated SATIRE classification.
-        if _resolve_exact_published_claim(target_claim, cleaned_claim):
+        if _resolve_exact_published_claim(
+            target_claim,
+            cleaned_claim,
+            schedule_classification=False,
+        ):
             published_resolution = True
             return
 
@@ -1858,7 +1877,10 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
         if vault_match:
             logger.info("Vault match found for URL claim %s!", claim_id)
             if _resolve_equivalent_published_claim(
-                target_claim, cleaned_claim, vault_match
+                target_claim,
+                cleaned_claim,
+                vault_match,
+                schedule_classification=False,
             ):
                 published_resolution = True
                 return
