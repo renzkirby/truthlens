@@ -290,7 +290,9 @@ def _record_related_published_claim(claim, query_text, vault_match):
         logger.warning("RELATED_CONTEXT outcome=scheduling_unavailable")
 
 
-def _reuse_second_chance_ai_analysis(matched_claim, claim_id):
+def _reuse_second_chance_ai_analysis(
+    matched_claim, claim_id, *, schedule_classification=True,
+):
     """Reuse prior automated analysis without conferring human authority."""
     logger.info(
         "Second-chance deduplication hit! OCR text matches existing claim %s ",
@@ -332,7 +334,9 @@ def _reuse_second_chance_ai_analysis(matched_claim, claim_id):
                 "last_updated",
             ] + (["relatedness_context", "relatedness_decision"] if invalidate_related else [])
         )
-        _schedule_subject_classification(current_claim.pk)
+        if schedule_classification:
+            # Fallback for reuse paths reached before ClaimGate normalization.
+            _schedule_subject_classification(current_claim.pk)
     except Claim.DoesNotExist:
         pass
 
@@ -1244,6 +1248,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     selected_verdict = _reuse_second_chance_ai_analysis(
                         matched_claim,
                         claim_id,
+                        schedule_classification=False,
                     )
                     # Cached result persistence is also a completed primary
                     # analysis. Schedule optional context only afterwards.
