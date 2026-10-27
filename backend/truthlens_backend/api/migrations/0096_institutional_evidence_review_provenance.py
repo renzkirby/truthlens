@@ -215,11 +215,11 @@ class Migration(migrations.Migration):
                 "ordering": ["created_at", "id"],
                 "indexes": [
                     models.Index(
-                        fields=["evidence_submission", "organization", "-created_at"],
+                        fields=["evidence_submission", "organization", "-reviewed_at"],
                         name="evrev_evid_org_time_idx",
                     ),
                     models.Index(
-                        fields=["organization", "-created_at"],
+                        fields=["organization", "-reviewed_at"],
                         name="evrev_org_time_idx",
                     ),
                 ],
