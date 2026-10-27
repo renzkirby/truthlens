@@ -1,6 +1,7 @@
 """Anonymous read projections for institutionally published fact-checks."""
 
 from .models import OfficialFactCheck
+from .organization_public_presence_service import is_public_partner_eligible
 from .organization_publication_query_service import (
     evaluate_publication_lineage_integrity,
 )
@@ -36,6 +37,9 @@ def _organization_payload(organization):
         "logo_url": organization.logo_url if organization.public_logo_enabled else None,
         "organization_type": organization.organization_type,
         "organization_type_label": organization.get_organization_type_display(),
+        "partner_status": organization.partner_status,
+        "partner_status_label": organization.get_partner_status_display(),
+        "public_profile_available": is_public_partner_eligible(organization),
     }
 
 
