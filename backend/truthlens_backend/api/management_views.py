@@ -34,7 +34,6 @@ from .management_governance_service import (
     ManagementGovernanceConflict,
     ManagementGovernanceValidationError,
     create_partner_organization,
-    update_organization_platform_trust,
 )
 from .organization_partnership_lifecycle_service import (
     OrganizationPartnershipLifecycleAuthorizationError,
