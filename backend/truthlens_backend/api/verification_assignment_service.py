@@ -419,10 +419,18 @@ def _ensure_successor_evidence_review_handoffs(
     )
 
     for evidence in reviewed_evidence:
-        if EvidenceReviewDecision.objects.filter(
-            evidence_submission=evidence,
-            organization=organization,
-        ).exists():
+        current_basis = (
+            EvidenceReviewDecision.objects.filter(
+                evidence_submission=evidence,
+                organization=organization,
+            )
+            .order_by("-reviewed_at", "-id")
+            .first()
+        )
+        if (
+            current_basis is not None
+            and current_basis.disposition == evidence.evidence_status
+        ):
             continue
 
         if ModerationCase.objects.filter(
