@@ -1286,6 +1286,12 @@
    font-size: var(--tl-text-sm);
 }
 
+.evidence-successor-actions > .tl-button {
+   width: fit-content;
+   max-width: 100%;
+   justify-self: start;
+}
+
 .evidence-independent-review-actions {
    display: flex;
    flex-wrap: wrap;
