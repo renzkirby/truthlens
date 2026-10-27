@@ -197,6 +197,46 @@ class ManagementApiTests(APITestCase):
             (
                 "post",
                 reverse(
+                    "management_organization_verify",
+                    kwargs={"organization_id": self.organization.id},
+                ),
+                {},
+            ),
+            (
+                "post",
+                reverse(
+                    "management_organization_reject_verification",
+                    kwargs={"organization_id": self.organization.id},
+                ),
+                {},
+            ),
+            (
+                "post",
+                reverse(
+                    "management_organization_activate_partnership",
+                    kwargs={"organization_id": self.organization.id},
+                ),
+                {},
+            ),
+            (
+                "post",
+                reverse(
+                    "management_organization_suspend_partnership",
+                    kwargs={"organization_id": self.organization.id},
+                ),
+                {},
+            ),
+            (
+                "post",
+                reverse(
+                    "management_organization_reinstate_partnership",
+                    kwargs={"organization_id": self.organization.id},
+                ),
+                {},
+            ),
+            (
+                "post",
+                reverse(
                     "management_organization_end_partnership",
                     kwargs={"organization_id": self.organization.id},
                 ),
