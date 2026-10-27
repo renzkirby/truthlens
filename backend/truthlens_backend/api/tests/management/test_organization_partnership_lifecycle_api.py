@@ -85,6 +85,12 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
             kwargs={"organization_id": (organization or self.organization).pk},
         )
 
+    def action_url(self, action, organization=None):
+        return reverse(
+            action,
+            kwargs={"organization_id": (organization or self.organization).pk},
+        )
+
     def test_detail_projects_current_lifecycle_and_end_partnership_impact(self):
         response = self.authenticated_client().get(self.detail_url())
 
@@ -94,6 +100,14 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
             {
                 "state": "ACTIVE_PARTNER",
                 "operational_access": "ENABLED",
+                "actions": {
+                    "can_verify": False,
+                    "can_reject_verification": False,
+                    "can_activate_partnership": False,
+                    "can_suspend_partnership": True,
+                    "can_reinstate_partnership": False,
+                    "can_end_partnership": True,
+                },
                 "can_end_partnership": True,
                 "end_partnership_blockers": [],
                 "impact": {
@@ -130,6 +144,14 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
             {
                 "state": "FORMER_PARTNER",
                 "operational_access": "DISABLED",
+                "actions": {
+                    "can_verify": False,
+                    "can_reject_verification": False,
+                    "can_activate_partnership": False,
+                    "can_suspend_partnership": False,
+                    "can_reinstate_partnership": True,
+                    "can_end_partnership": False,
+                },
                 "can_end_partnership": False,
                 "end_partnership_blockers": [
                     {
@@ -259,3 +281,154 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+    def test_explicit_verification_and_partnership_actions_follow_projected_rules(self):
+        onboarding = Organization.objects.create(
+            name="Lifecycle Action Candidate",
+            slug="lifecycle-action-candidate",
+            verification_status=Organization.VerificationStatus.UNVERIFIED,
+            partner_status=Organization.PartnerStatus.NONE,
+        )
+        client = self.authenticated_client()
+
+        detail = client.get(self.detail_url(onboarding))
+        self.assertEqual(
+            detail.data["lifecycle"]["actions"],
+            {
+                "can_verify": True,
+                "can_reject_verification": True,
+                "can_activate_partnership": False,
+                "can_suspend_partnership": False,
+                "can_reinstate_partnership": False,
+                "can_end_partnership": False,
+            },
+        )
+
+        verify_response = client.post(
+            self.action_url("management_organization_verify", onboarding),
+            {},
+            format="json",
+        )
+        self.assertEqual(verify_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            verify_response.data["organization"]["verification_status"],
+            Organization.VerificationStatus.VERIFIED,
+        )
+        self.assertTrue(
+            verify_response.data["organization"]["lifecycle"]["actions"][
+                "can_activate_partnership"
+            ]
+        )
+
+        activate_response = client.post(
+            self.action_url(
+                "management_organization_activate_partnership",
+                onboarding,
+            ),
+            {},
+            format="json",
+        )
+        self.assertEqual(activate_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            activate_response.data["organization"]["partner_status"],
+            Organization.PartnerStatus.ACTIVE,
+        )
+        self.assertTrue(
+            activate_response.data["organization"]["lifecycle"]["actions"][
+                "can_suspend_partnership"
+            ]
+        )
+
+        suspend_response = client.post(
+            self.action_url(
+                "management_organization_suspend_partnership",
+                onboarding,
+            ),
+            {},
+            format="json",
+        )
+        self.assertEqual(suspend_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            suspend_response.data["organization"]["partner_status"],
+            Organization.PartnerStatus.SUSPENDED,
+        )
+        self.assertTrue(
+            suspend_response.data["organization"]["lifecycle"]["actions"][
+                "can_reinstate_partnership"
+            ]
+        )
+
+        reinstate_response = client.post(
+            self.action_url(
+                "management_organization_reinstate_partnership",
+                onboarding,
+            ),
+            {},
+            format="json",
+        )
+        self.assertEqual(reinstate_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            reinstate_response.data["organization"]["partner_status"],
+            Organization.PartnerStatus.ACTIVE,
+        )
+
+    def test_reject_verification_action_is_onboarding_only(self):
+        candidate = Organization.objects.create(
+            name="Lifecycle Reject Candidate",
+            slug="lifecycle-reject-candidate",
+            verification_status=Organization.VerificationStatus.PENDING,
+            partner_status=Organization.PartnerStatus.NONE,
+        )
+
+        response = self.authenticated_client().post(
+            self.action_url(
+                "management_organization_reject_verification",
+                candidate,
+            ),
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["organization"]["verification_status"],
+            Organization.VerificationStatus.REJECTED,
+        )
+        self.assertFalse(
+            response.data["organization"]["lifecycle"]["actions"][
+                "can_reject_verification"
+            ]
+        )
+
+    def test_explicit_action_conflict_returns_409(self):
+        response = self.authenticated_client().post(
+            self.action_url("management_organization_activate_partnership"),
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(
+            response.data["detail"],
+            "Only an organization that is not currently a Partner can be activated.",
+        )
+
+    def test_explicit_action_rejects_unexpected_payload_fields(self):
+        candidate = Organization.objects.create(
+            name="Lifecycle Strict Candidate",
+            slug="lifecycle-strict-candidate",
+        )
+
+        response = self.authenticated_client().post(
+            self.action_url("management_organization_verify", candidate),
+            {"verification_status": Organization.VerificationStatus.VERIFIED},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        candidate.refresh_from_db()
+        self.assertEqual(
+            candidate.verification_status,
+            Organization.VerificationStatus.UNVERIFIED,
+        )
