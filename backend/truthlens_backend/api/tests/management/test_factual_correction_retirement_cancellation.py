@@ -16,6 +16,7 @@ from api.models import (
     ModerationCase,
     ModerationEvent,
     OfficialFactCheck,
+    Organization,
     OfficialFactCheckPublicationSnapshot,
 )
 from api.tests.workspace.test_factual_correction_proposal import (
@@ -172,6 +173,22 @@ class PlatformFactualCorrectionRetirementCancellationTests(
                 context,
                 actor=self.lead,
             )
+
+        context["correction_request"].refresh_from_db()
+        self.assertEqual(
+            context["correction_request"].status,
+            FactualCorrectionRequest.Status.ACTIVE,
+        )
+
+    def test_former_partner_cannot_use_retirement_cancellation(self):
+        context = self.correction_context(
+            suffix="platform-retirement-former",
+        )
+        self.organization.partner_status = Organization.PartnerStatus.FORMER
+        self.organization.save(update_fields=["partner_status"])
+
+        with self.assertRaises(FactualCorrectionConflict):
+            self.cancel_for_retirement(context)
 
         context["correction_request"].refresh_from_db()
         self.assertEqual(
