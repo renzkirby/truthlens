@@ -357,6 +357,8 @@ def get_adjudication_case_detail(
             review_decision.evidence_submission_id,
             review_decision,
         )
+    for item in evidence:
+        item.adjudication_review_basis = latest_institutional_basis.get(item.pk)
     active_evidence_case_count = ModerationCase.objects.filter(
         case_type=ModerationCase.CaseType.EVIDENCE,
         evidence_submission__thread__claim=claim,
@@ -435,21 +437,9 @@ def get_adjudication_case_detail(
     elif assignment.organization_id != organization.id:
         blockers.append(_adjudication_blocker("ASSIGNMENT_ORGANIZATION_CHANGED"))
 
-    organization_basis_by_evidence = {}
-    for review_decision in (
-        EvidenceReviewDecision.objects.filter(
-            evidence_submission__thread__claim=claim,
-            organization=organization,
-        )
-        .order_by("evidence_submission_id", "-reviewed_at", "-id")
-    ):
-        organization_basis_by_evidence.setdefault(
-            review_decision.evidence_submission_id,
-            review_decision,
-        )
     missing_or_stale_basis = any(
-        item.id not in organization_basis_by_evidence
-        or organization_basis_by_evidence[item.id].disposition
+        item.id not in latest_institutional_basis
+        or latest_institutional_basis[item.id].disposition
         != item.evidence_status
         for item in evidence
         if item.evidence_status != EvidenceSubmission.EvidenceStatus.UNVERIFIED
