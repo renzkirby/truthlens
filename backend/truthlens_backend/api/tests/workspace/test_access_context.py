@@ -225,3 +225,51 @@ class WorkspaceAccessContextTests(TestCase):
             PartnerCapability.ADJUDICATE,
             partner_capabilities,
         )
+
+    def test_active_partner_admin_keeps_organization_management_workspace_context(
+        self,
+    ):
+        user = User.objects.create_user(
+            username="workspace-admin",
+            password="test-password",
+        )
+
+        OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=user,
+            role=OrganizationMembership.Role.ADMIN,
+            status=OrganizationMembership.Status.ACTIVE,
+        )
+
+        context = get_workspace_access_context(user)
+
+        self.assertTrue(context["can_access"])
+        self.assertEqual(len(context["memberships"]), 1)
+        self.assertEqual(
+            context["memberships"][0]["capabilities"],
+            [PartnerCapability.MANAGE_ORGANIZATION],
+        )
+
+    def test_factual_role_loses_workspace_access_when_partner_is_suspended(
+        self,
+    ):
+        user = User.objects.create_user(
+            username="workspace-suspended-partner-lead",
+            password="test-password",
+        )
+
+        OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=user,
+            role=OrganizationMembership.Role.LEAD_VERIFIER,
+            status=OrganizationMembership.Status.ACTIVE,
+        )
+        self.organization.partner_status = Organization.PartnerStatus.SUSPENDED
+        self.organization.save(update_fields=["partner_status"])
+
+        context = get_workspace_access_context(user)
+
+        self.assertFalse(context["can_access"])
+        self.assertEqual(context["memberships"], [])
+        self.assertIsNone(context["default_organization_id"])
+
