@@ -107,6 +107,7 @@ class PublishedResultContractTests(SimpleTestCase):
                     "name": self.organization.name,
                     "slug": self.organization.slug,
                     "public_profile_available": True,
+                    "public_fact_check_available": True,
                     "logo_url": self.organization.logo_url,
                 },
                 "published_at": self.publication.published_at.isoformat(),
@@ -160,6 +161,7 @@ class PublishedResultContractTests(SimpleTestCase):
                 setattr(self.organization, field, value)
                 organization = self.build()["organization"]
                 self.assertFalse(organization["public_profile_available"])
+                self.assertTrue(organization["public_fact_check_available"])
                 self.assertIsNone(organization["logo_url"])
                 setattr(self.organization, field, original)
 
@@ -177,6 +179,7 @@ class PublishedResultContractTests(SimpleTestCase):
             organization = self.build()["organization"]
         eligible.assert_called_once_with(self.organization)
         self.assertFalse(organization["public_profile_available"])
+        self.assertTrue(organization["public_fact_check_available"])
         self.assertIsNone(organization["logo_url"])
 
     def test_non_published_publication_is_rejected(self):
@@ -268,6 +271,7 @@ class PublishedResultContractTests(SimpleTestCase):
                 "name",
                 "slug",
                 "public_profile_available",
+                "public_fact_check_available",
                 "logo_url",
             },
         )
@@ -296,6 +300,7 @@ class PublishedResultContractTests(SimpleTestCase):
                     "name": self.organization.name,
                     "slug": self.organization.slug,
                     "public_profile_available": True,
+                    "public_fact_check_available": True,
                     "logo_url": "https://public.example/partner-logo.png",
                 },
             },
@@ -383,10 +388,13 @@ class PublishedResultContractTests(SimpleTestCase):
         with patch(
             "api.knowledge_reuse_service.is_public_partner_eligible", return_value=False
         ) as eligible:
-            self.assertIsNone(
-                build_related_published_fact_check_payload(self.related_reference())
+            payload = build_related_published_fact_check_payload(
+                self.related_reference()
             )
         eligible.assert_called_once_with(self.organization)
+        self.assertIsNotNone(payload)
+        self.assertFalse(payload["organization"]["public_profile_available"])
+        self.assertTrue(payload["organization"]["public_fact_check_available"])
         with patch(
             "api.knowledge_reuse_service.is_public_partner_eligible",
             wraps=is_public_partner_eligible,
@@ -442,6 +450,7 @@ class PublishedResultContractTests(SimpleTestCase):
                 "name": "Sealed Public Partner",
                 "slug": "sealed-public-partner",
                 "public_profile_available": True,
+                "public_fact_check_available": True,
                 "logo_url": "https://public.example/sealed-partner-logo.png",
             },
         )
