@@ -307,6 +307,26 @@ function EvidenceRecord({
             </div>
          </dl>
 
+         {evidence?.review_basis && (
+            <div className="adjudication-evidence-basis">
+               <Icons name="info" size={16} aria-hidden="true" />
+               <div>
+                  <strong>Institutional evidence basis</strong>
+                  <span>
+                     {evidence.review_basis.decision_type === "PRIOR_REVIEW_ACCEPTED"
+                        ? `${evidence.review_basis.organization?.name || "This organization"} accepted the prior ${(evidence.review_basis.disposition_label || formatLabel(evidence.review_basis.disposition)).toLowerCase()} review from ${evidence.review_basis.source_organization?.name || "another Partner Organization"}.`
+                        : `${evidence.review_basis.organization?.name || "This organization"} independently reviewed this evidence as ${(evidence.review_basis.disposition_label || formatLabel(evidence.review_basis.disposition)).toLowerCase()}.`}
+                  </span>
+                  <small>
+                     {evidence.review_basis.reviewed_by?.username
+                        ? `Recorded by @${evidence.review_basis.reviewed_by.username} · `
+                        : ""}
+                     {formatDateTime(evidence.review_basis.reviewed_at)}
+                  </small>
+               </div>
+            </div>
+         )}
+
          {evidence?.is_current_user_contributor && (
             <p className="adjudication-inline-warning">
                You contributed this evidence. The authoritative action state accounts for direct-contribution conflicts.
