@@ -18,7 +18,11 @@ from .models import (
     VerificationAssignment,
 )
 from .accountability_service import record_accountability_event
-from .moderation_service import ACTIVE_CASE_STATUSES
+from .moderation_service import (
+    ACTIVE_CASE_STATUSES,
+    DuplicateActiveModerationCase,
+    create_moderation_case,
+)
 from .organization_service import (
     PartnerCapability,
     has_capability,
@@ -348,6 +352,50 @@ def ensure_verification_assignment(
         return assignment
 
 
+def _ensure_missing_unverified_evidence_cases(
+    *,
+    claim,
+    organization,
+):
+    """
+    Reconcile legacy unverified evidence that predates Evidence-case creation.
+
+    Only evidence that has never had an Evidence moderation case is repaired.
+    Resolved/cancelled/history-bearing cases are intentionally left untouched.
+    The caller holds the Claim lock, matching evidence submission's Claim-first
+    coordination and preventing a concurrent submission race.
+    """
+
+    evidence_rows = list(
+        EvidenceSubmission.objects.select_for_update(of=("self",))
+        .filter(
+            thread__claim=claim,
+            evidence_status=EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+        )
+        .order_by("submitted_at", "id")
+    )
+
+    for evidence in evidence_rows:
+        if ModerationCase.objects.filter(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            evidence_submission=evidence,
+        ).exists():
+            continue
+
+        try:
+            create_moderation_case(
+                case_type=ModerationCase.CaseType.EVIDENCE,
+                actor=None,
+                source=ModerationCase.Source.EVIDENCE_SUBMISSION,
+                evidence_submission=evidence,
+                organization=organization,
+            )
+        except DuplicateActiveModerationCase:
+            # A concurrent creator that follows the same Claim-first lock order
+            # has already restored the invariant.
+            pass
+
+
 def _attach_active_cases_to_organization(
     *,
     claim,
@@ -509,6 +557,10 @@ def claim_verification_assignment(
             ]
         )
 
+        _ensure_missing_unverified_evidence_cases(
+            claim=locked_claim,
+            organization=organization,
+        )
         _attach_active_cases_to_organization(
             claim=locked_claim,
             organization=organization,
