@@ -108,6 +108,16 @@ export const API_ENDPOINTS = {
       `management/organizations/${encodeURIComponent(organizationId)}/`,
    MANAGEMENT_ORGANIZATION_PLATFORM_TRUST: (organizationId) =>
       `management/organizations/${encodeURIComponent(organizationId)}/platform-trust/`,
+   MANAGEMENT_ORGANIZATION_VERIFY: (organizationId) =>
+      `management/organizations/${encodeURIComponent(organizationId)}/verification/verify/`,
+   MANAGEMENT_ORGANIZATION_REJECT_VERIFICATION: (organizationId) =>
+      `management/organizations/${encodeURIComponent(organizationId)}/verification/reject/`,
+   MANAGEMENT_ORGANIZATION_ACTIVATE_PARTNERSHIP: (organizationId) =>
+      `management/organizations/${encodeURIComponent(organizationId)}/partnership/activate/`,
+   MANAGEMENT_ORGANIZATION_SUSPEND_PARTNERSHIP: (organizationId) =>
+      `management/organizations/${encodeURIComponent(organizationId)}/partnership/suspend/`,
+   MANAGEMENT_ORGANIZATION_REINSTATE_PARTNERSHIP: (organizationId) =>
+      `management/organizations/${encodeURIComponent(organizationId)}/partnership/reinstate/`,
    MANAGEMENT_ORGANIZATION_END_PARTNERSHIP: (organizationId) =>
       `management/organizations/${encodeURIComponent(organizationId)}/partnership/end/`,
    ORGANIZATION_VERIFICATION_SCOPE: (organizationId) =>
