@@ -192,7 +192,7 @@ def get_latest_evidence_review_decision(
         queryset = queryset.exclude(organization=exclude_organization)
     if lock:
         queryset = queryset.select_for_update(of=("self",))
-    return queryset.order_by("-created_at", "-id").first()
+    return queryset.order_by("-reviewed_at", "-id").first()
 
 
 def _record_independent_evidence_review_decision(
@@ -255,7 +255,7 @@ def get_evidence_case_queryset(*, include_events=False):
                     "reviewed_by",
                     "source_review",
                     "source_review__organization",
-                ).order_by("created_at", "id")
+                ).order_by("reviewed_at", "id")
             ),
         )
     )
@@ -1060,6 +1060,56 @@ def review_evidence_submission(
                 organization=organization,
             )
 
+        previous_resolved_case = None
+        if (
+            expected_case_id is None
+            and allow_reopen
+            and case.status == ModerationCase.Status.RESOLVED
+        ):
+            previous_resolved_case = case
+            case = create_moderation_case(
+                case_type=ModerationCase.CaseType.EVIDENCE,
+                actor=actor,
+                source=ModerationCase.Source.EVIDENCE_SUBMISSION,
+                evidence_submission=locked_evidence,
+                organization=organization,
+            )
+            ModerationEvent.objects.create(
+                case=case,
+                actor=actor,
+                event_type=ModerationEvent.EventType.EVIDENCE_REOPENED,
+                from_status=ModerationCase.Status.RESOLVED,
+                to_status=ModerationCase.Status.OPEN,
+                reason_code="RE_REVIEW",
+                metadata={
+                    "previous_case_id": str(previous_resolved_case.pk),
+                },
+            )
+            record_accountability_event(
+                action_type=AccountabilityEvent.ActionType.EVIDENCE_REOPENED,
+                resource_type=AccountabilityEvent.ResourceType.EVIDENCE_SUBMISSION,
+                resource_id=locked_evidence.pk,
+                authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+                actor=actor,
+                authority_organization=organization,
+                subject_organization=organization,
+                capability=PartnerCapability.REVIEW_EVIDENCE,
+                previous_state={
+                    "case_id": str(previous_resolved_case.pk),
+                    "case_status": ModerationCase.Status.RESOLVED,
+                },
+                new_state={
+                    "case_id": str(case.pk),
+                    "case_status": ModerationCase.Status.OPEN,
+                },
+                reason_code="RE_REVIEW",
+                context={
+                    "claim_id": str(locked_claim.pk),
+                    "previous_case_id": str(previous_resolved_case.pk),
+                    "new_case_id": str(case.pk),
+                },
+            )
+
         if case.organization_id != organization.pk:
             raise EvidenceReviewConflict(
                 "This Evidence case is not owned by the organization currently "
@@ -1087,7 +1137,7 @@ def review_evidence_submission(
             case,
             actor=actor,
             claim_id=locked_claim.pk,
-            allow_reopen=allow_reopen,
+            allow_reopen=False,
         )
 
         previous_status = locked_evidence.evidence_status
