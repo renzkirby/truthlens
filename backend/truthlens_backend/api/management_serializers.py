@@ -1,6 +1,9 @@
 from rest_framework import serializers
 
 from .accountability_query_service import MANAGEMENT_GOVERNANCE_ACTIONS
+from .organization_partnership_lifecycle_service import (
+    get_partner_organization_lifecycle_projection,
+)
 from .models import (
     AccountabilityEvent,
     ClaimInvestigationClassification,
@@ -562,6 +565,7 @@ class ManagementOrganizationAdminInvitationSerializer(serializers.ModelSerialize
 
 
 class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerializer):
+    lifecycle = serializers.SerializerMethodField()
     institution_affiliation = serializers.SerializerMethodField()
     verification_specializations = serializers.ListField(
         child=serializers.CharField(), read_only=True
@@ -575,6 +579,9 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
     organization_admin = serializers.SerializerMethodField()
     # Temporary response alias for clients deployed before the role-model cleanup.
     primary_admin = serializers.SerializerMethodField()
+
+    def get_lifecycle(self, obj):
+        return get_partner_organization_lifecycle_projection(obj)
 
     def get_organization_admin(self, obj):
         current_admins = (
@@ -652,6 +659,7 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
             "institution_affiliation",
             "organization_admin",
             "primary_admin",
+            "lifecycle",
             "created_at",
         )
         read_only_fields = fields
