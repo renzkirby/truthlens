@@ -118,6 +118,11 @@ export const API_ENDPOINTS = {
       `management/organizations/${encodeURIComponent(organizationId)}/partnership/suspend/`,
    MANAGEMENT_ORGANIZATION_REINSTATE_PARTNERSHIP: (organizationId) =>
       `management/organizations/${encodeURIComponent(organizationId)}/partnership/reinstate/`,
+   MANAGEMENT_ORGANIZATION_CANCEL_FACTUAL_CORRECTION_FOR_RETIREMENT: (
+      organizationId,
+      correctionRequestId,
+   ) =>
+      `management/organizations/${encodeURIComponent(organizationId)}/factual-corrections/${encodeURIComponent(correctionRequestId)}/cancel-for-retirement/`,
    MANAGEMENT_ORGANIZATION_END_PARTNERSHIP: (organizationId) =>
       `management/organizations/${encodeURIComponent(organizationId)}/partnership/end/`,
    ORGANIZATION_VERIFICATION_SCOPE: (organizationId) =>
