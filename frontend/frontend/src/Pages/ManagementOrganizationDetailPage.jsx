@@ -33,7 +33,9 @@ function OrganizationGovernanceSection({
    const actions = lifecycle.actions || {};
    const impact = lifecycle.impact || {};
    const blockers = lifecycle.end_partnership_blockers || [];
+   const activeFactualCorrections = lifecycle.active_factual_corrections || [];
    const [confirmationAction, setConfirmationAction] = useState(null);
+   const [correctionConfirmation, setCorrectionConfirmation] = useState(null);
    const [endConfirmationOpen, setEndConfirmationOpen] = useState(false);
    const { mutate, pending, error, reset } = useManagementMutation();
 
@@ -127,6 +129,26 @@ function OrganizationGovernanceSection({
 
       setConfirmationAction(null);
       onFeedback(selectedAction.success);
+      onRefresh();
+   };
+
+   const cancelCorrectionForRetirement = async () => {
+      if (!correctionConfirmation) return;
+
+      const result = await mutate(
+         resolveApiEndpoint(
+            "MANAGEMENT_ORGANIZATION_CANCEL_FACTUAL_CORRECTION_FOR_RETIREMENT",
+            organization.id,
+            correctionConfirmation.id,
+         ),
+         { method: "POST", body: {} },
+      );
+      if (!result.ok) return;
+
+      setCorrectionConfirmation(null);
+      onFeedback(
+         "Factual correction cancelled for retirement. The current published fact-check remains authoritative historical work.",
+      );
       onRefresh();
    };
 
@@ -246,6 +268,38 @@ function OrganizationGovernanceSection({
                         ))}
                      </div>
                   ) : null}
+                  {activeFactualCorrections.length ? (
+                     <div className="management-governance-correction-list">
+                        {activeFactualCorrections.map((correction) => (
+                           <article
+                              key={correction.id}
+                              className="management-governance-correction"
+                           >
+                              <div>
+                                 <span>Active factual correction</span>
+                                 <strong>
+                                    {correction.predecessor_headline || "Published fact-check"}
+                                 </strong>
+                                 <p>{correction.correction_reason}</p>
+                                 <small>
+                                    Requested {formatManagementDate(correction.requested_at)}
+                                 </small>
+                              </div>
+                              <Button
+                                 variant="destructive"
+                                 density="compact"
+                                 disabled={pending}
+                                 onClick={() => {
+                                    reset();
+                                    setCorrectionConfirmation(correction);
+                                 }}
+                              >
+                                 Cancel correction for retirement
+                              </Button>
+                           </article>
+                        ))}
+                     </div>
+                  ) : null}
                </div>
                <Button
                   variant="destructive"
@@ -260,6 +314,22 @@ function OrganizationGovernanceSection({
             </div>
          ) : null}
 
+         <ManagementConfirmDialog
+            open={Boolean(correctionConfirmation)}
+            title="Cancel this factual correction for retirement?"
+            description={
+               correctionConfirmation
+                  ? `This will cancel the active correction for “${correctionConfirmation.predecessor_headline || "the published fact-check"}”.`
+                  : "This will cancel the active factual correction."
+            }
+            warning="The correction request and its adjudication case will become terminal and cannot be resumed. Any saved proposal and all provenance will be preserved. The currently published fact-check will remain the authoritative historical publication until a separate future correction is completed."
+            error={error?.message}
+            confirmLabel="Cancel correction"
+            confirmVariant="destructive"
+            processing={pending}
+            onConfirm={cancelCorrectionForRetirement}
+            onClose={() => setCorrectionConfirmation(null)}
+         />
          <ManagementConfirmDialog
             open={Boolean(selectedAction)}
             title={selectedAction ? `${selectedAction.label}?` : "Confirm governance action"}
