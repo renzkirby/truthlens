@@ -3,7 +3,7 @@
 > **Superseded contract note (2026-10-28):** This document records the earlier
 > v3 behavioral gate. The current `v4-primary-subject` branch adds an explicit
 > `primary_subject`, persists `candidate_primary_subject` in shadow/enforce
-> assessments, and introduces migration `0096`. Historical v3 model captures
+> assessments, and introduces migration `0098`. Historical v3 model captures
 > that omit `primary_subject` must not be scored as v4 predictions or used to
 > authorize v4 `enforce`.
 
