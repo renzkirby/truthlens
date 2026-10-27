@@ -37,6 +37,7 @@ function OrganizationGovernanceSection({
    const impact = lifecycle.impact || {};
    const blockers = lifecycle.end_partnership_blockers || [];
    const [editing, setEditing] = useState(false);
+   const [legacyConfirmationOpen, setLegacyConfirmationOpen] = useState(false);
    const [endConfirmationOpen, setEndConfirmationOpen] = useState(false);
    const editButtonRef = useRef(null);
    const endButtonRef = useRef(null);
@@ -103,6 +104,7 @@ function OrganizationGovernanceSection({
    const cancelEditing = () => {
       if (pending) return;
       reset();
+      setLegacyConfirmationOpen(false);
       setEditing(false);
    };
 
@@ -130,6 +132,10 @@ function OrganizationGovernanceSection({
    const submitLegacyChanges = (event) => {
       event.preventDefault();
       if (!hasChanges || pending) return;
+      if (isHighImpactChange) {
+         setLegacyConfirmationOpen(true);
+         return;
+      }
       saveLegacyChanges();
    };
 
@@ -327,6 +333,22 @@ function OrganizationGovernanceSection({
             </div>
          ) : null}
 
+         <ManagementConfirmDialog
+            open={legacyConfirmationOpen}
+            title="Confirm governance status change"
+            description="Review the selected verification and partnership statuses before applying this compatibility transition."
+            warning="Rejected and suspended statuses affect current organization authority. Former Partner cannot be set here and must use the dedicated End partnership lifecycle action."
+            error={error?.message}
+            confirmLabel="Apply status change"
+            confirmVariant="destructive"
+            processing={pending}
+            returnFocusRef={saveButtonRef}
+            onConfirm={async () => {
+               await saveLegacyChanges();
+               setLegacyConfirmationOpen(false);
+            }}
+            onClose={() => setLegacyConfirmationOpen(false)}
+         />
          <ManagementConfirmDialog
             open={endConfirmationOpen}
             title="End this Partner Organization’s partnership?"
