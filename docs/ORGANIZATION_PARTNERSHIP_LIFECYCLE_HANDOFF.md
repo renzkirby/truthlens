@@ -1051,3 +1051,59 @@ Regression coverage added for:
 - Management write-permission matrix.
 
 This slice still requires its focused backend gate plus frontend lint/build before it is considered green.
+
+
+### Legacy platform-trust endpoint hardening
+
+After the explicit lifecycle actions and correction-retirement flow passed their focused validation gates, the remaining Management API loophole was hardened.
+
+The legacy endpoint is intentionally retained for one rollout cycle:
+
+```text
+PATCH /management/organizations/<organization_id>/platform-trust/
+```
+
+Reason for retaining it temporarily:
+
+- production deployment remains backend-first;
+- an older Management frontend may briefly remain live while the compatible backend is already deployed;
+- deleting the endpoint immediately would create a transient rollout break.
+
+It no longer writes `verification_status` or `partner_status` directly.
+
+The endpoint now routes through `apply_legacy_platform_trust_transition()`, which translates old-client target values into the same governed lifecycle actions used by the current Management Console.
+
+Supported compatibility behavior includes:
+
+- Verify;
+- Reject verification;
+- Activate partnership;
+- Suspend partnership;
+- Reinstate partnership;
+- safe no-op requests.
+
+Unsafe raw targets fail closed, including:
+
+- direct `FORMER` assignment — must use End Partnership;
+- resetting a current Partner to `NONE`;
+- arbitrary downgrade to `UNVERIFIED/PENDING`;
+- rejected + active Partner combinations;
+- any unsupported lifecycle target combination.
+
+Combined legacy requests run inside one transaction. If a later transition fails, earlier transitions and their accountability events roll back together.
+
+The Management API no longer imports or calls `update_organization_platform_trust()` directly.
+
+Developer Console compatibility is preserved separately:
+
+```text
+developer_admin.py
+  -> persist_developer_console_organization()
+  -> update_organization_platform_trust()
+```
+
+That internal Developer Console pathway remains unchanged for now.
+
+The normal Management frontend no longer renders the legacy raw-status editor. The old frontend endpoint constant remains temporarily to support backend-first rollout compatibility and may be removed in a later cleanup release after the new frontend is deployed everywhere.
+
+This hardening requires a focused backend regression rerun before the branch is considered review-ready.
