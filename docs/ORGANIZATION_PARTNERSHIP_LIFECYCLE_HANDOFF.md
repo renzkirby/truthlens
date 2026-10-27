@@ -1003,3 +1003,51 @@ New focused tests:
   - wrong-organization and terminal requests fail closed.
 
 This service is not yet exposed through a Management API endpoint or frontend action. Validate the focused service/refactor gate before wiring the UI.
+
+
+### Management correction-retirement action slice
+
+After the Platform-governed cancellation service passed its focused regression gate, the blocker is now exposed through the Management organization lifecycle API/UI.
+
+Backend:
+
+- lifecycle projection now includes a minimal `active_factual_corrections` list with:
+  - request ID;
+  - predecessor fact-check ID;
+  - predecessor headline;
+  - correction reason;
+  - requested timestamp.
+- new endpoint:
+  ```text
+  POST /management/organizations/<organization_id>/factual-corrections/<correction_request_id>/cancel-for-retirement/
+  ```
+- endpoint accepts an empty body only;
+- Platform Admin only;
+- wrong organization/request scope fails closed;
+- already-former organizations cannot use the retirement-cancellation action;
+- response includes refreshed organization lifecycle projection and correction terminal status.
+
+Management Console:
+
+- End Partnership blocker now shows each active factual correction as a compact prerequisite card;
+- card shows predecessor headline, correction reason, and requested date;
+- explicit destructive action: **Cancel correction for retirement**;
+- confirmation explains:
+  - request/case become terminal;
+  - any proposal and provenance are preserved;
+  - current published fact-check remains authoritative historical work;
+  - cancellation does not publish the correction.
+- after success, the page refreshes; for an otherwise endable organization the correction count becomes zero and **End partnership** becomes available.
+
+Regression coverage added for:
+
+- CSG-like legacy `UNVERIFIED + NONE` retirement state;
+- cancellation clearing the blocker and enabling End Partnership;
+- published predecessor/seal preservation;
+- strict empty-body contract;
+- Platform Admin-only permission;
+- cross-organization/unknown-target failure;
+- former-partner rejection;
+- Management write-permission matrix.
+
+This slice still requires its focused backend gate plus frontend lint/build before it is considered green.
