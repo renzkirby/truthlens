@@ -199,7 +199,7 @@ class InvestigationClassificationShadowIntegrationTests(TestCase):
             )
             self.assertEqual(self._run(), "FAILED")
         a = InvestigationClassificationAssessment.objects.get(claim=self.claim)
-        self.assertEqual(a.reason_code, "INVALID_CLASSIFICATION_RESPONSE")
+        self.assertEqual(a.reason_code, "DUPLICATE_DOMAIN")
         self._assert_not_authoritative()
 
     def test_valid_but_extra_subject_is_only_shadow_candidate(self):
