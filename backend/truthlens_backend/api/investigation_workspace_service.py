@@ -4,6 +4,7 @@ from .adjudication_provenance import get_adjudication_decision_provenance
 from .adjudication_service import get_adjudication_case_detail
 from .models import (
     AdjudicationDecision,
+    EvidenceReviewDecision,
     EvidenceSubmission,
     ModerationCase,
     OfficialFactCheck,
@@ -151,6 +152,12 @@ def _evidence_context(claim, organization):
         )
         .order_by("submitted_at", "id")
     )
+    organization_reviewed_evidence_ids = set(
+        EvidenceReviewDecision.objects.filter(
+            evidence_submission__thread__claim=claim,
+            organization=organization,
+        ).values_list("evidence_submission_id", flat=True)
+    )
     active_cases = list(
         ModerationCase.objects.filter(
             case_type=ModerationCase.CaseType.EVIDENCE,
@@ -175,6 +182,11 @@ def _evidence_context(claim, organization):
             ),
             "unreviewed": sum(
                 item.evidence_status == EvidenceSubmission.EvidenceStatus.UNVERIFIED
+                for item in evidence
+            ),
+            "inherited_review_pending": sum(
+                item.evidence_status != EvidenceSubmission.EvidenceStatus.UNVERIFIED
+                and item.pk not in organization_reviewed_evidence_ids
                 for item in evidence
             ),
             "active_case_count": len(active_cases),
@@ -410,27 +422,54 @@ def _derive_state(
 
     elif (
         evidence_summary["unreviewed"] > 0
+        or evidence_summary["inherited_review_pending"] > 0
         or evidence_summary["active_case_count"] > 0
     ):
         pending_count = max(
-            evidence_summary["unreviewed"],
+            evidence_summary["unreviewed"]
+            + evidence_summary["inherited_review_pending"],
             evidence_summary["active_case_count"],
         )
+        if (
+            evidence_summary["inherited_review_pending"] > 0
+            and evidence_summary["unreviewed"] == 0
+        ):
+            detail = (
+                f"{pending_count} previously reviewed evidence "
+                f"{'item requires' if pending_count == 1 else 'items require'} "
+                "this organization to accept the prior review or conduct an "
+                "independent re-review before adjudication."
+            )
+        else:
+            detail = (
+                f"{pending_count} evidence "
+                f"{'item requires' if pending_count == 1 else 'items require'} "
+                "review before adjudication."
+            )
         state = {
             "code": "EVIDENCE_REVIEW",
             "label": "Evidence review",
-            "detail": (
-                f"{pending_count} evidence "
-                f"{'item requires' if pending_count == 1 else 'items require'} review before adjudication."
-            ),
+            "detail": detail,
         }
-        pending.append(
-            _pending_item(
-                "UNREVIEWED_EVIDENCE",
-                "Every submitted evidence item must be reviewed before adjudication.",
-                count=evidence_summary["unreviewed"],
+        if evidence_summary["unreviewed"] > 0:
+            pending.append(
+                _pending_item(
+                    "UNREVIEWED_EVIDENCE",
+                    "Every newly submitted evidence item must be reviewed before adjudication.",
+                    count=evidence_summary["unreviewed"],
+                )
             )
-        )
+        if evidence_summary["inherited_review_pending"] > 0:
+            pending.append(
+                _pending_item(
+                    "INHERITED_EVIDENCE_REVIEW",
+                    (
+                        "Previously reviewed evidence must be explicitly accepted "
+                        "or independently re-reviewed by this organization."
+                    ),
+                    count=evidence_summary["inherited_review_pending"],
+                )
+            )
         if evidence_summary["active_case_count"]:
             pending.append(
                 _pending_item(
