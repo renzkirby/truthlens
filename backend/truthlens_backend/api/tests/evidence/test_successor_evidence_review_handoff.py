@@ -329,6 +329,105 @@ class SuccessorEvidenceReviewHandoffTests(TestCase):
             )
         )
 
+    def test_returning_organization_must_refresh_stale_review_basis(self):
+        _assignment, first = self.establish_org_a_review()
+        original_a_review = first["review_decision"]
+
+        # Simulate a later independent Org B review that reverses the disposition,
+        # followed by work returning to Org A.
+        self.evidence.refresh_from_db()
+        b_case = ModerationCase.objects.create(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            evidence_submission=self.evidence,
+            organization=self.org_b,
+            status=ModerationCase.Status.RESOLVED,
+            source=ModerationCase.Source.EVIDENCE_SUBMISSION,
+            resolution_code=EvidenceSubmission.EvidenceStatus.REJECTED,
+            resolution_summary="Org B independently rejected the source.",
+            resolved_by=self.reviewer_b,
+            resolved_at=timezone.now(),
+        )
+        b_review = EvidenceReviewDecision.objects.create(
+            evidence_submission=self.evidence,
+            organization=self.org_b,
+            moderation_case=b_case,
+            reviewed_by=self.reviewer_b,
+            disposition=EvidenceReviewDecision.Disposition.REJECTED,
+            rejection_reason=EvidenceSubmission.RejectionReason.IRRELEVANT,
+            notes="Org B independently rejected the source.",
+        )
+        EvidenceSubmission.objects.filter(pk=self.evidence.pk).update(
+            evidence_status=EvidenceSubmission.EvidenceStatus.REJECTED,
+            verified_by=self.reviewer_b,
+            verified_at=timezone.now(),
+            rejection_reason=EvidenceSubmission.RejectionReason.IRRELEVANT,
+        )
+        self.evidence.refresh_from_db()
+
+        # Replace Org A's original active assignment with a fresh available row
+        # to model a later reassignment back to the same institution.
+        VerificationAssignment.objects.filter(
+            claim=self.claim,
+            status=VerificationAssignment.Status.ACTIVE,
+        ).update(
+            status=VerificationAssignment.Status.RELEASED,
+            released_at=timezone.now(),
+        )
+        available = VerificationAssignment.objects.create(
+            claim=self.claim,
+            status=VerificationAssignment.Status.AVAILABLE,
+        )
+
+        claimed = claim_verification_assignment(
+            assignment=available,
+            organization=self.org_a,
+            actor=self.reviewer_a,
+        )
+        self.assertEqual(claimed.organization_id, self.org_a.pk)
+
+        handoff_case = ModerationCase.objects.get(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            evidence_submission=self.evidence,
+            organization=self.org_a,
+            status=ModerationCase.Status.OPEN,
+        )
+        self.assertFalse(
+            is_claim_ready_for_adjudication(
+                self.claim,
+                organization=self.org_a,
+            )
+        )
+
+        accepted = accept_prior_evidence_review(
+            evidence=self.evidence,
+            actor=self.reviewer_a,
+            source_review_id=b_review.pk,
+            expected_status=EvidenceSubmission.EvidenceStatus.REJECTED,
+            expected_case_id=handoff_case.pk,
+            expected_organization_id=self.org_a.pk,
+        )["review_decision"]
+
+        self.assertEqual(
+            accepted.decision_type,
+            EvidenceReviewDecision.DecisionType.PRIOR_REVIEW_ACCEPTED,
+        )
+        self.assertEqual(accepted.source_review_id, b_review.pk)
+        self.assertEqual(
+            accepted.disposition,
+            EvidenceReviewDecision.Disposition.REJECTED,
+        )
+        self.assertTrue(
+            is_claim_ready_for_adjudication(
+                self.claim,
+                organization=self.org_a,
+            )
+        )
+        original_a_review.refresh_from_db()
+        self.assertEqual(
+            original_a_review.disposition,
+            EvidenceReviewDecision.Disposition.VERIFIED,
+        )
+
     def test_adjudication_captures_exact_successor_review_basis(self):
         _assignment, first = self.establish_org_a_review()
         original_review = first["review_decision"]
