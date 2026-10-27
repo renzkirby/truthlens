@@ -102,4 +102,3 @@ class OfficialFactCheckSaveCompatibilityTests(TestCase):
             "A portable offline test claim.",
         )
         self.assertIsNone(fact_check.search_vector)
-
