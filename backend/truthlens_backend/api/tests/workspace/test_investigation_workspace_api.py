@@ -12,6 +12,7 @@ from api.models import (
     AdjudicationDecision,
     AdjudicationDecisionEvidenceSnapshot,
     Claim,
+    EvidenceReviewDecision,
     EvidenceSubmission,
     ModerationCase,
     OfficialFactCheck,
@@ -76,7 +77,7 @@ class InvestigationWorkspaceApiTests(APITestCase):
             author=contributor,
             caption="Evidence thread",
         )
-        return EvidenceSubmission.objects.create(
+        evidence = EvidenceSubmission.objects.create(
             thread=thread,
             contributor=contributor,
             evidence_status=evidence_status,
@@ -94,6 +95,31 @@ class InvestigationWorkspaceApiTests(APITestCase):
                 else None
             ),
         )
+        if evidence_status != EvidenceSubmission.EvidenceStatus.UNVERIFIED:
+            evidence_case = ModerationCase.objects.create(
+                case_type=ModerationCase.CaseType.EVIDENCE,
+                evidence_submission=evidence,
+                organization=self.organization,
+                status=ModerationCase.Status.RESOLVED,
+                resolution_code=evidence_status,
+                resolved_by=self.actor,
+                resolved_at=evidence.verified_at,
+            )
+            EvidenceReviewDecision.objects.create(
+                evidence_submission=evidence,
+                organization=self.organization,
+                moderation_case=evidence_case,
+                reviewed_by=self.actor,
+                disposition=evidence_status,
+                notes="Reviewed test evidence.",
+                rejection_reason=(
+                    EvidenceSubmission.RejectionReason.OTHER
+                    if evidence_status == EvidenceSubmission.EvidenceStatus.REJECTED
+                    else None
+                ),
+                reviewed_at=evidence.verified_at,
+            )
+        return evidence
 
     def resolved_decision(self):
         case = ModerationCase.objects.create(
@@ -259,6 +285,57 @@ class InvestigationWorkspaceApiTests(APITestCase):
         self.assertEqual(
             [item["code"] for item in payload["allowed_actions"]],
             ["REVIEW_EVIDENCE"],
+        )
+
+    def test_inherited_review_requires_successor_action(self):
+        contributor = User.objects.create_user(username="guided-inherited-contributor")
+        thread = Thread.objects.create(
+            claim=self.claim,
+            author=contributor,
+            caption="Inherited evidence thread",
+        )
+        evidence = EvidenceSubmission.objects.create(
+            thread=thread,
+            contributor=contributor,
+            evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            verified_by=self.actor,
+            verified_at=timezone.now(),
+        )
+        prior_case = ModerationCase.objects.create(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            evidence_submission=evidence,
+            organization=self.other,
+            status=ModerationCase.Status.RESOLVED,
+            resolution_code=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            resolved_at=timezone.now(),
+        )
+        EvidenceReviewDecision.objects.create(
+            evidence_submission=evidence,
+            organization=self.other,
+            moderation_case=prior_case,
+            disposition=EvidenceReviewDecision.Disposition.VERIFIED,
+            reviewed_at=prior_case.resolved_at,
+        )
+        handoff_case = ModerationCase.objects.create(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            evidence_submission=evidence,
+            organization=self.organization,
+            status=ModerationCase.Status.OPEN,
+        )
+
+        payload = self.get().json()
+
+        self.assertEqual(payload["state"]["code"], "EVIDENCE_REVIEW")
+        self.assertEqual(payload["evidence"]["unreviewed"], 0)
+        self.assertEqual(payload["evidence"]["inherited_review_pending"], 1)
+        self.assertEqual(
+            [item["code"] for item in payload["pending"]],
+            ["INHERITED_EVIDENCE_REVIEW", "ACTIVE_EVIDENCE_CASE"],
+        )
+        self.assertIn("accept the prior review", payload["state"]["detail"])
+        self.assertEqual(
+            payload["context_links"]["evidence_case_id"],
+            str(handoff_case.pk),
         )
 
     def test_review_state_is_visible_without_review_permission(self):
