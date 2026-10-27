@@ -3284,12 +3284,21 @@ class AdjudicationCaseDetailSerializer(serializers.ModelSerializer):
             item.evidence_status == EvidenceSubmission.EvidenceStatus.UNVERIFIED
             for item in evidence
         )
+        institutional_basis_count = sum(
+            getattr(item, "adjudication_review_basis", None) is not None
+            and item.adjudication_review_basis.disposition == item.evidence_status
+            for item in evidence
+        )
         return {
             "basis": "CURRENT_EVIDENCE_RECORDS",
             "total": len(evidence),
             "verified": verified,
             "rejected": rejected,
             "unreviewed": unreviewed,
+            "institutional_basis_count": institutional_basis_count,
+            "institutional_basis_complete": bool(
+                evidence and institutional_basis_count == len(evidence)
+            ),
             "active_evidence_cases": (
                 obj.adjudication_active_evidence_case_count
             ),
