@@ -693,3 +693,39 @@ This was a test-fixture naming collision, not an API implementation failure.
 - `5d12edb8` — rename the helper to `authenticated_client()`.
 
 No production lifecycle or Management API behavior changed in this correction.
+
+
+### Legacy retirement compatibility path
+
+Before replacing the Management Console status UI, the CSG production state exposed one more compatibility requirement:
+
+```text
+CSG
+verification_status = UNVERIFIED
+partner_status = NONE
+current memberships still present
+historical/active verification work present
+```
+
+The initial lifecycle service only allowed `ACTIVE` or `SUSPENDED` partnerships to transition to `FORMER`, which would have prevented CSG from using the new lifecycle path.
+
+The backend now distinguishes a brand-new onboarding organization from a legacy organization that was manually deactivated but still has Partner-work provenance.
+
+- `a7d823f0` — allow a `NONE` organization to enter the retirement path only when it has persisted prior Partner work (verification assignments or Official Fact Checks), and project it as `RETIREMENT_REQUIRED`.
+- `f33e56d5` — service regression coverage for the legacy retirement path and for preserving the non-endable state of a new onboarding organization.
+- `ab425835` — Management API projection coverage for `RETIREMENT_REQUIRED`.
+
+Derived behavior:
+
+```text
+UNVERIFIED + NONE + no prior Partner work
+→ ONBOARDING / SETUP_ONLY / not endable
+
+NONE + persisted Partner verification work
+→ RETIREMENT_REQUIRED / operational access disabled / endable
+   unless another lifecycle blocker exists
+```
+
+An ACTIVE factual-correction request remains an explicit blocker. Therefore CSG will project as retirement-required but still cannot complete End Partnership until its active factual correction is resolved or an explicit correction-handoff policy is implemented.
+
+This compatibility logic intentionally avoids treating every `UNVERIFIED + NONE` organization as retired, which preserves the Organization Admin onboarding flow.
