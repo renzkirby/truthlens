@@ -2091,6 +2091,151 @@ class ModerationCase(models.Model):
         return f"{self.get_case_type_display()} " f"{self.id} - {self.status}"
 
 
+class EvidenceReviewDecision(models.Model):
+    class DecisionType(models.TextChoices):
+        INDEPENDENT_REVIEW = "INDEPENDENT_REVIEW", "Independent Review"
+        PRIOR_REVIEW_ACCEPTED = (
+            "PRIOR_REVIEW_ACCEPTED",
+            "Prior Review Accepted",
+        )
+
+    class Disposition(models.TextChoices):
+        VERIFIED = "VERIFIED", "Verified"
+        REJECTED = "REJECTED", "Rejected"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    evidence_submission = models.ForeignKey(
+        EvidenceSubmission,
+        on_delete=models.PROTECT,
+        related_name="review_decisions",
+    )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.PROTECT,
+        related_name="evidence_review_decisions",
+    )
+    moderation_case = models.OneToOneField(
+        ModerationCase,
+        on_delete=models.PROTECT,
+        related_name="evidence_review_decision",
+    )
+    reviewed_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="institutional_evidence_review_decisions",
+    )
+    decision_type = models.CharField(
+        max_length=32,
+        choices=DecisionType.choices,
+        default=DecisionType.INDEPENDENT_REVIEW,
+    )
+    disposition = models.CharField(
+        max_length=20,
+        choices=Disposition.choices,
+    )
+    source_review = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="accepted_by_decisions",
+    )
+    notes = models.TextField(blank=True, default="")
+    rejection_reason = models.CharField(
+        max_length=30,
+        choices=EvidenceSubmission.RejectionReason.choices,
+        null=True,
+        blank=True,
+    )
+    organization_name_snapshot = models.CharField(
+        max_length=255,
+        editable=False,
+    )
+    reviewer_username_snapshot = models.CharField(
+        max_length=150,
+        blank=True,
+        editable=False,
+    )
+    created_at = models.DateTimeField(auto_now_add=True, editable=False)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        indexes = [
+            models.Index(
+                fields=["evidence_submission", "organization", "-created_at"],
+                name="evrev_evid_org_time_idx",
+            ),
+            models.Index(
+                fields=["organization", "-created_at"],
+                name="evrev_org_time_idx",
+            ),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["moderation_case"],
+                name="uniq_evidence_review_decision_case",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if (
+            self.decision_type == self.DecisionType.PRIOR_REVIEW_ACCEPTED
+            and self.source_review_id is None
+        ):
+            raise ValidationError(
+                {"source_review": "Accepting a prior review requires its source review."}
+            )
+        if (
+            self.decision_type == self.DecisionType.INDEPENDENT_REVIEW
+            and self.source_review_id is not None
+        ):
+            raise ValidationError(
+                {"source_review": "Independent reviews cannot reference a prior review."}
+            )
+        if (
+            self.source_review_id is not None
+            and self.source_review.evidence_submission_id
+            != self.evidence_submission_id
+        ):
+            raise ValidationError(
+                {"source_review": "The source review must concern the same evidence."}
+            )
+        if self.disposition == self.Disposition.REJECTED and not self.rejection_reason:
+            raise ValidationError(
+                {"rejection_reason": "Rejected evidence requires a rejection reason."}
+            )
+        if self.disposition == self.Disposition.VERIFIED and self.rejection_reason:
+            raise ValidationError(
+                {"rejection_reason": "Verified evidence cannot have a rejection reason."}
+            )
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError(
+                "Evidence review decisions are immutable and cannot be modified."
+            )
+        self.organization_name_snapshot = self.organization.name
+        self.reviewer_username_snapshot = (
+            self.reviewed_by.username if self.reviewed_by_id else ""
+        )
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            "Evidence review decisions cannot be deleted directly."
+        )
+
+    def __str__(self):
+        return (
+            f"{self.disposition} - Evidence {self.evidence_submission_id} "
+            f"by {self.organization_name_snapshot}"
+        )
+
+
 class ModerationEvent(models.Model):
     class EventType(models.TextChoices):
         CASE_CREATED = "CASE_CREATED", "Case Created"
@@ -2415,6 +2560,10 @@ class AccountabilityEvent(models.Model):
             "Platform Staff Invitation Expired",
         )
         EVIDENCE_REOPENED = "EVIDENCE_REOPENED", "Evidence Reopened"
+        EVIDENCE_PRIOR_REVIEW_ACCEPTED = (
+            "EVIDENCE_PRIOR_REVIEW_ACCEPTED",
+            "Prior Evidence Review Accepted",
+        )
         EVIDENCE_VERIFIED = "EVIDENCE_VERIFIED", "Evidence Verified"
         EVIDENCE_REJECTED = "EVIDENCE_REJECTED", "Evidence Rejected"
         ADJUDICATION_STARTED = "ADJUDICATION_STARTED", "Adjudication Started"
@@ -2774,6 +2923,58 @@ class AdjudicationDecision(models.Model):
             f"{self.verdict} - "
             f"Claim {self.claim_id} "
             f"(revision {self.revision_number})"
+        )
+
+
+class AdjudicationDecisionEvidenceReviewBasis(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    decision = models.ForeignKey(
+        AdjudicationDecision,
+        on_delete=models.PROTECT,
+        related_name="evidence_review_basis",
+    )
+    evidence_submission = models.ForeignKey(
+        EvidenceSubmission,
+        on_delete=models.PROTECT,
+        related_name="adjudication_review_basis",
+    )
+    review_decision = models.ForeignKey(
+        EvidenceReviewDecision,
+        on_delete=models.PROTECT,
+        related_name="adjudication_basis_records",
+    )
+    captured_at = models.DateTimeField(auto_now_add=True, editable=False)
+
+    class Meta:
+        ordering = ["captured_at", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["decision", "evidence_submission"],
+                name="uniq_adj_dec_evidence_review_basis",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError(
+                "Adjudication evidence review basis records are immutable."
+            )
+        if (
+            self.review_decision.evidence_submission_id
+            != self.evidence_submission_id
+        ):
+            raise ValidationError(
+                "The evidence review basis must match its evidence submission."
+            )
+        if self.review_decision.organization_id != self.decision.organization_id:
+            raise ValidationError(
+                "The adjudication must rely on a review basis adopted by its organization."
+            )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            "Adjudication evidence review basis records cannot be deleted directly."
         )
 
 
