@@ -11,14 +11,11 @@ import {
 } from "../components/management/ManagementUi";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
-import Select from "../components/ui/Select";
 import { useManagementMutation } from "../hooks/useManagementMutation";
 import { useManagementRequest } from "../hooks/useManagementRequest";
 import { resolveApiEndpoint } from "../utils/api";
 import {
    formatManagementDate,
-   MANAGEMENT_PARTNER_STATUSES,
-   MANAGEMENT_VERIFICATION_STATUSES,
    formatVerificationDomain,
 } from "../utils/management";
 
@@ -31,29 +28,14 @@ function OrganizationGovernanceSection({
    organization,
    onRefresh,
    onFeedback,
-   returnFocusAfterRefreshRef,
 }) {
    const lifecycle = organization.lifecycle || {};
+   const actions = lifecycle.actions || {};
    const impact = lifecycle.impact || {};
    const blockers = lifecycle.end_partnership_blockers || [];
-   const [editing, setEditing] = useState(false);
-   const [legacyConfirmationOpen, setLegacyConfirmationOpen] = useState(false);
+   const [confirmationAction, setConfirmationAction] = useState(null);
    const [endConfirmationOpen, setEndConfirmationOpen] = useState(false);
-   const editButtonRef = useRef(null);
-   const endButtonRef = useRef(null);
-   const saveButtonRef = useRef(null);
-   const [values, setValues] = useState({
-      verification_status: organization.verification_status,
-      partner_status: organization.partner_status,
-   });
    const { mutate, pending, error, reset } = useManagementMutation();
-
-   useEffect(() => {
-      if (returnFocusAfterRefreshRef.current && editButtonRef.current) {
-         returnFocusAfterRefreshRef.current = false;
-         editButtonRef.current.focus();
-      }
-   }, [returnFocusAfterRefreshRef]);
 
    const lifecycleLabels = {
       ACTIVE_PARTNER: "Active Partner",
@@ -72,74 +54,80 @@ function OrganizationGovernanceSection({
    const isRetirementRequired = lifecycle.state === "RETIREMENT_REQUIRED";
    const isFormerPartner = lifecycle.state === "FORMER_PARTNER";
    const canShowEndAction = isCurrentPartner || isRetirementRequired;
-   const canUseLegacyEditor = !isFormerPartner && !isRetirementRequired;
-   const partnerStatusOptions = MANAGEMENT_PARTNER_STATUSES.filter(([value]) => {
-      if (value === "FORMER") return false;
-      if (isCurrentPartner) return ["ACTIVE", "SUSPENDED"].includes(value);
-      if (organization.partner_status === "NONE") return ["NONE", "ACTIVE"].includes(value);
-      return value === organization.partner_status;
-   });
 
-   const hasChanges =
-      values.verification_status !== organization.verification_status ||
-      values.partner_status !== organization.partner_status;
-   const isHighImpactChange =
-      (
-         values.verification_status !== organization.verification_status &&
-         values.verification_status === "REJECTED"
-      ) ||
-      (
-         values.partner_status !== organization.partner_status &&
-         values.partner_status === "SUSPENDED"
-      );
+   const governanceActions = [
+      {
+         key: "verify",
+         allowed: actions.can_verify,
+         label: "Verify organization",
+         endpoint: "MANAGEMENT_ORGANIZATION_VERIFY",
+         description: "Approve the organization’s institutional verification. This does not activate a partnership by itself.",
+         warning: "Verification establishes the organization’s approved institutional status. Partnership activation remains a separate governance action.",
+         success: "Organization verification approved.",
+         variant: "primary",
+      },
+      {
+         key: "reject",
+         allowed: actions.can_reject_verification,
+         label: "Reject verification",
+         endpoint: "MANAGEMENT_ORGANIZATION_REJECT_VERIFICATION",
+         description: "Reject an onboarding verification review before the organization becomes an active Partner.",
+         warning: "The organization will remain outside Partner verification operations. This does not delete its institutional record.",
+         success: "Organization verification rejected.",
+         variant: "destructive",
+      },
+      {
+         key: "activate",
+         allowed: actions.can_activate_partnership,
+         label: "Activate partnership",
+         endpoint: "MANAGEMENT_ORGANIZATION_ACTIVATE_PARTNERSHIP",
+         description: "Enable Partner status after institutional verification has been approved.",
+         warning: "Eligible active organization members will gain the Partner capabilities assigned to their roles.",
+         success: "Partnership activated.",
+         variant: "primary",
+      },
+      {
+         key: "suspend",
+         allowed: actions.can_suspend_partnership,
+         label: "Suspend partnership",
+         endpoint: "MANAGEMENT_ORGANIZATION_SUSPEND_PARTNERSHIP",
+         description: "Temporarily disable Partner verification authority without ending the partnership.",
+         warning: "Current memberships and investigation ownership are retained. Members cannot perform Partner verification work until the partnership is reinstated or ended.",
+         success: "Partnership suspended.",
+         variant: "destructive",
+      },
+      {
+         key: "reinstate",
+         allowed: actions.can_reinstate_partnership,
+         label: "Reinstate partnership",
+         endpoint: "MANAGEMENT_ORGANIZATION_REINSTATE_PARTNERSHIP",
+         description: isFormerPartner
+            ? "Restore active Partner status after a former partnership."
+            : "Restore active Partner authority after a suspension.",
+         warning: isFormerPartner
+            ? "Historical memberships remain historical and are not reactivated automatically. Current members must be provisioned or invited through the normal organization workflow."
+            : "Existing current memberships remain unchanged and eligible role capabilities become active again.",
+         success: "Partnership reinstated.",
+         variant: "primary",
+      },
+   ].filter((action) => action.allowed);
 
-   const beginEditing = () => {
-      reset();
-      setValues({
-         verification_status: organization.verification_status,
-         partner_status: organization.partner_status,
-      });
-      setEditing(true);
-   };
+   const selectedAction = governanceActions.find(
+      (action) => action.key === confirmationAction,
+   );
 
-   const cancelEditing = () => {
-      if (pending) return;
-      reset();
-      setLegacyConfirmationOpen(false);
-      setEditing(false);
-   };
-
-   const saveLegacyChanges = async () => {
-      const body = {};
-      if (values.verification_status !== organization.verification_status) {
-         body.verification_status = values.verification_status;
-      }
-      if (values.partner_status !== organization.partner_status) {
-         body.partner_status = values.partner_status;
-      }
+   const executeGovernanceAction = async () => {
+      if (!selectedAction) return;
 
       const result = await mutate(
-         resolveApiEndpoint("MANAGEMENT_ORGANIZATION_PLATFORM_TRUST", organization.id),
-         { method: "PATCH", body },
+         resolveApiEndpoint(selectedAction.endpoint, organization.id),
+         { method: "POST", body: {} },
       );
-      if (!result.ok) return false;
+      if (!result.ok) return;
 
-      returnFocusAfterRefreshRef.current = true;
-      setLegacyConfirmationOpen(false);
-      setEditing(false);
-      onFeedback("Organization governance status updated.");
+      setConfirmationAction(null);
+      onFeedback(selectedAction.success);
       onRefresh();
-      return true;
-   };
-
-   const submitLegacyChanges = (event) => {
-      event.preventDefault();
-      if (!hasChanges || pending) return;
-      if (isHighImpactChange) {
-         setLegacyConfirmationOpen(true);
-         return;
-      }
-      saveLegacyChanges();
    };
 
    const endPartnership = async () => {
@@ -207,8 +195,34 @@ function OrganizationGovernanceSection({
          {isRetirementRequired ? (
             <ManagementFeedback tone="error">
                This organization has prior Partner verification work but is still recorded as “Not a Partner.”
-               Complete the governed retirement flow instead of changing raw status fields.
+               Complete the governed retirement flow before any later reinstatement.
             </ManagementFeedback>
+         ) : null}
+
+         {governanceActions.length ? (
+            <div className="management-governance-actions">
+               <div>
+                  <strong>Available governance actions</strong>
+                  <p>
+                     Only transitions valid for the organization’s current lifecycle state are available.
+                  </p>
+               </div>
+               <div className="management-governance-action-buttons">
+                  {governanceActions.map((action) => (
+                     <Button
+                        key={action.key}
+                        variant={action.variant}
+                        disabled={pending}
+                        onClick={() => {
+                           reset();
+                           setConfirmationAction(action.key);
+                        }}
+                     >
+                        {action.label}
+                     </Button>
+                  ))}
+               </div>
+            </div>
          ) : null}
 
          {canShowEndAction ? (
@@ -234,9 +248,8 @@ function OrganizationGovernanceSection({
                   ) : null}
                </div>
                <Button
-                  ref={endButtonRef}
                   variant="destructive"
-                  disabled={!lifecycle.can_end_partnership || pending}
+                  disabled={!actions.can_end_partnership || pending}
                   onClick={() => {
                      reset();
                      setEndConfirmationOpen(true);
@@ -247,107 +260,17 @@ function OrganizationGovernanceSection({
             </div>
          ) : null}
 
-         {canUseLegacyEditor ? (
-            <div className="management-governance-legacy">
-               <div className="management-governance-legacy__heading">
-                  <div>
-                     <strong>Remaining status controls</strong>
-                     <p>
-                        Temporary compatibility controls while Verify, Activate, Suspend, and Reject are migrated to dedicated governance actions.
-                        Former Partner is intentionally unavailable here.
-                     </p>
-                  </div>
-                  {!editing ? (
-                     <Button
-                        ref={editButtonRef}
-                        variant="secondary"
-                        density="compact"
-                        onClick={beginEditing}
-                     >
-                        Manage remaining statuses
-                     </Button>
-                  ) : null}
-               </div>
-
-               {editing ? (
-                  <form className="management-trust-editor" onSubmit={submitLegacyChanges}>
-                     <label className="management-form-field">
-                        <span>Verification status</span>
-                        <Select
-                           value={values.verification_status}
-                           onChange={(event) => {
-                              reset();
-                              setValues((current) => ({
-                                 ...current,
-                                 verification_status: event.target.value,
-                              }));
-                           }}
-                           invalid={Boolean(error?.fields.verification_status)}
-                           aria-describedby={error?.fields.verification_status ? "governance-verification-error" : undefined}
-                           disabled={pending}
-                        >
-                           {MANAGEMENT_VERIFICATION_STATUSES.map(([value, label]) => (
-                              <option key={value} value={value}>{label}</option>
-                           ))}
-                        </Select>
-                        <FieldError id="governance-verification-error">{error?.fields.verification_status}</FieldError>
-                     </label>
-                     <label className="management-form-field">
-                        <span>Partner status</span>
-                        <Select
-                           value={values.partner_status}
-                           onChange={(event) => {
-                              reset();
-                              setValues((current) => ({
-                                 ...current,
-                                 partner_status: event.target.value,
-                              }));
-                           }}
-                           invalid={Boolean(error?.fields.partner_status)}
-                           aria-describedby={error?.fields.partner_status ? "governance-partner-error" : undefined}
-                           disabled={pending}
-                        >
-                           {partnerStatusOptions.map(([value, label]) => (
-                              <option key={value} value={value}>{label}</option>
-                           ))}
-                        </Select>
-                        <FieldError id="governance-partner-error">{error?.fields.partner_status}</FieldError>
-                     </label>
-                     <div className="management-inline-actions">
-                        <Button variant="secondary" disabled={pending} onClick={cancelEditing}>Cancel</Button>
-                        <Button
-                           ref={saveButtonRef}
-                           type="submit"
-                           loading={pending}
-                           loadingLabel="Saving…"
-                           disabled={!hasChanges}
-                        >
-                           Save changes
-                        </Button>
-                     </div>
-                     {isHighImpactChange ? (
-                        <p className="management-governance-inline-warning">
-                           This status change affects current organization authority. End Partnership must use the dedicated action above.
-                        </p>
-                     ) : null}
-                     {error ? <ManagementFeedback tone="error">{error.message}</ManagementFeedback> : null}
-                  </form>
-               ) : null}
-            </div>
-         ) : null}
-
          <ManagementConfirmDialog
-            open={legacyConfirmationOpen}
-            title="Confirm governance status change"
-            description="Review the selected verification and partnership statuses before applying this compatibility transition."
-            warning="Rejected and suspended statuses affect current organization authority. Former Partner cannot be set here and must use the dedicated End partnership lifecycle action."
+            open={Boolean(selectedAction)}
+            title={selectedAction ? `${selectedAction.label}?` : "Confirm governance action"}
+            description={selectedAction?.description}
+            warning={selectedAction?.warning}
             error={error?.message}
-            confirmLabel="Apply status change"
-            confirmVariant="destructive"
+            confirmLabel={selectedAction?.label || "Confirm"}
+            confirmVariant={selectedAction?.variant || "primary"}
             processing={pending}
-            returnFocusRef={saveButtonRef}
-            onConfirm={saveLegacyChanges}
-            onClose={() => setLegacyConfirmationOpen(false)}
+            onConfirm={executeGovernanceAction}
+            onClose={() => setConfirmationAction(null)}
          />
          <ManagementConfirmDialog
             open={endConfirmationOpen}
@@ -358,7 +281,6 @@ function OrganizationGovernanceSection({
             confirmLabel="End partnership"
             confirmVariant="destructive"
             processing={pending}
-            returnFocusRef={endButtonRef}
             onConfirm={endPartnership}
             onClose={() => setEndConfirmationOpen(false)}
          />
@@ -613,7 +535,6 @@ function OrganizationAdminState({
 function ManagementOrganizationDetailPage() {
    const { organizationId } = useParams();
    const [feedback, setFeedback] = useState("");
-   const returnFocusAfterTrustRefreshRef = useRef(false);
    const returnFocusAfterPrimaryAdminRefreshRef = useRef(false);
    const { data, loading, error, retry } = useManagementRequest(
       resolveApiEndpoint("MANAGEMENT_ORGANIZATION_DETAIL", organizationId),
@@ -644,7 +565,6 @@ function ManagementOrganizationDetailPage() {
                      organization={data}
                      onRefresh={retry}
                      onFeedback={showFeedback}
-                     returnFocusAfterRefreshRef={returnFocusAfterTrustRefreshRef}
                   />
                   <VerificationScopeSection organization={data} />
                   <section className="management-detail-section">
