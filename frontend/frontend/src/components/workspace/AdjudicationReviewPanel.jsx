@@ -1668,8 +1668,6 @@ function AdjudicationReviewContent({
    const isResolvedCase = detail?.status === "RESOLVED";
    const currentDecision = detail?.current_decision || null;
    const evidenceTotal = normalizeNonnegativeNumber(evidenceReview.total);
-   const evidenceVerified = normalizeNonnegativeNumber(evidenceReview.verified);
-   const evidenceRejected = normalizeNonnegativeNumber(evidenceReview.rejected);
    const institutionalBasisCount = normalizeNonnegativeNumber(evidenceReview.institutional_basis_count);
    const institutionalBasisComplete = evidenceReview.institutional_basis_complete === true;
    const isUrlClaim = String(detailClaim.claim_type || "").toUpperCase() === "URL";
