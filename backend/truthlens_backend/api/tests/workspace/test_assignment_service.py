@@ -8,6 +8,7 @@ from api.adjudication_service import (
 )
 from api.evidence_review_service import (
     ensure_evidence_case,
+    review_evidence_submission,
 )
 from api.models import (
     AdjudicationDecision,
@@ -624,8 +625,20 @@ class VerificationAssignmentServiceTests(TestCase):
     ):
         self._claim_for_organization_a()
 
-        self._create_evidence(
-            status=(EvidenceSubmission.EvidenceStatus.VERIFIED),
+        evidence = self._create_evidence()
+        evidence_case = ensure_evidence_case(
+            evidence=evidence,
+            actor=self.community_user,
+            organization=self.organization_a,
+        )
+        review = review_evidence_submission(
+            evidence=evidence,
+            actor=self.lead_a,
+            evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            expected_status=EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+            expected_case_id=evidence_case.pk,
+            expected_organization_id=self.organization_a.pk,
+            allow_reopen=False,
         )
 
         case = ensure_claim_adjudication_readiness(
@@ -633,6 +646,7 @@ class VerificationAssignmentServiceTests(TestCase):
             actor=self.lead_a,
             organization=self.organization_a,
         )
+        self.assertEqual(case.pk, review["adjudication_case"].pk)
 
         self.assertIsNotNone(case)
 
