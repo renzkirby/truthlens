@@ -2158,6 +2158,10 @@ class EvidenceReviewDecision(models.Model):
         blank=True,
         editable=False,
     )
+    reviewed_at = models.DateTimeField(
+        default=timezone.now,
+        editable=False,
+    )
     created_at = models.DateTimeField(auto_now_add=True, editable=False)
 
     class Meta:
