@@ -13,6 +13,7 @@ from api.evidence_review_service import (
 from api.models import (
     AdjudicationDecision,
     Claim,
+    EvidenceReviewDecision,
     EvidenceSubmission,
     ModerationCase,
     Organization,
@@ -96,6 +97,29 @@ class EvidenceReviewServiceTests(TestCase):
         }
         values.update(overrides)
         return review_evidence_submission(**values)
+
+    def test_canonical_review_creates_immutable_institutional_decision(self):
+        result = self._review()
+
+        review = result["review_decision"]
+        self.assertEqual(review.evidence_submission_id, self.evidence.pk)
+        self.assertEqual(review.organization_id, self.organization.pk)
+        self.assertEqual(review.moderation_case_id, self.case.pk)
+        self.assertEqual(review.reviewed_by_id, self.reviewer.pk)
+        self.assertEqual(
+            review.decision_type,
+            EvidenceReviewDecision.DecisionType.INDEPENDENT_REVIEW,
+        )
+        self.assertEqual(
+            review.disposition,
+            EvidenceReviewDecision.Disposition.VERIFIED,
+        )
+        self.assertIsNone(review.source_review_id)
+        self.assertEqual(review.organization_name_snapshot, self.organization.name)
+        self.assertEqual(
+            review.reviewer_username_snapshot,
+            self.reviewer.username,
+        )
 
     def test_canonical_review_requires_current_active_assignment(self):
         self.assignment.status = VerificationAssignment.Status.RELEASED
