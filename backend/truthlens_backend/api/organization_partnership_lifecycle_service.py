@@ -82,6 +82,13 @@ def _record_platform_event(
     )
 
 
+def _has_prior_partner_work(organization):
+    return (
+        organization.verification_assignments.exists()
+        or organization.official_fact_checks.exists()
+    )
+
+
 def get_partner_organization_lifecycle_projection(organization):
     """Return derived governance state without mutating organization records."""
 
@@ -111,6 +118,12 @@ def get_partner_organization_lifecycle_projection(organization):
     elif organization.partner_status == Organization.PartnerStatus.FORMER:
         lifecycle_state = "FORMER_PARTNER"
         operational_access = "DISABLED"
+    elif (
+        organization.partner_status == Organization.PartnerStatus.NONE
+        and _has_prior_partner_work(organization)
+    ):
+        lifecycle_state = "RETIREMENT_REQUIRED"
+        operational_access = "DISABLED"
     elif organization.verification_status == Organization.VerificationStatus.REJECTED:
         lifecycle_state = "REJECTED"
         operational_access = "DISABLED"
@@ -118,10 +131,17 @@ def get_partner_organization_lifecycle_projection(organization):
         lifecycle_state = "ONBOARDING"
         operational_access = "SETUP_ONLY"
 
-    end_partnership_eligible = organization.partner_status in {
-        Organization.PartnerStatus.ACTIVE,
-        Organization.PartnerStatus.SUSPENDED,
-    }
+    end_partnership_eligible = (
+        organization.partner_status
+        in {
+            Organization.PartnerStatus.ACTIVE,
+            Organization.PartnerStatus.SUSPENDED,
+        }
+        or (
+            organization.partner_status == Organization.PartnerStatus.NONE
+            and _has_prior_partner_work(organization)
+        )
+    )
     blockers = []
     if active_factual_corrections:
         blockers.append(
@@ -163,9 +183,12 @@ def _ensure_endable_partnership(organization):
         raise OrganizationPartnershipLifecycleConflict(
             "This organization is already a former Partner Organization."
         )
-    if organization.partner_status == Organization.PartnerStatus.NONE:
+    if (
+        organization.partner_status == Organization.PartnerStatus.NONE
+        and not _has_prior_partner_work(organization)
+    ):
         raise OrganizationPartnershipLifecycleConflict(
-            "This organization does not have an active or suspended partnership to end."
+            "This organization has no prior Partner verification work to retire."
         )
 
 
