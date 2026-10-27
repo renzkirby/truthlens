@@ -10,6 +10,7 @@ from rest_framework.test import APITestCase
 from api.models import (
     AdjudicationDecision,
     Claim,
+    EvidenceReviewDecision,
     EvidenceSubmission,
     ModerationCase,
     ModerationEvent,
@@ -276,6 +277,105 @@ class EvidenceCaseApiTests(APITestCase):
         self.assertEqual(response.data["offset"], 0)
         self.assertEqual(response.data["organization"]["id"], str(self.organization.id))
         self.assertEqual(response.data["results"][0]["id"], str(self.case.id))
+
+    def test_successor_handoff_can_accept_prior_institutional_review(self):
+        prior_reviewer = User.objects.create_user(
+            username="prior-org-reviewer",
+            password="test-password",
+        )
+        self._add_member(
+            prior_reviewer,
+            self.other_organization,
+            OrganizationMembership.Role.LEAD_VERIFIER,
+        )
+        reviewed_at = timezone.now() - timedelta(days=2)
+        prior_case = ModerationCase.objects.create(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            evidence_submission=self.evidence,
+            organization=self.other_organization,
+            status=ModerationCase.Status.RESOLVED,
+            source=ModerationCase.Source.EVIDENCE_SUBMISSION,
+            resolution_code=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            resolution_summary="Prior organization accepted the source.",
+            resolved_by=prior_reviewer,
+            resolved_at=reviewed_at,
+        )
+        prior_review = EvidenceReviewDecision.objects.create(
+            evidence_submission=self.evidence,
+            organization=self.other_organization,
+            moderation_case=prior_case,
+            reviewed_by=prior_reviewer,
+            disposition=EvidenceReviewDecision.Disposition.VERIFIED,
+            notes="Prior organization accepted the source.",
+            reviewed_at=reviewed_at,
+        )
+        self.evidence.evidence_status = EvidenceSubmission.EvidenceStatus.VERIFIED
+        self.evidence.verified_by = prior_reviewer
+        self.evidence.verified_at = reviewed_at
+        self.evidence.moderator_notes = "Prior organization accepted the source."
+        self.evidence.save(
+            update_fields=[
+                "evidence_status",
+                "verified_by",
+                "verified_at",
+                "moderator_notes",
+            ]
+        )
+
+        self._authenticate(self.lead)
+        queue = self.client.get(self._queue_url())
+        detail = self.client.get(self._detail_url())
+
+        self.assertEqual(queue.status_code, status.HTTP_200_OK)
+        self.assertEqual(queue.data["count"], 1)
+        self.assertEqual(queue.data["results"][0]["id"], str(self.case.pk))
+        self.assertTrue(
+            queue.data["results"][0]["review_context"]["requires_successor_action"]
+        )
+        self.assertEqual(
+            detail.data["review_context"]["prior_review"]["id"],
+            str(prior_review.pk),
+        )
+        self.assertEqual(
+            detail.data["review_context"]["prior_review"]["organization"]["id"],
+            str(self.other_organization.pk),
+        )
+
+        response = self.client.post(
+            self._action_url(),
+            {
+                "action": "ACCEPT_PRIOR_REVIEW",
+                "source_review_id": str(prior_review.pk),
+                "expected_status": EvidenceSubmission.EvidenceStatus.VERIFIED,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.case.refresh_from_db()
+        self.assertEqual(self.case.status, ModerationCase.Status.RESOLVED)
+        accepted = EvidenceReviewDecision.objects.get(
+            evidence_submission=self.evidence,
+            organization=self.organization,
+        )
+        self.assertEqual(
+            accepted.decision_type,
+            EvidenceReviewDecision.DecisionType.PRIOR_REVIEW_ACCEPTED,
+        )
+        self.assertEqual(accepted.source_review_id, prior_review.pk)
+        self.assertEqual(
+            accepted.disposition,
+            EvidenceReviewDecision.Disposition.VERIFIED,
+        )
+        self.evidence.refresh_from_db()
+        self.assertEqual(self.evidence.verified_by_id, prior_reviewer.pk)
+        self.assertFalse(
+            response.data["review_context"]["requires_successor_action"]
+        )
+        self.assertEqual(
+            response.data["review_context"]["current_organization_review"]["id"],
+            str(accepted.pk),
+        )
 
     def test_reviewed_history_is_status_specific_and_excludes_cancelled_cases(self):
         self.evidence.evidence_status = EvidenceSubmission.EvidenceStatus.VERIFIED
