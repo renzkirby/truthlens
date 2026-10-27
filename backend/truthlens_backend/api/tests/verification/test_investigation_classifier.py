@@ -13,7 +13,7 @@ from api.models import (
     AccountabilityEvent, Claim, ClaimInvestigationClassification,
     InvestigationClassificationAssessment, Thread, VerificationAssignment,
 )
-from api.verification_domain_policy import eligibility_reason
+from api.verification_domain_policy import eligibility_reason, subject_eligibility_enforced
 
 
 class AutomaticInvestigationClassificationTests(TestCase):
@@ -168,6 +168,24 @@ class AutomaticInvestigationClassificationTests(TestCase):
         self.assertEqual(event.new_state["primary_subject"], "SCIENCE")
         self.assertEqual(classify_investigation_claim(self.claim.pk), "ALREADY_CLASSIFIED")
         mock_provider.assert_called_once()
+
+    @override_settings(
+        INVESTIGATION_CLASSIFICATION_MODE="enforce",
+        INVESTIGATION_ROUTING_MODE="off",
+    )
+    @patch("api.investigation_classifier._query_classifier")
+    def test_authoritative_subject_persistence_does_not_enable_partner_routing(
+        self, mock_provider,
+    ):
+        mock_provider.return_value = self.suggestion()
+
+        self.assertEqual(classify_investigation_claim(self.claim.pk), "APPLIED")
+        classification = ClaimInvestigationClassification.objects.get(
+            claim=self.claim,
+        )
+        self.assertEqual(classification.domains, ["SCIENCE"])
+        self.assertEqual(classification.primary_subject, "SCIENCE")
+        self.assertFalse(subject_eligibility_enforced())
 
     @override_settings(INVESTIGATION_CLASSIFICATION_MODE="enforce")
     @patch("api.investigation_classifier._query_classifier")
