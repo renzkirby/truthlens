@@ -602,13 +602,40 @@ No lifecycle production logic was changed by these commits.
 
 ## Current checkpoint / next step
 
-As of this document's creation:
+### Baseline validation completed
 
-- branch exists and is pushed;
-- branch is identical to current `main` at baseline;
-- impact audit has started;
-- no lifecycle behavior changes have been implemented;
-- CSG should remain untouched as historical data;
-- the next development task is to establish the focused **regression-test checkpoint** and add missing invariant tests before implementing the first lifecycle service.
+Local baseline validation completed successfully after recreating the stale preserved test database:
 
-When implementation begins, prefer small commits grouped by behavior, and keep this document updated as decisions change.
+- 97 focused regression tests passed;
+- `python manage.py check` passed;
+- `python manage.py makemigrations --check --dry-run` reported no changes.
+
+The initial `--keepdb` failure was caused by a stale test database whose schema still contained `api_platformstaffinvitation` from the pre-reconciled migration state. Recreating only the test database resolved it; production/development data was not implicated.
+
+### First lifecycle implementation slice
+
+The branch now contains a backend-only, not-yet-exposed lifecycle service:
+
+- `e0a4cdd1` — add `end_partner_organization_partnership()`;
+- `785ef603` — define end-partnership lifecycle invariants;
+- `db7d2c2c` — correct the lifecycle invitation test fixture.
+
+Current intended behavior:
+
+- Platform Admin only;
+- active or suspended partnership may be ended;
+- partner status becomes `FORMER`;
+- verification history is preserved;
+- current non-`LEFT` memberships become `LEFT`;
+- pending invitations are cancelled and their token digests rotated;
+- ACTIVE verification assignments become historical `RELEASED` rows with `PARTNERSHIP_ENDED` audit reason;
+- fresh `AVAILABLE` replacement assignments are created;
+- active factual moderation-case ownership is detached so another Partner Organization can claim the work;
+- completed assignments and historical provenance remain untouched;
+- an ACTIVE factual-correction request currently blocks partnership termination because the correction belongs to an already-published institutional record and requires explicit resolution rather than silent abandonment.
+
+A new assignment enum such as `TERMINATED` has intentionally **not** been added yet. The first slice reuses `RELEASED` with explicit Platform-governance audit metadata to minimize changes to existing assignment queries and state assumptions.
+
+The service is not yet wired to a Management API endpoint or frontend control. Run its focused tests before exposing it.
+
+CSG should remain untouched until this lifecycle path is validated.
