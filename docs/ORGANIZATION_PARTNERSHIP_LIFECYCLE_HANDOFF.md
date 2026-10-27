@@ -6,7 +6,7 @@
 >
 > Baseline at creation: `main` = `b57c84349bdff3e5b9a846043de012b736a59cbf`
 >
-> Status: **Impact audit / regression checkpoint. No lifecycle behavior change has been implemented yet.**
+> Status: **Lifecycle services, explicit Management governance actions/UI, legacy-retirement handling, and historical publication preservation are implemented on the feature branch. Latest combined backend/frontend/extension validation is pending. No PR or merge has been created.**
 
 ## Purpose
 
@@ -761,3 +761,122 @@ Current UI behavior:
 The legacy platform-trust backend mutation remains temporarily available for compatibility (including Developer Console paths). It should be retired only after dedicated Verify / Reject / Activate / Suspend / Reinstate transitions have their own backend services and regression gates.
 
 Frontend lint/build still need to be run locally for this slice.
+
+
+---
+
+## Explicit governance transitions
+
+The temporary raw status editor in the Management Console has now been replaced by explicit Platform Admin actions.
+
+Implemented service transitions:
+
+- `verify_partner_organization()`
+- `reject_partner_organization_verification()`
+- `activate_partner_organization_partnership()`
+- `suspend_partner_organization_partnership()`
+- `reinstate_partner_organization_partnership()`
+- existing `end_partner_organization_partnership()`
+
+State rules:
+
+- **Verify**: changes a non-verified institutional record to `VERIFIED`, except a `RETIREMENT_REQUIRED` legacy record cannot bypass retirement by being verified.
+- **Reject verification**: only `UNVERIFIED/PENDING + NONE` onboarding organizations with no prior Partner work.
+- **Activate partnership**: only `VERIFIED + NONE` organizations with no prior Partner work.
+- **Suspend partnership**: only `ACTIVE`; retains current memberships and active investigation ownership while disabling Partner verification authority.
+- **Reinstate partnership**: only `SUSPENDED` or `FORMER`, and requires `VERIFIED`.
+  - suspended reinstatement preserves current memberships;
+  - former reinstatement never silently changes historical `LEFT` memberships back to current.
+- **End partnership**: separately handles operational retirement, current membership closure, pending invitation cancellation, and unfinished investigation requeueing.
+
+The lifecycle projection now provides an `actions` object so the client does not reconstruct transition rules.
+
+Management API actions:
+
+```text
+POST /management/organizations/<id>/verification/verify/
+POST /management/organizations/<id>/verification/reject/
+POST /management/organizations/<id>/partnership/activate/
+POST /management/organizations/<id>/partnership/suspend/
+POST /management/organizations/<id>/partnership/reinstate/
+POST /management/organizations/<id>/partnership/end/
+```
+
+All actions accept empty bodies only. Invalid lifecycle transitions fail with 409.
+
+The normal Management Console no longer exposes arbitrary verification/partner-status dropdowns. The legacy platform-trust mutation remains temporarily in backend code for compatibility/Developer Console paths and should be retired separately only after its remaining callers are audited.
+
+## Historical publication preservation implemented
+
+Active Partner profile/directory eligibility and historical publication readability are now separate contracts.
+
+### Active Partner profile/directory
+
+Still requires:
+
+```text
+public_profile_enabled = true
+verification_status = VERIFIED
+partner_status = ACTIVE
+```
+
+A suspended or former partner therefore remains absent from the current Partner Directory/profile.
+
+### Historical published fact-checks
+
+A separate publication organization resolver now permits public fact-check collection/detail access when the organization owns valid sealed published work, regardless of current Partner profile eligibility.
+
+Public publication organization payloads now include:
+
+- current `partner_status`;
+- current partner-status label;
+- `public_profile_available`.
+
+Knowledge-reuse/verification payloads now distinguish:
+
+- `public_profile_available` — whether the current Partner profile may be opened;
+- `public_fact_check_available` — whether the sealed published fact-check may be opened.
+
+This allows a former Partner Organization to have:
+
+```text
+public_profile_available = false
+public_fact_check_available = true
+```
+
+Client behavior updated accordingly:
+
+- Verify result page keeps the “Read published fact-check” link for historical publications;
+- Deep Analysis keeps official/related publication links;
+- Browser Extension keeps official and related publication links;
+- organization profile links remain disabled when the organization is no longer an active public Partner;
+- Public Fact-Check page displays **Former TruthLens Partner** attribution for former publishers without linking to an unavailable Partner profile.
+
+Public-reach instrumentation follows the same split:
+
+- `PARTNER_PROFILE_VIEW` still requires current active Partner eligibility;
+- publication view/impression/click events require a valid public publication, not current Partner profile eligibility;
+- therefore former-partner publications remain measurable without making the former Partner profile public.
+
+### Current factual-correction exception
+
+An ACTIVE factual-correction request still blocks End Partnership.
+
+This remains intentional. A correction changes an already-published institutional factual record and must not be silently cancelled or orphaned as a side effect of organizational retirement.
+
+CSG is therefore expected to project as `RETIREMENT_REQUIRED` but remain blocked from completing End Partnership until its active correction is resolved/cancelled or a separately designed correction-handoff policy is implemented.
+
+## Latest validation boundary
+
+The latest code after the previously green regression gates changes:
+
+- explicit lifecycle service transitions;
+- lifecycle API actions and permissions;
+- action-driven Management Console UI;
+- public publication routing/metadata;
+- verification/related fact-check link contracts;
+- extension publication-link behavior;
+- former-partner public fact-check attribution;
+- publication public-reach eligibility.
+
+These latest changes still require one combined local validation gate before the branch is considered ready for review.
