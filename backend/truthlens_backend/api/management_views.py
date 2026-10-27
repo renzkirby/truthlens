@@ -31,6 +31,11 @@ from .management_governance_service import (
     create_partner_organization,
     update_organization_platform_trust,
 )
+from .organization_partnership_lifecycle_service import (
+    OrganizationPartnershipLifecycleAuthorizationError,
+    OrganizationPartnershipLifecycleConflict,
+    end_partner_organization_partnership,
+)
 from .institution_affiliation_service import (
     create_institution,
     set_organization_institution_affiliation,
@@ -740,6 +745,49 @@ class ManagementOrganizationPlatformTrustView(APIView):
 
         return Response(
             _serialize_management_organization(organization),
+            status=status.HTTP_200_OK,
+        )
+
+
+class ManagementOrganizationEndPartnershipView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def post(self, request, organization_id):
+        serializer = ManagementEmptyMutationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            result = end_partner_organization_partnership(
+                organization_id=organization_id,
+                actor=request.user,
+            )
+        except Organization.DoesNotExist:
+            return Response(
+                {"detail": "Organization not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except OrganizationPartnershipLifecycleAuthorizationError as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except OrganizationPartnershipLifecycleConflict as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response(
+            {
+                "organization": _serialize_management_organization(
+                    result["organization"]
+                ),
+                "transition": {
+                    "ended_memberships": result["ended_memberships"],
+                    "cancelled_invitations": result["cancelled_invitations"],
+                    "requeued_investigations": result["requeued_investigations"],
+                },
+            },
             status=status.HTTP_200_OK,
         )
 
