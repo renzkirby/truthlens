@@ -2107,9 +2107,11 @@ class EvidenceInstitutionalReviewSerializer(serializers.ModelSerializer):
     def get_source_organization(self, obj):
         if obj.source_review is None:
             return None
-        return EvidenceReviewOrganizationSerializer(
+        payload = EvidenceReviewOrganizationSerializer(
             obj.source_review.organization
         ).data
+        payload["name_snapshot"] = obj.source_review.organization_name_snapshot
+        return payload
 
     class Meta:
         model = EvidenceReviewDecision
