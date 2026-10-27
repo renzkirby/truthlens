@@ -183,7 +183,7 @@ class ActiveSuccessorEvidenceHandoffMigrationTests(TestCase):
             name="Handoff Migration Partner A",
             slug="handoff-migration-partner-a",
             verification_status=Organization.VerificationStatus.VERIFIED,
-            partner_status=Organization.PartnerStatus.ENDED,
+            partner_status=Organization.PartnerStatus.FORMER,
         )
         self.org_b = Organization.objects.create(
             name="Handoff Migration Partner B",
