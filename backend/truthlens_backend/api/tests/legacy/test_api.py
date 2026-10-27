@@ -21,6 +21,7 @@ from io import StringIO
 from api.models import (
     Claim,
     ClaimCheckHistory,
+    EvidenceReviewDecision,
     EvidenceSubmission,
     Thread,
     ThreadComment,
@@ -2002,56 +2003,64 @@ class EvidenceCaseFoundationTests(APITestCase):
 
         self.assertIsNone(self.evidence.rejection_reason)
 
-    def test_resolved_evidence_case_can_be_reopened_for_review(self):
-        case = ensure_evidence_case(
+    def test_resolved_evidence_review_creates_new_case_for_rereview(self):
+        first_case = ensure_evidence_case(
             evidence=self.evidence,
             actor=self.contributor,
         )
 
-        review_evidence_submission(
+        first = review_evidence_submission(
             evidence=self.evidence,
             actor=self.moderator,
             evidence_status=(EvidenceSubmission.EvidenceStatus.VERIFIED),
         )
 
-        review_evidence_submission(
+        second = review_evidence_submission(
             evidence=self.evidence,
             actor=self.second_moderator,
             evidence_status=(EvidenceSubmission.EvidenceStatus.REJECTED),
             rejection_reason=(EvidenceSubmission.RejectionReason.MISREPRESENTS_SOURCE),
         )
 
-        case.refresh_from_db()
+        first_case.refresh_from_db()
+        second["case"].refresh_from_db()
         self.evidence.refresh_from_db()
 
-        self.assertEqual(
-            case.status,
-            ModerationCase.Status.RESOLVED,
-        )
-
+        self.assertEqual(first_case.status, ModerationCase.Status.RESOLVED)
+        self.assertNotEqual(first_case.pk, second["case"].pk)
+        self.assertEqual(second["case"].status, ModerationCase.Status.RESOLVED)
         self.assertEqual(
             self.evidence.evidence_status,
             EvidenceSubmission.EvidenceStatus.REJECTED,
         )
-
         self.assertTrue(
-            case.events.filter(
-                event_type=(ModerationEvent.EventType.EVIDENCE_REOPENED)
+            second["case"].events.filter(
+                event_type=ModerationEvent.EventType.EVIDENCE_REOPENED,
+                metadata__previous_case_id=str(first_case.pk),
             ).exists()
         )
-
         self.assertEqual(
-            case.events.filter(
-                event_type=(ModerationEvent.EventType.EVIDENCE_VERIFIED)
+            EvidenceReviewDecision.objects.filter(
+                evidence_submission=self.evidence,
+                organization=self.organization,
             ).count(),
-            1,
+            2,
         )
-
         self.assertEqual(
-            case.events.filter(
-                event_type=(ModerationEvent.EventType.EVIDENCE_REJECTED)
-            ).count(),
-            1,
+            first["review_decision"].disposition,
+            EvidenceReviewDecision.Disposition.VERIFIED,
+        )
+        self.assertEqual(
+            second["review_decision"].disposition,
+            EvidenceReviewDecision.Disposition.REJECTED,
+        )
+        self.assertEqual(
+            first["review_decision"].moderation_case_id,
+            first_case.pk,
+        )
+        self.assertEqual(
+            second["review_decision"].moderation_case_id,
+            second["case"].pk,
         )
 
     def test_stale_evidence_review_is_rejected(self):
@@ -2144,7 +2153,8 @@ class AdjudicationFoundationTests(APITestCase):
             caption="Community thread with reviewed evidence.",
             status=Thread.Status.OPEN,
         )
-        EvidenceSubmission.objects.create(
+        reviewed_at = timezone.now()
+        evidence = EvidenceSubmission.objects.create(
             thread=self.thread,
             contributor=self.contributor,
             evidence_caption="Reviewed adjudication evidence.",
@@ -2152,7 +2162,25 @@ class AdjudicationFoundationTests(APITestCase):
             evidence_type=EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
             evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
             verified_by=self.moderator,
-            verified_at=timezone.now(),
+            verified_at=reviewed_at,
+        )
+        evidence_case = ModerationCase.objects.create(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            evidence_submission=evidence,
+            organization=self.organization,
+            source=ModerationCase.Source.EVIDENCE_SUBMISSION,
+            status=ModerationCase.Status.RESOLVED,
+            resolution_code=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            resolved_by=self.moderator,
+            resolved_at=reviewed_at,
+        )
+        EvidenceReviewDecision.objects.create(
+            evidence_submission=evidence,
+            organization=self.organization,
+            moderation_case=evidence_case,
+            reviewed_by=self.moderator,
+            disposition=EvidenceReviewDecision.Disposition.VERIFIED,
+            reviewed_at=reviewed_at,
         )
 
     def test_ensure_adjudication_case_creates_and_reuses_active_case(
