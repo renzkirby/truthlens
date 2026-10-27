@@ -68,7 +68,7 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
             claimed_at=now,
         )
 
-    def client(self):
+    def authenticated_client(self):
         client = APIClient()
         client.force_authenticate(user=self.platform_admin)
         return client
@@ -86,7 +86,7 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
         )
 
     def test_detail_projects_current_lifecycle_and_end_partnership_impact(self):
-        response = self.client().get(self.detail_url())
+        response = self.authenticated_client().get(self.detail_url())
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(
@@ -106,7 +106,7 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
         )
 
     def test_end_partnership_returns_transition_summary_and_refreshed_projection(self):
-        response = self.client().post(self.end_url(), {}, format="json")
+        response = self.authenticated_client().post(self.end_url(), {}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(
@@ -167,7 +167,7 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
         self.organization.partner_status = Organization.PartnerStatus.SUSPENDED
         self.organization.save(update_fields=["partner_status"])
 
-        response = self.client().get(self.detail_url())
+        response = self.authenticated_client().get(self.detail_url())
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["lifecycle"]["state"], "SUSPENDED_PARTNER")
@@ -182,7 +182,7 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
             partner_status=Organization.PartnerStatus.NONE,
         )
 
-        response = self.client().get(self.detail_url(onboarding))
+        response = self.authenticated_client().get(self.detail_url(onboarding))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["lifecycle"]["state"], "ONBOARDING")
@@ -201,7 +201,7 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
                 "this organization's partnership."
             ),
         ):
-            response = self.client().post(self.end_url(), {}, format="json")
+            response = self.authenticated_client().post(self.end_url(), {}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
         self.assertEqual(
@@ -215,7 +215,7 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
         )
 
     def test_end_partnership_rejects_unexpected_payload_fields(self):
-        response = self.client().post(
+        response = self.authenticated_client().post(
             self.end_url(),
             {"partner_status": Organization.PartnerStatus.FORMER},
             format="json",
@@ -229,7 +229,7 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
         )
 
     def test_end_partnership_unknown_organization_returns_404(self):
-        response = self.client().post(
+        response = self.authenticated_client().post(
             reverse(
                 "management_organization_end_partnership",
                 kwargs={"organization_id": uuid4()},
