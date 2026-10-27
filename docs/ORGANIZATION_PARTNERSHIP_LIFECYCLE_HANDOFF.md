@@ -1393,3 +1393,59 @@ Stale correction case IDs now fail closed: when no active case exists, `expected
 - never fabricates a missing historical rejection reason.
 
 This slice is implemented but requires focused backend tests, migration checks, and frontend lint/build before being considered review-ready.
+
+
+### Successor evidence handoff hardening after interrupted implementation
+
+The implementation session was interrupted after the main successor-review slice had partially landed. The branch was recovered and statically reconciled before continuing.
+
+Additional hardening completed after recovery:
+
+- `EvidenceReviewDecision.moderation_case` is a ForeignKey, not OneToOne:
+  - review decisions remain append-only;
+  - historical same-case/reopen patterns cannot be artificially constrained to one decision forever.
+- model-level provenance validation now requires:
+  - an Evidence review decision to reference an Evidence case;
+  - case evidence identity to match;
+  - case organization to match the reviewing organization;
+  - accepted prior review to concern the same evidence;
+  - accepted prior review to originate from another organization;
+  - independent rejected reviews to carry a rejection reason.
+- successor acceptance rejects stale prior reviews whose disposition no longer matches the current evidence state.
+- a returning organization with an old stale basis is not treated as complete:
+  - claim-time reconciliation creates a fresh handoff case when its latest basis differs from the current evidence disposition;
+  - Workspace `inherited_review_pending` likewise detects stale bases;
+  - the organization may accept a newer prior review or independently re-review.
+- Adjudication detail now has an explicit `MISSING_EVIDENCE_REVIEW_BASIS` blocker even if an active handoff case is somehow absent.
+- the locked adjudication transaction still independently enforces exact current-organization basis for every evidence item.
+- adjudication evidence payloads expose the current organization's exact institutional review basis, including prior-review lineage.
+- the Adjudication UI now shows:
+  - whether the current organization independently reviewed the evidence;
+  - or explicitly accepted a prior review;
+  - the source Partner Organization for accepted prior review;
+  - current basis reviewer and review time.
+- Adjudication navigation can open any active organization Evidence case, including successor handoff cases whose global evidence status is already VERIFIED/REJECTED.
+- Adjudication summary distinguishes:
+  - global evidence disposition;
+  - current organization's institutional evidence-basis completeness.
+- adjudication basis sidecar storage is transaction-critical:
+  - failure to persist `AdjudicationDecisionEvidenceReviewBasis` rolls back the authoritative decision, evidence snapshot, claim verdict, case transition and thread verdict together.
+- migration 0096 explicitly excludes factual-correction evidence-review events from ordinary institutional-review backfill:
+  - correction evidence retains its existing sealed correction provenance;
+  - no correction review is silently recast as ordinary assignment evidence authority.
+- backfill preserves historical `reviewed_at`, organization name and reviewer username snapshots.
+
+The successor-review slice is intentionally **not yet marked green**. Required validation includes:
+
+- successor handoff service tests;
+- migration 0096 regression;
+- Evidence Review service/API;
+- assignment/reassignment behavior;
+- Investigation Workspace progression;
+- Adjudication detail/readiness;
+- adjudication evidence snapshot and transaction safety;
+- factual-correction evidence regressions;
+- Django system/migration checks;
+- frontend lint/build.
+
+No Browser Extension files were changed by this successor-review slice.
