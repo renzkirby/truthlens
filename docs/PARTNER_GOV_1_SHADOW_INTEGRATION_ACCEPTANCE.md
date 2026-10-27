@@ -97,8 +97,10 @@ means `NEEDS_CLASSIFICATION`, regardless of the candidate domains.
 
 ## Operational guardrails
 
-- The current `INVESTIGATION_CLASSIFICATION_MODE=off` remains the
-  default. Do NOT set it to `enforce`.
+- This checkpoint evaluated classifier shadow behavior. Automatic subject
+  authority and partner routing are now separate controls. Keep
+  `INVESTIGATION_ROUTING_MODE=off` unless routing enforcement receives its own
+  approval; classifier `enforce` alone must not grant or deny partner intake.
 - The three-provider hierarchy is dev-only; production and staging
   will not activate the Cloudflare classification pilot using flags
   alone. To test live `shadow` in a dev worker, a separate explicit
