@@ -621,6 +621,7 @@ The branch now contains a backend-only, not-yet-exposed lifecycle service:
 - `db7d2c2c` — correct the lifecycle invitation test fixture.
 - `926054bd` — scope partnership termination moderation-case row locks to `ModerationCase` itself. PostgreSQL rejects `FOR UPDATE` across the nullable joins used to locate evidence/adjudication cases; `select_for_update(of=("self",))` preserves the intended concurrency protection without locking nullable joined relations.
 - Focused lifecycle validation after the row-lock fix: **5/5 tests passed** in `api.tests.management.test_organization_partnership_lifecycle_service`.
+- Broader regression gate after the lifecycle service: **all 102 focused tests passed**, `manage.py check` passed, and `makemigrations --check --dry-run` reported no changes.
 
 Current intended behavior:
 
@@ -641,3 +642,39 @@ A new assignment enum such as `TERMINATED` has intentionally **not** been added 
 The service is not yet wired to a Management API endpoint or frontend control. Run its focused tests before exposing it.
 
 CSG should remain untouched until this lifecycle path is validated.
+
+
+### Management lifecycle API slice
+
+The next isolated backend slice is now implemented but still not connected to the frontend:
+
+- `3b3484c3` — derived, read-only organization lifecycle projection;
+- `be18ffaf` — expose the lifecycle projection on Management organization detail;
+- `013c004d` — add the Platform Admin End Partnership API view;
+- `d6fefa27` — route the dedicated End Partnership action;
+- `d6d9bd43` — include the action in the Management write-permission regression matrix;
+- `ac855027` — dedicated lifecycle API contract tests;
+- `b823a20e` — align derived operational access with the existing VERIFIED + ACTIVE partner-authority rule.
+
+Current API route:
+
+```text
+POST /management/organizations/<organization_id>/partnership/end/
+```
+
+The action accepts an empty body only. Arbitrary raw status fields are rejected.
+
+The Management organization detail now includes a derived `lifecycle` object with:
+
+- lifecycle state;
+- operational-access state;
+- whether End Partnership is currently allowed;
+- explicit End Partnership blockers;
+- impact counts for current memberships, pending invitations, active investigations, and active factual corrections.
+
+The End Partnership response returns:
+
+- the refreshed Management organization detail;
+- transition counts for memberships ended, invitations cancelled, and investigations requeued.
+
+No frontend behavior has changed yet. The legacy Edit Platform Trust UI remains in place until this API slice passes its focused regression gate.
