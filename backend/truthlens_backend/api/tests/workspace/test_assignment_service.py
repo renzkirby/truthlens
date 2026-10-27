@@ -417,6 +417,57 @@ class VerificationAssignmentServiceTests(TestCase):
             VerificationAssignment.Status.ACTIVE,
         )
 
+    def test_claiming_creates_missing_case_for_legacy_unverified_evidence(
+        self,
+    ):
+        evidence = self._create_evidence()
+        self.assertFalse(
+            ModerationCase.objects.filter(
+                case_type=ModerationCase.CaseType.EVIDENCE,
+                evidence_submission=evidence,
+            ).exists()
+        )
+
+        self._claim_for_organization_a()
+
+        case = ModerationCase.objects.get(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            evidence_submission=evidence,
+        )
+        self.assertEqual(case.status, ModerationCase.Status.OPEN)
+        self.assertEqual(case.organization_id, self.organization_a.id)
+        self.assertEqual(
+            case.source,
+            ModerationCase.Source.EVIDENCE_SUBMISSION,
+        )
+        self.assertTrue(
+            case.events.filter(
+                event_type="CASE_CREATED",
+            ).exists()
+        )
+
+    def test_claiming_does_not_recreate_terminal_legacy_evidence_case(self):
+        evidence = self._create_evidence()
+        terminal = ModerationCase.objects.create(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            evidence_submission=evidence,
+            source=ModerationCase.Source.EVIDENCE_SUBMISSION,
+            status=ModerationCase.Status.CANCELLED,
+        )
+
+        self._claim_for_organization_a()
+
+        self.assertEqual(
+            ModerationCase.objects.filter(
+                case_type=ModerationCase.CaseType.EVIDENCE,
+                evidence_submission=evidence,
+            ).count(),
+            1,
+        )
+        terminal.refresh_from_db()
+        self.assertEqual(terminal.status, ModerationCase.Status.CANCELLED)
+        self.assertIsNone(terminal.organization_id)
+
     def test_claiming_attaches_only_factual_cases(
         self,
     ):
