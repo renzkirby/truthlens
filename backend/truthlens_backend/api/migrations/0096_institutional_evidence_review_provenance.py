@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import migrations, models
 import django.db.models.deletion
+import django.utils.timezone
 import uuid
 
 
@@ -79,6 +80,10 @@ def backfill_institutional_evidence_reviews(apps, schema_editor):
             reviewer_username_snapshot=(
                 reviewer.username if reviewer is not None else ""
             ),
+            reviewed_at=(
+                case.resolved_at
+                or (review_event.created_at if review_event is not None else case.updated_at)
+            ),
         )
 
 
@@ -149,6 +154,13 @@ class Migration(migrations.Migration):
                 (
                     "reviewer_username_snapshot",
                     models.CharField(blank=True, editable=False, max_length=150),
+                ),
+                (
+                    "reviewed_at",
+                    models.DateTimeField(
+                        default=django.utils.timezone.now,
+                        editable=False,
+                    ),
                 ),
                 (
                     "created_at",
