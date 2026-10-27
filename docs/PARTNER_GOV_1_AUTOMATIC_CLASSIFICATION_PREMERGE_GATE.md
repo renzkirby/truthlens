@@ -6,6 +6,11 @@
 > assessments, and introduces migration `0098`. Historical v3 model captures
 > that omit `primary_subject` must not be scored as v4 predictions or used to
 > authorize v4 `enforce`.
+>
+> **Routing decoupling note:** authoritative subject persistence and Partner
+> Organization routing now use separate rollout controls. Classifier `enforce`
+> does not itself authorize partner intake; that requires
+> `INVESTIGATION_ROUTING_MODE=enforce`.
 
 
 **2026-10-22. This gate precedes any PR/merge or authorization of
