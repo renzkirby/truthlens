@@ -2114,6 +2114,7 @@ class EvidenceInstitutionalReviewSerializer(serializers.ModelSerializer):
             "reviewer_username_snapshot",
             "notes",
             "rejection_reason",
+            "reviewed_at",
             "created_at",
             "source_review_id",
             "source_organization",
