@@ -47,13 +47,12 @@ subject topic.
 1. Classify the **specific persisted factual proposition**, not the surrounding
    article's every mention or the identity of its publisher.
 2. Do **not** infer truthfulness or source reliability from the subject.
-3. Select one **explicit primary subject** for future public display when a
-   reliable classification is available. The *current* authoritative database
-   record holds only an **unordered-by-importance list of required domains**,
-   so never derive a primary subject using `domains[0]` or sorting. The
-   Community feed may project a public topic from a **single-domain**
-   authoritative row because no primary-subject inference is required; a
-   multi-domain row remains unresolved until primary-subject persistence exists.
+3. Select one **explicit primary subject** for public display when a reliable
+   classification is available. Authoritative classifications persist both the
+   required `domains` and, when established, `primary_subject`. Never derive
+   primary subject using `domains[0]` or sorting. The Community feed uses the
+   explicit primary subject when present and only uses the legacy single-domain
+   fallback when no explicit primary subject exists.
 4. Add another **required** domain only if verifying the material proposition
    genuinely needs that specialist expertise. Incidental mentions do not
    impose extra partner permissions. Ordinary partners must cover **all
@@ -173,8 +172,8 @@ Included in this branch:
 
 - Phase 1 offline taxonomy rubric, public category mapping, Campus Affairs
   boundaries, synthetic fixtures and structural tests.
-- Phase 2 Community API projection/filtering for authoritative single-domain
-  classifications.
+- Community API subject-topic projection using explicit authoritative
+  `primary_subject`, with the legacy single-domain fallback.
 - Phase 2 Community Topic / Review / Sort / Content Format controls.
 - Campus Affairs Community filtering from authoritative confirmed campus
   context, kept separate from public subject-topic projection.
