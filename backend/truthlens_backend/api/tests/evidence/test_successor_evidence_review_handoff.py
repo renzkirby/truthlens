@@ -7,6 +7,7 @@ from api.adjudication_service import (
     issue_adjudication_decision,
 )
 from api.evidence_review_service import (
+    EvidenceReviewConflict,
     accept_prior_evidence_review,
     ensure_evidence_case,
     review_evidence_submission,
