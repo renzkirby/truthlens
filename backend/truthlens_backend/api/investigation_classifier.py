@@ -311,7 +311,7 @@ def dispatch_classification_task(claim_id):
 
 
 def dispatch_classification_after_text_save(claim_id):
-    """Queue after factual analysis saves durable claim text, with no thread gate."""
+    """Queue after durable normalized claim text is committed, with no thread gate."""
     if classification_mode() == "off":
         return
     transaction.on_commit(
