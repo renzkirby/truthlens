@@ -880,3 +880,33 @@ The latest code after the previously green regression gates changes:
 - publication public-reach eligibility.
 
 These latest changes still require one combined local validation gate before the branch is considered ready for review.
+
+
+### 333-test combined-gate follow-up
+
+The first combined 333-test backend gate after the explicit lifecycle/publication-preservation slice produced 11 failures.
+
+They separated into two causes:
+
+1. **Four public fact-check collection query-validation failures**
+   - invalid query parameters returned `404` instead of the established `400`;
+   - cause: the new historical publication organization resolver ran before `PublicFactCheckQuerySerializer` validation;
+   - fix: validate query parameters first, then resolve the publication organization;
+   - this preserves bounded/strict request validation independently of whether the slug currently has public publication data.
+
+2. **Seven stale related-publication eligibility assertions**
+   - the old test expected a related publication to disappear whenever the publishing organization stopped satisfying active Partner-profile eligibility;
+   - that conflicts with the accepted lifecycle invariant that historical sealed publications remain readable/reusable after current profile, verification, or partnership eligibility changes;
+   - the regression now expects the related publication to remain surfaced with:
+     - `public_profile_available = false`;
+     - `public_fact_check_available = true`;
+     - the durable ClaimFactCheckReference still preserved.
+
+This specifically protects legacy states such as CSG's current `UNVERIFIED + NONE` record while retaining its published historical work.
+
+Fix commits:
+
+- `bfef32bc` — validate public fact-check query parameters before publication-target lookup;
+- `c4571400` — align related-publication lifecycle regression with historical-publication preservation.
+
+The combined backend gate must be rerun after these fixes before this checkpoint is considered green.
