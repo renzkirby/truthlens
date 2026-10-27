@@ -705,7 +705,7 @@ class ManagementApiTests(APITestCase):
         self.assertEqual(events.count(), 2)
         self.assertEqual(
             [event.reason_code for event in events],
-            ["ORGANIZATION_VERIFIED", "PARTNERSHIP_ACTIVATED"],
+            ["ORGANIZATION_VERIFIED", "PARTNERSHIP_REINSTATED"],
         )
         self.assertTrue(
             all(event.capability == MANAGE_PARTNER_ORGANIZATION for event in events)
@@ -721,6 +721,50 @@ class ManagementApiTests(APITestCase):
         self.assertEqual(
             self.pending_organization.partner_status,
             Organization.PartnerStatus.SUSPENDED,
+        )
+
+    def test_platform_trust_compatibility_endpoint_activates_true_onboarding_organization(
+        self,
+    ):
+        onboarding = Organization.objects.create(
+            name="Legacy Compatibility Onboarding",
+            slug="legacy-compatibility-onboarding",
+            organization_type=Organization.OrganizationType.RESEARCH,
+            verification_status=Organization.VerificationStatus.PENDING,
+            partner_status=Organization.PartnerStatus.NONE,
+        )
+
+        response = self.client_for(self.superuser).patch(
+            reverse(
+                "management_organization_platform_trust",
+                kwargs={"organization_id": onboarding.id},
+            ),
+            {
+                "verification_status": Organization.VerificationStatus.VERIFIED,
+                "partner_status": Organization.PartnerStatus.ACTIVE,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        onboarding.refresh_from_db()
+        self.assertEqual(
+            onboarding.verification_status,
+            Organization.VerificationStatus.VERIFIED,
+        )
+        self.assertEqual(
+            onboarding.partner_status,
+            Organization.PartnerStatus.ACTIVE,
+        )
+        events = AccountabilityEvent.objects.filter(
+            action_type=(
+                AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED
+            ),
+            subject_organization=onboarding,
+        ).order_by("created_at")
+        self.assertEqual(
+            [event.reason_code for event in events],
+            ["ORGANIZATION_VERIFIED", "PARTNERSHIP_ACTIVATED"],
         )
 
     def test_platform_trust_compatibility_endpoint_rejects_unsafe_raw_targets(self):
