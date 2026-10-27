@@ -910,3 +910,30 @@ Fix commits:
 - `c4571400` — align related-publication lifecycle regression with historical-publication preservation.
 
 The combined backend gate must be rerun after these fixes before this checkpoint is considered green.
+
+
+### Extension release decision — 0.1.6
+
+The Browser Extension compatibility update is intentionally included in this lifecycle release rather than deferred.
+
+Current extension manifest version was `0.1.5`; the feature branch now prepares `0.1.6`.
+
+Reason for the extension change:
+
+- current Partner-profile availability and historical published-fact-check availability are now separate backend concepts;
+- the extension uses `public_fact_check_available` for official/related fact-check links;
+- `public_profile_available` continues to control organization-profile navigation;
+- this preserves readable historical publications for former/suspended partners without presenting their inactive profile as a current public Partner.
+
+Deployment/submission order is important:
+
+1. finish backend regression validation;
+2. run frontend lint/build;
+3. run extension lint/build;
+4. merge only after explicit authorization;
+5. deploy backend changes first so production emits `public_fact_check_available`;
+6. deploy/update the web frontend as appropriate;
+7. build/package TruthLens Extension `0.1.6`;
+8. submit `0.1.6` to the Chrome Web Store for review.
+
+Do not submit the updated extension before the compatible backend is deployed, because the new extension expects the new publication-availability field.
