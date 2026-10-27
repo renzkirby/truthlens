@@ -36,7 +36,9 @@ def backfill_institutional_evidence_reviews(apps, schema_editor):
 
     for case in cases.iterator():
         if EvidenceReviewDecision.objects.filter(
-            moderation_case_id=case.id
+            moderation_case_id=case.id,
+            organization_id=case.organization_id,
+            decision_type="INDEPENDENT_REVIEW",
         ).exists():
             continue
 
