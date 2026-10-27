@@ -150,6 +150,7 @@ class VerificationAssignmentApiTests(APITestCase):
         self,
         *,
         suffix="default",
+        domains=("SCIENCE",),
     ):
         claim = Claim.objects.create(
             claim_type=Claim.ClaimType.TEXT,
@@ -159,10 +160,14 @@ class VerificationAssignmentApiTests(APITestCase):
             consensus_score=55.0,
         )
 
-        ClaimInvestigationClassification.objects.create(
-            claim=claim, domains=["SCIENCE"], jurisdiction="PH",
-            rationale="Reviewed test fixture for science and geography.",
-        )
+        if domains is not None:
+            ClaimInvestigationClassification.objects.create(
+                claim=claim,
+                domains=list(domains),
+                primary_subject=domains[0] if domains else None,
+                jurisdiction="PH",
+                rationale="Reviewed test fixture for intake classification.",
+            )
 
         thread = Thread.objects.create(
             claim=claim,
@@ -387,6 +392,136 @@ class VerificationAssignmentApiTests(APITestCase):
         self.assertNotIn(
             str(active["assignment"].id),
             returned_ids,
+        )
+
+    @override_settings(INVESTIGATION_ROUTING_MODE="off")
+    def test_intake_classification_filter_matches_single_domain(self):
+        science = self._create_available_assignment(
+            suffix="classification-science",
+            domains=("SCIENCE",),
+        )
+        self._create_available_assignment(
+            suffix="classification-law",
+            domains=("LAW",),
+        )
+
+        response = self.lead_a_client.get(
+            reverse("verification_intake"),
+            {
+                "organization_id": str(self.organization_a.id),
+                "classification": "SCIENCE",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(
+            response.data["results"][0]["id"],
+            str(science["assignment"].id),
+        )
+
+    @override_settings(INVESTIGATION_ROUTING_MODE="off")
+    def test_intake_classification_filter_matches_any_multi_domain_membership(self):
+        multi = self._create_available_assignment(
+            suffix="classification-multi",
+            domains=("ECONOMY", "LAW", "TECHNOLOGY"),
+        )
+        self._create_available_assignment(
+            suffix="classification-science-only",
+            domains=("SCIENCE",),
+        )
+
+        for domain in ("ECONOMY", "LAW", "TECHNOLOGY"):
+            with self.subTest(domain=domain):
+                response = self.lead_a_client.get(
+                    reverse("verification_intake"),
+                    {
+                        "organization_id": str(self.organization_a.id),
+                        "classification": domain,
+                    },
+                )
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                self.assertEqual(response.data["count"], 1)
+                self.assertEqual(
+                    response.data["results"][0]["id"],
+                    str(multi["assignment"].id),
+                )
+
+    @override_settings(INVESTIGATION_ROUTING_MODE="off")
+    def test_intake_unclassified_filter_shows_only_unclassified_work(self):
+        unclassified = self._create_available_assignment(
+            suffix="classification-none",
+            domains=None,
+        )
+        self._create_available_assignment(
+            suffix="classification-present",
+            domains=("SCIENCE",),
+        )
+
+        response = self.lead_a_client.get(
+            reverse("verification_intake"),
+            {
+                "organization_id": str(self.organization_a.id),
+                "classification": "UNCLASSIFIED",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(
+            response.data["results"][0]["id"],
+            str(unclassified["assignment"].id),
+        )
+
+    def test_intake_invalid_classification_returns_controlled_bad_request(self):
+        response = self.lead_a_client.get(
+            reverse("verification_intake"),
+            {
+                "organization_id": str(self.organization_a.id),
+                "classification": "NOT_A_SUBJECT",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("classification", response.data["detail"])
+
+    @override_settings(INVESTIGATION_ROUTING_MODE="off")
+    def test_intake_classification_filter_applies_before_count_and_pagination(self):
+        first_science = self._create_available_assignment(
+            suffix="classification-page-1",
+            domains=("SCIENCE",),
+        )
+        self._create_available_assignment(
+            suffix="classification-law-between",
+            domains=("LAW",),
+        )
+        second_science = self._create_available_assignment(
+            suffix="classification-page-2",
+            domains=("SCIENCE", "TECHNOLOGY"),
+        )
+
+        response = self.lead_a_client.get(
+            reverse("verification_intake"),
+            {
+                "organization_id": str(self.organization_a.id),
+                "classification": "SCIENCE",
+                "limit": 1,
+                "offset": 1,
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(response.data["limit"], 1)
+        self.assertEqual(response.data["offset"], 1)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(
+            response.data["results"][0]["id"],
+            str(first_science["assignment"].id),
+        )
+        self.assertNotEqual(
+            response.data["results"][0]["id"],
+            str(second_science["assignment"].id),
         )
 
     def test_intake_pagination_returns_total_count(
