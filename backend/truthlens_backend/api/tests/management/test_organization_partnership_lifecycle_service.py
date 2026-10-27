@@ -556,3 +556,23 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
                 organization_id=self.organization.pk,
                 actor=self.ordinary_user,
             )
+
+
+    def test_legacy_retirement_state_cannot_bypass_retirement_by_verifying(self):
+        self.organization.partner_status = Organization.PartnerStatus.NONE
+        self.organization.verification_status = Organization.VerificationStatus.UNVERIFIED
+        self.organization.save(
+            update_fields=["partner_status", "verification_status"]
+        )
+
+        with self.assertRaises(OrganizationPartnershipLifecycleConflict):
+            verify_partner_organization(
+                organization_id=self.organization.pk,
+                actor=self.platform_admin,
+            )
+
+        self.organization.refresh_from_db()
+        self.assertEqual(
+            self.organization.verification_status,
+            Organization.VerificationStatus.UNVERIFIED,
+        )
