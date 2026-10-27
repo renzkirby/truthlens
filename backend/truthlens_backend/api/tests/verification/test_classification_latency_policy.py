@@ -27,12 +27,17 @@ CLAIM = (
 )
 VALID = json.dumps({
     "decision": "CLASSIFY",
+    "primary_subject": "SCIENCE",
     "domains": [
         {"code": "SCIENCE", "evidence": "NASA launched the Europa Clipper"},
         {"code": "TECHNOLOGY", "evidence": "SpaceX Falcon Heavy rocket"},
     ],
 })
-ABSTAIN = json.dumps({"decision": "ABSTAIN", "domains": []})
+ABSTAIN = json.dumps({
+    "decision": "ABSTAIN",
+    "primary_subject": None,
+    "domains": [],
+})
 
 
 class GeminiBillingError(RuntimeError):
@@ -240,7 +245,7 @@ class ClassificationLatencyPolicyTests(SimpleTestCase):
         )
 
     def test_invalid_cloudflare_contract_also_uses_validated_groq(self):
-        self._response('{"decision":"CLASSIFY","domains":[]}')
+        self._response('{"decision":"CLASSIFY","primary_subject":"SCIENCE","domains":[]}')
         self.assertEqual(self._classify(), VALID)
         self.http.assert_called_once()
         self.groq_call.assert_called_once()
