@@ -110,6 +110,7 @@ def get_partner_organization_lifecycle_projection(organization):
     active_factual_corrections = organization.factual_correction_requests.filter(
         status=FactualCorrectionRequest.Status.ACTIVE
     ).count()
+    has_prior_partner_work = _has_prior_partner_work(organization)
 
     if organization.partner_status == Organization.PartnerStatus.ACTIVE:
         lifecycle_state = "ACTIVE_PARTNER"
@@ -126,7 +127,7 @@ def get_partner_organization_lifecycle_projection(organization):
         operational_access = "DISABLED"
     elif (
         organization.partner_status == Organization.PartnerStatus.NONE
-        and _has_prior_partner_work(organization)
+        and has_prior_partner_work
     ):
         lifecycle_state = "RETIREMENT_REQUIRED"
         operational_access = "DISABLED"
@@ -145,7 +146,7 @@ def get_partner_organization_lifecycle_projection(organization):
         }
         or (
             organization.partner_status == Organization.PartnerStatus.NONE
-            and _has_prior_partner_work(organization)
+            and has_prior_partner_work
         )
     )
     blockers = []
@@ -172,10 +173,14 @@ def get_partner_organization_lifecycle_projection(organization):
 
     can_verify = (
         organization.verification_status != Organization.VerificationStatus.VERIFIED
+        and not (
+            organization.partner_status == Organization.PartnerStatus.NONE
+            and has_prior_partner_work
+        )
     )
     can_reject_verification = (
         organization.partner_status == Organization.PartnerStatus.NONE
-        and not _has_prior_partner_work(organization)
+        and not has_prior_partner_work
         and organization.verification_status
         in {
             Organization.VerificationStatus.UNVERIFIED,
@@ -251,6 +256,14 @@ def verify_partner_organization(*, organization_id, actor):
     if organization.verification_status == Organization.VerificationStatus.VERIFIED:
         raise OrganizationPartnershipLifecycleConflict(
             "This organization is already verified."
+        )
+    if (
+        organization.partner_status == Organization.PartnerStatus.NONE
+        and _has_prior_partner_work(organization)
+    ):
+        raise OrganizationPartnershipLifecycleConflict(
+            "This organization has prior Partner verification work and must complete "
+            "the governed retirement flow before verification can change."
         )
 
     previous_state = _organization_status_state(organization)
