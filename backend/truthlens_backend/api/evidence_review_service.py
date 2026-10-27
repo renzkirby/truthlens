@@ -1361,12 +1361,17 @@ def accept_prior_evidence_review(
             raise EvidenceReviewAuthorizationError(
                 "You do not have permission to accept prior evidence review for this organization."
             )
-        if EvidenceReviewDecision.objects.filter(
-            evidence_submission=locked_evidence,
+        current_basis = get_latest_evidence_review_decision(
+            evidence=locked_evidence,
             organization=organization,
-        ).exists():
+            lock=True,
+        )
+        if (
+            current_basis is not None
+            and current_basis.disposition == locked_evidence.evidence_status
+        ):
             raise EvidenceReviewConflict(
-                "This organization has already established its evidence review basis."
+                "This organization has already established its current evidence review basis."
             )
 
         try:
