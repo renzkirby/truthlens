@@ -34,7 +34,12 @@ from .management_governance_service import (
 from .organization_partnership_lifecycle_service import (
     OrganizationPartnershipLifecycleAuthorizationError,
     OrganizationPartnershipLifecycleConflict,
+    activate_partner_organization_partnership,
     end_partner_organization_partnership,
+    reinstate_partner_organization_partnership,
+    reject_partner_organization_verification,
+    suspend_partner_organization_partnership,
+    verify_partner_organization,
 )
 from .institution_affiliation_service import (
     create_institution,
@@ -747,6 +752,80 @@ class ManagementOrganizationPlatformTrustView(APIView):
             _serialize_management_organization(organization),
             status=status.HTTP_200_OK,
         )
+
+
+class ManagementOrganizationLifecycleTransitionView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+    transition = None
+
+    def post(self, request, organization_id):
+        serializer = ManagementEmptyMutationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        transitions = {
+            "verify": verify_partner_organization,
+            "reject_verification": reject_partner_organization_verification,
+            "activate_partnership": activate_partner_organization_partnership,
+            "suspend_partnership": suspend_partner_organization_partnership,
+            "reinstate_partnership": reinstate_partner_organization_partnership,
+        }
+        transition_function = transitions[self.transition]
+
+        try:
+            organization = transition_function(
+                organization_id=organization_id,
+                actor=request.user,
+            )
+        except Organization.DoesNotExist:
+            return Response(
+                {"detail": "Organization not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except OrganizationPartnershipLifecycleAuthorizationError as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except OrganizationPartnershipLifecycleConflict as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response(
+            {
+                "organization": _serialize_management_organization(organization),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ManagementOrganizationVerifyView(ManagementOrganizationLifecycleTransitionView):
+    transition = "verify"
+
+
+class ManagementOrganizationRejectVerificationView(
+    ManagementOrganizationLifecycleTransitionView
+):
+    transition = "reject_verification"
+
+
+class ManagementOrganizationActivatePartnershipView(
+    ManagementOrganizationLifecycleTransitionView
+):
+    transition = "activate_partnership"
+
+
+class ManagementOrganizationSuspendPartnershipView(
+    ManagementOrganizationLifecycleTransitionView
+):
+    transition = "suspend_partnership"
+
+
+class ManagementOrganizationReinstatePartnershipView(
+    ManagementOrganizationLifecycleTransitionView
+):
+    transition = "reinstate_partnership"
 
 
 class ManagementOrganizationEndPartnershipView(APIView):
