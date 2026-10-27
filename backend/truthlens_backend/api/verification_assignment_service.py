@@ -483,6 +483,14 @@ def claim_verification_assignment(
             locked_assignment.status == VerificationAssignment.Status.ACTIVE
             and locked_assignment.organization_id == organization.id
         ):
+            _ensure_missing_unverified_evidence_cases(
+                claim=locked_claim,
+                organization=organization,
+            )
+            _attach_active_cases_to_organization(
+                claim=locked_claim,
+                organization=organization,
+            )
             return locked_assignment
 
         if locked_assignment.status != VerificationAssignment.Status.AVAILABLE:
