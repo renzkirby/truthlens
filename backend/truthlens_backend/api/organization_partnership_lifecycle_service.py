@@ -190,7 +190,7 @@ def get_partner_organization_lifecycle_projection(organization):
     can_activate_partnership = (
         organization.partner_status == Organization.PartnerStatus.NONE
         and organization.verification_status == Organization.VerificationStatus.VERIFIED
-        and not _has_prior_partner_work(organization)
+        and not has_prior_partner_work
     )
     can_suspend_partnership = (
         organization.partner_status == Organization.PartnerStatus.ACTIVE
