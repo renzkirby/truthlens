@@ -28,7 +28,6 @@ const CATEGORY_FILTERS = [
    { value: CATEGORIES.ALL, label: "All formats", icon: null },
    { value: CATEGORIES.TEXT, label: "Text", icon: "file-text" },
    { value: CATEGORIES.IMAGE, label: "Images", icon: "image" },
-   { value: CATEGORIES.VIDEO, label: "Videos", icon: "play" },
    { value: CATEGORIES.FILE, label: "Files", icon: "paperclip" },
    { value: CATEGORIES.URL, label: "Links", icon: "link" },
 ];
