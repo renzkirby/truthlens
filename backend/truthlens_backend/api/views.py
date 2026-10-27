@@ -156,6 +156,7 @@ from .public_reach_service import (
 from .organization_public_presence_service import (
     get_public_partner_by_slug,
     get_public_partner_directory,
+    get_publication_organization_by_slug,
 )
 from .organization_follow_service import (
     PublicPartnerFollowUnavailable,
@@ -4670,7 +4671,7 @@ def toggle_public_partner_follow_view(request, slug):
 @permission_classes([AllowAny])
 @throttle_classes([PublicPartnerRateThrottle])
 def public_partner_fact_checks(request, slug):
-    organization = get_public_partner_by_slug(slug)
+    organization = get_publication_organization_by_slug(slug)
     if organization is None:
         raise NotFound()
 
@@ -4691,7 +4692,7 @@ def public_partner_fact_checks(request, slug):
 @permission_classes([AllowAny])
 @throttle_classes([PublicPartnerRateThrottle])
 def public_partner_fact_check_detail(request, slug, publication_id):
-    organization = get_public_partner_by_slug(slug)
+    organization = get_publication_organization_by_slug(slug)
     if organization is None:
         raise NotFound()
 
@@ -4715,13 +4716,18 @@ def public_reach_events(request):
     serializer = PublicReachRequestSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     payload = serializer.validated_data
-    organization = get_public_partner_by_slug(payload["organization_slug"])
+    publication_id = payload.get("publication_id")
+    organization = (
+        get_publication_organization_by_slug(payload["organization_slug"])
+        if publication_id is not None
+        else get_public_partner_by_slug(payload["organization_slug"])
+    )
     if organization is None:
         raise NotFound()
     fact_check = None
-    if payload.get("publication_id") is not None:
+    if publication_id is not None:
         fact_check = OfficialFactCheck.objects.filter(
-            pk=payload["publication_id"],
+            pk=publication_id,
             organization=organization,
         ).first()
         if fact_check is None:
