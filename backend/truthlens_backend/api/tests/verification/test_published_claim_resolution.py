@@ -1428,7 +1428,7 @@ class RelatedPublicationSurfacingTests(PublicationResolutionFixture):
             ClaimFactCheckReference.objects.filter(pk=reference.pk).exists()
         )
 
-    def test_each_public_eligibility_gate_hides_context_without_deleting_provenance(
+    def test_current_profile_ineligibility_does_not_hide_historical_publication_context(
         self,
     ):
         reference = self.related()
@@ -1451,12 +1451,24 @@ class RelatedPublicationSurfacingTests(PublicationResolutionFixture):
                 Organization.objects.filter(pk=self.organization.pk).update(
                     **{field: value}
                 )
+
+                related = get_match_result(self.target)["related_fact_checks"]
+
+                self.assertEqual(len(related), 1)
                 self.assertEqual(
-                    get_match_result(self.target)["related_fact_checks"], []
+                    related[0]["fact_check_id"],
+                    str(self.publication.pk),
+                )
+                self.assertFalse(
+                    related[0]["organization"]["public_profile_available"]
+                )
+                self.assertTrue(
+                    related[0]["organization"]["public_fact_check_available"]
                 )
                 self.assertTrue(
                     ClaimFactCheckReference.objects.filter(pk=reference.pk).exists()
                 )
+
                 Organization.objects.filter(pk=self.organization.pk).update(
                     **{field: original}
                 )
