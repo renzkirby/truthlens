@@ -192,6 +192,7 @@ from .evidence_review_service import (
     EvidenceReviewAuthorizationError,
     EvidenceReviewConflict,
     EvidenceReviewError,
+    accept_prior_evidence_review,
     ensure_can_review_evidence,
     ensure_evidence_case,
     get_evidence_case_queue,
@@ -1253,7 +1254,10 @@ def _evidence_case_detail_response(case_id, *, organization, request):
     return Response(
         EvidenceCaseDetailSerializer(
             case,
-            context={"request": request},
+            context={
+                "request": request,
+                "organization": organization,
+            },
         ).data,
         status=status.HTTP_200_OK,
     )
@@ -1288,7 +1292,10 @@ def evidence_case_queue(request):
             "results": EvidenceCaseSummarySerializer(
                 cases,
                 many=True,
-                context={"request": request},
+                context={
+                    "request": request,
+                    "organization": organization,
+                },
             ).data,
         },
         status=status.HTTP_200_OK,
@@ -1329,17 +1336,27 @@ def evidence_case_action(request, case_id):
     )
 
     try:
-        result = review_evidence_submission(
-            evidence=case.evidence_submission,
-            actor=request.user,
-            evidence_status=payload.validated_data["decision"],
-            expected_status=payload.validated_data["expected_status"],
-            moderator_notes=payload.validated_data["moderator_notes"],
-            rejection_reason=payload.validated_data.get("rejection_reason"),
-            expected_case_id=case.id,
-            expected_organization_id=organization.id,
-            allow_reopen=False,
-        )
+        if payload.validated_data["action"] == "ACCEPT_PRIOR_REVIEW":
+            result = accept_prior_evidence_review(
+                evidence=case.evidence_submission,
+                actor=request.user,
+                source_review_id=payload.validated_data["source_review_id"],
+                expected_status=payload.validated_data["expected_status"],
+                expected_case_id=case.id,
+                expected_organization_id=organization.id,
+            )
+        else:
+            result = review_evidence_submission(
+                evidence=case.evidence_submission,
+                actor=request.user,
+                evidence_status=payload.validated_data["decision"],
+                expected_status=payload.validated_data["expected_status"],
+                moderator_notes=payload.validated_data["moderator_notes"],
+                rejection_reason=payload.validated_data.get("rejection_reason"),
+                expected_case_id=case.id,
+                expected_organization_id=organization.id,
+                allow_reopen=False,
+            )
     except EvidenceReviewAuthorizationError as error:
         raise PermissionDenied(str(error)) from error
     except (EvidenceReviewConflict, ModerationCaseError) as error:
@@ -1353,7 +1370,8 @@ def evidence_case_action(request, case_id):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    schedule_evidence_review_trust_updates(result)
+    if payload.validated_data["action"] == "REVIEW":
+        schedule_evidence_review_trust_updates(result)
     return _evidence_case_detail_response(
         case_id,
         organization=organization,
