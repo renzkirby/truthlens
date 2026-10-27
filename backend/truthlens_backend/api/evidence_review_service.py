@@ -1387,6 +1387,12 @@ def accept_prior_evidence_review(
                 "A Partner Organization cannot accept its own prior review as a successor handoff."
             )
 
+        if source_review.disposition != locked_evidence.evidence_status:
+            raise EvidenceReviewConflict(
+                "The prior institutional review no longer matches the evidence's "
+                "current disposition. Conduct an independent re-review instead."
+            )
+
         latest_prior = get_latest_evidence_review_decision(
             evidence=locked_evidence,
             exclude_organization=organization,
