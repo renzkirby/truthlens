@@ -73,6 +73,10 @@ ADJUDICATION_ACTION_BLOCKER_MESSAGES = {
         "Every evidence submission must be reviewed before adjudication."
     ),
     "ACTIVE_EVIDENCE_CASE": "An Evidence case is still active for this claim.",
+    "MISSING_EVIDENCE_REVIEW_BASIS": (
+        "This organization must explicitly accept or independently review every "
+        "evidence item before adjudication."
+    ),
     "DIRECT_CONTRIBUTION_CONFLICT": (
         "You cannot adjudicate a claim in which you have a direct contribution."
     ),
@@ -431,6 +435,26 @@ def get_adjudication_case_detail(
     elif assignment.organization_id != organization.id:
         blockers.append(_adjudication_blocker("ASSIGNMENT_ORGANIZATION_CHANGED"))
 
+    organization_basis_by_evidence = {}
+    for review_decision in (
+        EvidenceReviewDecision.objects.filter(
+            evidence_submission__thread__claim=claim,
+            organization=organization,
+        )
+        .order_by("evidence_submission_id", "-reviewed_at", "-id")
+    ):
+        organization_basis_by_evidence.setdefault(
+            review_decision.evidence_submission_id,
+            review_decision,
+        )
+    missing_or_stale_basis = any(
+        item.id not in organization_basis_by_evidence
+        or organization_basis_by_evidence[item.id].disposition
+        != item.evidence_status
+        for item in evidence
+        if item.evidence_status != EvidenceSubmission.EvidenceStatus.UNVERIFIED
+    )
+
     unreviewed_count = sum(
         item.evidence_status == EvidenceSubmission.EvidenceStatus.UNVERIFIED
         for item in evidence
@@ -452,6 +476,8 @@ def get_adjudication_case_detail(
         )
     if active_evidence_case_count:
         blockers.append(_adjudication_blocker("ACTIVE_EVIDENCE_CASE"))
+    if missing_or_stale_basis:
+        blockers.append(_adjudication_blocker("MISSING_EVIDENCE_REVIEW_BASIS"))
 
     if any(thread.author_id == actor.id for thread in threads) or any(
         item.contributor_id == actor.id for item in evidence
