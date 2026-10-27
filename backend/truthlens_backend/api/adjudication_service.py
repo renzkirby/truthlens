@@ -1069,16 +1069,12 @@ def issue_adjudication_decision(
             evidence_records=_build_decision_evidence_records(context["evidence"]),
         )
 
-        AdjudicationDecisionEvidenceReviewBasis.objects.bulk_create(
-            [
-                AdjudicationDecisionEvidenceReviewBasis(
-                    decision=decision,
-                    evidence_submission=item,
-                    review_decision=context["latest_evidence_review_basis"][item.pk],
-                )
-                for item in context["evidence"]
-            ]
-        )
+        for item in context["evidence"]:
+            AdjudicationDecisionEvidenceReviewBasis.objects.create(
+                decision=decision,
+                evidence_submission=item,
+                review_decision=context["latest_evidence_review_basis"][item.pk],
+            )
 
         locked_claim.final_verdict = verdict
         locked_claim.last_updated = timezone.now()
