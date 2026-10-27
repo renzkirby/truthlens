@@ -197,6 +197,14 @@ class ManagementApiTests(APITestCase):
             (
                 "post",
                 reverse(
+                    "management_organization_end_partnership",
+                    kwargs={"organization_id": self.organization.id},
+                ),
+                {},
+            ),
+            (
+                "post",
+                reverse(
                     "management_primary_admin_provision",
                     kwargs={"organization_id": self.pending_organization.id},
                 ),
