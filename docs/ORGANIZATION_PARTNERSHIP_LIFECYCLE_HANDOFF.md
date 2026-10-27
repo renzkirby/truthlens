@@ -678,3 +678,18 @@ The End Partnership response returns:
 - transition counts for memberships ended, invitations cancelled, and investigations requeued.
 
 No frontend behavior has changed yet. The legacy Edit Platform Trust UI remains in place until this API slice passes its focused regression gate.
+
+
+### Management lifecycle API test-fixture correction
+
+The first 49-test Management API gate produced seven errors before endpoint assertions ran. The lifecycle API test class defined a helper named `client()`, but DRF `APITestCase` already installs `self.client` as an `APIClient` instance. Calling `self.client()` therefore raised:
+
+```text
+TypeError: 'APIClient' object is not callable
+```
+
+This was a test-fixture naming collision, not an API implementation failure.
+
+- `5d12edb8` — rename the helper to `authenticated_client()`.
+
+No production lifecycle or Management API behavior changed in this correction.
