@@ -171,6 +171,30 @@ class AutomaticInvestigationClassificationTests(TestCase):
 
     @override_settings(INVESTIGATION_CLASSIFICATION_MODE="enforce")
     @patch("api.investigation_classifier._query_classifier")
+    def test_multi_domain_primary_subject_is_explicit_not_sorted(self, mock_provider):
+        self.claim.context_text = (
+            "Scientists analyzed data from a spacecraft using newly developed "
+            "navigation software."
+        )
+        self.claim.save(update_fields=["context_text", "last_updated"])
+        mock_provider.return_value = {
+            "decision": "CLASSIFY",
+            "primary_subject": "TECHNOLOGY",
+            "domains": [
+                {"code": "SCIENCE", "evidence": "Scientists analyzed data"},
+                {"code": "TECHNOLOGY", "evidence": "navigation software"},
+            ],
+        }
+
+        self.assertEqual(classify_investigation_claim(self.claim.pk), "APPLIED")
+        classification = ClaimInvestigationClassification.objects.get(
+            claim=self.claim,
+        )
+        self.assertEqual(classification.domains, ["SCIENCE", "TECHNOLOGY"])
+        self.assertEqual(classification.primary_subject, "TECHNOLOGY")
+
+    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="enforce")
+    @patch("api.investigation_classifier._query_classifier")
     def test_non_text_claim_with_persisted_subject_text_can_be_classified(self, mock_provider):
         mock_provider.return_value = self.suggestion()
         for claim_type in (
