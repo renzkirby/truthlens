@@ -37,13 +37,21 @@ that it is the intended isolated development project, confirm a recent backup,
 check `showmigrations api`, and inspect `migrate --plan` and
 `sqlmigrate api 0085`. Do not migrate production without separate approval.
 
-## Automatic classifier rollout
+## Automatic classifier and routing rollout
 
 `INVESTIGATION_CLASSIFICATION_MODE` remains `off` by default.
-- `off`: no model calls; unclassified claims remain unclaimable.
+- `off`: no automatic subject-classification model calls.
 - `shadow`: records subject suggestions without creating claim authority.
-- `enforce`: applies validated subject classifications; **only** enable after
-  independent accuracy evaluation, representative real examples, and approval.
+- `enforce`: applies validated authoritative subject/domain classifications
+  for uses such as Community topic projection.
+
+Partner intake is controlled separately:
+- `INVESTIGATION_ROUTING_MODE=off`: preserve pre-routing intake behavior.
+- `INVESTIGATION_ROUTING_MODE=enforce`: authoritative classification may gate
+  Partner Organization intake and direct claiming.
+
+Do not treat classifier enforce as routing approval. These are separate rollout
+decisions.
 
 The classification pipeline is distinct from factual-verdict generation and
 does not modify factual confidence, evidence, adjudication, publication, or
@@ -109,10 +117,11 @@ retroactive authority. It does not itself assign subjects.
    unsupported quote rate, and abstention and
    provider-failure rates. Record disagreements and model version. **Do not
    infer classifier accuracy from mocked unit tests or a few demos.**
-6. Require a separate explicit accuracy-review and rollout decision before
-   switching any environment to `enforce`. Enforcement creates system-audited
-   authoritative subject classifications only on successful quoted-evidence
-   validation, and still checks partner specialization authorization.
+6. Require a separate explicit accuracy-review before switching
+   `INVESTIGATION_CLASSIFICATION_MODE` to `enforce`. That creates
+   system-audited authoritative subject classifications only after successful
+   quoted-evidence validation. Keep `INVESTIGATION_ROUTING_MODE=off` until
+   partner-routing enforcement receives its own explicit authorization.
 
 The latest assessment record is retained for internal diagnostics. A
 separate policy is needed before automatically reclassifying authoritative
