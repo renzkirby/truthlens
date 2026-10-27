@@ -279,7 +279,7 @@ class VerificationAssignmentApiTests(APITestCase):
     # Available intake
     # =====================================
 
-    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="enforce")
+    @override_settings(INVESTIGATION_ROUTING_MODE="enforce")
     def test_unclassified_intake_is_not_visible_to_partner(self):
         fixture = self._create_available_assignment(suffix="needs-classification")
         ClaimInvestigationClassification.objects.filter(claim=fixture["claim"]).delete()
@@ -289,8 +289,8 @@ class VerificationAssignmentApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 0)
 
-    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="off")
-    def test_off_mode_keeps_unclassified_intake_visible(self):
+    @override_settings(INVESTIGATION_ROUTING_MODE="off")
+    def test_routing_off_keeps_unclassified_intake_visible(self):
         fixture = self._create_available_assignment(suffix="legacy-off")
         ClaimInvestigationClassification.objects.filter(claim=fixture["claim"]).delete()
         response = self.lead_a_client.get(
@@ -300,8 +300,11 @@ class VerificationAssignmentApiTests(APITestCase):
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["id"], str(fixture["assignment"].id))
 
-    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="shadow")
-    def test_shadow_mode_keeps_unclassified_intake_visible(self):
+    @override_settings(
+        INVESTIGATION_CLASSIFICATION_MODE="enforce",
+        INVESTIGATION_ROUTING_MODE="off",
+    )
+    def test_classifier_enforce_does_not_hide_unclassified_intake_when_routing_off(self):
         fixture = self._create_available_assignment(suffix="legacy-shadow")
         ClaimInvestigationClassification.objects.filter(claim=fixture["claim"]).delete()
         response = self.lead_a_client.get(
