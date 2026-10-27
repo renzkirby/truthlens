@@ -182,6 +182,16 @@ class PublishedResultContractTests(SimpleTestCase):
         self.assertTrue(organization["public_fact_check_available"])
         self.assertIsNone(organization["logo_url"])
 
+    def test_authoritative_payload_fails_closed_when_public_detail_is_unavailable(self):
+        self.public_detail_lookup.side_effect = PublicPublicationNotFound(
+            "Publication not found."
+        )
+
+        organization = self.build()["organization"]
+
+        self.assertTrue(organization["public_profile_available"])
+        self.assertFalse(organization["public_fact_check_available"])
+
     def test_non_published_publication_is_rejected(self):
         for publication_status in OfficialFactCheck.PublicationStatus.values:
             if publication_status == OfficialFactCheck.PublicationStatus.PUBLISHED:
@@ -321,6 +331,7 @@ class PublishedResultContractTests(SimpleTestCase):
                 "name",
                 "slug",
                 "public_profile_available",
+                "public_fact_check_available",
                 "logo_url",
             },
         )
