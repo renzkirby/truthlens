@@ -180,9 +180,9 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "moderation_case",
-                    models.OneToOneField(
+                    models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
-                        related_name="evidence_review_decision",
+                        related_name="evidence_review_decisions",
                         to="api.moderationcase",
                     ),
                 ),
@@ -225,12 +225,6 @@ class Migration(migrations.Migration):
                     models.Index(
                         fields=["organization", "-reviewed_at"],
                         name="evrev_org_time_idx",
-                    ),
-                ],
-                "constraints": [
-                    models.UniqueConstraint(
-                        fields=("moderation_case",),
-                        name="uniq_evidence_review_decision_case",
                     ),
                 ],
             },
