@@ -1,5 +1,13 @@
 # AI-RQ-2 classification latency and fallback decision record
 
+> **2026-10-28 v4 note:** The latency observations below are historical v3
+> measurements. Classifier `v4-primary-subject` changes the response contract
+> to require explicit `primary_subject`; old v3 captures remain useful only as
+> latency/provider-history evidence, not as valid v4 classification responses or
+> v4 accuracy evidence. The provider order/timeout policy itself is unchanged by
+> the v4 primary-subject work.
+
+
 **Status (2026-10-22):** Development-only candidate; offline tests required.
 **Scope:** The *subject classification* operation only. Not the authoritative
 fact-check verdict, evidence assessment, partner organization permissions,

@@ -26,13 +26,14 @@ class AutomaticInvestigationClassificationTests(TestCase):
     def suggestion(self):
         return {
             "decision": "CLASSIFY",
+            "primary_subject": "SCIENCE",
             "domains": [{"code": "SCIENCE", "evidence": "science experiment"}],
         }
 
     def test_no_geography_needed_for_supported_subject(self):
         self.assertEqual(
             validate_model_suggestion(self.claim.context_text, self.suggestion()),
-            ["SCIENCE"],
+            {"domains": ["SCIENCE"], "primary_subject": "SCIENCE"},
         )
 
     def test_unquoted_domain_evidence_cannot_authorize_claim(self):
@@ -50,18 +51,23 @@ class AutomaticInvestigationClassificationTests(TestCase):
         invalid["domains"] *= 2
         self.assertIsNone(validate_model_suggestion(self.claim.context_text, invalid))
 
+    def test_primary_subject_must_be_one_of_selected_domains(self):
+        invalid = self.suggestion()
+        invalid["primary_subject"] = "HEALTH"
+        self.assertIsNone(validate_model_suggestion(self.claim.context_text, invalid))
+
     def test_authority_gate_rejects_surplus_and_unquoted_json_fields(self):
         valid = self.suggestion()
         for invalid in (
             {**valid, "verdict": "FACT"},
             {**valid, "jurisdiction": "GLOBAL"},
-            {"decision": "CLASSIFY", "domains": [
+            {"decision": "CLASSIFY", "primary_subject": "SCIENCE", "domains": [
                 {**valid["domains"][0], "confidence": 0.99},
             ]},
-            {"decision": "ABSTAIN", "domains": [
+            {"decision": "ABSTAIN", "primary_subject": None, "domains": [
                 {"code": "SCIENCE", "evidence": "science experiment"},
             ]},
-            {"decision": "CLASSIFY", "domains": [
+            {"decision": "CLASSIFY", "primary_subject": "SCIENCE", "domains": [
                 {"code": "SCIENCE", "evidence": "not in claim"},
             ]},
         ):
@@ -102,6 +108,7 @@ class AutomaticInvestigationClassificationTests(TestCase):
             claim=self.claim,
         )
         self.assertEqual(suggestion.candidate_domains, ["SCIENCE"])
+        self.assertEqual(suggestion.candidate_primary_subject, "SCIENCE")
         self.assertEqual(
             eligibility_reason(classification=None, specializations=["SCIENCE"]),
             "NEEDS_CLASSIFICATION",
@@ -127,13 +134,18 @@ class AutomaticInvestigationClassificationTests(TestCase):
         self.assertEqual(classify_investigation_claim(self.claim.pk), "SUGGESTED")
         assessment = InvestigationClassificationAssessment.objects.get(claim=self.claim)
         self.assertEqual(assessment.candidate_domains, ["SCIENCE"])
+        self.assertEqual(assessment.candidate_primary_subject, "SCIENCE")
         self.assertEqual(assessment.candidate_jurisdiction, "")
         self.assertFalse(ClaimInvestigationClassification.objects.filter(claim=self.claim).exists())
 
     @override_settings(INVESTIGATION_CLASSIFICATION_MODE="shadow")
     @patch("api.investigation_classifier._query_classifier")
     def test_ambiguous_model_reply_abstains(self, mock_provider):
-        mock_provider.return_value = {"decision": "ABSTAIN", "domains": []}
+        mock_provider.return_value = {
+            "decision": "ABSTAIN",
+            "primary_subject": None,
+            "domains": [],
+        }
         self.assertEqual(classify_investigation_claim(self.claim.pk), "ABSTAINED")
         self.assertFalse(ClaimInvestigationClassification.objects.exists())
 
@@ -145,6 +157,7 @@ class AutomaticInvestigationClassificationTests(TestCase):
         classification = ClaimInvestigationClassification.objects.get(claim=self.claim)
         self.assertEqual(classification.source, ClaimInvestigationClassification.Source.AUTOMATIC)
         self.assertEqual(classification.domains, ["SCIENCE"])
+        self.assertEqual(classification.primary_subject, "SCIENCE")
         self.assertEqual(classification.jurisdiction, "")
         self.assertIsNone(classification.classified_by)
         event = AccountabilityEvent.objects.get(
@@ -152,8 +165,33 @@ class AutomaticInvestigationClassificationTests(TestCase):
             resource_id=str(self.claim.pk),
         )
         self.assertEqual(event.authority_scope, AccountabilityEvent.AuthorityScope.SYSTEM)
+        self.assertEqual(event.new_state["primary_subject"], "SCIENCE")
         self.assertEqual(classify_investigation_claim(self.claim.pk), "ALREADY_CLASSIFIED")
         mock_provider.assert_called_once()
+
+    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="enforce")
+    @patch("api.investigation_classifier._query_classifier")
+    def test_multi_domain_primary_subject_is_explicit_not_sorted(self, mock_provider):
+        self.claim.context_text = (
+            "Scientists analyzed data from a spacecraft using newly developed "
+            "navigation software."
+        )
+        self.claim.save(update_fields=["context_text", "last_updated"])
+        mock_provider.return_value = {
+            "decision": "CLASSIFY",
+            "primary_subject": "TECHNOLOGY",
+            "domains": [
+                {"code": "SCIENCE", "evidence": "Scientists analyzed data"},
+                {"code": "TECHNOLOGY", "evidence": "navigation software"},
+            ],
+        }
+
+        self.assertEqual(classify_investigation_claim(self.claim.pk), "APPLIED")
+        classification = ClaimInvestigationClassification.objects.get(
+            claim=self.claim,
+        )
+        self.assertEqual(classification.domains, ["SCIENCE", "TECHNOLOGY"])
+        self.assertEqual(classification.primary_subject, "TECHNOLOGY")
 
     @override_settings(INVESTIGATION_CLASSIFICATION_MODE="enforce")
     @patch("api.investigation_classifier._query_classifier")
@@ -170,6 +208,7 @@ class AutomaticInvestigationClassificationTests(TestCase):
                 self.assertEqual(classify_investigation_claim(claim.pk), "APPLIED")
                 classification = ClaimInvestigationClassification.objects.get(claim=claim)
                 self.assertEqual(classification.domains, ["SCIENCE"])
+                self.assertEqual(classification.primary_subject, "SCIENCE")
                 self.assertEqual(classification.jurisdiction, "")
         self.assertEqual(mock_provider.call_count, 3)
 
@@ -273,29 +312,65 @@ class AutomaticInvestigationClassificationTests(TestCase):
 
     @override_settings(INVESTIGATION_CLASSIFICATION_MODE="shadow")
     @patch("api.tasks.classify_investigation_claim_task.delay")
-    @patch("api.embedding_service.generate_embedding", return_value=None)
-    def test_factual_claim_persistence_queues_late_text_without_modifying_verdict(
-        self, _embedding, delay,
-    ):
-        from api.tasks import _save_claim
+    def test_stable_claim_text_queues_classification_before_verdict(self, delay):
+        from api.tasks import _persist_subject_classification_input
 
         image = Claim.objects.create(
             claim_type=Claim.ClaimType.IMAGE, context_text=None,
         )
-        self.assertFalse(Thread.objects.filter(claim=image).exists())
         with self.captureOnCommitCallbacks(execute=True):
-            saved = _save_claim(
+            persisted = _persist_subject_classification_input(
                 image.pk,
-                {"verdict": "UNVERIFIED", "summary": "Needs independent review."},
-                "Test source",
                 self.claim.context_text,
             )
-        self.assertEqual(saved.ai_verdict, "UNVERIFIED")
-        self.assertEqual(saved.context_text, self.claim.context_text)
-        self.assertFalse(
-            ClaimInvestigationClassification.objects.filter(claim=image).exists()
-        )
+        self.assertTrue(persisted)
+        image.refresh_from_db()
+        self.assertEqual(image.context_text, self.claim.context_text)
+        self.assertIsNone(image.ai_verdict)
         delay.assert_called_once_with(str(image.pk))
+
+    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="off")
+    @patch("api.tasks.classify_investigation_claim_task.delay")
+    def test_off_mode_does_not_early_persist_or_queue_classification(self, delay):
+        from api.tasks import _persist_subject_classification_input
+
+        claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="Original submitted text.",
+        )
+        persisted = _persist_subject_classification_input(
+            claim.pk,
+            "Normalized text that should not be written while classification is off.",
+        )
+        self.assertFalse(persisted)
+        claim.refresh_from_db()
+        self.assertEqual(claim.context_text, "Original submitted text.")
+        delay.assert_not_called()
+
+    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="shadow")
+    @patch("api.tasks.classify_investigation_claim_task.delay")
+    @patch("api.embedding_service.generate_embedding", return_value=None)
+    def test_final_verdict_save_does_not_queue_duplicate_classification(
+        self, _embedding, delay,
+    ):
+        from api.tasks import _persist_subject_classification_input, _save_claim
+
+        claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT, context_text=None,
+        )
+        with self.captureOnCommitCallbacks(execute=True):
+            _persist_subject_classification_input(claim.pk, self.claim.context_text)
+        delay.assert_called_once_with(str(claim.pk))
+        delay.reset_mock()
+
+        saved = _save_claim(
+            claim.pk,
+            {"verdict": "UNVERIFIED", "summary": "Needs independent review."},
+            "Test source",
+            self.claim.context_text,
+        )
+        self.assertEqual(saved.ai_verdict, "UNVERIFIED")
+        delay.assert_not_called()
 
     @override_settings(INVESTIGATION_CLASSIFICATION_MODE="shadow")
     @patch("api.tasks.classify_investigation_claim_task.delay")

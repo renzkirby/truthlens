@@ -5788,6 +5788,15 @@ class InvestigationClassificationAssessment(models.Model):
     )
     status = models.CharField(max_length=16, choices=Status.choices)
     candidate_domains = models.JSONField(default=list, blank=True)
+    candidate_primary_subject = models.CharField(
+        max_length=32,
+        null=True,
+        blank=True,
+        help_text=(
+            "Shadow/enforce candidate primary subject. It is authoritative only "
+            "when copied into ClaimInvestigationClassification in enforce mode."
+        ),
+    )
     candidate_jurisdiction = models.CharField(max_length=32, blank=True)
     reason_code = models.CharField(max_length=64, blank=True)
     classifier_version = models.CharField(max_length=32, default="v1")

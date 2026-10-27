@@ -47,8 +47,9 @@ check `showmigrations api`, and inspect `migrate --plan` and
 
 The classification pipeline is distinct from factual-verdict generation and
 does not modify factual confidence, evidence, adjudication, publication, or
-provenance. Classifier `v3-persisted-subject` requires exact supporting quotations,
-abstains on uncertain/unsupported subjects, and reads persisted `Claim.context_text`
+provenance. Classifier `v4-primary-subject` requires exact supporting quotations,
+an explicit primary subject contained in the selected domains, abstains on
+uncertain/unsupported subjects, and reads persisted `Claim.context_text`
 from TEXT, URL, IMAGE, and FILE claims. URL/IMAGE/FILE inputs are eligible only
 after the existing verification/extraction pipeline stores usable claim text:
 URLs, image links, bare filenames, AI verdicts, and arbitrary article content
@@ -56,11 +57,13 @@ are NOT treated as classification evidence. Input outside 20–2400 characters
 abstains. Geographic evidence is neither required nor inferred.
 
 Classification is **claim-level**, not dependent on a community thread. Once
-the factual-verification pipeline persists claim text/results, it queues the
-separate subject-classification Celery task **after database commit**. This
-includes ordinary saved factual analysis and early authoritative publication
-resolutions that persist claim text. Verification, caching, and publication
-never wait for the classifier. A community thread can additionally trigger
+ClaimGate has accepted and persisted normalized claim text, the pipeline queues
+the separate subject-classification Celery task **after database commit**, before
+evidence retrieval/final reasoning continues. Verification does not wait for
+the classifier, so subject classification and factual verification can progress
+in parallel. Publication-authority and cached-result paths retain narrow fallback
+triggers when they bypass normal ClaimGate normalization. A community thread can
+additionally trigger
 an idempotent fallback for a previously analyzed claim, but is not required.
 For URL/IMAGE/FILE claims, wait until usable extraction/OCR text is persisted.
 Repeated assessment of identical claim text/version is idempotent and will
@@ -85,7 +88,9 @@ retroactive authority. It does not itself assign subjects.
    are configured; classification is a separate provider operation.
 2. Analyze a fresh TEXT claim **without creating a thread** and inspect its
    `InvestigationClassificationAssessment`. For supported claims, expect
-   `SUGGESTED` with candidate subject codes and `candidate_jurisdiction=""`;
+   `SUGGESTED` with candidate subject codes, an explicit
+   `candidate_primary_subject` contained in those codes, and
+   `candidate_jurisdiction=""`;
    for insufficient/ambiguous claims expect `ABSTAINED` or `FAILED`.
    There must be **no** `ClaimInvestigationClassification` row in shadow and
    no new eligibility in partner intake.
@@ -100,7 +105,8 @@ retroactive authority. It does not itself assign subjects.
    across all 12 subjects, multi-subject claims, ambiguous/nonfactual inputs,
    adversarial prompt-injection content, Philippine and international
    examples, and all persisted input types. Compare exact subject-set match,
-   per-subject precision/recall, unsupported quote rate, and abstention and
+   explicit primary-subject accuracy, per-subject precision/recall,
+   unsupported quote rate, and abstention and
    provider-failure rates. Record disagreements and model version. **Do not
    infer classifier accuracy from mocked unit tests or a few demos.**
 6. Require a separate explicit accuracy-review and rollout decision before

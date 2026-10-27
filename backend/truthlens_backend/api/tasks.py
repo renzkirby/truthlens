@@ -102,6 +102,38 @@ def _schedule_subject_classification(claim_id):
         )
 
 
+def _persist_subject_classification_input(claim_id, context_text):
+    """Persist stable normalized claim text and queue classification early.
+
+    Factual verification continues immediately; classification is a separate
+    Celery job and never blocks or changes the verdict path.
+    """
+    from .investigation_classifier import classification_mode
+
+    if classification_mode() == "off" or not isinstance(context_text, str):
+        return False
+    normalized_text = context_text.strip()
+    if not normalized_text or normalized_text == "OUT_OF_SCOPE":
+        return False
+
+    try:
+        with transaction.atomic():
+            claim = Claim.objects.select_for_update().filter(pk=claim_id).first()
+            if claim is None:
+                return False
+            if claim.context_text != normalized_text:
+                claim.context_text = normalized_text
+                claim.save(update_fields=["context_text", "last_updated"])
+            _schedule_subject_classification(claim.pk)
+        return True
+    except Exception:
+        logger.exception(
+            "Could not persist early subject-classification input for claim %s",
+            claim_id,
+        )
+        return False
+
+
 def _render_bounded_persisted_evidence_context(groups, claim_text, stance):
     """Use original dossier unchanged unless dev pilot exceeds its input cap.
 
@@ -180,7 +212,9 @@ def _render_bounded_persisted_evidence_context(groups, claim_text, stance):
     )
 
 
-def _resolve_exact_published_claim(claim, cleaned_claim):
+def _resolve_exact_published_claim(
+    claim, cleaned_claim, *, schedule_classification=True,
+):
     """Resolve cleaned factual text without storing AI/human verdict copies."""
     if claim is None:
         return False
@@ -198,8 +232,10 @@ def _resolve_exact_published_claim(claim, cleaned_claim):
                 return False
             claim.context_text = cleaned_claim
             claim.save(update_fields=["context_text", "last_updated"])
-            # Do not couple publication authority to classifier availability.
-            _schedule_subject_classification(claim.pk)
+            if schedule_classification:
+                # Fallback for authority paths reached before normal ClaimGate
+                # normalization/early dispatch.
+                _schedule_subject_classification(claim.pk)
     except Exception as exc:
         raise ClaimPersistenceError(
             f"Published resolution persistence failed for claim {claim.pk}."
@@ -207,7 +243,9 @@ def _resolve_exact_published_claim(claim, cleaned_claim):
     return True
 
 
-def _resolve_equivalent_published_claim(claim, cleaned_claim, vault_match):
+def _resolve_equivalent_published_claim(
+    claim, cleaned_claim, vault_match, *, schedule_classification=True,
+):
     """A Vault candidate only opens the strict multi-candidate authority gate."""
     if claim is None or not vault_match:
         return False
@@ -223,8 +261,10 @@ def _resolve_equivalent_published_claim(claim, cleaned_claim, vault_match):
                 return False
             claim.context_text = cleaned_claim
             claim.save(update_fields=["context_text", "last_updated"])
-            # Do not couple publication authority to classifier availability.
-            _schedule_subject_classification(claim.pk)
+            if schedule_classification:
+                # Fallback for authority paths reached before normal ClaimGate
+                # normalization/early dispatch.
+                _schedule_subject_classification(claim.pk)
     except LLMProviderUnavailableError:
         raise
     except Exception as exc:
@@ -250,7 +290,9 @@ def _record_related_published_claim(claim, query_text, vault_match):
         logger.warning("RELATED_CONTEXT outcome=scheduling_unavailable")
 
 
-def _reuse_second_chance_ai_analysis(matched_claim, claim_id):
+def _reuse_second_chance_ai_analysis(
+    matched_claim, claim_id, *, schedule_classification=True,
+):
     """Reuse prior automated analysis without conferring human authority."""
     logger.info(
         "Second-chance deduplication hit! OCR text matches existing claim %s ",
@@ -292,6 +334,9 @@ def _reuse_second_chance_ai_analysis(matched_claim, claim_id):
                 "last_updated",
             ] + (["relatedness_context", "relatedness_decision"] if invalidate_related else [])
         )
+        if schedule_classification:
+            # Fallback for reuse paths reached before ClaimGate normalization.
+            _schedule_subject_classification(current_claim.pk)
     except Claim.DoesNotExist:
         pass
 
@@ -1152,6 +1197,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 )
                 return
 
+            _persist_subject_classification_input(claim_id, cleaned_claim)
             target_claim = Claim.objects.filter(id=claim_id).first()
 
             # This shared pipeline also serves TEXT. IMAGE claims get both
@@ -1164,7 +1210,11 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 target_claim is not None
                 and target_claim.claim_type == Claim.ClaimType.IMAGE
             ):
-                if _resolve_exact_published_claim(target_claim, cleaned_claim):
+                if _resolve_exact_published_claim(
+                    target_claim,
+                    cleaned_claim,
+                    schedule_classification=False,
+                ):
                     published_resolution = True
                     return
 
@@ -1175,7 +1225,10 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 if vault_match:
                     logger.info("Vault match found for claim %s!", claim_id)
                     if _resolve_equivalent_published_claim(
-                        target_claim, cleaned_claim, vault_match
+                        target_claim,
+                        cleaned_claim,
+                        vault_match,
+                        schedule_classification=False,
                     ):
                         published_resolution = True
                         return
@@ -1195,6 +1248,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     selected_verdict = _reuse_second_chance_ai_analysis(
                         matched_claim,
                         claim_id,
+                        schedule_classification=False,
                     )
                     # Cached result persistence is also a completed primary
                     # analysis. Schedule optional context only afterwards.
@@ -1808,10 +1862,15 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
             _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
             return
 
+        _persist_subject_classification_input(claim_id, cleaned_claim)
         target_claim = Claim.objects.filter(id=claim_id).first()
 
         # Human publication authority precedes automated SATIRE classification.
-        if _resolve_exact_published_claim(target_claim, cleaned_claim):
+        if _resolve_exact_published_claim(
+            target_claim,
+            cleaned_claim,
+            schedule_classification=False,
+        ):
             published_resolution = True
             return
 
@@ -1823,7 +1882,10 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
         if vault_match:
             logger.info("Vault match found for URL claim %s!", claim_id)
             if _resolve_equivalent_published_claim(
-                target_claim, cleaned_claim, vault_match
+                target_claim,
+                cleaned_claim,
+                vault_match,
+                schedule_classification=False,
             ):
                 published_resolution = True
                 return
@@ -2401,13 +2463,12 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None, 
             claim.ai_verdict,
             claim.claim_fingerprint,
         )
-        # Separate, asynchronous subject classification for every analyzed
-        # claim, whether or not a community thread exists. The hook never
-        # queries an LLM or changes the factual-verification result.
+        # Optional relatedness remains post-save, but subject classification
+        # was already queued from durable normalized claim text before evidence
+        # retrieval/final reasoning.
         if (related_proposition is not None
                 and claim.claim_type in {Claim.ClaimType.IMAGE, Claim.ClaimType.URL}):
             _record_related_published_claim(claim, related_proposition, related_candidate)
-        _schedule_subject_classification(claim.pk)
         return claim
     except ClaimPersistenceError:
         raise

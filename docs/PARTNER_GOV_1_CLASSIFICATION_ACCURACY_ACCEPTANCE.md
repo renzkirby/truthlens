@@ -173,7 +173,7 @@ bundled default corpus remains a draft.
   "predictions": [
     {
       "case_id": "science_telescope",
-      "raw_response": "{\"decision\":\"CLASSIFY\",\"domains\":[{\"code\":\"SCIENCE\",\"evidence\":\"telescope observations\"}]}"
+      "raw_response": "{\"decision\":\"CLASSIFY\",\"primary_subject\":\"SCIENCE\",\"domains\":[{\"code\":\"SCIENCE\",\"evidence\":\"telescope observations\"}]}"
     }
   ]
 }
@@ -182,7 +182,9 @@ bundled default corpus remains a draft.
 `raw_response` must be the **unaltered complete JSON text** previously
 returned by a provider, including the per-domain quote evidence.
 No fallback reconstruction is permitted from persisted
-`candidate_domains`. Capture provider name/model, flags, input
+`candidate_domains` or `candidate_primary_subject`. Historical v3 captures
+without `primary_subject` are not valid v4 predictions. Capture provider
+name/model, flags, input
 revision, time, selection method and reviewer provenance separately
 in secure experiment notes; do not commit credentials, personal
 claims or full production prompts to the repository.

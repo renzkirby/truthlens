@@ -35,9 +35,14 @@ from api.verification.telemetry import (
 CLAIM = "Researchers reported that a science experiment achieved reproducible results."
 VALID = json.dumps({
     "decision": "CLASSIFY",
+    "primary_subject": "SCIENCE",
     "domains": [{"code": "SCIENCE", "evidence": "science experiment"}],
 })
-ABSTAIN = json.dumps({"decision": "ABSTAIN", "domains": []})
+ABSTAIN = json.dumps({
+    "decision": "ABSTAIN",
+    "primary_subject": None,
+    "domains": [],
+})
 
 
 class GeminiBillingError(RuntimeError):
@@ -54,32 +59,32 @@ class StrictClassificationContractTests(SimpleTestCase):
         self.assertTrue(validate_classification_response(ABSTAIN, CLAIM))
         self.assertEqual(
             validate_model_suggestion(CLAIM, json.loads(VALID)),
-            ["SCIENCE"],
+            {"domains": ["SCIENCE"], "primary_subject": "SCIENCE"},
         )
 
     def test_rejects_unsupported_domain_and_invented_quote(self):
         for payload in (
-            {"decision": "CLASSIFY", "domains": [
+            {"decision": "CLASSIFY", "primary_subject": "SCIENCE", "domains": [
                 {"code": "NOT_A_DOMAIN", "evidence": "science experiment"}]},
-            {"decision": "CLASSIFY", "domains": [
+            {"decision": "CLASSIFY", "primary_subject": "SCIENCE", "domains": [
                 {"code": "SCIENCE", "evidence": "fabricated wording"}]},
-            {"decision": "CLASSIFY", "domains": [
+            {"decision": "CLASSIFY", "primary_subject": "SCIENCE", "domains": [
                 {"code": "SCIENCE", "evidence": "sc"}]},
-            {"decision": "CLASSIFY", "domains": [
+            {"decision": "CLASSIFY", "primary_subject": "SCIENCE", "domains": [
                 {"code": "SCIENCE", "evidence": "science experiment"},
                 {"code": "SCIENCE", "evidence": "Researchers reported"}]},
-            {"decision": "ABSTAIN", "domains": [
+            {"decision": "ABSTAIN", "primary_subject": None, "domains": [
                 {"code": "SCIENCE", "evidence": "science experiment"}]},
-            {"decision": "ABSTAIN", "domains": [], "jurisdiction": "PH"},
-            {"decision": "CLASSIFY", "domains": [
+            {"decision": "ABSTAIN", "primary_subject": None, "domains": [], "jurisdiction": "PH"},
+            {"decision": "CLASSIFY", "primary_subject": "SCIENCE", "domains": [
                 {"code": "SCIENCE", "evidence": "science experiment",
                  "confidence": 1.0}]},
-            {"decision": "CLASSIFY", "domains": [
+            {"decision": "CLASSIFY", "primary_subject": "SCIENCE", "domains": [
                 {"code": "SCIENCE", "evidence": "science experiment"}],
              "verdict": "FACT"},
-            {"decision": "UNKNOWN", "domains": []},
-            {"decision": "CLASSIFY", "domains": []},
-            {"decision": "CLASSIFY", "domains": [
+            {"decision": "UNKNOWN", "primary_subject": None, "domains": []},
+            {"decision": "CLASSIFY", "primary_subject": "SCIENCE", "domains": []},
+            {"decision": "CLASSIFY", "primary_subject": "SCIENCE", "domains": [
                 {"code": "SCIENCE", "evidence": "science experiment"}] * 4},
         ):
             with self.subTest(payload=payload):
@@ -158,6 +163,7 @@ class ClassificationProviderHierarchyTests(SimpleTestCase):
         self.gemini.models.generate_content.return_value = SimpleNamespace(
             text=json.dumps({
                 "decision": "CLASSIFY",
+                "primary_subject": "SCIENCE",
                 "domains": [{"code": "SCIENCE", "evidence": "imaginary quote"}],
             }),
         )
@@ -178,7 +184,7 @@ class ClassificationProviderHierarchyTests(SimpleTestCase):
         self.gemini.models.generate_content.side_effect = GeminiBillingError(402)
         self.cloud.side_effect = CloudflareEvaluationError("HTTP_429_CAPACITY")
         self.groq_lane.return_value = SimpleNamespace(choices=[
-            SimpleNamespace(message=SimpleNamespace(content='{"decision":"CLASSIFY","domains":[]}')),
+            SimpleNamespace(message=SimpleNamespace(content='{"decision":"CLASSIFY","primary_subject":"SCIENCE","domains":[]}')),
         ])
         with self.assertRaises(LLMProviderUnavailableError):
             self._request()
@@ -214,7 +220,7 @@ class ClassificationProviderHierarchyTests(SimpleTestCase):
     def test_flag_off_invalid_groq_still_enforces_contract_when_hierarchy_active(self):
         self.gemini.models.generate_content.side_effect = GeminiBillingError(402)
         self.groq_lane.return_value = SimpleNamespace(choices=[
-            SimpleNamespace(message=SimpleNamespace(content='{"decision":"CLASSIFY","domains":[]}')),
+            SimpleNamespace(message=SimpleNamespace(content='{"decision":"CLASSIFY","primary_subject":"SCIENCE","domains":[]}')),
         ])
         with patch.dict(os.environ, {
             "ENABLE_CLOUDFLARE_CLASSIFICATION_PILOT": "0",
@@ -428,7 +434,7 @@ class CloudflareClassificationAdapterTests(SimpleTestCase):
             self.assertNotIn("reject_if_busy", self.generate.call_args.kwargs)
 
     def test_invalid_classification_adaptor_json_rejected(self):
-        self.generate.return_value = '{"decision":"CLASSIFY","domains":[]}'
+        self.generate.return_value = '{"decision":"CLASSIFY","primary_subject":"SCIENCE","domains":[]}'
         with self.assertRaisesRegex(CloudflareEvaluationError,
                                     "^INVALID_CLASSIFICATION_JSON$"):
             call_validated_cloudflare_pilot(
