@@ -712,10 +712,20 @@ def review_correction_evidence(
                 (item for item in evidence_cases if item.id == expected_case_id),
                 None,
             )
-            if case is None or any(
-                item.id != expected_case_id for item in active_cases
-            ):
+            if case is None:
                 raise EvidenceReviewConflict("This Evidence case is no longer current.")
+            if active_cases:
+                if (
+                    len(active_cases) != 1
+                    or active_cases[0].id != expected_case_id
+                ):
+                    raise EvidenceReviewConflict(
+                        "This Evidence case is no longer current."
+                    )
+            elif not evidence_cases or evidence_cases[-1].id != expected_case_id:
+                raise EvidenceReviewConflict(
+                    "This Evidence case is no longer current."
+                )
             if case.status == ModerationCase.Status.CANCELLED:
                 raise EvidenceReviewConflict(
                     "The selected Evidence case was cancelled."
