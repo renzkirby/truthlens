@@ -102,6 +102,36 @@ def _schedule_subject_classification(claim_id):
         )
 
 
+def _persist_subject_classification_input(claim_id, context_text):
+    """Persist stable normalized claim text and queue classification early.
+
+    Factual verification continues immediately; classification is a separate
+    Celery job and never blocks or changes the verdict path.
+    """
+    if not isinstance(context_text, str):
+        return False
+    normalized_text = context_text.strip()
+    if not normalized_text or normalized_text == "OUT_OF_SCOPE":
+        return False
+
+    try:
+        with transaction.atomic():
+            claim = Claim.objects.select_for_update().filter(pk=claim_id).first()
+            if claim is None:
+                return False
+            if claim.context_text != normalized_text:
+                claim.context_text = normalized_text
+                claim.save(update_fields=["context_text", "last_updated"])
+            _schedule_subject_classification(claim.pk)
+        return True
+    except Exception:
+        logger.exception(
+            "Could not persist early subject-classification input for claim %s",
+            claim_id,
+        )
+        return False
+
+
 def _render_bounded_persisted_evidence_context(groups, claim_text, stance):
     """Use original dossier unchanged unless dev pilot exceeds its input cap.
 
@@ -292,6 +322,7 @@ def _reuse_second_chance_ai_analysis(matched_claim, claim_id):
                 "last_updated",
             ] + (["relatedness_context", "relatedness_decision"] if invalidate_related else [])
         )
+        _schedule_subject_classification(current_claim.pk)
     except Claim.DoesNotExist:
         pass
 
@@ -1152,6 +1183,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 )
                 return
 
+            _persist_subject_classification_input(claim_id, cleaned_claim)
             target_claim = Claim.objects.filter(id=claim_id).first()
 
             # This shared pipeline also serves TEXT. IMAGE claims get both
@@ -1808,6 +1840,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
             _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
             return
 
+        _persist_subject_classification_input(claim_id, cleaned_claim)
         target_claim = Claim.objects.filter(id=claim_id).first()
 
         # Human publication authority precedes automated SATIRE classification.
@@ -2401,13 +2434,12 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None, 
             claim.ai_verdict,
             claim.claim_fingerprint,
         )
-        # Separate, asynchronous subject classification for every analyzed
-        # claim, whether or not a community thread exists. The hook never
-        # queries an LLM or changes the factual-verification result.
+        # Optional relatedness remains post-save, but subject classification
+        # was already queued from durable normalized claim text before evidence
+        # retrieval/final reasoning.
         if (related_proposition is not None
                 and claim.claim_type in {Claim.ClaimType.IMAGE, Claim.ClaimType.URL}):
             _record_related_published_claim(claim, related_proposition, related_candidate)
-        _schedule_subject_classification(claim.pk)
         return claim
     except ClaimPersistenceError:
         raise
