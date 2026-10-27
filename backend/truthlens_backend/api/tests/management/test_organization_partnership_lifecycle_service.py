@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.utils import timezone
@@ -83,7 +85,7 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
             invited_by=self.admin,
             token_digest=hash_invitation_token("pending-token"),
             status=OrganizationInvitation.Status.PENDING,
-            expires_at=now + timezone.timedelta(days=7),
+            expires_at=now + timedelta(days=7),
             last_sent_at=now,
         )
         self.original_invitation_digest = self.invitation.token_digest
