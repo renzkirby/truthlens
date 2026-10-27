@@ -3095,7 +3095,7 @@ class AdjudicationCaseDetailEvidenceSerializer(serializers.ModelSerializer):
     review_basis = serializers.SerializerMethodField()
 
     def get_review_basis(self, obj):
-        basis = getattr(obj, "adjudication_review_basis", None)
+        basis = getattr(obj, "adjudication_institutional_review_basis", None)
         if basis is None:
             return None
         return EvidenceInstitutionalReviewSerializer(basis).data
@@ -3285,8 +3285,8 @@ class AdjudicationCaseDetailSerializer(serializers.ModelSerializer):
             for item in evidence
         )
         institutional_basis_count = sum(
-            getattr(item, "adjudication_review_basis", None) is not None
-            and item.adjudication_review_basis.disposition == item.evidence_status
+            getattr(item, "adjudication_institutional_review_basis", None) is not None
+            and item.adjudication_institutional_review_basis.disposition == item.evidence_status
             for item in evidence
         )
         return {

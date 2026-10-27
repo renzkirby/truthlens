@@ -364,7 +364,7 @@ def get_adjudication_case_detail(
             review_decision,
         )
     for item in evidence:
-        item.adjudication_review_basis = latest_institutional_basis.get(item.pk)
+        item.adjudication_institutional_review_basis = latest_institutional_basis.get(item.pk)
     active_evidence_case_count = ModerationCase.objects.filter(
         case_type=ModerationCase.CaseType.EVIDENCE,
         evidence_submission__thread__claim=claim,

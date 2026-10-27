@@ -192,8 +192,20 @@ class VerificationAssignmentServiceTests(TestCase):
         self,
     ):
         assignment = self._claim_for_organization_a()
-        self._create_evidence(
-            status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+        evidence = self._create_evidence()
+        evidence_case = ensure_evidence_case(
+            evidence=evidence,
+            actor=self.community_user,
+            organization=self.organization_a,
+        )
+        review_evidence_submission(
+            evidence=evidence,
+            actor=self.lead_a,
+            evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            expected_status=EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+            expected_case_id=evidence_case.pk,
+            expected_organization_id=self.organization_a.pk,
+            allow_reopen=False,
         )
         case = ensure_adjudication_case(
             claim=self.claim,
@@ -218,8 +230,20 @@ class VerificationAssignmentServiceTests(TestCase):
         self,
     ):
         assignment = self._claim_for_organization_a()
-        self._create_evidence(
-            status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+        evidence = self._create_evidence()
+        evidence_case = ensure_evidence_case(
+            evidence=evidence,
+            actor=self.community_user,
+            organization=self.organization_a,
+        )
+        review_evidence_submission(
+            evidence=evidence,
+            actor=self.lead_a,
+            evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            expected_status=EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+            expected_case_id=evidence_case.pk,
+            expected_organization_id=self.organization_a.pk,
+            allow_reopen=False,
         )
         case = ensure_adjudication_case(
             claim=self.claim,

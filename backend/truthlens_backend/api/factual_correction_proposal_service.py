@@ -608,7 +608,13 @@ def _freeze_evidence_basis(context, *, request, correction_case, approving_actor
     case_by_id = {item.id: item for item in cases}
     events = list(
         ModerationEvent.objects.select_for_update(of=("self",))
-        .filter(case_id__in=case_by_id)
+        .filter(
+            case_id__in=case_by_id,
+            event_type__in=[
+                ModerationEvent.EventType.EVIDENCE_VERIFIED,
+                ModerationEvent.EventType.EVIDENCE_REJECTED,
+            ],
+        )
         .order_by("created_at", "id")
     )
     candidates = {evidence_id: [] for evidence_id in evidence_by_id}

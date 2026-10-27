@@ -16,6 +16,10 @@ from api.adjudication_service import (
     ensure_adjudication_case,
     issue_adjudication_decision,
 )
+from api.evidence_review_service import (
+    ensure_evidence_case,
+    review_evidence_submission,
+)
 from api.models import (
     AdjudicationDecision,
     Claim,
@@ -116,12 +120,6 @@ class AdjudicationContractFixtures:
                     EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION
                 ),
                 evidence_status=evidence_status,
-                verified_by=(
-                    self.moderator
-                    if reviewed_at is not None
-                    else None
-                ),
-                verified_at=reviewed_at,
                 rejection_reason=(
                     EvidenceSubmission.RejectionReason.OTHER
                     if evidence_status == EvidenceSubmission.EvidenceStatus.REJECTED
@@ -700,12 +698,26 @@ class AdjudicationActionApiContractTests(
                 EvidenceSubmission.EvidenceStatus.REJECTED,
             ]
         )
-        EvidenceSubmission.objects.create(
+        extra_evidence = EvidenceSubmission.objects.create(
             thread=context["thread"],
             contributor=self.second_contributor,
             evidence_caption="A second contributor's reviewed evidence.",
             evidence_type=EvidenceSubmission.EvidenceType.PROVIDES_CONTEXT,
+            evidence_status=EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+        )
+        extra_case = ensure_evidence_case(
+            evidence=extra_evidence,
+            actor=self.moderator,
+            organization=self.organization,
+        )
+        review_evidence_submission(
+            evidence=extra_evidence,
+            actor=self.moderator,
             evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            expected_status=EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+            expected_case_id=extra_case.pk,
+            expected_organization_id=self.organization.pk,
+            allow_reopen=False,
         )
 
         with patch(

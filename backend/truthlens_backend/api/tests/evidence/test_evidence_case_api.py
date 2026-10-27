@@ -787,11 +787,23 @@ class EvidenceCaseApiTests(APITestCase):
         self.assertEqual(self.evidence.evidence_status, "REJECTED")
         self.assertEqual(self.evidence.rejection_reason, "UNRELIABLE_SOURCE")
 
-    def test_action_payload_is_strict_and_requires_unverified_expected_status(self):
+    def test_action_payload_is_strict_and_stale_expected_status_conflicts(self):
         self._authenticate(self.lead)
+
+        stale = self.client.post(
+            self._action_url(),
+            {"decision": "VERIFIED", "expected_status": "VERIFIED"},
+            format="json",
+        )
+        self.assertEqual(stale.status_code, status.HTTP_409_CONFLICT)
+        self.evidence.refresh_from_db()
+        self.assertEqual(
+            self.evidence.evidence_status,
+            EvidenceSubmission.EvidenceStatus.UNVERIFIED,
+        )
+
         payloads = [
             {"decision": "VERIFIED"},
-            {"decision": "VERIFIED", "expected_status": "VERIFIED"},
             {
                 "decision": "VERIFIED",
                 "expected_status": "UNVERIFIED",
