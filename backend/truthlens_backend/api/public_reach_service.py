@@ -56,13 +56,17 @@ def record_public_reach_event(
     validate_public_reach_pair(event_type, source_surface)
     if not isinstance(organization, Organization) or organization._state.adding:
         raise PublicReachTargetNotFound("Public target unavailable.")
-    # Refresh eligibility from storage rather than trusting a stale caller instance.
+    # Refresh the organization from storage rather than trusting a stale
+    # caller instance. Current Partner-profile eligibility and historical
+    # publication reachability are intentionally separate contracts.
     organization = Organization.objects.filter(pk=organization.pk).first()
-    if organization is None or not is_public_partner_eligible(organization):
+    if organization is None:
         raise PublicReachTargetNotFound("Public target unavailable.")
 
     publication_snapshot = ""
     if event_type == E.PARTNER_PROFILE_VIEW:
+        if not is_public_partner_eligible(organization):
+            raise PublicReachTargetNotFound("Public target unavailable.")
         if fact_check is not None:
             raise InvalidPublicReach("Profile views cannot specify a publication.")
     else:
