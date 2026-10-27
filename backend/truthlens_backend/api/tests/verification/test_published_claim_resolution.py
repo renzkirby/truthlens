@@ -2563,6 +2563,23 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.assert_ai_path(self.image_gfc)
         self.llm.assert_not_called()
 
+        # A Vault candidate may inform the AI assessment, but it must never
+        # replace the submitted claim that Community and subject classification
+        # consume.
+        self.target.refresh_from_db()
+        self.assertEqual(
+            self.target.context_text,
+            self.cleaned["cleaned_claim"],
+        )
+        self.assertNotEqual(
+            self.target.context_text,
+            self.vault.return_value["summary"],
+        )
+        self.assertEqual(
+            self.save_claim.call_args.args[3],
+            self.cleaned["cleaned_claim"],
+        )
+
     def test_non_equivalent_image_semantic_context_keeps_telemetry_and_durable_provenance(
         self,
     ):
