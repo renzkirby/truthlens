@@ -158,6 +158,14 @@ normalization rules invalidates evaluation fingerprints tied to the older
 configuration. Re-run reviewed evaluation rather than comparing incompatible
 scores.
 
+The existing repository quality-audit corpus was designed primarily for
+**domain-set** accuracy and does not provide reviewed primary-subject labels for
+every multi-domain case. Therefore a passing domain-set audit is not evidence
+that `primary_subject` is accurate. Before any `enforce` rollout that makes
+automatic primary subjects authoritative for public Community topics, evaluate
+primary-subject choices against separately reviewed reference labels as an
+additional gate.
+
 ## Known observed weaknesses
 
 Previous development evaluation has observed:
