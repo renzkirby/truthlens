@@ -148,6 +148,10 @@ class FactualCorrectionRequestFixtures(EditorialReplacementFixtures):
         return context
 
     def review_correction(self, context, **overrides):
+        expected_case = context.get(
+            "latest_correction_evidence_case",
+            context["evidence_case"],
+        )
         values = {
             "correction_request_id": context["correction_request"].id,
             "evidence_id": context["evidence"][0].id,
@@ -156,13 +160,15 @@ class FactualCorrectionRequestFixtures(EditorialReplacementFixtures):
             "expected_evidence_status": (
                 EvidenceSubmission.EvidenceStatus.VERIFIED
             ),
-            "expected_case_id": context["evidence_case"].id,
+            "expected_case_id": expected_case.id,
             "moderator_notes": "Correction review reaffirmed this evidence.",
             "expected_predecessor_version": context["published"].version,
             "expected_decision_revision": context["decision"].revision_number,
         }
         values.update(overrides)
-        return review_correction_evidence(**values)
+        result = review_correction_evidence(**values)
+        context["latest_correction_evidence_case"] = result["case"]
+        return result
 
     @staticmethod
     def assert_authority_unchanged(test_case, context, *, assignment_count):
@@ -1070,13 +1076,19 @@ class CorrectionEvidenceReviewTests(
             "rejection_reason": EvidenceSubmission.RejectionReason.OUTDATED,
         }
         self.assertEqual(result["evidence_record"], expected_record)
-        self.assertEqual(result["event"].case_id, context["evidence_case"].id)
+        self.assertNotEqual(result["case"].id, context["evidence_case"].id)
+        self.assertEqual(result["event"].case_id, result["case"].id)
+        context["evidence_case"].refresh_from_db()
+        self.assertEqual(
+            context["evidence_case"].status,
+            ModerationCase.Status.RESOLVED,
+        )
         self.assertEqual(
             result["event"].metadata,
             {
                 "correction_request_id": str(context["correction_request"].id),
                 "correction_case_id": str(context["correction_case"].id),
-                "evidence_case_id": str(context["evidence_case"].id),
+                "evidence_case_id": str(result["case"].id),
                 "reviewer_snapshot": {
                     "id": str(self.moderator.id),
                     "username": self.moderator.username,
@@ -1179,16 +1191,29 @@ class CorrectionEvidenceReviewTests(
         second = self.review_correction(context)
 
         events = ModerationEvent.objects.filter(
-            case=context["evidence_case"],
+            case__in=[first["case"], second["case"]],
             event_type=ModerationEvent.EventType.EVIDENCE_VERIFIED,
             metadata__correction_request_id=str(context["correction_request"].id),
         ).order_by("created_at", "id")
         self.assertEqual(events.count(), 2)
+        self.assertNotEqual(first["case"].id, second["case"].id)
         self.assertNotEqual(first["event"].id, second["event"].id)
         self.assertEqual(events[0].metadata["evidence_record"], first["evidence_record"])
         self.assertEqual(events[1].metadata["evidence_record"], second["evidence_record"])
         self.assertTrue(events[0].metadata["is_reaffirmation"])
         self.assertTrue(events[1].metadata["is_reaffirmation"])
+        self.assertTrue(
+            first["case"].events.filter(
+                event_type=ModerationEvent.EventType.EVIDENCE_REOPENED,
+                metadata__previous_case_id=str(context["evidence_case"].id),
+            ).exists()
+        )
+        self.assertTrue(
+            second["case"].events.filter(
+                event_type=ModerationEvent.EventType.EVIDENCE_REOPENED,
+                metadata__previous_case_id=str(first["case"].id),
+            ).exists()
+        )
 
     def test_wrong_organization_and_missing_or_revoked_capability_are_rejected(self):
         wrong_organization = self.make_correction_review_context(
