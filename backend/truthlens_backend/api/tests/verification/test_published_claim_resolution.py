@@ -11,7 +11,7 @@ from uuid import uuid4
 from django.contrib.auth.models import User
 from django.contrib.postgres.search import SearchVector
 from django.core.cache import cache
-from django.db import IntegrityError, OperationalError, transaction
+from django.db import IntegrityError, OperationalError, connection, transaction
 from django.db.models.deletion import ProtectedError
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
@@ -976,8 +976,13 @@ class ExactCanonicalLookupTests(PublicationResolutionFixture):
         self.distance.assert_not_called()
 
     def test_full_text_only_match_is_not_authoritative(self):
+        search_vector_value = (
+            SearchVector("canonical_claim", "summary")
+            if connection.vendor == "postgresql"
+            else "vaccines tracking microchips"
+        )
         OfficialFactCheck.objects.filter(pk=self.publication.pk).update(
-            search_vector=SearchVector("canonical_claim", "summary"),
+            search_vector=search_vector_value,
         )
         self.assertIsNone(
             find_exact_canonical_published_fact_check("vaccines tracking microchips")
