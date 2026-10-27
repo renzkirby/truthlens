@@ -45,6 +45,9 @@ class PublicFactCheckApiTests(
         "logo_url",
         "organization_type",
         "organization_type_label",
+        "partner_status",
+        "partner_status_label",
+        "public_profile_available",
     }
     collection_item_fields = {
         "publication_id",
@@ -198,9 +201,9 @@ class PublicFactCheckApiTests(
         hidden = APIClient().get(self.detail_url(context["published"]))
         self.assertIsNone(hidden.data["organization"]["logo_url"])
 
-    def test_unknown_and_ineligible_partner_slugs_return_not_found(self):
+    def test_unknown_slug_is_not_found_but_historical_publication_survives_partner_status_changes(self):
         client = APIClient()
-        context = self.make_published("ineligible-partner")
+        context = self.make_published("historical-partner")
         unknown = client.get(
             reverse("public_partner_fact_checks", kwargs={"slug": "unknown-partner"})
         )
@@ -220,22 +223,40 @@ class PublicFactCheckApiTests(
             {"public_profile_enabled": False},
             {"verification_status": Organization.VerificationStatus.UNVERIFIED},
             {"partner_status": Organization.PartnerStatus.SUSPENDED},
+            {"partner_status": Organization.PartnerStatus.FORMER},
         )
         for changes in eligibility_changes:
             with self.subTest(changes=changes):
                 Organization.objects.filter(pk=self.organization.pk).update(**changes)
-                response = client.get(self.collection_url())
-                self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-                detail_response = client.get(self.detail_url(context["published"]))
+                self.organization.refresh_from_db()
+
+                collection = client.get(self.collection_url())
+                detail = client.get(self.detail_url(context["published"]))
+
+                self.assertEqual(collection.status_code, status.HTTP_200_OK)
+                self.assertEqual(detail.status_code, status.HTTP_200_OK)
                 self.assertEqual(
-                    detail_response.status_code,
-                    status.HTTP_404_NOT_FOUND,
+                    detail.data["organization"]["partner_status"],
+                    self.organization.partner_status,
                 )
+                self.assertFalse(
+                    detail.data["organization"]["public_profile_available"]
+                )
+
+                profile = client.get(
+                    reverse(
+                        "public_partner_detail",
+                        kwargs={"slug": self.organization.slug},
+                    )
+                )
+                self.assertEqual(profile.status_code, status.HTTP_404_NOT_FOUND)
+
                 Organization.objects.filter(pk=self.organization.pk).update(
                     public_profile_enabled=True,
                     verification_status=Organization.VerificationStatus.VERIFIED,
                     partner_status=Organization.PartnerStatus.ACTIVE,
                 )
+                self.organization.refresh_from_db()
 
     def test_only_current_cards_appear_and_history_counts_actual_lineage(self):
         context = self.make_published("published-history")
