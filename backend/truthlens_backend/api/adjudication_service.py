@@ -459,17 +459,6 @@ def get_adjudication_case_detail(
         blockers.append(_adjudication_blocker("NO_EVIDENCE"))
     elif unreviewed_count:
         blockers.append(_adjudication_blocker("UNREVIEWED_EVIDENCE"))
-    if (
-        set(latest_institutional_basis) != {item.pk for item in evidence}
-        or any(
-            latest_institutional_basis[item.pk].disposition != item.evidence_status
-            for item in evidence
-            if item.pk in latest_institutional_basis
-        )
-    ):
-        blockers.append(
-            _adjudication_blocker("INSTITUTIONAL_EVIDENCE_BASIS_REQUIRED")
-        )
     if active_evidence_case_count:
         blockers.append(_adjudication_blocker("ACTIVE_EVIDENCE_CASE"))
     if missing_or_stale_basis:
