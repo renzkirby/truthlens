@@ -166,25 +166,14 @@ class SuccessorEvidenceReviewHandoffTests(TestCase):
                 organization=self.org_b,
             )
         )
-        accountability = AccountabilityEvent.objects.get(
-            action_type=(
-                AccountabilityEvent.ActionType.EVIDENCE_PRIOR_REVIEW_ACCEPTED
-            ),
-            resource_id=str(self.evidence.pk),
-            authority_organization=self.org_b,
-        )
-        self.assertEqual(
-            accountability.authority_scope,
-            AccountabilityEvent.AuthorityScope.ORGANIZATION,
-        )
-        self.assertEqual(accountability.actor_id, self.reviewer_b.pk)
-        self.assertEqual(
-            accountability.context["source_review_id"],
-            str(original_review.pk),
-        )
-        self.assertEqual(
-            accountability.context["source_organization_id"],
-            str(self.org_a.pk),
+        self.assertFalse(
+            AccountabilityEvent.objects.filter(
+                action_type=(
+                    AccountabilityEvent.ActionType.EVIDENCE_PRIOR_REVIEW_ACCEPTED
+                ),
+                resource_id=str(self.evidence.pk),
+                authority_organization=self.org_b,
+            ).exists()
         )
 
         original_review.refresh_from_db()
@@ -223,6 +212,26 @@ class SuccessorEvidenceReviewHandoffTests(TestCase):
         self.assertEqual(
             accepted.disposition,
             EvidenceReviewDecision.Disposition.VERIFIED,
+        )
+        accountability = AccountabilityEvent.objects.get(
+            action_type=(
+                AccountabilityEvent.ActionType.EVIDENCE_PRIOR_REVIEW_ACCEPTED
+            ),
+            resource_id=str(self.evidence.pk),
+            authority_organization=self.org_b,
+        )
+        self.assertEqual(
+            accountability.authority_scope,
+            AccountabilityEvent.AuthorityScope.ORGANIZATION,
+        )
+        self.assertEqual(accountability.actor_id, self.reviewer_b.pk)
+        self.assertEqual(
+            accountability.context["source_review_id"],
+            str(original_review.pk),
+        )
+        self.assertEqual(
+            accountability.context["source_organization_id"],
+            str(self.org_a.pk),
         )
         self.evidence.refresh_from_db()
         self.assertEqual(self.evidence.verified_by_id, original_reviewer_id)
