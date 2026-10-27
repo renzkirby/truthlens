@@ -75,8 +75,9 @@ function OrganizationGovernanceSection({
    const canUseLegacyEditor = !isFormerPartner && !isRetirementRequired;
    const partnerStatusOptions = MANAGEMENT_PARTNER_STATUSES.filter(([value]) => {
       if (value === "FORMER") return false;
-      if (isCurrentPartner && value === "NONE") return false;
-      return true;
+      if (isCurrentPartner) return ["ACTIVE", "SUSPENDED"].includes(value);
+      if (organization.partner_status === "NONE") return ["NONE", "ACTIVE"].includes(value);
+      return value === organization.partner_status;
    });
 
    const hasChanges =
@@ -121,12 +122,14 @@ function OrganizationGovernanceSection({
          resolveApiEndpoint("MANAGEMENT_ORGANIZATION_PLATFORM_TRUST", organization.id),
          { method: "PATCH", body },
       );
-      if (!result.ok) return;
+      if (!result.ok) return false;
 
       returnFocusAfterRefreshRef.current = true;
+      setLegacyConfirmationOpen(false);
       setEditing(false);
       onFeedback("Organization governance status updated.");
       onRefresh();
+      return true;
    };
 
    const submitLegacyChanges = (event) => {
@@ -343,10 +346,7 @@ function OrganizationGovernanceSection({
             confirmVariant="destructive"
             processing={pending}
             returnFocusRef={saveButtonRef}
-            onConfirm={async () => {
-               await saveLegacyChanges();
-               setLegacyConfirmationOpen(false);
-            }}
+            onConfirm={saveLegacyChanges}
             onClose={() => setLegacyConfirmationOpen(false)}
          />
          <ManagementConfirmDialog
