@@ -619,6 +619,7 @@ The branch now contains a backend-only, not-yet-exposed lifecycle service:
 - `e0a4cdd1` — add `end_partner_organization_partnership()`;
 - `785ef603` — define end-partnership lifecycle invariants;
 - `db7d2c2c` — correct the lifecycle invitation test fixture.
+- `926054bd` — scope partnership termination moderation-case row locks to `ModerationCase` itself. PostgreSQL rejects `FOR UPDATE` across the nullable joins used to locate evidence/adjudication cases; `select_for_update(of=("self",))` preserves the intended concurrency protection without locking nullable joined relations.
 
 Current intended behavior:
 
