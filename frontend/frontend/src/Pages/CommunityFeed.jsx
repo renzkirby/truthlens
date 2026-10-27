@@ -1,5 +1,5 @@
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 
 import Icons from "../components/Icons.jsx";
 import PartnerAffiliations from "../components/partners/PartnerAffiliations.jsx";
@@ -8,6 +8,12 @@ import { useNotification } from "../hooks/useNotification";
 import { buildApiUrl, resolveApiEndpoint } from "../utils/api";
 import timeAgo from "../utils/timeAgo";
 import { getEffectiveVerdict } from "../utils/verdict";
+import {
+   CAMPUS_AFFAIRS_TOPIC,
+   TOPIC_ALL,
+   TOPIC_FILTERS,
+   buildCommunityFeedQuery,
+} from "./communityFeedFilters.js";
 
 import "./CommunityFeed.css";
 
@@ -16,26 +22,12 @@ const UNSAFE_ERROR_PATTERN =
    /<[^>]+>|traceback|stack trace|django|internal server error|exception at|request failed with status code|\b(?:valueerror|typeerror|runtimeerror|databaseerror|integrityerror|operationalerror)\b|\bat\s+\S+\s*\([^)]*:\d+:\d+\)/i;
 
 const ASSESSMENT_SOURCES = { ALL: "ALL", HUMAN: "human", AI: "ai" };
-const TOPIC_ALL = "ALL";
 const CATEGORIES = { ALL: "ALL", TEXT: "TEXT", IMAGE: "IMAGE", VIDEO: "VIDEO", FILE: "FILE", URL: "URL" };
-
-const TOPIC_FILTERS = [
-   { value: TOPIC_ALL, label: "All Topics" },
-   { value: "POLITICS_GOVERNMENT_LAW", label: "Politics, Governance & Law" },
-   { value: "BUSINESS_ECONOMY", label: "Business & Economy" },
-   { value: "HEALTH_MEDICINE", label: "Health & Medicine" },
-   { value: "SCIENCE_TECHNOLOGY", label: "Science & Technology" },
-   { value: "EDUCATION", label: "Education" },
-   { value: "ENVIRONMENT_SAFETY", label: "Environment & Public Safety" },
-   { value: "SPORTS", label: "Sports" },
-   { value: "CULTURE_ENTERTAINMENT", label: "Culture & Entertainment" },
-];
 
 const CATEGORY_FILTERS = [
    { value: CATEGORIES.ALL, label: "All formats", icon: null },
    { value: CATEGORIES.TEXT, label: "Text", icon: "file-text" },
    { value: CATEGORIES.IMAGE, label: "Images", icon: "image" },
-   { value: CATEGORIES.VIDEO, label: "Videos", icon: "play" },
    { value: CATEGORIES.FILE, label: "Files", icon: "paperclip" },
    { value: CATEGORIES.URL, label: "Links", icon: "link" },
 ];
@@ -591,13 +583,14 @@ function CommunityFeed() {
             setLoadError(null);
             let url = pageUrl || threadsEndpoint;
             if (!pageUrl) {
-               const query = new URLSearchParams();
-               if (activeSearchTerm) query.set("search", activeSearchTerm);
-               query.set("sort", sortOrder);
-               if (activeTopic !== TOPIC_ALL) query.set("topic", activeTopic);
-               if (activeAssessmentSource !== ASSESSMENT_SOURCES.ALL) query.set("assessment_source", activeAssessmentSource);
-               if (activeContentType !== CATEGORIES.ALL) query.set("claim_type", activeContentType);
-               url = `${threadsEndpoint}?${query.toString()}`;
+               const query = buildCommunityFeedQuery({
+                  searchTerm: activeSearchTerm,
+                  sortOrder,
+                  topic: activeTopic,
+                  assessmentSource: activeAssessmentSource,
+                  claimType: activeContentType,
+               });
+               url = `${threadsEndpoint}?${query}`;
             }
 
             const response = await authFetch(url, { method: "GET" });
@@ -752,17 +745,26 @@ function CommunityFeed() {
                            onKeyDown={(event) => moveMenuFocus(event, closeTopicMenu)}
                         >
                            {TOPIC_FILTERS.map((topic) => (
-                              <button
-                                 key={topic.value}
-                                 type="button"
-                                 role="menuitemradio"
-                                 aria-checked={activeTopic === topic.value}
-                                 className="feed-popup-item"
-                                 onClick={() => selectTopic(topic.value)}
-                              >
-                                 <span>{topic.label}</span>
-                                 {activeTopic === topic.value && <Icons name="check" size={15} aria-hidden="true" />}
-                              </button>
+                              <Fragment key={topic.value}>
+                                 {topic.value === CAMPUS_AFFAIRS_TOPIC && (
+                                    <>
+                                       <div className="feed-popup-divider" role="separator" />
+                                       <span className="feed-popup-section-label">Context</span>
+                                    </>
+                                 )}
+                                 <button
+                                    type="button"
+                                    role="menuitemradio"
+                                    aria-checked={activeTopic === topic.value}
+                                    className="feed-popup-item"
+                                    onClick={() => selectTopic(topic.value)}
+                                 >
+                                    <span>{topic.label}</span>
+                                    {activeTopic === topic.value && (
+                                       <Icons name="check" size={15} aria-hidden="true" />
+                                    )}
+                                 </button>
+                              </Fragment>
                            ))}
                         </div>
                      )}

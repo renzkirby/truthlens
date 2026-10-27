@@ -11,15 +11,15 @@ suggestions do not independently authorize partner intake.
 Keep public browsing simple without weakening institutional verification rules.
 TruthLens retains the existing **12 investigation subjects** and groups them into
 **eight public news categories** for the Community feed. **Campus Affairs**
-remains a separate context dimension, not a thirteenth subject. Its backend
-routing contract is reviewed separately from public browsing, and the live
-Topic control will remain unchanged until the dedicated Community Campus filter
-and UI are reviewed and enabled.
+remains a separate context dimension, not a thirteenth subject. The Community
+Topic control exposes it as a visually separated context filter while keeping
+the eight subject-topic groups unchanged.
 
 The subject rubric and public group mapping live in
-`api/verification/subject_taxonomy.py`. The Community API currently projects a
-public topic only for authoritative **single-domain** classifications. It does
-not guess a primary subject for multi-domain rows.
+`api/verification/subject_taxonomy.py`. The Community API projects an explicit
+authoritative `primary_subject` when present and preserves the legacy
+single-domain fallback. It does not guess a primary subject for unresolved
+multi-domain rows.
 
 ### Public category mapping
 
@@ -34,23 +34,25 @@ not guess a primary subject for multi-domain rows.
 | Sports | `SPORTS` |
 | Culture & Entertainment | `CULTURE` |
 
-The current Community Topic dropdown exposes **All Topics** plus these eight
-groups. **Campus Affairs is not exposed yet.** Unclassified claims and
-multi-domain claims without an explicit persisted primary subject remain
-discoverable under **All Topics** and must not be assigned a guessed topic.
+The Community Topic dropdown exposes **All Topics**, these eight subject-topic
+groups, and a separate **Context → Campus Affairs** option. Campus Affairs
+selects claims whose authoritative `campus_context_state` is `CONFIRMED`; it
+does not replace or rewrite the claim's normal public subject topic. Unclassified
+claims and multi-domain claims without an explicit persisted primary subject
+remain discoverable under **All Topics** and must not be assigned a guessed
+subject topic.
 
 ## Subject classification guidelines
 
 1. Classify the **specific persisted factual proposition**, not the surrounding
    article's every mention or the identity of its publisher.
 2. Do **not** infer truthfulness or source reliability from the subject.
-3. Select one **explicit primary subject** for future public display when a
-   reliable classification is available. The *current* authoritative database
-   record holds only an **unordered-by-importance list of required domains**,
-   so never derive a primary subject using `domains[0]` or sorting. The
-   Community feed may project a public topic from a **single-domain**
-   authoritative row because no primary-subject inference is required; a
-   multi-domain row remains unresolved until primary-subject persistence exists.
+3. Select one **explicit primary subject** for public display when a reliable
+   classification is available. Authoritative classifications persist both the
+   required `domains` and, when established, `primary_subject`. Never derive
+   primary subject using `domains[0]` or sorting. The Community feed uses the
+   explicit primary subject when present and only uses the legacy single-domain
+   fallback when no explicit primary subject exists.
 4. Add another **required** domain only if verifying the material proposition
    genuinely needs that specialist expertise. Incidental mentions do not
    impose extra partner permissions. Ordinary partners must cover **all
@@ -140,19 +142,21 @@ rule. Conflict-of-interest review remains a separate future policy.
 
 **Desktop:** Topic · Review · Sort · Filters.
 
-- **Topic:** All Topics plus the eight public news categories above.
+- **Topic:** All Topics plus the eight public news categories above, followed
+  by a separate Context section containing Campus Affairs.
 - **Review:** All Reviews, Human Review, AI Analysis. Human means attributable
   human adjudication; AI means an actual AI assessment without such an
   authoritative human verdict.
 - **Sort:** Latest, Oldest.
-- **Filters:** content format (All formats, Text, Images, Videos, Files, Links).
+- **Filters:** content format (All formats, Text, Images, Files, Links).
   Clear Filters resets Topic, Review and Content Format while preserving Sort.
 - **Mobile:** Topic remains visible and Review, Sort and Content Format are
   grouped under a combined Sort & Filter control.
 
 Filtering happens **on the server before pagination**. Topic query parameters
-are preserved in cursor links. The API still rejects `CAMPUS_AFFAIRS` because
-the Community Campus filter has not been enabled yet.
+are preserved in cursor links. `topic=CAMPUS_AFFAIRS` filters authoritative
+`campus_context_state = CONFIRMED` claims across subject categories; all other
+unsupported topic codes still return a controlled bad request.
 
 ## Fixture and approval limitations
 
@@ -168,9 +172,11 @@ Included in this branch:
 
 - Phase 1 offline taxonomy rubric, public category mapping, Campus Affairs
   boundaries, synthetic fixtures and structural tests.
-- Phase 2 Community API projection/filtering for authoritative single-domain
-  classifications.
+- Community API subject-topic projection using explicit authoritative
+  `primary_subject`, with the legacy single-domain fallback.
 - Phase 2 Community Topic / Review / Sort / Content Format controls.
+- Campus Affairs Community filtering from authoritative confirmed campus
+  context, kept separate from public subject-topic projection.
 - AI Analysis filtering that requires an actual AI verdict rather than merely
   the absence of human review.
 
@@ -190,5 +196,4 @@ Still excluded:
 - changes to `api/investigation_classifier.py` or live provider prompts;
 - changes to `api/services.py` or `api/tasks.py`;
 - automatic institution inference;
-- Campus Affairs Community filtering;
 - any claim that the synthetic fixture measures real classifier accuracy.
