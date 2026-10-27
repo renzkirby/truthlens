@@ -100,7 +100,11 @@ def get_partner_organization_lifecycle_projection(organization):
 
     if organization.partner_status == Organization.PartnerStatus.ACTIVE:
         lifecycle_state = "ACTIVE_PARTNER"
-        operational_access = "ENABLED"
+        operational_access = (
+            "ENABLED"
+            if organization.verification_status == Organization.VerificationStatus.VERIFIED
+            else "DISABLED"
+        )
     elif organization.partner_status == Organization.PartnerStatus.SUSPENDED:
         lifecycle_state = "SUSPENDED_PARTNER"
         operational_access = "DISABLED"
