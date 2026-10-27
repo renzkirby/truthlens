@@ -122,6 +122,14 @@ urlpatterns = [
         name="management_organization_reinstate_partnership",
     ),
     path(
+        (
+            "management/organizations/<uuid:organization_id>/"
+            "factual-corrections/<uuid:correction_request_id>/cancel-for-retirement/"
+        ),
+        management_views.ManagementOrganizationFactualCorrectionRetirementCancelView.as_view(),
+        name="management_organization_factual_correction_retirement_cancel",
+    ),
+    path(
         "management/organizations/<uuid:organization_id>/partnership/end/",
         management_views.ManagementOrganizationEndPartnershipView.as_view(),
         name="management_organization_end_partnership",
