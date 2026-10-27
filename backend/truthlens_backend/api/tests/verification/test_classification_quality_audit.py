@@ -19,6 +19,7 @@ from api.management.commands.audit_investigation_classification import DEFAULT_C
 def valid_response(*domains):
     return json.dumps({
         "decision": "CLASSIFY",
+        "primary_subject": domains[0][0],
         "domains": [{"code": code, "evidence": quote} for code, quote in domains],
     })
 
@@ -163,7 +164,7 @@ class SubjectCorpusQualityAuditTests(SimpleTestCase):
                 ("TECHNOLOGY", "Europa Clipper spacecraft"),
             ),
             "ambiguous_plan": json.dumps({
-                "decision": "ABSTAIN", "domains": [],
+                "decision": "ABSTAIN", "primary_subject": None, "domains": [],
             }),
         }
         report = score_classification_predictions(approved, preds)
@@ -183,7 +184,7 @@ class SubjectCorpusQualityAuditTests(SimpleTestCase):
         )
         preds = {
             "science_telescope": json.dumps({
-                "decision": "ABSTAIN", "domains": [],
+                "decision": "ABSTAIN", "primary_subject": None, "domains": [],
             }),
             "cross_spacecraft": valid_response((
                 "SCIENCE", "scientists would analyze data",
@@ -221,7 +222,7 @@ class SubjectCorpusQualityAuditTests(SimpleTestCase):
                 ("TECHNOLOGY", "telescope observations"),
             ),
             "cross_spacecraft": json.dumps({
-                "decision": "ABSTAIN", "domains": [],
+                "decision": "ABSTAIN", "primary_subject": None, "domains": [],
             }),
         }
         report = score_classification_predictions(approved, predictions)
