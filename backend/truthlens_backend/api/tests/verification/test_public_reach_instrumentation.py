@@ -171,6 +171,69 @@ class PublicReachInstrumentationTests(EditorialReplacementFixtures, TestCase):
                     partner_status=Organization.PartnerStatus.ACTIVE,
                 )
 
+    def test_publication_reach_survives_partner_profile_ineligibility(self):
+        publication = self.publication()
+        publication_events = EXPECTED_PAIRS - {
+            (E.PARTNER_PROFILE_VIEW, S.PUBLIC_PARTNER_PROFILE)
+        }
+
+        for changes in (
+            {"public_profile_enabled": False},
+            {"verification_status": Organization.VerificationStatus.UNVERIFIED},
+            {"partner_status": Organization.PartnerStatus.SUSPENDED},
+            {"partner_status": Organization.PartnerStatus.FORMER},
+        ):
+            with self.subTest(changes=changes):
+                Organization.objects.filter(pk=self.organization.pk).update(**changes)
+                self.organization.refresh_from_db()
+
+                # The Partner profile remains unavailable once current eligibility
+                # is lost.
+                with self.assertRaises(PublicReachTargetNotFound):
+                    self.record()
+                self.assertEqual(
+                    self.client.post(
+                        self.url,
+                        self.payload(),
+                        format="json",
+                    ).status_code,
+                    404,
+                )
+
+                # Sealed published work remains a valid historical public target.
+                for event_type, surface in publication_events:
+                    with self.subTest(
+                        changes=changes,
+                        event_type=event_type,
+                        surface=surface,
+                    ):
+                        event, created = self.record(
+                            event_type=event_type,
+                            source_surface=surface,
+                            fact_check=publication,
+                        )
+                        self.assertTrue(created)
+                        self.assertEqual(event.fact_check_id_snapshot, str(publication.pk))
+
+                        response = self.client.post(
+                            self.url,
+                            self.payload(
+                                event_type=event_type,
+                                source_surface=surface,
+                                publication_id=str(publication.pk),
+                            ),
+                            format="json",
+                        )
+                        self.assertEqual(response.status_code, 201)
+
+                PublicReachEvent.objects.all().delete()
+                Organization.objects.filter(pk=self.organization.pk).update(
+                    public_profile_enabled=True,
+                    verification_status=Organization.VerificationStatus.VERIFIED,
+                    partner_status=Organization.PartnerStatus.ACTIVE,
+                )
+                self.organization.refresh_from_db()
+
     def test_inaccessible_and_broken_publication_lineage_rejected(self):
         context = self.make_published_context(suffix="broken-reach")
         publication = context["published"]
