@@ -174,6 +174,26 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
         self.assertEqual(response.data["lifecycle"]["operational_access"], "DISABLED")
         self.assertTrue(response.data["lifecycle"]["can_end_partnership"])
 
+    def test_legacy_none_partner_with_prior_work_projects_retirement_required(self):
+        self.organization.partner_status = Organization.PartnerStatus.NONE
+        self.organization.verification_status = Organization.VerificationStatus.UNVERIFIED
+        self.organization.save(
+            update_fields=["partner_status", "verification_status"]
+        )
+
+        response = self.authenticated_client().get(self.detail_url())
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["lifecycle"]["state"],
+            "RETIREMENT_REQUIRED",
+        )
+        self.assertEqual(
+            response.data["lifecycle"]["operational_access"],
+            "DISABLED",
+        )
+        self.assertTrue(response.data["lifecycle"]["can_end_partnership"])
+
     def test_onboarding_organization_is_not_endable(self):
         onboarding = Organization.objects.create(
             name="Lifecycle Onboarding",
