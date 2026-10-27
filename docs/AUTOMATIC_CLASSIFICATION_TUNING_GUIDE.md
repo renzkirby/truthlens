@@ -7,8 +7,9 @@ scripts were intentionally removed before PR preparation.
 ## Current role
 
 Automatic classification assigns a submitted claim to one or more supported
-investigation subject domains. It does **not** change factual verification and it
-does **not** define a Partner Organization's expertise.
+investigation subject domains and selects one explicit `primary_subject` from
+those domains for public-topic projection. It does **not** change factual
+verification and it does **not** define a Partner Organization's expertise.
 
 Partner Organization specializations are managed independently. Subject
 classification affects Partner Organization intake only after a separately
@@ -60,20 +61,41 @@ approved `enforce` rollout.
 Tuning must proceed through `shadow` first. A successful unit test or a small
 canary is not enough to authorize `enforce`.
 
+## Runtime timing
+
+When classification is enabled, the factual pipeline persists the normalized
+claim proposition immediately after the claim gate has accepted it, then queues
+subject classification as a separate Celery job **before** evidence retrieval and
+final verdict reasoning continue. The factual-verification task does not wait for
+classification to finish.
+
+This makes the two operations parallel-capable without coupling their outcomes:
+classification failure cannot turn a factual verification into a failure, and a
+verdict may be returned before classification finishes. In `off` mode the early
+classification persistence/dispatch path is skipped so legacy behavior remains
+unchanged.
+
+Published-claim resolution and exact cached-result paths retain safe fallback
+classification triggers when the normal claim-gate path is bypassed.
+
 ## Strict response contract
 
 Do not weaken the contract to make a provider look more accurate.
 
 A valid provider response has exactly:
 - `decision`
+- `primary_subject`
 - `domains`
 
-`ABSTAIN` requires an empty domain list.
+`ABSTAIN` requires `primary_subject: null` and an empty domain list.
 
-`CLASSIFY` requires 1-3 distinct supported domain codes. Each selected domain
-must include evidence accepted by the shared contract: quoted text must actually
-occur in the original claim. Surplus fields such as verdict, jurisdiction,
-confidence or free-form explanations are rejected.
+`CLASSIFY` requires 1-3 distinct supported domain codes and exactly one
+`primary_subject` that is also present in the selected domains. Each selected
+domain must include evidence accepted by the shared contract: quoted text must
+actually occur in the original claim. The primary subject is explicit model
+output; it must never be reconstructed from sorting or `domains[0]`. Surplus
+fields such as verdict, jurisdiction, confidence or free-form explanations are
+rejected.
 
 The strict boundary applies after provider fallback as well; malformed Gemini or
 Groq output must not become authoritative merely because Cloudflare was skipped.
@@ -87,9 +109,10 @@ Groq output must not become authoritative merely because Cloudflare was skipped.
 4. Run the strict classification unit/integration tests.
 5. Prepare predictions using the offline evaluation package workflow.
 6. Audit predictions against a human-reviewed reference corpus.
-7. Review domain-set errors, not only per-label accuracy:
+7. Review both domain-set errors and primary-subject errors:
    - an extra domain can wrongly exclude an otherwise qualified organization;
    - a missing domain can wrongly broaden eligibility;
+   - a wrong primary subject can place the claim under the wrong public topic;
    - a malformed response must fail closed.
 8. Use a small development shadow canary only after offline review.
 9. Inspect provider telemetry and stored shadow assessments.
