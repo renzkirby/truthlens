@@ -12,6 +12,7 @@ from api.evidence_review_service import (
     review_evidence_submission,
 )
 from api.models import (
+    AccountabilityEvent,
     AdjudicationDecision,
     AdjudicationDecisionEvidenceReviewBasis,
     Claim,
@@ -164,6 +165,27 @@ class SuccessorEvidenceReviewHandoffTests(TestCase):
                 organization=self.org_b,
             )
         )
+        accountability = AccountabilityEvent.objects.get(
+            action_type=(
+                AccountabilityEvent.ActionType.EVIDENCE_PRIOR_REVIEW_ACCEPTED
+            ),
+            resource_id=str(self.evidence.pk),
+            authority_organization=self.org_b,
+        )
+        self.assertEqual(
+            accountability.authority_scope,
+            AccountabilityEvent.AuthorityScope.ORGANIZATION,
+        )
+        self.assertEqual(accountability.actor_id, self.reviewer_b.pk)
+        self.assertEqual(
+            accountability.context["source_review_id"],
+            str(original_review.pk),
+        )
+        self.assertEqual(
+            accountability.context["source_organization_id"],
+            str(self.org_a.pk),
+        )
+
         original_review.refresh_from_db()
         self.assertEqual(original_review.organization_id, self.org_a.pk)
         self.assertEqual(
@@ -260,6 +282,37 @@ class SuccessorEvidenceReviewHandoffTests(TestCase):
         )
         self.assertEqual(self.evidence.verified_by_id, self.reviewer_b.pk)
         self.assertTrue(
+            is_claim_ready_for_adjudication(
+                self.claim,
+                organization=self.org_b,
+            )
+        )
+
+    def test_stale_disposition_blocks_prior_review_acceptance_and_adjudication(
+        self,
+    ):
+        _assignment, first = self.establish_org_a_review()
+        original_review = first["review_decision"]
+        self.retire_a_and_claim_b()
+        successor_case = self.successor_case()
+
+        EvidenceSubmission.objects.filter(pk=self.evidence.pk).update(
+            evidence_status=EvidenceSubmission.EvidenceStatus.REJECTED,
+            rejection_reason=EvidenceSubmission.RejectionReason.OTHER,
+        )
+        self.evidence.refresh_from_db()
+
+        with self.assertRaises(EvidenceReviewConflict):
+            accept_prior_evidence_review(
+                evidence=self.evidence,
+                actor=self.reviewer_b,
+                source_review_id=original_review.pk,
+                expected_status=EvidenceSubmission.EvidenceStatus.REJECTED,
+                expected_case_id=successor_case.pk,
+                expected_organization_id=self.org_b.pk,
+            )
+
+        self.assertFalse(
             is_claim_ready_for_adjudication(
                 self.claim,
                 organization=self.org_b,
