@@ -26,15 +26,23 @@ def validate_classification_response(raw, claim_text):
         payload = json.loads(raw)
     except (TypeError, ValueError):
         return False
-    if not isinstance(payload, dict) or set(payload) != {"decision", "domains"}:
+    if not isinstance(payload, dict) or set(payload) != {
+        "decision", "primary_subject", "domains",
+    }:
         return False
     decision = payload["decision"]
+    primary_subject = payload["primary_subject"]
     domains = payload["domains"]
     if not isinstance(domains, list):
         return False
     if decision == "ABSTAIN":
-        return domains == []
-    if decision != "CLASSIFY" or not (1 <= len(domains) <= MAX_CLASSIFICATION_DOMAINS):
+        return primary_subject is None and domains == []
+    if (
+        decision != "CLASSIFY"
+        or not isinstance(primary_subject, str)
+        or primary_subject not in DOMAIN_CODES
+        or not (1 <= len(domains) <= MAX_CLASSIFICATION_DOMAINS)
+    ):
         return False
     seen = set()
     for domain in domains:
@@ -51,4 +59,4 @@ def validate_classification_response(raw, claim_text):
         ):
             return False
         seen.add(code)
-    return True
+    return primary_subject in seen
