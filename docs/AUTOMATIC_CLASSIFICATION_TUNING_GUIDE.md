@@ -42,24 +42,34 @@ approved `enforce` rollout.
 - `api/management/commands/queue_investigation_classifications.py`
   - controlled backlog scheduling for non-off modes
 
-## Classification modes
+## Classification and routing modes
 
 `INVESTIGATION_CLASSIFICATION_MODE=off`
-- no automatic classification job is authoritative;
-- normal Partner Organization intake remains backward-compatible.
+- no automatic subject-classification provider calls are made.
 
 `INVESTIGATION_CLASSIFICATION_MODE=shadow`
 - model suggestions/abstentions are stored for evaluation;
-- suggestions cannot grant or deny Partner Organization eligibility;
-- use this mode for prompt/model tuning.
+- suggestions do not create authoritative subject/domain rows.
 
 `INVESTIGATION_CLASSIFICATION_MODE=enforce`
-- an authoritative classification may participate in Partner Organization
-  specialization matching;
-- do not enable without separate accuracy and rollout approval.
+- validated results may create authoritative `domains` and
+  `primary_subject` for downstream subject uses such as Community topic
+  projection;
+- this mode does **not** by itself enable Partner Organization intake gating.
 
-Tuning must proceed through `shadow` first. A successful unit test or a small
-canary is not enough to authorize `enforce`.
+Partner intake has a separate rollout switch:
+
+`INVESTIGATION_ROUTING_MODE=off`
+- preserve pre-routing intake/claim behavior even when authoritative subject
+  classifications exist.
+
+`INVESTIGATION_ROUTING_MODE=enforce`
+- use authoritative subject/institution classification for Partner Organization
+  intake and direct-claim authorization.
+
+Classifier tuning must proceed through `shadow` first. Enabling authoritative
+classification and enabling partner-routing enforcement are separate review
+decisions.
 
 ## Runtime timing
 
@@ -116,8 +126,7 @@ Groq output must not become authoritative merely because Cloudflare was skipped.
    - a malformed response must fail closed.
 8. Use a small development shadow canary only after offline review.
 9. Inspect provider telemetry and stored shadow assessments.
-10. Discuss `enforce` only after broader reviewed accuracy and rollout safety
-    are acceptable.
+10. Discuss `INVESTIGATION_CLASSIFICATION_MODE=enforce` only after reviewed subject accuracy is acceptable. Keep `INVESTIGATION_ROUTING_MODE=off` until partner-routing authorization receives its own approval.
 
 ## Core regression tests
 
@@ -158,9 +167,10 @@ normalization rules invalidates evaluation fingerprints tied to the older
 configuration. Re-run reviewed evaluation rather than comparing incompatible
 scores.
 
-Classifier `v4-primary-subject` intentionally changes the provider response
-contract and prompt, so historical v3 prompt hashes/canary captures cannot be
-treated as v4 accuracy evidence.
+Classifier `v5-primary-unique-domains` keeps the v4 primary-subject contract
+and strengthens the prompt so CLASSIFY responses contain 1-3 unique domain
+objects with one strongest exact quote per domain. Historical v3/v4 prompt
+hashes and canary captures cannot be treated as v5 accuracy evidence.
 
 The existing repository quality-audit corpus was designed primarily for
 **domain-set** accuracy and does not provide reviewed primary-subject labels for
@@ -175,6 +185,7 @@ additional gate.
 Previous development evaluation has observed:
 - overclassification, for example a CIVICS claim also receiving LAW;
 - duplicate-domain output from a model, correctly rejected by the contract;
+  v5 now explicitly forbids repeated domain objects in the provider prompt;
 - deliberate ambiguity that should produce `ABSTAIN`;
 - Gemini billing/quota rejection in the development account;
 - intermittent Cloudflare read timeouts;

@@ -2865,11 +2865,33 @@ def verification_intake(request):
 
     limit, offset = _parse_verification_pagination(request)
 
-    queryset = get_available_verification_assignments()
+    classification_filter = (
+        request.query_params.get("classification", "")
+        .strip()
+        .upper()
+    )
     from .verification_domain_policy import (
+        DOMAIN_CODES,
         organization_claim_eligibility_reason,
         subject_eligibility_enforced,
     )
+    if (
+        classification_filter
+        and classification_filter != "UNCLASSIFIED"
+        and classification_filter not in DOMAIN_CODES
+    ):
+        return Response(
+            {
+                "detail": {
+                    "classification": [
+                        "Select a supported investigation classification."
+                    ]
+                }
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    queryset = get_available_verification_assignments()
 
     # Taxonomy routing is authoritative only in the separately approved
     # enforce rollout. Off/shadow preserve today's partner intake; shadow
@@ -2889,6 +2911,29 @@ def verification_intake(request):
                 eligible.append(assignment)
     else:
         eligible = list(queryset)
+
+    # This is a verifier browsing filter, not an authorization rule. Apply it
+    # after routing eligibility but before pagination so counts and pages stay
+    # correct without changing who may claim an investigation.
+    if classification_filter:
+        filtered = []
+        for assignment in eligible:
+            classification = getattr(
+                assignment.claim,
+                "investigation_classification",
+                None,
+            )
+            domains = (
+                list(getattr(classification, "domains", None) or [])
+                if classification is not None
+                else []
+            )
+            if classification_filter == "UNCLASSIFIED":
+                if classification is None or not domains:
+                    filtered.append(assignment)
+            elif classification_filter in domains:
+                filtered.append(assignment)
+        eligible = filtered
 
     total_count = len(eligible)
     assignments = eligible[offset : offset + limit]

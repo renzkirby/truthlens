@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.contrib.postgres.indexes import GinIndex
-from django.test import SimpleTestCase
+from django.db import connection
+from django.test import SimpleTestCase, TestCase
 from pgvector.django import HnswIndex
 
 from api.models import OfficialFactCheck, _official_fact_check_indexes
@@ -83,3 +84,21 @@ class OfficialFactCheckIndexCompatibilityTests(SimpleTestCase):
         for name, fields in PORTABLE_INDEX_FIELDS.items():
             with self.subTest(index=name):
                 self.assertEqual(indexes[name].fields, fields)
+
+class OfficialFactCheckSaveCompatibilityTests(TestCase):
+    def test_sqlite_save_skips_postgresql_search_vector_update(self):
+        if connection.vendor != "sqlite":
+            self.skipTest("SQLite portability regression only.")
+
+        fact_check = OfficialFactCheck.objects.create(
+            canonical_claim="A portable offline test claim.",
+            verdict="UNVERIFIED",
+            summary="Offline test fixture.",
+        )
+
+        fact_check.refresh_from_db()
+        self.assertEqual(
+            fact_check.canonical_claim,
+            "A portable offline test claim.",
+        )
+        self.assertIsNone(fact_check.search_vector)

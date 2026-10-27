@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test:auth": "node --test src/utils/authStorage.test.js",
-    "test:community-filters": "node --test src/Pages/communityFeedFilters.test.js"
+    "test:community-filters": "node --test src/Pages/communityFeedFilters.test.js",
+    "test:intake-filters": "node --test src/components/workspace/verificationIntakeFilters.test.js"
   },
   "dependencies": {
     "@fontsource-variable/mona-sans": "^5.3.0",

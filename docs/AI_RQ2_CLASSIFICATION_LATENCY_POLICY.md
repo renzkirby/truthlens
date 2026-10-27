@@ -6,6 +6,11 @@
 > latency/provider-history evidence, not as valid v4 classification responses or
 > v4 accuracy evidence. The provider order/timeout policy itself is unchanged by
 > the v4 primary-subject work.
+>
+> **2026-10-28 v5 note:** Classifier `v5-primary-unique-domains` keeps the v4
+> schema but makes the prompt explicitly require 1-3 unique domain objects and
+> one evidence quote per selected domain. Historical v4 responses remain useful
+> for provider/latency evidence but are not v5 prompt-quality evidence.
 
 
 **Status (2026-10-22):** Development-only candidate; offline tests required.

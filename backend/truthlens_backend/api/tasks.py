@@ -1322,11 +1322,15 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     article_stance,
                 )
 
+                # The Vault payload is verification context, not the
+                # submitted claim. Preserve the normalized incoming claim as
+                # Claim.context_text so Community and subject classification
+                # never inherit a matched publication's summary.
                 _save_claim(
                     claim_id,
                     ai_verdict,
                     "TruthLens Verified Vault",
-                    vault_match["summary"],
+                    cleaned_claim,
                     vault_match.get("sources", []),
                 )
 

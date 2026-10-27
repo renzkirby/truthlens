@@ -30,6 +30,31 @@
    line-height: 1.5;
 }
 
+.intake-overview-actions {
+   flex: 0 0 auto;
+   display: flex;
+   align-items: flex-end;
+   gap: 10px;
+}
+
+.intake-classification-filter {
+   min-width: 220px;
+   display: flex;
+   flex-direction: column;
+   gap: 5px;
+}
+
+.intake-classification-filter label {
+   color: var(--text-muted);
+   font-size: 0.68rem;
+   font-weight: 700;
+   line-height: 1.2;
+}
+
+.intake-classification-filter .tl-select {
+   width: 100%;
+}
+
 .intake-guidance {
    min-width: 0;
    display: flex;
@@ -460,6 +485,18 @@
    .intake-list-heading span:last-child {
       text-align: left;
    }
+
+   .intake-overview-actions {
+      width: 100%;
+      align-items: stretch;
+      flex-direction: column;
+   }
+
+   .intake-classification-filter {
+      width: 100%;
+      min-width: 0;
+   }
+
 
    .intake-item {
       grid-template-columns: 1fr;

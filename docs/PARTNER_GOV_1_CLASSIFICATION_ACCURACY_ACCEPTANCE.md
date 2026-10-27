@@ -270,7 +270,7 @@ has 32 APPROVED synthetic reference labels for offline evaluation.
 No complete, unaltered real model prediction set or representative
 held-out real-claim accuracy study has yet been supplied.
 
-**PARTNER-GOV-1 `enforce` authorization:** **NOT APPROVED**.
+**PARTNER-GOV-1 `INVESTIGATION_ROUTING_MODE=enforce` authorization:** **NOT APPROVED**.
 Before proposing a transition, require:
 - Human-approved, representative references covering every supported
   domain, cross-domain/ambiguous, hallucination/prompt-injection and
@@ -301,5 +301,5 @@ Before proposing a transition, require:
 - No stacked-branch PR or merge until co-development dependencies
   are reviewed and accepted.
 
-**Default policy stays** `INVESTIGATION_CLASSIFICATION_MODE=off`.
-No partner permissions or existing AI/RAG verdict logic changed.
+**Default partner-routing policy stays** `INVESTIGATION_ROUTING_MODE=off`.
+`INVESTIGATION_CLASSIFICATION_MODE` may be evaluated or enabled separately for authoritative subject/topic persistence; doing so does not grant partner permissions. Existing AI/RAG verdict logic remains unchanged.

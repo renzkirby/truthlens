@@ -76,13 +76,14 @@ def effective_organization_scope(organization):
 
 
 def subject_eligibility_enforced():
-    """Only the separately approved enforce mode may change partner intake.
+    """Return whether authoritative classification may gate partner intake.
 
-    Off and shadow preserve the pre-classification production workflow.
-    Shadow suggestions are diagnostic only and cannot grant or deny work.
+    Subject classification and Community topic projection are independent from
+    this routing rollout. Routing remains backward-compatible until explicitly
+    enabled even when automatic classification itself is in enforce mode.
     """
     return (
-        str(getattr(settings, "INVESTIGATION_CLASSIFICATION_MODE", "off"))
+        str(getattr(settings, "INVESTIGATION_ROUTING_MODE", "off"))
         .strip()
         .lower()
         == "enforce"

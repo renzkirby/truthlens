@@ -4,6 +4,7 @@ import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../hooks/useNotification";
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
+import Select from "../ui/Select.jsx";
 
 import { resolveApiEndpoint } from "../../utils/api";
 import { showWorkspaceSuccess } from "../../utils/workspaceToast";
@@ -12,6 +13,11 @@ import { VERDICT_CONFIG } from "../../utils/constants";
 
 import "./VerificationIntakePanel.css";
 import InvestigationContextLinks from "./InvestigationContextLinks.jsx";
+import {
+   INTAKE_CLASSIFICATION_ALL,
+   INTAKE_CLASSIFICATION_OPTIONS,
+   buildVerificationIntakeQuery,
+} from "./verificationIntakeFilters.js";
 
 const PAGE_SIZE = 10;
 
@@ -79,6 +85,10 @@ function VerificationIntakePanel({ organizationId, organizationName, onInvestiga
 
    const [offset, setOffset] = useState(0);
 
+   const [classificationFilter, setClassificationFilter] = useState(
+      INTAKE_CLASSIFICATION_ALL,
+   );
+
    const [requestVersion, setRequestVersion] = useState(0);
 
    const [intake, setIntake] = useState({
@@ -118,14 +128,15 @@ function VerificationIntakePanel({ organizationId, organizationName, onInvestiga
          return null;
       }
 
-      const query = new URLSearchParams({
-         organization_id: String(organizationId),
-         limit: String(PAGE_SIZE),
-         offset: String(offset),
+      const query = buildVerificationIntakeQuery({
+         organizationId,
+         limit: PAGE_SIZE,
+         offset,
+         classification: classificationFilter,
       });
 
-      return `${resolveApiEndpoint("VERIFICATION_INTAKE")}?${query.toString()}`;
-   }, [organizationId, offset]);
+      return `${resolveApiEndpoint("VERIFICATION_INTAKE")}?${query}`;
+   }, [classificationFilter, organizationId, offset]);
 
    useEffect(() => {
       if (!intakeUrl) {
@@ -196,6 +207,15 @@ function VerificationIntakePanel({ organizationId, organizationName, onInvestiga
          return;
       }
 
+      setOffset(0);
+   };
+
+   const handleClassificationChange = (event) => {
+      setLoading(true);
+      setErrorMessage("");
+      setNotice("");
+      setConfirmingId(null);
+      setClassificationFilter(event.target.value);
       setOffset(0);
    };
 
@@ -322,17 +342,36 @@ function VerificationIntakePanel({ organizationId, organizationName, onInvestiga
                <p>Choose new community investigations for {organizationName || "your organization"} to verify.</p>
             </div>
 
-            <Button
-               type="button"
-               variant="secondary"
-               density="compact"
-               className="intake-refresh-action"
-               leadingIcon={<Icons name="refresh-cw" size={14} />}
-               onClick={refreshCurrentPage}
-               disabled={loading}
-            >
-               Refresh
-            </Button>
+            <div className="intake-overview-actions">
+               <div className="intake-classification-filter">
+                  <label htmlFor="intake-classification-filter">Classification</label>
+                  <Select
+                     id="intake-classification-filter"
+                     value={classificationFilter}
+                     onChange={handleClassificationChange}
+                     density="compact"
+                     disabled={loading}
+                  >
+                     {INTAKE_CLASSIFICATION_OPTIONS.map((option) => (
+                        <option key={option.value || "all"} value={option.value}>
+                           {option.label}
+                        </option>
+                     ))}
+                  </Select>
+               </div>
+
+               <Button
+                  type="button"
+                  variant="secondary"
+                  density="compact"
+                  className="intake-refresh-action"
+                  leadingIcon={<Icons name="refresh-cw" size={14} />}
+                  onClick={refreshCurrentPage}
+                  disabled={loading}
+               >
+                  Refresh
+               </Button>
+            </div>
          </div>
 
          <div className="intake-guidance" role="note">
@@ -378,8 +417,12 @@ function VerificationIntakePanel({ organizationId, organizationName, onInvestiga
          ) : intake.results.length === 0 && !errorMessage ? (
             <div className="intake-empty-state">
                <Icons name="check-circle" size={26} />
-               <h3>Intake is clear</h3>
-               <p>There are currently no available investigations waiting to be claimed.</p>
+               <h3>{classificationFilter ? "No investigations match this classification" : "Intake is clear"}</h3>
+               <p>
+                  {classificationFilter
+                     ? "Choose another classification to see other available investigations."
+                     : "There are currently no available investigations waiting to be claimed."}
+               </p>
             </div>
          ) : !errorMessage ? (
             <>

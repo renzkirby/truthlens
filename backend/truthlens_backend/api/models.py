@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import connections, models
 from django.db.models import Prefetch, Q
 from django.db.models.functions import Lower
 from django.core.exceptions import ValidationError
@@ -3698,8 +3698,14 @@ class OfficialFactCheck(models.Model):
         self._validate_sealed_update()
         super().save(*args, **kwargs)
 
-        if self.canonical_claim:
-            OfficialFactCheck.objects.filter(pk=self.pk).update(
+        database_alias = self._state.db or kwargs.get("using") or "default"
+        if (
+            self.canonical_claim
+            and connections[database_alias].vendor == "postgresql"
+        ):
+            OfficialFactCheck.objects.using(database_alias).filter(
+                pk=self.pk
+            ).update(
                 search_vector=(
                     SearchVector(
                         "canonical_claim",

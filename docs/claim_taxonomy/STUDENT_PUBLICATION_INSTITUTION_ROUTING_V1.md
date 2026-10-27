@@ -135,14 +135,16 @@ authorization decision.
 
 ## Rollout gate
 
-The existing investigation-classification rollout gate remains authoritative:
+Partner-routing authorization is controlled independently from automatic subject
+classification:
 
-- `off` — preserve pre-routing intake behavior;
-- `shadow` — classification/context may be observed but cannot grant or deny
-  intake;
-- `enforce` — organization-aware subject/institution routing is authoritative.
+- `INVESTIGATION_ROUTING_MODE=off` — preserve pre-routing intake behavior;
+- `INVESTIGATION_ROUTING_MODE=enforce` — organization-aware
+  subject/institution routing is authoritative.
 
-This PR does not change the configured rollout mode.
+`INVESTIGATION_CLASSIFICATION_MODE` controls whether automatic subject
+classification is off, shadow-only, or persisted authoritatively; it no longer
+implicitly turns partner routing on.
 
 ## Deliberate non-goals
 

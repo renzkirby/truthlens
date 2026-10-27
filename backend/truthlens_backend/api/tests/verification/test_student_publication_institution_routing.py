@@ -332,7 +332,7 @@ class StudentPublicationInstitutionRoutingTests(TestCase):
             )
         )
 
-    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="enforce")
+    @override_settings(INVESTIGATION_ROUTING_MODE="enforce")
     def test_direct_claim_accepts_matching_student_publication(self):
         _claim, _classification, assignment = self._make_claim(
             suffix="direct-match",
@@ -349,7 +349,7 @@ class StudentPublicationInstitutionRoutingTests(TestCase):
 
         self.assertEqual(claimed.organization_id, self.student_publication.id)
 
-    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="enforce")
+    @override_settings(INVESTIGATION_ROUTING_MODE="enforce")
     def test_direct_claim_rejects_manual_assignment_id_bypass(self):
         _claim, _classification, assignment = self._make_claim(
             suffix="direct-mismatch",
@@ -367,7 +367,7 @@ class StudentPublicationInstitutionRoutingTests(TestCase):
         assignment.refresh_from_db()
         self.assertIsNone(assignment.organization_id)
 
-    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="enforce")
+    @override_settings(INVESTIGATION_ROUTING_MODE="enforce")
     def test_intake_visibility_uses_same_institution_policy(self):
         own = self._make_claim(
             suffix="intake-own",
@@ -407,8 +407,8 @@ class StudentPublicationInstitutionRoutingTests(TestCase):
         self.assertNotIn(str(generic[2].id), returned)
         self.assertNotIn(str(unresolved[2].id), returned)
 
-    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="off")
-    def test_off_mode_preserves_pre_routing_student_publication_access(self):
+    @override_settings(INVESTIGATION_ROUTING_MODE="off")
+    def test_routing_off_preserves_pre_routing_student_publication_access(self):
         _claim, _classification, assignment = self._make_claim(
             suffix="off-mode-generic",
             campus_state=(
@@ -424,8 +424,11 @@ class StudentPublicationInstitutionRoutingTests(TestCase):
 
         self.assertEqual(claimed.organization_id, self.student_publication.id)
 
-    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="shadow")
-    def test_shadow_mode_preserves_pre_routing_student_publication_intake(self):
+    @override_settings(
+        INVESTIGATION_CLASSIFICATION_MODE="enforce",
+        INVESTIGATION_ROUTING_MODE="off",
+    )
+    def test_classifier_enforce_preserves_pre_routing_student_publication_intake(self):
         _claim, _classification, assignment = self._make_claim(
             suffix="shadow-mode-generic",
             campus_state=(

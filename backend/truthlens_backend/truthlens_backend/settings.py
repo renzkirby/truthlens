@@ -260,14 +260,24 @@ CSRF_TRUSTED_ORIGINS = _split_csv_env(
     "http://localhost:5173,http://localhost:5174",
 )
 
-# Separate from the factual-verification pipeline. A new classifier must be
-# evaluated in shadow mode before it can authorize partner intake.
-# off: no provider calls; shadow: unclaimable suggestions; enforce: apply results.
+# Automatic subject classification is separate from factual verification.
+# off: no provider calls; shadow: non-authoritative suggestions; enforce:
+# persist validated authoritative subject/domain results for downstream use
+# such as Community topic projection.
 INVESTIGATION_CLASSIFICATION_MODE = os.getenv(
     "INVESTIGATION_CLASSIFICATION_MODE", "off"
 ).strip().lower()
 if INVESTIGATION_CLASSIFICATION_MODE not in {"off", "shadow", "enforce"}:
     raise ValueError("INVESTIGATION_CLASSIFICATION_MODE must be off, shadow, or enforce.")
+
+# Partner intake authorization is a separate rollout decision. Automatic
+# classifications may be authoritative for subject/topic persistence while
+# routing remains backward-compatible.
+INVESTIGATION_ROUTING_MODE = os.getenv(
+    "INVESTIGATION_ROUTING_MODE", "off"
+).strip().lower()
+if INVESTIGATION_ROUTING_MODE not in {"off", "enforce"}:
+    raise ValueError("INVESTIGATION_ROUTING_MODE must be off or enforce.")
 
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
