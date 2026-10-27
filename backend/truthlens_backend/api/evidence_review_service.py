@@ -831,16 +831,6 @@ def review_correction_evidence(
                 "evidence_record": evidence_record,
             },
         )
-        institutional_review = _record_independent_evidence_review_decision(
-            evidence=locked_evidence,
-            case=case,
-            organization=organization,
-            actor=actor,
-            disposition=evidence_status,
-            moderator_notes=moderator_notes,
-            rejection_reason=rejection_reason,
-        )
-
         if previous_status != evidence_status:
             dispatch_after_commit(
                 notify_evidence_reviewed,
@@ -1144,6 +1134,16 @@ def review_evidence_submission(
                 "new_evidence_status": evidence_status,
             },
         )
+        institutional_review = _record_independent_evidence_review_decision(
+            evidence=locked_evidence,
+            case=case,
+            organization=organization,
+            actor=actor,
+            disposition=evidence_status,
+            moderator_notes=moderator_notes,
+            rejection_reason=rejection_reason,
+        )
+
         if previous_status != evidence_status:
             dispatch_after_commit(
                 notify_evidence_reviewed,
@@ -1202,6 +1202,7 @@ def review_evidence_submission(
         return {
             "evidence": locked_evidence,
             "case": case,
+            "review_decision": institutional_review,
             "contributor_id": (locked_evidence.contributor_id),
             "adjudication_case": adjudication_case,
         }
