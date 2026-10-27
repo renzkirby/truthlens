@@ -84,7 +84,7 @@ After testing, one previously recorded claim was assessed in
 **without queuing a new task or making a new model call**:
 
 ```powershell
-..\.venv\Scripts\python.exe .\manage.py shell -c "from api.models import InvestigationClassificationAssessment as A, ClaimInvestigationClassification as C; cid='17111917-5bf3-4d07-bc6c-b3a63047a03f'; print('Shadow assessment:', A.objects.filter(claim_id=cid).values('status','candidate_domains','reason_code','classifier_version').first()); print('Authoritative classification:', C.objects.filter(claim_id=cid).values('domains','source').first())"
+..\.venv\Scripts\python.exe .\manage.py shell -c "from api.models import InvestigationClassificationAssessment as A, ClaimInvestigationClassification as C; cid='17111917-5bf3-4d07-bc6c-b3a63047a03f'; print('Shadow assessment:', A.objects.filter(claim_id=cid).values('status','candidate_domains','candidate_primary_subject','reason_code','classifier_version').first()); print('Authoritative classification:', C.objects.filter(claim_id=cid).values('domains','primary_subject','source').first())"
 ```
 
 The record may be absent if the local database has changed. A
@@ -101,9 +101,10 @@ means `NEEDS_CLASSIFICATION`, regardless of the candidate domains.
   alone. To test live `shadow` in a dev worker, a separate explicit
   authorization is needed for new provider calls and quota use.
 - Structural contract validation rejects duplicates, unquoted
-  evidence, nonexistent codes, extraneous keys and malformed JSON.
-  It **does not** prove the chosen subjects are correct. A valid
-  but incorrect multi-domain result is stored only as a proposal.
+  evidence, nonexistent codes, a primary subject outside the selected
+  domains, extraneous keys and malformed JSON. It **does not** prove the
+  chosen subjects or primary subject are semantically correct. A valid but
+  incorrect multi-domain result is stored only as a proposal.
 - One full live Cloudflare accuracy packet is permanently locked
   after two attempts. Never unlock/retry it. The earlier Cloudflare-02
   and Cloudflare-03 packets are also permanently locked.
