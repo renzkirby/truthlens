@@ -9,6 +9,11 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .factual_correction_service import (
+    FactualCorrectionAuthorizationError,
+    FactualCorrectionConflict,
+    cancel_factual_correction_for_partner_retirement,
+)
 from .accountability_query_service import (
     AccountabilityQueryAuthorizationError,
     AccountabilityQueryInputError,
@@ -826,6 +831,51 @@ class ManagementOrganizationReinstatePartnershipView(
     ManagementOrganizationLifecycleTransitionView
 ):
     transition = "reinstate_partnership"
+
+
+class ManagementOrganizationFactualCorrectionRetirementCancelView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def post(self, request, organization_id, correction_request_id):
+        serializer = ManagementEmptyMutationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        if not Organization.objects.filter(pk=organization_id).exists():
+            return Response(
+                {"detail": "Organization not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            result = cancel_factual_correction_for_partner_retirement(
+                correction_request_id=correction_request_id,
+                organization_id=organization_id,
+                actor=request.user,
+            )
+        except FactualCorrectionAuthorizationError as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except FactualCorrectionConflict as error:
+            return Response(
+                {"detail": str(error)},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        organization = Organization.objects.get(pk=organization_id)
+        return Response(
+            {
+                "organization": _serialize_management_organization(organization),
+                "correction": {
+                    "id": str(result["request"].pk),
+                    "status": result["request"].status,
+                    "case_status": result["case"].status,
+                    "proposal_preserved": result["proposal"] is not None,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class ManagementOrganizationEndPartnershipView(APIView):
