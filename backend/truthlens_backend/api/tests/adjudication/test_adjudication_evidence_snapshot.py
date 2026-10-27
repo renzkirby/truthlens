@@ -11,6 +11,7 @@ from api.adjudication_service import (
 )
 from api.models import (
     AdjudicationDecision,
+    AdjudicationDecisionEvidenceReviewBasis,
     AdjudicationDecisionEvidenceSnapshot,
     EvidenceSubmission,
     ModerationCase,
@@ -132,6 +133,22 @@ class AdjudicationEvidenceSnapshotTests(
             "The source does not address the claim.",
         )
 
+        basis = {
+            item.evidence_submission_id: item
+            for item in AdjudicationDecisionEvidenceReviewBasis.objects.filter(
+                decision=decision
+            ).select_related("review_decision")
+        }
+        self.assertEqual(set(basis), {verified.pk, rejected.pk})
+        self.assertEqual(
+            basis[verified.pk].review_decision.organization_id,
+            self.organization.pk,
+        )
+        self.assertEqual(
+            basis[rejected.pk].review_decision.organization_id,
+            self.organization.pk,
+        )
+
         context["claim"].refresh_from_db()
         self.assertEqual(decision.revision_number, 1)
         self.assertTrue(decision.is_current)
@@ -215,6 +232,49 @@ class AdjudicationEvidenceSnapshotTests(
         self.assertFalse(
             AdjudicationDecisionEvidenceSnapshot.objects.filter(
                 claim_id=context["claim"].id
+            ).exists()
+        )
+        self.assertEqual(
+            ModerationEvent.objects.filter(case=context["case"]).count(),
+            original_event_count,
+        )
+
+    def test_review_basis_storage_failure_rolls_back_authoritative_transaction(self):
+        context = self.make_context(
+            evidence_statuses=[EvidenceSubmission.EvidenceStatus.VERIFIED]
+        )
+        original_event_count = ModerationEvent.objects.filter(
+            case=context["case"]
+        ).count()
+
+        with patch(
+            "api.adjudication_service."
+            "AdjudicationDecisionEvidenceReviewBasis.objects.create",
+            side_effect=RuntimeError("review basis storage unavailable"),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "review basis storage unavailable",
+            ):
+                self.issue(context)
+
+        context["claim"].refresh_from_db()
+        context["case"].refresh_from_db()
+        context["thread"].refresh_from_db()
+        self.assertIsNone(context["claim"].final_verdict)
+        self.assertEqual(context["case"].status, ModerationCase.Status.OPEN)
+        self.assertIsNone(context["thread"].moderator_verdict)
+        self.assertFalse(
+            AdjudicationDecision.objects.filter(claim=context["claim"]).exists()
+        )
+        self.assertFalse(
+            AdjudicationDecisionEvidenceSnapshot.objects.filter(
+                claim_id=context["claim"].id
+            ).exists()
+        )
+        self.assertFalse(
+            AdjudicationDecisionEvidenceReviewBasis.objects.filter(
+                decision__claim=context["claim"]
             ).exists()
         )
         self.assertEqual(
