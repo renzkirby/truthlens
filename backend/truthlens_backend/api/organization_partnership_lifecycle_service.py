@@ -126,7 +126,7 @@ def _relinquish_active_investigations(*, organization, actor, now):
     claim_ids = [assignment.claim_id for assignment in assignments]
 
     cases = list(
-        ModerationCase.objects.select_for_update()
+        ModerationCase.objects.select_for_update(of=("self",))
         .filter(
             organization=organization,
             status__in=ACTIVE_FACTUAL_CASE_STATUSES,
