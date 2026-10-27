@@ -1,3 +1,4 @@
+from datetime import timedelta
 from importlib import import_module
 
 from django.apps import apps
@@ -45,7 +46,7 @@ class InstitutionalEvidenceReviewMigrationTests(TestCase):
         )
 
     def test_backfills_resolved_review_with_original_provenance(self):
-        reviewed_at = timezone.now() - timezone.timedelta(days=30)
+        reviewed_at = timezone.now() - timedelta(days=30)
         evidence = EvidenceSubmission.objects.create(
             thread=self.thread,
             contributor=self.contributor,
