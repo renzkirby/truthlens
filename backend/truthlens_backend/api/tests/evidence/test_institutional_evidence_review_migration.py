@@ -120,3 +120,45 @@ class InstitutionalEvidenceReviewMigrationTests(TestCase):
         self.assertFalse(
             EvidenceReviewDecision.objects.filter(moderation_case=active).exists()
         )
+
+
+    def test_does_not_recast_factual_correction_review_as_ordinary_basis(self):
+        reviewed_at = timezone.now() - timedelta(days=10)
+        evidence = EvidenceSubmission.objects.create(
+            thread=self.thread,
+            contributor=self.contributor,
+            evidence_status=EvidenceSubmission.EvidenceStatus.REJECTED,
+            verified_by=self.reviewer,
+            verified_at=reviewed_at,
+            rejection_reason=EvidenceSubmission.RejectionReason.OTHER,
+        )
+        case = ModerationCase.objects.create(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            evidence_submission=evidence,
+            organization=self.organization,
+            source=ModerationCase.Source.EVIDENCE_SUBMISSION,
+            status=ModerationCase.Status.RESOLVED,
+            resolution_code=EvidenceSubmission.EvidenceStatus.REJECTED,
+            resolution_summary="Correction-specific evidence review.",
+            resolved_by=self.reviewer,
+            resolved_at=reviewed_at,
+        )
+        ModerationEvent.objects.create(
+            case=case,
+            actor=self.reviewer,
+            event_type=ModerationEvent.EventType.EVIDENCE_REJECTED,
+            reason_code=EvidenceSubmission.RejectionReason.OTHER,
+            notes="Correction-specific evidence review.",
+            metadata={
+                "correction_request_id": "00000000-0000-0000-0000-000000000001",
+                "correction_case_id": "00000000-0000-0000-0000-000000000002",
+            },
+        )
+
+        migration_module.backfill_institutional_evidence_reviews(apps, None)
+
+        self.assertFalse(
+            EvidenceReviewDecision.objects.filter(
+                moderation_case=case,
+            ).exists()
+        )
