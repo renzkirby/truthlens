@@ -2203,7 +2203,11 @@ class EvidenceReviewDecision(models.Model):
             raise ValidationError(
                 {"source_review": "The source review must concern the same evidence."}
             )
-        if self.disposition == self.Disposition.REJECTED and not self.rejection_reason:
+        if (
+            self.decision_type == self.DecisionType.INDEPENDENT_REVIEW
+            and self.disposition == self.Disposition.REJECTED
+            and not self.rejection_reason
+        ):
             raise ValidationError(
                 {"rejection_reason": "Rejected evidence requires a rejection reason."}
             )
