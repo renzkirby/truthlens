@@ -1670,10 +1670,8 @@ function AdjudicationReviewContent({
    const evidenceTotal = normalizeNonnegativeNumber(evidenceReview.total);
    const evidenceVerified = normalizeNonnegativeNumber(evidenceReview.verified);
    const evidenceRejected = normalizeNonnegativeNumber(evidenceReview.rejected);
-   const evidenceUnreviewed = normalizeNonnegativeNumber(evidenceReview.unreviewed);
    const institutionalBasisCount = normalizeNonnegativeNumber(evidenceReview.institutional_basis_count);
    const institutionalBasisComplete = evidenceReview.institutional_basis_complete === true;
-   const reviewedEvidenceCount = evidenceVerified + evidenceRejected;
    const isUrlClaim = String(detailClaim.claim_type || "").toUpperCase() === "URL";
    const originalClaimUrl = isUrlClaim ? getSafeHttpUrl(detailClaim.url_link) : null;
    const draftingHandoff = detail?.drafting_handoff || null;
