@@ -390,6 +390,31 @@ class VerificationAssignmentServiceTests(TestCase):
             self.organization_a.id,
         )
 
+    def test_idempotent_claim_repairs_missing_legacy_evidence_case(self):
+        assignment = self._claim_for_organization_a()
+        evidence = self._create_evidence()
+
+        self.assertFalse(
+            ModerationCase.objects.filter(
+                case_type=ModerationCase.CaseType.EVIDENCE,
+                evidence_submission=evidence,
+            ).exists()
+        )
+
+        claimed_again = claim_verification_assignment(
+            assignment=assignment,
+            organization=self.organization_a,
+            actor=self.lead_a,
+        )
+
+        self.assertEqual(claimed_again.pk, assignment.pk)
+        case = ModerationCase.objects.get(
+            case_type=ModerationCase.CaseType.EVIDENCE,
+            evidence_submission=evidence,
+        )
+        self.assertEqual(case.status, ModerationCase.Status.OPEN)
+        self.assertEqual(case.organization_id, self.organization_a.id)
+
     def test_second_organization_cannot_take_active_assignment(
         self,
     ):
