@@ -7,12 +7,13 @@ from django.test import TestCase, override_settings
 from api.investigation_classifier import (
     classify_investigation_claim, validate_model_suggestion,
     dispatch_classification_task, dispatch_classification_after_text_save,
-    _query_classifier,
+    classification_system_prompt, _query_classifier,
 )
 from api.models import (
     AccountabilityEvent, Claim, ClaimInvestigationClassification,
     InvestigationClassificationAssessment, Thread, VerificationAssignment,
 )
+from api.verification.classification_contract import classification_response_error
 from api.verification_domain_policy import eligibility_reason, subject_eligibility_enforced
 
 
@@ -82,10 +83,59 @@ class AutomaticInvestigationClassificationTests(TestCase):
         # development-only provider-level JSON validation.
         wrong = {**self.suggestion(), "verdict": "FACT"}
         llm.return_value = json.dumps(wrong)
-        with self.assertRaisesRegex(ValueError, "INVALID_CLASSIFICATION_RESPONSE"):
+        with self.assertRaisesRegex(ValueError, "INVALID_TOP_LEVEL_KEYS"):
             _query_classifier(self.claim.context_text)
         llm.assert_called_once()
         self.assertEqual(llm.call_args.kwargs["operation"], "investigation_classification")
+
+    def test_prompt_requires_one_object_per_unique_domain(self):
+        prompt = classification_system_prompt()
+        self.assertIn("domains MUST contain 1 to 3 objects", prompt)
+        self.assertIn("every domain code MUST be unique", prompt)
+        self.assertIn("NEVER repeat a domain code", prompt)
+        self.assertIn("ONE strongest exact quotation", prompt)
+
+    def test_duplicate_domain_response_has_bounded_diagnostic_reason(self):
+        raw = json.dumps({
+            "decision": "CLASSIFY",
+            "primary_subject": "LAW",
+            "domains": [
+                {"code": "LAW", "evidence": "science experiment"},
+                {"code": "LAW", "evidence": "reproducible results"},
+            ],
+        })
+        self.assertEqual(
+            classification_response_error(raw, self.claim.context_text),
+            "DUPLICATE_DOMAIN",
+        )
+
+    @override_settings(INVESTIGATION_CLASSIFICATION_MODE="enforce")
+    @patch("api.investigation_classifier._query_classifier")
+    def test_duterte_style_law_civics_classification_is_applied(self, provider):
+        self.claim.context_text = (
+            "Circulating posts claim that former President Rodrigo Duterte was "
+            "recently detained and released. There are no official legal records "
+            "or warrants corroborating that any formal detention took place."
+        )
+        self.claim.save(update_fields=["context_text", "last_updated"])
+        provider.return_value = {
+            "decision": "CLASSIFY",
+            "primary_subject": "LAW",
+            "domains": [
+                {"code": "LAW", "evidence": "detained and released"},
+                {
+                    "code": "CIVICS",
+                    "evidence": "former President Rodrigo Duterte",
+                },
+            ],
+        }
+
+        self.assertEqual(classify_investigation_claim(self.claim.pk), "APPLIED")
+        classification = ClaimInvestigationClassification.objects.get(
+            claim=self.claim,
+        )
+        self.assertEqual(classification.domains, ["CIVICS", "LAW"])
+        self.assertEqual(classification.primary_subject, "LAW")
 
     @override_settings(INVESTIGATION_CLASSIFICATION_MODE="enforce")
     @patch("api.investigation_classifier._query_classifier")
