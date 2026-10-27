@@ -715,3 +715,125 @@ def end_partner_organization_partnership(*, organization_id, actor):
         "cancelled_invitations": len(cancelled_invitations),
         "requeued_investigations": len(replacements),
     }
+
+
+
+@transaction.atomic
+def apply_legacy_platform_trust_transition(
+    *,
+    organization_id,
+    actor,
+    verification_status=None,
+    partner_status=None,
+):
+    """
+    Compatibility adapter for the pre-lifecycle Management Console endpoint.
+
+    This deliberately does not write status fields directly. Requested legacy
+    target values are translated into the same explicit governed transitions
+    used by the current Management Console. Unsupported historical target
+    combinations fail closed.
+    """
+
+    _require_platform_management_authority(actor)
+
+    organization = Organization.objects.select_for_update(of=("self",)).get(
+        pk=organization_id
+    )
+    requested_verification = (
+        verification_status
+        if verification_status is not None
+        else organization.verification_status
+    )
+    requested_partner = (
+        partner_status
+        if partner_status is not None
+        else organization.partner_status
+    )
+
+    if requested_verification not in {
+        organization.verification_status,
+        Organization.VerificationStatus.VERIFIED,
+        Organization.VerificationStatus.REJECTED,
+    }:
+        raise OrganizationPartnershipLifecycleConflict(
+            "This verification status change requires an explicit governance "
+            "workflow and cannot be applied through the legacy endpoint."
+        )
+
+    if requested_partner == Organization.PartnerStatus.FORMER:
+        raise OrganizationPartnershipLifecycleConflict(
+            "Use the governed End Partnership action to retire a Partner "
+            "Organization."
+        )
+    if requested_partner not in {
+        organization.partner_status,
+        Organization.PartnerStatus.ACTIVE,
+        Organization.PartnerStatus.SUSPENDED,
+        Organization.PartnerStatus.NONE,
+    }:
+        raise OrganizationPartnershipLifecycleConflict(
+            "This partnership status change is not supported by the legacy endpoint."
+        )
+    if (
+        requested_partner == Organization.PartnerStatus.NONE
+        and organization.partner_status != Organization.PartnerStatus.NONE
+    ):
+        raise OrganizationPartnershipLifecycleConflict(
+            "A current partnership cannot be reset to Not a Partner. Use Suspend "
+            "or End Partnership."
+        )
+    if (
+        requested_verification == Organization.VerificationStatus.REJECTED
+        and requested_partner != Organization.PartnerStatus.NONE
+    ):
+        raise OrganizationPartnershipLifecycleConflict(
+            "A rejected organization cannot be activated or retained as a current "
+            "Partner."
+        )
+
+    if requested_verification != organization.verification_status:
+        if requested_verification == Organization.VerificationStatus.VERIFIED:
+            organization = verify_partner_organization(
+                organization_id=organization.pk,
+                actor=actor,
+            )
+        else:
+            organization = reject_partner_organization_verification(
+                organization_id=organization.pk,
+                actor=actor,
+            )
+
+    organization.refresh_from_db()
+
+    if requested_partner != organization.partner_status:
+        if requested_partner == Organization.PartnerStatus.ACTIVE:
+            if organization.partner_status == Organization.PartnerStatus.NONE:
+                organization = activate_partner_organization_partnership(
+                    organization_id=organization.pk,
+                    actor=actor,
+                )
+            elif organization.partner_status in {
+                Organization.PartnerStatus.SUSPENDED,
+                Organization.PartnerStatus.FORMER,
+            }:
+                organization = reinstate_partner_organization_partnership(
+                    organization_id=organization.pk,
+                    actor=actor,
+                )
+            else:
+                raise OrganizationPartnershipLifecycleConflict(
+                    "This organization cannot be activated from its current state."
+                )
+        elif requested_partner == Organization.PartnerStatus.SUSPENDED:
+            organization = suspend_partner_organization_partnership(
+                organization_id=organization.pk,
+                actor=actor,
+            )
+        else:
+            raise OrganizationPartnershipLifecycleConflict(
+                "This partnership status change requires an explicit governance "
+                "workflow."
+            )
+
+    return organization
