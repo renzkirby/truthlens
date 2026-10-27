@@ -237,6 +237,17 @@ class ManagementApiTests(APITestCase):
             (
                 "post",
                 reverse(
+                    "management_organization_factual_correction_retirement_cancel",
+                    kwargs={
+                        "organization_id": self.organization.id,
+                        "correction_request_id": uuid4(),
+                    },
+                ),
+                {},
+            ),
+            (
+                "post",
+                reverse(
                     "management_organization_end_partnership",
                     kwargs={"organization_id": self.organization.id},
                 ),
