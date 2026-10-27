@@ -27,11 +27,13 @@ CLAIM_TEXT = (
 )
 SCIENCE_RESULT = json.dumps({
     "decision": "CLASSIFY",
+    "primary_subject": "SCIENCE",
     "domains": [{"code": "SCIENCE", "evidence": "science experiment"}],
 })
-ABSTAIN_RESULT = '{"decision":"ABSTAIN","domains":[]}'
+ABSTAIN_RESULT = '{"decision":"ABSTAIN","primary_subject":null,"domains":[]}'
 INVALID_DUPLICATE = json.dumps({
     "decision": "CLASSIFY",
+    "primary_subject": "SCIENCE",
     "domains": [
         {"code": "SCIENCE", "evidence": "science experiment"},
         {"code": "SCIENCE", "evidence": "science experiment"},
@@ -105,6 +107,7 @@ class InvestigationClassificationShadowIntegrationTests(TestCase):
         self.assertEqual(self._run(), "SUGGESTED")
         a = InvestigationClassificationAssessment.objects.get(claim=self.claim)
         self.assertEqual(a.candidate_domains, ["SCIENCE"])
+        self.assertEqual(a.candidate_primary_subject, "SCIENCE")
         self.assertEqual(a.reason_code, "")
         self.gemini.models.generate_content.assert_called_once()
         self.cloudflare.assert_not_called()
@@ -123,11 +126,11 @@ class InvestigationClassificationShadowIntegrationTests(TestCase):
             "investigation_classification",
         )
         self.groq_request.assert_not_called()
-        self.assertEqual(
-            InvestigationClassificationAssessment.objects.get(
-                claim=self.claim,
-            ).candidate_domains, ["SCIENCE"],
+        assessment = InvestigationClassificationAssessment.objects.get(
+            claim=self.claim,
         )
+        self.assertEqual(assessment.candidate_domains, ["SCIENCE"])
+        self.assertEqual(assessment.candidate_primary_subject, "SCIENCE")
         self._assert_not_authoritative()
 
     def test_invalid_gemini_cloudflare_failure_groq_suggestion_remains_shadow(self):
@@ -152,6 +155,7 @@ class InvestigationClassificationShadowIntegrationTests(TestCase):
         a = InvestigationClassificationAssessment.objects.get(claim=self.claim)
         self.assertEqual(a.reason_code, "MODEL_ABSTAINED")
         self.assertEqual(a.candidate_domains, [])
+        self.assertIsNone(a.candidate_primary_subject)
         self.cloudflare.assert_not_called()
         self.groq_request.assert_not_called()
         self._assert_not_authoritative()
@@ -174,6 +178,7 @@ class InvestigationClassificationShadowIntegrationTests(TestCase):
         )
         self.assertEqual(assessment.reason_code, "PROVIDER_UNAVAILABLE")
         self.assertEqual(assessment.candidate_domains, [])
+        self.assertIsNone(assessment.candidate_primary_subject)
         self.groq_request.assert_called_once()
         self._assert_not_authoritative()
 
@@ -208,6 +213,7 @@ class InvestigationClassificationShadowIntegrationTests(TestCase):
         self.gemini.models.generate_content.return_value = SimpleNamespace(
             text=json.dumps({
                 "decision": "CLASSIFY",
+                "primary_subject": "SCIENCE",
                 "domains": [
                     {"code": "SCIENCE", "evidence": "science experiment"},
                     {"code": "LAW", "evidence": "court hearing"},
@@ -215,12 +221,11 @@ class InvestigationClassificationShadowIntegrationTests(TestCase):
             }),
         )
         self.assertEqual(self._run(), "SUGGESTED")
-        self.assertEqual(
-            InvestigationClassificationAssessment.objects.get(
-                claim=self.claim,
-            ).candidate_domains,
-            ["LAW", "SCIENCE"],
+        assessment = InvestigationClassificationAssessment.objects.get(
+            claim=self.claim,
         )
+        self.assertEqual(assessment.candidate_domains, ["LAW", "SCIENCE"])
+        self.assertEqual(assessment.candidate_primary_subject, "SCIENCE")
         self._assert_not_authoritative()
 
     def test_idempotent_second_task_call_does_not_consume_another_provider_call(self):
