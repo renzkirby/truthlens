@@ -898,6 +898,45 @@ class ManagementApiTests(APITestCase):
         self.assertEqual(events.count(), 1)
         self.assertEqual(events.get().capability, PROVISION_PARTNER_ORGANIZATION)
 
+    def test_former_partner_rejects_primary_admin_provisioning(self):
+        organization = Organization.objects.create(
+            name="Former Management Partner",
+            slug="former-management-partner",
+            verification_status=Organization.VerificationStatus.VERIFIED,
+            partner_status=Organization.PartnerStatus.FORMER,
+        )
+
+        detail = self.client_for(self.superuser).get(
+            reverse(
+                "management_organization_detail",
+                kwargs={"organization_id": organization.id},
+            )
+        )
+        self.assertEqual(detail.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail.data["organization_admin"]["state"], "NONE")
+        self.assertFalse(
+            detail.data["lifecycle"]["actions"][
+                "can_provision_organization_admin"
+            ]
+        )
+        self.assertEqual(
+            detail.data["lifecycle"]["admin_onboarding"]["code"],
+            "FORMER_PARTNER",
+        )
+
+        response = self.client_for(self.superuser).post(
+            reverse(
+                "management_primary_admin_provision",
+                kwargs={"organization_id": organization.id},
+            ),
+            {"email": "replacement-admin@example.com"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertIn("Reinstate the partnership", response.data["detail"])
+        self.assertFalse(organization.invitations.exists())
+
     def test_primary_admin_provision_rejects_unknown_fields_and_conflicts(self):
         unknown_response = self.client_for(self.superuser).post(
             reverse(
