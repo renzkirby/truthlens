@@ -85,6 +85,14 @@ class Command(BaseCommand):
             | Q(vote_reputation_weight_snapshot__isnull=True)
             | Q(vote_reputation_weight_snapshot__lt=0)
             | Q(vote_reputation_weight_snapshot__gt=1)
+            | Q(
+                vote_resolved_actions_snapshot__isnull=False,
+                vote_validated_actions_snapshot__isnull=True,
+            )
+            | Q(
+                vote_resolved_actions_snapshot__isnull=True,
+                vote_validated_actions_snapshot__isnull=False,
+            )
         ).count()
 
         report = {
