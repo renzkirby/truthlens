@@ -555,7 +555,17 @@ function UserProfile() {
       ? getTrustLevel(numericTrustScore)
       : { label: "Not available", tone: "unavailable" };
    const isPlatformModerator = isPlatformModeratorRole(displayUser.role);
-   const roleLabel = isPlatformModerator ? "Platform moderator" : "Community member";
+   const partnerAffiliations = Array.isArray(displayUser.partner_affiliations)
+      ? displayUser.partner_affiliations
+      : [];
+   const hasPartnerAffiliation = partnerAffiliations.length > 0;
+   const roleLabel = isPlatformModerator
+      ? "Platform moderator"
+      : hasPartnerAffiliation
+         ? null
+         : hasTrustScore
+            ? "Community member"
+            : "Partner Organization member";
    const currentTabDescription = getTabDescription(activeTab, isOwnProfile);
    const currentTabEmptyMessage = getEmptyTabMessage(activeTab, isOwnProfile);
    const hasViewableProfileAvatar =
@@ -592,28 +602,32 @@ function UserProfile() {
                      <p className="user-profile__handle">@{displayUser.username.toLowerCase()}</p>
                   </div>
 
-                  <div className={`user-profile__trust-compact is-${trustLevel.tone}`} aria-labelledby="trust-heading">
-                     <span id="trust-heading" className="user-profile__trust-compact-label">
-                        Trust Score
-                     </span>
-                     <div className="user-profile__trust-compact-value">
-                        <strong>{hasTrustScore ? numericTrustScore.toFixed(1) : "—"}</strong>
-                        <span>{trustLevel.label}</span>
+                  {hasTrustScore && !hasPartnerAffiliation && (
+                     <div className={`user-profile__trust-compact is-${trustLevel.tone}`} aria-labelledby="trust-heading">
+                        <span id="trust-heading" className="user-profile__trust-compact-label">
+                           Trust Score
+                        </span>
+                        <div className="user-profile__trust-compact-value">
+                           <strong>{numericTrustScore.toFixed(1)}</strong>
+                           <span>{trustLevel.label}</span>
+                        </div>
+                        <p className="user-profile__sr-only">
+                           Participation reputation on TruthLens, not verification or publication authority.
+                        </p>
                      </div>
-                     <p className="user-profile__sr-only">
-                        Participation reputation on TruthLens, not verification or publication authority.
-                     </p>
-                  </div>
+                  )}
                </div>
 
                <div className="user-profile__identity-details">
-                  <p className={`user-profile__role ${isPlatformModerator ? "is-moderator" : ""}`}>
-                     {isPlatformModerator && <Icons name="shield-user" size={16} aria-hidden="true" />}
-                     {roleLabel}
-                  </p>
+                  {roleLabel && (
+                     <p className={`user-profile__role ${isPlatformModerator ? "is-moderator" : ""}`}>
+                        {isPlatformModerator && <Icons name="shield-user" size={16} aria-hidden="true" />}
+                        {roleLabel}
+                     </p>
+                  )}
 
                   <PartnerAffiliations
-                     affiliations={displayUser.partner_affiliations}
+                     affiliations={partnerAffiliations}
                      className="user-profile__partner-affiliations"
                   />
 
@@ -998,7 +1012,11 @@ function UserProfile() {
                               <small>
                                  {isPlatformModeratorRole(member.role)
                                     ? "Platform moderator"
-                                    : `Trust score ${Number(member.trust_score || 0).toFixed(1)}`}
+                                    : member.partner_affiliations?.[0]
+                                       ? `${member.partner_affiliations[0].role_label || "Partner member"} at ${member.partner_affiliations[0].name}`
+                                       : member.trust_score !== null && member.trust_score !== undefined
+                                          ? `Trust score ${Number(member.trust_score).toFixed(1)}`
+                                          : "Partner Organization member"}
                               </small>
                            </span>
                            <Icons name="chevron-right" size={18} aria-hidden="true" />
