@@ -4179,8 +4179,12 @@ class UserHubView(APIView):
                     "next_rank": progression["next_rank"],
                     "score_to_next_rank": progression["score_to_next_rank"],
                     "actions_to_next_rank": progression["actions_to_next_rank"],
+                    "validated_actions_to_next_rank": progression[
+                        "validated_actions_to_next_rank"
+                    ],
                     "progress_percent": progression["progress_percent"],
                     "resolved_actions": progression["resolved_actions"],
+                    "validated_actions": progression["validated_actions"],
                     "confidence": progression["confidence"],
                     "breakdown": {
                         "base_score": components["base_score"],
