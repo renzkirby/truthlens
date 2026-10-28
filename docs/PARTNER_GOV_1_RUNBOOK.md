@@ -39,13 +39,16 @@ check `showmigrations api`, and inspect `migrate --plan` and
 
 ## Automatic classifier and routing rollout
 
-`INVESTIGATION_CLASSIFICATION_MODE` remains `off` by default.
-- `off`: no automatic subject-classification model calls.
-- `shadow`: records subject suggestions without creating claim authority.
-- `enforce`: applies validated authoritative subject/domain classifications
+`INVESTIGATION_CLASSIFICATION_MODE` now defaults to `enforce` after the
+accepted automatic-classification rollout. Fresh deployments therefore classify
+new eligible claims without requiring a separate environment-variable toggle.
+An explicit environment override remains available:
+- `off`: emergency/operational disable; no automatic subject-classification calls.
+- `shadow`: controlled diagnostic mode that records suggestions without claim authority.
+- `enforce`: default; applies validated authoritative subject/domain classifications
   for uses such as Community topic projection.
 
-Partner intake is controlled separately:
+Partner intake remains a separate rollout and still defaults to `off`:
 - `INVESTIGATION_ROUTING_MODE=off`: preserve pre-routing intake behavior.
 - `INVESTIGATION_ROUTING_MODE=enforce`: authoritative classification may gate
   Partner Organization intake and direct claiming.
@@ -90,10 +93,13 @@ retroactive authority. It does not itself assign subjects.
 
 ### Shadow evaluation before enforcement
 
-1. Set `INVESTIGATION_CLASSIFICATION_MODE=shadow` in the isolated development
-   environment (web server **and** Celery worker), and restart both. Keep
-   production `off`. Ensure Redis/Celery and existing Gemini/Groq API keys
-   are configured; classification is a separate provider operation.
+1. To reproduce the earlier shadow-evaluation workflow, explicitly set
+   `INVESTIGATION_CLASSIFICATION_MODE=shadow` in the isolated development
+   environment (web server **and** Celery worker), and restart both. Production
+   now defaults to `enforce`; do not apply the shadow override there unless a
+   deliberate rollback/diagnostic decision is being made. Ensure Redis/Celery
+   and existing Gemini/Groq API keys are configured; classification is a
+   separate provider operation.
 2. Analyze a fresh TEXT claim **without creating a thread** and inspect its
    `InvestigationClassificationAssessment`. For supported claims, expect
    `SUGGESTED` with candidate subject codes, an explicit
