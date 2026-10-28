@@ -52,5 +52,32 @@ class TrustVoteSnapshotAuditTests(TestCase):
         self.assertIn("total_votes=1", rendered)
         self.assertIn("null_snapshots=1", rendered)
         self.assertIn("snapshot_coverage_percent=0.00", rendered)
+        self.assertIn("weight_coverage_percent=0.00", rendered)
+        self.assertIn("history_snapshot_coverage_percent=0.00", rendered)
         self.assertIn("NO VOTE OR USER DETAILS EXPOSED", rendered)
         self.assertNotIn(self.voter.username, rendered)
+    def test_audit_recognizes_fully_hardened_vote(self):
+        Vote.objects.create(
+            evidence=self.evidence,
+            voter=self.voter,
+            vote_value=True,
+            vote_trust_snapshot=60.0,
+            vote_resolved_actions_snapshot=3,
+            vote_validated_actions_snapshot=2,
+            vote_reputation_weight_snapshot=0.2285714286,
+        )
+
+        output = StringIO()
+        call_command(
+            "audit_trust_vote_snapshots",
+            stdout=output,
+        )
+        rendered = output.getvalue()
+
+        self.assertIn("snapshot_coverage_percent=100.00", rendered)
+        self.assertIn("weight_coverage_percent=100.00", rendered)
+        self.assertIn("history_snapshot_coverage_percent=100.00", rendered)
+        self.assertIn("hardened_votes=1", rendered)
+        self.assertIn("legacy_preserved_votes=0", rendered)
+        self.assertIn("nonstandard_snapshot_rows=0", rendered)
+
