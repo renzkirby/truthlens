@@ -172,3 +172,23 @@ Future AI/classifier work may propose or produce the authoritative subject,
 Campus context, and institution identity inputs only after its own reviewed
 reliability gates. The deterministic routing policy remains responsible for
 organization authorization.
+
+
+## Interim Intake browsing behavior
+
+Before institution-aware routing is enabled, Student Publication workspaces may
+default the Verification Intake browsing filter to **Campus Affairs**. This is a
+presentation preference only:
+
+- Campus Affairs maps to authoritative `campus_context_state=CONFIRMED`;
+- it is shown in the same flat Intake filter list as subject filters;
+- the UI does not expose a separate "Context" heading;
+- verifiers may switch to All classifications or any other filter;
+- the filter is applied after routing eligibility and does not grant or deny
+  authorization;
+- `INVESTIGATION_ROUTING_MODE` remains the only switch that enables
+  authoritative intake routing policy.
+
+This interim behavior does not replace automatic campus detection, canonical
+institution resolution, or institution-aware routing. Those remain separate
+future rollout steps.
