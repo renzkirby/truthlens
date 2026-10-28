@@ -11,7 +11,7 @@ class TrustScoreRecomputeCommandTests(TestCase):
             username="trust-recompute-user",
             password="pass1234",
         )
-        self.user.profile.trust_score = 10.0
+        self.user.profile.trust_score = 0.0
         self.user.profile.save(
             update_fields=["trust_score"],
         )
@@ -39,7 +39,7 @@ class TrustScoreRecomputeCommandTests(TestCase):
 
         self.assertEqual(
             self.user.profile.trust_score,
-            10.0,
+            0.0,
         )
         self.assertEqual(
             self.platform_admin.profile.trust_score,
@@ -50,6 +50,10 @@ class TrustScoreRecomputeCommandTests(TestCase):
         self.assertIn("mode=PREVIEW", rendered)
         self.assertIn("changed_users=1", rendered)
         self.assertIn("platform_staff_skipped=1", rendered)
+        self.assertIn("legacy_zero_to_neutral=1", rendered)
+        self.assertIn("delta_over_15=1", rendered)
+        self.assertIn("changed_with_resolved_actions=0", rendered)
+        self.assertIn("changed_with_community_votes=0", rendered)
         self.assertIn("NO DATABASE WRITES", rendered)
         self.assertNotIn(self.user.username, rendered)
         self.assertNotIn(self.platform_admin.username, rendered)
