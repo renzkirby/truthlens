@@ -349,6 +349,7 @@ def get_workspace_access_context(user):
                     "name": organization.name,
                     "slug": organization.slug,
                     "logo_url": organization.logo_url,
+                    "organization_subtype": organization.organization_subtype,
                     "verification_status": (organization.verification_status),
                     "partner_status": (organization.partner_status),
                 },
