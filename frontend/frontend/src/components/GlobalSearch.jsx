@@ -99,6 +99,13 @@ function SearchResults({ idPrefix, query, loading, error, users, organizations, 
                                     Trust {Number(searchUser.trust_score).toFixed(1)}
                                  </span>
                               )}
+                              {searchUser.trust_score === null
+                                 && !searchUser.partner_affiliations?.length
+                                 && !isModeratorRole(searchUser.role) && (
+                                 <span className="tl-global-search__platform-role">
+                                    Partner Organization member
+                                 </span>
+                              )}
                               {isModeratorRole(searchUser.role) && (
                                  <span className="tl-global-search__platform-role" aria-label="Platform Safety moderator">
                                     Safety
