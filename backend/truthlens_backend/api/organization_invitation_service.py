@@ -29,6 +29,9 @@ from .organization_service import (
     get_manageable_membership_roles,
     has_capability,
 )
+from .organization_partnership_policy import (
+    get_organization_admin_onboarding_policy,
+)
 from django.core.exceptions import (
     ValidationError,
 )
@@ -66,6 +69,10 @@ class InvalidOrganizationInvitationRole(OrganizationInvitationError):
 
 
 ADMIN_INVITABLE_ROLES = set(ADMIN_MANAGEABLE_MEMBERSHIP_ROLES)
+ADMIN_ONBOARDING_PURPOSES = {
+    OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING,
+    "PRIMARY_ADMIN_ONBOARDING",
+}
 
 
 def normalize_invitation_email(
@@ -100,11 +107,7 @@ def get_invitation_role_label(
     invitation,
 ):
     if (
-        invitation.purpose
-        in {
-            OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING,
-            "PRIMARY_ADMIN_ONBOARDING",
-        }
+        invitation.purpose in ADMIN_ONBOARDING_PURPOSES
         and invitation.invited_role
         in {
             OrganizationMembership.Role.ADMIN,
@@ -239,10 +242,7 @@ def accept_organization_invitation(
 
         locked_organization = None
 
-        if (
-            preflight_invitation.purpose
-            == OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING
-        ):
+        if preflight_invitation.purpose in ADMIN_ONBOARDING_PURPOSES:
             locked_organization = Organization.objects.select_for_update(
                 of=("self",),
             ).get(
@@ -341,12 +341,16 @@ def accept_organization_invitation(
                     )
                 )
 
-            is_admin_onboarding = invitation.purpose in {
-                OrganizationInvitation.InvitationPurpose.ORGANIZATION_ADMIN_ONBOARDING,
-                "PRIMARY_ADMIN_ONBOARDING",
-            }
+            is_admin_onboarding = invitation.purpose in ADMIN_ONBOARDING_PURPOSES
 
             if is_admin_onboarding:
+                onboarding_policy = get_organization_admin_onboarding_policy(
+                    invitation.organization
+                )
+                if not onboarding_policy["allowed"]:
+                    raise OrganizationInvitationConflict(
+                        onboarding_policy["message"]
+                    )
                 if invitation.invited_role not in {
                     OrganizationMembership.Role.ADMIN,
                     "OWNER",
