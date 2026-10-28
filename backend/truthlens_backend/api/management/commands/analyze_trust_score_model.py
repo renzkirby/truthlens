@@ -91,6 +91,42 @@ class Command(BaseCommand):
             f"NUMERIC_INVARIANTS passed={passed} failed={failed}"
         )
 
+        self.stdout.write("")
+        self.stdout.write("ATTACK PROBES")
+        promotion = report["attacks"]["promotion_probe"]
+        demotion = report["attacks"]["demotion_probe"]
+        self.stdout.write(
+            "Promotion baseline: "
+            f"{promotion['baseline']['trust_score']:.2f} "
+            f"{promotion['baseline']['current_rank']}"
+        )
+        for row in promotion["thresholds"]:
+            self.stdout.write(
+                "  fresh/upvote voter_trust="
+                f"{row['voter_trust_score']:.0f} "
+                f"minimum_votes={row['minimum_votes']} "
+                f"result={row['score']:.2f}/{row['to_rank']}"
+            )
+        self.stdout.write(
+            "Demotion baseline: "
+            f"{demotion['baseline']['trust_score']:.2f} "
+            f"{demotion['baseline']['current_rank']}"
+        )
+        for row in demotion["thresholds"]:
+            self.stdout.write(
+                "  downvote voter_trust="
+                f"{row['voter_trust_score']:.0f} "
+                f"minimum_votes={row['minimum_votes']} "
+                f"result={row['score']:.2f}/{row['to_rank']}"
+            )
+
+        self.stdout.write("")
+        self.stdout.write("DIAGNOSTICS")
+        for name, diagnostic in report["diagnostics"].items():
+            self.stdout.write(
+                f"{name}: {diagnostic['finding']}"
+            )
+
         if options["sensitivity"]:
             self.stdout.write("")
             self.stdout.write("SENSITIVITY PROBES")
