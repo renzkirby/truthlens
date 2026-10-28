@@ -20,9 +20,9 @@ def backfill_legacy_vote_reputation_weights(apps, schema_editor):
         )
         snapshot = _clamp(snapshot, 0.0, 100.0)
 
-        # Existing votes predate history-depth snapshots. Preserve their
-        # historical vote-time Trust influence instead of inventing an
-        # action count that was never stored.
+        # Existing votes predate resolved/validated history snapshots.
+        # Preserve their historical vote-time Trust influence instead of
+        # inventing action counts that were never stored.
         vote.vote_reputation_weight_snapshot = (
             0.5 + (snapshot / 200.0)
         )
@@ -57,6 +57,11 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="vote",
             name="vote_resolved_actions_snapshot",
+            field=models.PositiveIntegerField(blank=True, null=True),
+        ),
+        migrations.AddField(
+            model_name="vote",
+            name="vote_validated_actions_snapshot",
             field=models.PositiveIntegerField(blank=True, null=True),
         ),
         migrations.RunPython(
