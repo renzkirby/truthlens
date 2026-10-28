@@ -210,6 +210,16 @@ class TrustScoreHardeningExperimentTests(SimpleTestCase):
             "New Contributor",
         )
 
+    def test_selected_candidate_checks_all_pass(self):
+        report = build_hardening_experiment_report()
+
+        self.assertTrue(
+            all(
+                check["passed"]
+                for check in report["selected_candidate_checks"]
+            )
+        )
+
     def test_hardening_command_reports_comparison(self):
         output = StringIO()
 
@@ -225,6 +235,14 @@ class TrustScoreHardeningExperimentTests(SimpleTestCase):
         )
         self.assertIn(
             "snapshot_validated_history",
+            rendered,
+        )
+        self.assertIn(
+            "SELECTED CANDIDATE CHECKS",
+            rendered,
+        )
+        self.assertIn(
+            "PASS H2B",
             rendered,
         )
         self.assertIn(
