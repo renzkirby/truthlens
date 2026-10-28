@@ -76,6 +76,8 @@ function NavigationBar() {
    const platformRole = user?.community_identity?.platform_role || null;
    const platformRoleLabel = user?.community_identity?.platform_role_label || null;
    const isPlatformStaff = user?.community_identity?.reputation_applicable === false;
+   const reputationVisible = user?.community_identity?.reputation_visible !== false;
+   const professionalIdentity = user?.community_identity?.professional_identity || null;
    const displayTrustScore = Number(user?.trust_breakdown?.trust_score ?? user?.trust_score ?? 0);
    const isCommunityRoute =
       location.pathname === "/community" ||
@@ -174,9 +176,11 @@ function NavigationBar() {
                      <span className="tl-app-nav__account-copy">
                         <span className="tl-app-nav__account-name">@{user?.username}</span>
                         <span className="tl-app-nav__account-trust">
-                           {canParticipateInCommunity
-                              ? `Trust ${displayTrustScore.toFixed(1)}`
-                              : (platformRoleLabel || "Platform staff")}
+                           {professionalIdentity
+                              ? professionalIdentity.role_label
+                              : canParticipateInCommunity && reputationVisible
+                                 ? `Trust ${displayTrustScore.toFixed(1)}`
+                                 : (platformRoleLabel || "Platform staff")}
                         </span>
                      </span>
                      {isPlatformStaff && (
@@ -198,7 +202,11 @@ function NavigationBar() {
                            <span className="tl-app-nav__panel-username">@{user?.username}</span>
                            <span className="tl-app-nav__panel-email">{user?.email}</span>
                            <div className="tl-app-nav__account-metadata">
-                              {canParticipateInCommunity ? (
+                              {professionalIdentity ? (
+                                 <span className="tl-app-nav__panel-role">
+                                    {professionalIdentity.display_label}
+                                 </span>
+                              ) : canParticipateInCommunity && reputationVisible ? (
                                  <span className="tl-app-nav__panel-trust">
                                     Trust {displayTrustScore.toFixed(1)}
                                  </span>
