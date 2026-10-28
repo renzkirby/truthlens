@@ -148,9 +148,11 @@ effective_vote_weight =
 where:
 
 ```text
-n = voter's resolved Community reputation actions
+n = voter's resolved Community reputation actions AT THE VOTE EVENT
 4 = current Beta(2,2) prior mass
 ```
+
+Both the Trust Score and the resolved-action depth must be treated as vote-time snapshots. Using a current/live resolved-action count would reintroduce retroactive drift even if `vote_trust_snapshot` itself were immutable.
 
 ## Why `n/(n+4)`?
 
@@ -541,10 +543,13 @@ For reputation impact only:
 effective_vote_weight =
     (0.5 + vote_trust_snapshot / 200)
     ×
-    resolved_actions / (resolved_actions + 4)
+    vote_resolved_actions_snapshot
+      / (vote_resolved_actions_snapshot + 4)
 ```
 
 The four derives from the existing `Beta(2,2)` prior mass.
+
+The current `Vote` model stores the Trust Score snapshot but does **not** store resolved-action depth at vote time. A production implementation of H2 therefore needs an additional immutable history-depth snapshot (or an equivalent stored final weight) rather than querying the voter's current history.
 
 ## H3 — positive evidence for first rank
 
@@ -574,7 +579,66 @@ This minimizes simultaneous variables and makes post-change validation interpret
 
 ---
 
-# 15. Decision standard
+# 15. Vote lifecycle semantics required before implementation
+
+Snapshot weighting also exposes an existing vote-lifecycle ambiguity.
+
+Current API behavior:
+
+```text
+POST vote
+-> stores vote_trust_snapshot
+
+PATCH vote_value (upvote <-> downvote)
+-> changes vote_value
+-> does NOT refresh vote_trust_snapshot
+
+DELETE vote
+-> removes the vote
+```
+
+If snapshot-based weighting is adopted, TruthLens should explicitly define a vote change as a **new rating event** for reputation-weight purposes.
+
+Recommended semantics to validate:
+
+```text
+POST:
+  snapshot current Trust Score
+  snapshot current resolved-action depth
+  record weighting timestamp
+
+PATCH upvote <-> downvote:
+  refresh both snapshots
+  refresh weighting timestamp
+
+DELETE:
+  remove the vote and its reputation effect
+```
+
+Why:
+
+- changing an old upvote into a downvote changes the substantive rating;
+- retaining a years-old credibility snapshot for a newly changed rating would be difficult to explain;
+- refreshing only score but not history depth would make the weighting inputs inconsistent.
+
+The current model has `voted_at` as creation time only. If precise audit provenance is desired, a separate last-weighted/last-rating timestamp may be preferable to silently redefining `voted_at`.
+
+## Legacy/null snapshot consideration
+
+`vote_trust_snapshot` has been nullable since the initial schema, although the normal vote-creation API currently supplies it.
+
+Before production migration, audit:
+
+- total votes;
+- null Trust snapshots;
+- snapshots outside 0-100;
+- votes created through nonstandard/manual paths.
+
+Do not silently fall back to the voter's current Trust Score for null historical snapshots without documenting that exception, because that would preserve I9 for those rows.
+
+---
+
+# 16. Decision standard
 
 These candidates should be implemented in production **only after**:
 
