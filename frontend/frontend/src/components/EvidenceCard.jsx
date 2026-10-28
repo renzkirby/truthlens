@@ -230,7 +230,7 @@ export default function EvidenceCard({
                     ? "Your own evidence is not votable."
                     : isVoting
                       ? "Syncing vote…"
-                      : "Votes are recorded now; reputation impact applies if the evidence is verified."}
+                      : "Votes are recorded now; verified evidence can affect reputation based on the voter’s resolved contribution history."}
             </span>
          </footer>
       </article>
