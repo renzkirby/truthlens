@@ -13,15 +13,6 @@ const TAB_PAGE_SIZE = 6;
 const TAB_SKELETON_COUNT = 3;
 const ACTIVITY_TABS = ["threads", "contributions"];
 
-function getTrustLevel(score) {
-   if (score <= 25) return { label: "Untrusted", tone: "untrusted" };
-   if (score < 40) return { label: "At risk", tone: "at-risk" };
-   if (score < 60) return { label: "Newcomer", tone: "newcomer" };
-   if (score < 75) return { label: "Contributor", tone: "contributor" };
-   if (score < 90) return { label: "Trusted analyst", tone: "trusted" };
-   return { label: "Expert analyst", tone: "expert" };
-}
-
 function isPlatformModeratorRole(role) {
    return role === "MOD" || role === "MODERATOR";
 }
