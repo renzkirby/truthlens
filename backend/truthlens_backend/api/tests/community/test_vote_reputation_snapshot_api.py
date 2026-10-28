@@ -161,6 +161,61 @@ class VoteReputationSnapshotApiTests(TestCase):
         )
 
     @patch("api.views.recompute_user_trust_score_task.delay")
+    def test_noop_patch_does_not_refresh_vote_weight(
+        self,
+        recompute_delay,
+    ):
+        create_response = self.client.post(
+            reverse("vote-list"),
+            {
+                "evidence": str(self.target_evidence.pk),
+                "vote_value": True,
+            },
+            format="json",
+        )
+        self.assertEqual(create_response.status_code, 201)
+        vote = Vote.objects.get(
+            evidence=self.target_evidence,
+            voter=self.voter,
+        )
+        original_weight = vote.vote_reputation_weight_snapshot
+
+        self.voter.profile.trust_score = 80.0
+        self.voter.profile.save(update_fields=["trust_score"])
+        for index in range(3, 10):
+            self._create_resolved_evidence(
+                contributor=self.voter,
+                index=index,
+            )
+
+        response = self.client.patch(
+            reverse("vote-detail", args=[vote.pk]),
+            {"vote_value": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        vote.refresh_from_db()
+        self.assertTrue(vote.vote_value)
+        self.assertEqual(vote.vote_trust_snapshot, 60.0)
+        self.assertEqual(
+            vote.vote_resolved_actions_snapshot,
+            3,
+        )
+        self.assertEqual(
+            vote.vote_validated_actions_snapshot,
+            3,
+        )
+        self.assertEqual(
+            vote.vote_reputation_weight_snapshot,
+            original_weight,
+        )
+        self.assertEqual(
+            recompute_delay.call_count,
+            2,
+        )
+
+    @patch("api.views.recompute_user_trust_score_task.delay")
     def test_failed_history_does_not_gain_reputation_vote_weight(
         self,
         recompute_delay,
