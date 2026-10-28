@@ -36,7 +36,8 @@ class TrustScoreHardeningExperimentTests(SimpleTestCase):
             name="fresh",
             snapshot_score=50.0,
             current_score=50.0,
-            resolved_actions=0,
+            snapshot_resolved_actions=0,
+            current_resolved_actions=0,
             validated_actions=0,
         )
 
