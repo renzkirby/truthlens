@@ -163,10 +163,13 @@ class WorkspaceAccessContextTests(TestCase):
         )
 
     def test_workspace_context_exposes_student_publication_subtype(self):
+        self.organization.organization_type = Organization.OrganizationType.NEWS
         self.organization.organization_subtype = (
             Organization.OrganizationSubtype.STUDENT_PUBLICATION
         )
-        self.organization.save(update_fields=["organization_subtype"])
+        self.organization.save(
+            update_fields=["organization_type", "organization_subtype"]
+        )
 
         user = User.objects.create_user(
             username="workspace-student-publication-lead",
