@@ -81,7 +81,11 @@ export default function EvidenceCard({
    const verdict = (evidence.evidence_verdict || "UNVERIFIED").toUpperCase();
    const verdictMeta = EVIDENCE_VERDICT_META[verdict] || EVIDENCE_VERDICT_META.UNVERIFIED;
    const username = evidence.contributor?.username || "Unknown";
-   const contributorTrust = Number(evidence.contributor?.trust_score || 0);
+   const contributorTrustVisible =
+      evidence.contributor?.trust_score !== null && evidence.contributor?.trust_score !== undefined;
+   const contributorTrust = Number(
+      evidence.contributor?.trust_score ?? evidence.contributor_trust_snapshot ?? 0,
+   );
    const isEditing = editingId === evidence.id;
    const isOwnEvidence = String(evidence.contributor?.id || "") === String(currentUserId || "");
    const isVoting = votingEvidenceId === evidence.id;
@@ -103,7 +107,9 @@ export default function EvidenceCard({
                   <EvidenceAvatar contributor={evidence.contributor} />
                   <span>
                      <strong>@{username}</strong>
-                     <small>Trust: <b>{contributorTrust.toFixed(1)}</b></small>
+                     {contributorTrustVisible && (
+                        <small>Trust: <b>{contributorTrust.toFixed(1)}</b></small>
+                     )}
                   </span>
                </Link>
                <PartnerAffiliations affiliations={evidence.contributor?.partner_affiliations} compact />
