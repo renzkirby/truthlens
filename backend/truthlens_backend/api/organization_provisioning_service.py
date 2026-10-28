@@ -19,6 +19,9 @@ from .organization_invitation_service import (
     normalize_invitation_email,
     send_organization_invitation_email,
 )
+from .organization_partnership_policy import (
+    get_organization_admin_onboarding_policy,
+)
 
 
 PROVISION_PARTNER_ORGANIZATION = "PROVISION_PARTNER_ORGANIZATION"
@@ -38,6 +41,12 @@ class OrganizationProvisioningConflict(OrganizationProvisioningError):
 
 class OrganizationProvisioningDeliveryError(OrganizationProvisioningError):
     pass
+
+
+def _ensure_organization_admin_onboarding_allowed(organization):
+    policy = get_organization_admin_onboarding_policy(organization)
+    if not policy["allowed"]:
+        raise OrganizationProvisioningConflict(policy["message"])
 
 
 def _require_developer_authority(actor):
@@ -128,6 +137,7 @@ def _create_organization_admin_invitation(
     _require_developer_authority(actor)
 
     locked_organization = _lock_organization(organization)
+    _ensure_organization_admin_onboarding_allowed(locked_organization)
     normalized_email = _normalize_email(email)
 
     expire_stale_invitations(
@@ -243,6 +253,7 @@ def resend_organization_admin_invitation(
     _require_developer_authority(actor)
 
     locked_organization = _lock_organization(invitation.organization)
+    _ensure_organization_admin_onboarding_allowed(locked_organization)
     _ensure_no_current_admin(locked_organization)
 
     locked_invitation = (
