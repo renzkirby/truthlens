@@ -61,6 +61,24 @@ class TrustScoreProductionParityTests(TestCase):
             status=Thread.Status.REJECTED,
         )
 
+    def test_production_uses_frozen_vote_weight_snapshot_when_present(self):
+        Vote.objects.filter(
+            evidence=self.evidence,
+            voter=self.voter,
+        ).update(
+            vote_trust_snapshot=100.0,
+            vote_reputation_weight_snapshot=0.2,
+        )
+
+        production = calculate_trust_components(
+            self.contributor,
+        )
+
+        self.assertEqual(
+            production["weighted_vote_signal"],
+            0.2,
+        )
+
     def test_simulator_matches_production_component_calculation(self):
         production = calculate_trust_components(self.contributor)
         simulated = simulate_trust_score(
