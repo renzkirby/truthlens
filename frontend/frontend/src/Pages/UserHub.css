@@ -2217,3 +2217,115 @@
       height: 42px;
    }
 }
+
+
+/* Partner-member professional identity */
+.hub-professional-card {
+   display: grid;
+   grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+   padding: 0;
+   overflow: hidden;
+}
+
+.hub-professional-main {
+   min-width: 0;
+   padding: 30px;
+}
+
+.hub-professional-title {
+   margin: 0;
+   color: #0f172a;
+   font-size: clamp(1.25rem, 2.3vw, 1.65rem);
+   line-height: 1.3;
+}
+
+.hub-professional-description {
+   max-width: 70ch;
+   margin: 10px 0 0;
+   color: #64748b;
+   font-size: 0.9rem;
+   line-height: 1.6;
+}
+
+.hub-professional-facts {
+   display: grid;
+   grid-template-columns: repeat(3, minmax(0, 1fr));
+   gap: 1px;
+   margin-top: 24px;
+   overflow: hidden;
+   background: #e2e8f0;
+   border: 1px solid #e2e8f0;
+   border-radius: 12px;
+}
+
+.hub-professional-facts article {
+   display: grid;
+   align-content: start;
+   gap: 6px;
+   padding: 16px;
+   background: #f8fafc;
+}
+
+.hub-professional-facts span {
+   color: #64748b;
+   font-size: 0.68rem;
+   font-weight: 800;
+   letter-spacing: 0.06em;
+   text-transform: uppercase;
+}
+
+.hub-professional-facts strong {
+   color: #0f172a;
+   font-size: 0.9rem;
+   line-height: 1.45;
+}
+
+.hub-professional-actions {
+   display: flex;
+   flex-direction: column;
+   align-items: flex-start;
+   gap: 12px;
+   padding: 30px;
+   background: #f8fafc;
+   border-left: 1px solid #e2e8f0;
+}
+
+.hub-professional-actions h3 {
+   margin: 0;
+   color: #0f172a;
+   font-size: 1rem;
+}
+
+.hub-professional-actions p {
+   margin: 8px 0 0;
+   color: #64748b;
+   font-size: 0.82rem;
+   line-height: 1.55;
+}
+
+.hub-professional-actions .hub-action {
+   width: 100%;
+   justify-content: center;
+}
+
+@media (max-width: 900px) {
+   .hub-professional-card {
+      grid-template-columns: 1fr;
+   }
+
+   .hub-professional-actions {
+      border-top: 1px solid #e2e8f0;
+      border-left: 0;
+   }
+}
+
+@media (max-width: 620px) {
+   .hub-professional-main,
+   .hub-professional-actions {
+      padding: 22px;
+   }
+
+   .hub-professional-facts {
+      grid-template-columns: 1fr;
+   }
+}
