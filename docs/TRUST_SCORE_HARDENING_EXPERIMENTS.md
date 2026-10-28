@@ -1,6 +1,6 @@
 # TruthLens Trust Score — Hardening Experiments
 
-Status: candidate-policy comparison; no production behavior changed  
+Status: selected hardening candidate implemented on feature branch; pending validation and merge  
 Research basis: `docs/TRUST_SCORE_REPUTATION_DEEP_RESEARCH.md`  
 Baseline validation: `docs/TRUST_SCORE_CALIBRATION_VALIDATION.md`  
 Experiment implementation: `backend/truthlens_backend/api/trust_score_hardening_experiments.py`
@@ -128,9 +128,11 @@ Conclusion:
 
 ---
 
-# 4. Candidate B — snapshot × observed-evidence share
+# 4. Candidate B — snapshot × validated-history factor
 
-This experiment keeps the immutable snapshot and introduces a smooth history-depth factor.
+The first history-depth candidate used all resolved actions in the maturation factor. Adversarial review found a weakness: a user could accumulate rejected/dismissed actions and still increase voting influence merely by increasing the denominator's history depth.
+
+The refined candidate therefore counts **successful resolved actions in the numerator**.
 
 Formula:
 
@@ -138,79 +140,62 @@ Formula:
 base_vote_weight =
     0.5 + vote_trust_snapshot / 200
 
-observed_evidence_share =
-    n / (n + 4)
+validated_history_factor =
+    vote_validated_actions_snapshot
+    /
+    (vote_resolved_actions_snapshot + 4)
 
 effective_vote_weight =
-    base_vote_weight × observed_evidence_share
+    base_vote_weight × validated_history_factor
 ```
 
 where:
 
 ```text
-n = voter's resolved Community reputation actions AT THE VOTE EVENT
-4 = current Beta(2,2) prior mass
+vote_validated_actions_snapshot =
+    successful resolved Community reputation actions at the vote event
+
+vote_resolved_actions_snapshot =
+    all resolved Community reputation actions at the vote event
+
+4 =
+    current Beta(2,2) prior mass
 ```
 
-Both the Trust Score and the resolved-action depth must be treated as vote-time snapshots. Using a current/live resolved-action count would reintroduce retroactive drift even if `vote_trust_snapshot` itself were immutable.
+All three inputs are frozen at the rating event:
 
-## Why `n/(n+4)`?
+- Trust Score snapshot;
+- resolved-action count snapshot;
+- validated-action count snapshot.
 
-TruthLens already uses:
+The final effective weight is also persisted directly.
 
-```text
-Beta(2,2)
-```
+## Why validated / (resolved + 4)?
 
-for contribution-quality smoothing.
+The factor has three desirable properties:
 
-That prior contributes:
+1. a fresh account has zero reputation influence;
+2. failed actions alone cannot be farmed to mature influence;
+3. successful history increases influence gradually, while failures reduce maturation.
 
-```text
-2 + 2 = 4
-```
+Examples:
 
-pseudo-observations.
-
-After `n` real resolved actions, the fraction of posterior observation mass contributed by real observations is:
-
-```text
-n / (n + 4)
-```
-
-This experiment uses that value as a transparent **evidence-depth shrinkage factor**.
+| History at vote time | Factor |
+|---|---:|
+| 0 resolved / 0 successful | 0.000 |
+| 3 resolved / 0 successful | 0.000 |
+| 25 resolved / 0 successful | 0.000 |
+| 3 resolved / 3 successful | 0.429 |
+| 10 resolved / 5 successful | 0.357 |
+| 10 resolved / 10 successful | 0.714 |
+| 25 resolved / 20 successful | 0.690 |
+| 25 resolved / 25 successful | 0.862 |
 
 Important:
 
-> This is not claimed to be a formal Bayesian credible interval or a literature-prescribed vote formula.
+> This is a TruthLens calibration rule derived consistently from the existing Beta(2,2) prior mass. It is not claimed to be a Bayesian credible interval or a formula prescribed by the literature.
 
-It is a TruthLens candidate derived consistently from the prior already used by the system.
-
-## Effect by history depth
-
-| Resolved actions | Evidence-share factor |
-|---:|---:|
-| 0 | 0.000 |
-| 1 | 0.200 |
-| 2 | 0.333 |
-| 3 | 0.429 |
-| 5 | 0.556 |
-| 10 | 0.714 |
-| 25 | 0.862 |
-| 50 | 0.926 |
-| 100 | 0.962 |
-
-Thus:
-
-```text
-fresh account
-n = 0
-effective reputation vote influence = 0
-```
-
-without banning the user from voting in the Community UI.
-
-The vote can still be stored as social feedback; it simply does not yet affect somebody else's reputation calculation.
+The vote can still exist as ordinary social feedback even when its reputation weight is zero. The attenuation only affects how much that vote can change **another person's Community Trust Score**.
 
 ---
 
@@ -290,21 +275,22 @@ Snapshot-only has the same attack thresholds as current behavior when the voter'
 
 This confirms that snapshot-only solves historical integrity but not low-history influence.
 
-## 6.2 Snapshot × observed-evidence share
+## 6.2 Snapshot × validated-history factor
 
 | Voter archetype | Effective weight | Upvotes to promote | Downvotes to demote |
 |---|---:|---:|---:|
-| Fresh, 0 actions | 0.000 | >100 / none | >100 / none |
-| 3 successes | 0.347 | 9 | 11 |
-| 3 failures | 0.298 | 11 | 13 |
-| 10 successes | 0.617 | 6 | 7 |
-| 25 successes | 0.761 | 5 | 5 |
+| Fresh, 0/0 history | 0.000 | >100 / none | >100 / none |
+| 3 failures, 0/3 successful | 0.000 | >100 / none | >100 / none |
+| 25 failures, 0/25 successful | 0.000 | >100 / none | >100 / none |
+| 3 successes, 3/3 successful | 0.347 | 9 | 11 |
+| 10 successes, 10/10 successful | 0.617 | 6 | 7 |
+| 25 successes, 25/25 successful | 0.761 | 5 | 5 |
 
-This candidate changes the attack economics substantially.
+The refinement closes the failed-action farming path.
 
-Fresh identities cannot alter reputation by creating additional fresh identities alone.
+Fresh identities and all-failure histories cannot affect reputation through vote weighting alone.
 
-To obtain meaningful influence, an attacker must first build resolved Community history.
+To obtain meaningful influence, an attacker must first accumulate **successful resolved history**, such as professionally verified evidence or valid Safety reports.
 
 The policy does **not** make collusion impossible.
 
@@ -316,7 +302,7 @@ For example:
 
 can still cross the tested promotion boundary.
 
-The value of the policy is that it converts a near-zero-history attack into an attack requiring independently accumulated resolved reputation evidence.
+The value of the policy is that it changes the attack requirement from creating identities or accumulating failures to building independently validated Community history.
 
 ## 6.3 Snapshot + Contributor gate
 
@@ -338,7 +324,7 @@ A good anti-manipulation policy should not remove useful Community signal unnece
 
 Community points generated by five positive votes:
 
-| Voter history | Current / snapshot-only | Snapshot × evidence share | Contributor gate |
+| Voter history | Current / snapshot-only | Snapshot × validated-history factor | Contributor gate |
 |---|---:|---:|---:|
 | 3 successful actions | +6.99 | +3.20 | 0.00 |
 | 10 successful actions | +7.40 | +5.52 | +7.40 |
@@ -354,7 +340,7 @@ Preserves all current Community influence, including the fresh-account problem.
 
 Preserves full established influence but completely discards reputation impact from legitimate users below Contributor depth.
 
-### Snapshot × evidence share
+### Snapshot × validated-history factor
 
 Provides a gradual transition:
 
@@ -383,7 +369,7 @@ Results:
 |---|---|
 | Current dynamic Trust | **No** |
 | Snapshot only | **Yes** |
-| Snapshot × evidence share | **Yes** |
+| Snapshot × validated-history factor | **Yes** |
 | Snapshot + Contributor gate | **Yes** |
 
 All snapshot-based candidates fix I9.
@@ -489,7 +475,7 @@ Recommendation:
 | Candidate | Fixes I9 | Fixes fresh I8 | Smooth participation | Explainable | Current assessment |
 |---|:---:|:---:|:---:|:---:|---|
 | Snapshot only | ✅ | ❌ | ✅ | ✅ | Necessary integrity fix, insufficient alone |
-| Snapshot × evidence share | ✅ | ✅ | ✅ | ✅ | **Best current trade-off** |
+| Snapshot × validated-history factor | ✅ | ✅ | ✅ | ✅ | **Best current trade-off** |
 | Snapshot + Contributor gate | ✅ | ✅ | ❌ | ✅ | Effective but likely too restrictive |
 | Positive-evidence Provisional gate | n/a | n/a | ✅ | ✅ | Strong first-rank candidate |
 
@@ -535,7 +521,7 @@ vote_trust_snapshot
 
 instead of the voter's current persisted Trust Score.
 
-## H2 — history-depth attenuation
+## H2 — validated-history attenuation
 
 For reputation impact only:
 
@@ -543,13 +529,20 @@ For reputation impact only:
 effective_vote_weight =
     (0.5 + vote_trust_snapshot / 200)
     ×
-    vote_resolved_actions_snapshot
+    vote_validated_actions_snapshot
       / (vote_resolved_actions_snapshot + 4)
 ```
 
 The four derives from the existing `Beta(2,2)` prior mass.
 
-The current `Vote` model stores the Trust Score snapshot but does **not** store resolved-action depth at vote time. A production implementation of H2 therefore needs an additional immutable history-depth snapshot (or an equivalent stored final weight) rather than querying the voter's current history.
+The feature branch now stores:
+
+- `vote_trust_snapshot`;
+- `vote_resolved_actions_snapshot`;
+- `vote_validated_actions_snapshot`;
+- `vote_reputation_weight_snapshot`.
+
+The final weight snapshot is what the Trust Score calculation consumes.
 
 ## H3 — positive evidence for first rank
 
@@ -604,12 +597,13 @@ Recommended semantics to validate:
 ```text
 POST:
   snapshot current Trust Score
-  snapshot current resolved-action depth
-  record weighting timestamp
+  snapshot current resolved-action count
+  snapshot current validated-action count
+  persist final reputation weight
 
 PATCH upvote <-> downvote:
-  refresh both snapshots
-  refresh weighting timestamp
+  refresh all three source snapshots
+  refresh final reputation weight
 
 DELETE:
   remove the vote and its reputation effect
@@ -619,9 +613,9 @@ Why:
 
 - changing an old upvote into a downvote changes the substantive rating;
 - retaining a years-old credibility snapshot for a newly changed rating would be difficult to explain;
-- refreshing only score but not history depth would make the weighting inputs inconsistent.
+- refreshing only some snapshot inputs would make the weighting state inconsistent.
 
-The current model has `voted_at` as creation time only. If precise audit provenance is desired, a separate last-weighted/last-rating timestamp may be preferable to silently redefining `voted_at`.
+The current implementation keeps `voted_at` as creation time. A vote-direction change is treated as a new weighting event for snapshot purposes, while the original creation timestamp remains unchanged.
 
 ## Legacy/null snapshot consideration
 
@@ -638,7 +632,54 @@ Do not silently fall back to the voter's current Trust Score for null historical
 
 ---
 
-# 16. Decision standard
+# 16. Implemented migration and legacy strategy
+
+Migration:
+
+```text
+0099_vote_reputation_weight_snapshots
+```
+
+Legacy votes predate resolved/validated action snapshots.
+
+TruthLens therefore does **not** fabricate historical action counts.
+
+For each existing vote:
+
+```text
+vote_reputation_weight_snapshot =
+    0.5 + clamp(vote_trust_snapshot, 0, 100) / 200
+```
+
+If an exceptional legacy row has no Trust snapshot, migration uses the neutral 50 baseline for the frozen legacy weight.
+
+Legacy history snapshots remain null.
+
+This preserves historical votes at their vote-time Trust influence while preventing future reinterpretation.
+
+New or changed votes use the full validated-history attenuation policy.
+
+After migration, persisted user Trust Scores must be recomputed because freezing historical weights can legitimately change Community Reception relative to the old dynamic-voter calculation.
+
+Deployment utility:
+
+```powershell
+py .\manage.py recompute_trust_scores
+```
+
+defaults to preview-only aggregate output.
+
+After reviewing impact:
+
+```powershell
+py .\manage.py recompute_trust_scores --apply
+```
+
+updates applicable Community profiles. Platform staff identities are skipped.
+
+---
+
+# 17. Decision standard
 
 These candidates should be implemented in production **only after**:
 
