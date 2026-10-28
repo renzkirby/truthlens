@@ -38,10 +38,34 @@ class Command(BaseCommand):
             minimum=Min("vote_trust_snapshot"),
             maximum=Max("vote_trust_snapshot"),
         )
+        weight_null = Vote.objects.filter(
+            vote_reputation_weight_snapshot__isnull=True,
+        ).count()
+        weight_below_zero = Vote.objects.filter(
+            vote_reputation_weight_snapshot__lt=0,
+        ).count()
+        weight_above_one = Vote.objects.filter(
+            vote_reputation_weight_snapshot__gt=1,
+        ).count()
+        history_null = Vote.objects.filter(
+            vote_resolved_actions_snapshot__isnull=True,
+        ).count()
+        legacy_preserved = Vote.objects.filter(
+            vote_reputation_weight_snapshot__isnull=False,
+            vote_resolved_actions_snapshot__isnull=True,
+        ).count()
+        hardened = Vote.objects.filter(
+            vote_reputation_weight_snapshot__isnull=False,
+            vote_resolved_actions_snapshot__isnull=False,
+        ).count()
+
         nonstandard = Vote.objects.filter(
             Q(vote_trust_snapshot__isnull=True)
             | Q(vote_trust_snapshot__lt=0)
             | Q(vote_trust_snapshot__gt=100)
+            | Q(vote_reputation_weight_snapshot__isnull=True)
+            | Q(vote_reputation_weight_snapshot__lt=0)
+            | Q(vote_reputation_weight_snapshot__gt=1)
         ).count()
 
         report = {
@@ -52,9 +76,31 @@ class Command(BaseCommand):
             "nonstandard_snapshot_rows": nonstandard,
             "minimum_snapshot": bounds["minimum"],
             "maximum_snapshot": bounds["maximum"],
+            "weight_null": weight_null,
+            "weight_below_zero": weight_below_zero,
+            "weight_above_one": weight_above_one,
+            "history_snapshot_null": history_null,
+            "legacy_preserved_votes": legacy_preserved,
+            "hardened_votes": hardened,
             "snapshot_coverage_percent": (
                 round(
                     ((total - null_snapshots) / total) * 100,
+                    2,
+                )
+                if total
+                else 100.0
+            ),
+            "weight_coverage_percent": (
+                round(
+                    ((total - weight_null) / total) * 100,
+                    2,
+                )
+                if total
+                else 100.0
+            ),
+            "history_snapshot_coverage_percent": (
+                round(
+                    ((total - history_null) / total) * 100,
                     2,
                 )
                 if total
@@ -82,10 +128,36 @@ class Command(BaseCommand):
             f"null_snapshots={report['null_snapshots']}"
         )
         self.stdout.write(
+            f"weight_coverage_percent="
+            f"{report['weight_coverage_percent']:.2f}"
+        )
+        self.stdout.write(
+            f"history_snapshot_coverage_percent="
+            f"{report['history_snapshot_coverage_percent']:.2f}"
+        )
+        self.stdout.write(
+            f"weight_null={report['weight_null']}"
+        )
+        self.stdout.write(
+            f"history_snapshot_null={report['history_snapshot_null']}"
+        )
+        self.stdout.write(
+            f"legacy_preserved_votes={report['legacy_preserved_votes']}"
+        )
+        self.stdout.write(
+            f"hardened_votes={report['hardened_votes']}"
+        )
+        self.stdout.write(
             f"below_zero={report['below_zero']}"
         )
         self.stdout.write(
             f"above_hundred={report['above_hundred']}"
+        )
+        self.stdout.write(
+            f"weight_below_zero={report['weight_below_zero']}"
+        )
+        self.stdout.write(
+            f"weight_above_one={report['weight_above_one']}"
         )
         self.stdout.write(
             f"nonstandard_snapshot_rows="
