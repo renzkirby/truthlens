@@ -36,13 +36,13 @@ class VotePolicy:
     key: str
     label: str
     use_snapshot: bool
-    evidence_share_scaling: bool = False
+    validated_history_scaling: bool = False
     contributor_gate: bool = False
 
 
 BASELINE_DYNAMIC = VotePolicy(
     key="baseline_dynamic",
-    label="Current dynamic voter Trust",
+    label="Pre-hardening dynamic voter Trust",
     use_snapshot=False,
 )
 
@@ -56,7 +56,7 @@ SNAPSHOT_VALIDATED_HISTORY = VotePolicy(
     key="snapshot_validated_history",
     label="Snapshot Trust × validated-history factor",
     use_snapshot=True,
-    evidence_share_scaling=True,
+    validated_history_scaling=True,
 )
 
 SNAPSHOT_CONTRIBUTOR_GATE = VotePolicy(
@@ -143,7 +143,7 @@ def effective_vote_weight(
 
     weight = base_vote_weight(score)
 
-    if policy.evidence_share_scaling:
+    if policy.validated_history_scaling:
         weight *= validated_history_factor(
             validated_actions=validated_actions,
             resolved_actions=history_actions,
@@ -534,6 +534,66 @@ def legitimate_influence_comparison(calibration=DEFAULT_CALIBRATION):
     return rows
 
 
+def selected_candidate_checks(calibration=DEFAULT_CALIBRATION):
+    report = vote_policy_comparison(calibration)
+    selected = next(
+        row
+        for row in report["policies"]
+        if row["policy"] == SNAPSHOT_VALIDATED_HISTORY.key
+    )
+    by_voter = {
+        row["voter"]: row
+        for row in selected["archetypes"]
+    }
+    stability = {
+        row["policy"]: row
+        for row in historical_vote_stability(calibration)
+    }
+    provisional = {
+        row["scenario"]: row
+        for row in provisional_policy_comparison(calibration)
+    }
+
+    checks = (
+        {
+            "id": "H1",
+            "name": "Historical vote weight is stable",
+            "passed": stability[SNAPSHOT_VALIDATED_HISTORY.key]["stable"],
+        },
+        {
+            "id": "H2A",
+            "name": "Fresh accounts have zero reputation influence",
+            "passed": by_voter["fresh"]["effective_weight"] == 0.0,
+        },
+        {
+            "id": "H2B",
+            "name": "Failed actions cannot mature vote influence",
+            "passed": (
+                by_voter["three_failures"]["effective_weight"] == 0.0
+                and by_voter["twenty_five_failures"]["effective_weight"] == 0.0
+            ),
+        },
+        {
+            "id": "H2C",
+            "name": "Successful established history retains influence",
+            "passed": (
+                by_voter["ten_successes"]["effective_weight"] > 0.5
+                and by_voter["twenty_five_successes"]["effective_weight"] > 0.5
+            ),
+        },
+        {
+            "id": "H3",
+            "name": "All-failure history remains Provisional",
+            "passed": (
+                provisional["three_failures"]["positive_evidence_gate_rank"]
+                == "Provisional"
+            ),
+        },
+    )
+
+    return checks
+
+
 def build_hardening_experiment_report(calibration=DEFAULT_CALIBRATION):
     return {
         "vote_policy_comparison": vote_policy_comparison(calibration),
@@ -544,6 +604,7 @@ def build_hardening_experiment_report(calibration=DEFAULT_CALIBRATION):
         "legitimate_influence_comparison": legitimate_influence_comparison(
             calibration
         ),
+        "selected_candidate_checks": selected_candidate_checks(calibration),
         "candidate_notes": {
             "snapshot_only": (
                 "Fixes historical reinterpretation but does not reduce fresh "
