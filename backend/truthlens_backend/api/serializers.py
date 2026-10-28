@@ -4430,6 +4430,7 @@ class VoteSerializer(serializers.ModelSerializer):
             "vote_value",
             "vote_trust_snapshot",
             "vote_resolved_actions_snapshot",
+            "vote_validated_actions_snapshot",
             "vote_reputation_weight_snapshot",
             "voted_at",
         ]
@@ -4438,6 +4439,7 @@ class VoteSerializer(serializers.ModelSerializer):
             "voter",
             "vote_trust_snapshot",
             "vote_resolved_actions_snapshot",
+            "vote_validated_actions_snapshot",
             "vote_reputation_weight_snapshot",
             "voted_at",
         ]
