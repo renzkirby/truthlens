@@ -10,6 +10,22 @@ How can TruthLens justify, evaluate, and improve its Trust Score as a Community 
 
 This document is intentionally not a claim that the exact TruthLens formula was copied from a published model. The literature supports several important **design principles** used by TruthLens. The exact weights, caps, nonlinear scaling constants, rank thresholds, and some eligibility rules are **TruthLens-specific calibration choices** that require scenario testing and sensitivity analysis.
 
+## Source quality and transfer limits
+
+The research base intentionally mixes several kinds of evidence:
+
+- foundational peer-reviewed or refereed work on computational trust and reputation;
+- peer-reviewed surveys and taxonomies;
+- peer-reviewed research on adversarial reputation systems;
+- peer-reviewed research on collaborative online communities;
+- peer-reviewed research on crowdsourced fact-checking and Community Notes;
+- selected platform technical documentation where the implemented algorithm itself is the object of interest;
+- a small number of recent working papers used only to identify open research questions, not as the sole basis for a design decision.
+
+Many foundational reputation papers study e-commerce, peer-to-peer networks, distributed systems, or online labor rather than fact-checking. Their **general design principles** can inform TruthLens, but their domain-specific results must not be presented as direct empirical validation of TruthLens.
+
+Where possible, this document therefore pairs general reputation research with evidence from community-based fact-checking.
+
 ---
 
 # 1. What Trust Score means in TruthLens
@@ -424,7 +440,7 @@ A modern survey similarly catalogs:
 
 Source:
 
-- Bellini et al. (2022), **Privacy-Preserving Reputation Systems Based on Blockchain and Other Cryptographic Building Blocks: A Survey**, *ACM Computing Surveys*: https://doi.org/10.1145/3490236
+- Hasan, Brunie & Bertino (2022), **Privacy-Preserving Reputation Systems Based on Blockchain and Other Cryptographic Building Blocks: A Survey**, *ACM Computing Surveys*: https://doi.org/10.1145/3490236
 
 Swamynathan, Almeroth & Zhao also identify user collusion and short-lived identities as major sources of erroneous reputation values.
 
@@ -924,7 +940,85 @@ This supports the current direction of:
 
 ---
 
-# 16. Current score ceiling
+# 16. Direct relevance to community-based fact-checking
+
+General reputation theory is useful, but TruthLens also needs evidence from systems whose users directly assess misinformation or fact-checking contributions.
+
+## 16.1 Birdwatch / Community Notes evidence
+
+Pröllochs (2022) analyzed Twitter's Birdwatch community fact-checking system and found that users create contextual notes, rate other users' notes, and that notes linking to trustworthy sources are more likely to be considered helpful. The study also identified challenges involving opinion, consensus, and polarization.
+
+Source:
+
+- Pröllochs (2022), **Community-Based Fact-Checking on Twitter's Birdwatch Platform**, ICWSM: https://doi.org/10.1609/icwsm.v16i1.19335
+
+TruthLens relevance:
+
+- community participation can contribute useful fact-checking signal;
+- source quality matters;
+- raw agreement alone is not sufficient because consensus can vary with social and political context;
+- professional evidence review in TruthLens provides an additional quality gate before Community Reception affects reputation.
+
+## 16.2 Reliability of crowdsourced fact-checking
+
+La Barbera et al. (2024) study crowdsourced fact-checking and explicitly evaluate crowd-worker reliability, reporting improved agreement between crowd workers and experts under studied approaches.
+
+Source:
+
+- La Barbera et al. (2024), **Crowdsourced Fact-checking: Does It Actually Work?**, *Information Processing & Management*: https://doi.org/10.1016/j.ipm.2024.103792
+
+TruthLens relevance:
+
+- crowd reliability is not a fixed assumption; it can be estimated and used in aggregation;
+- the reliability of contributors is directly relevant to any TruthLens mechanism that weights Community feedback;
+- this supports researching voter reputation/confidence rather than treating every vote identically.
+
+## 16.3 Bridging and heterogeneous-rating histories
+
+Community Notes does not simply publish notes with the largest raw majority. Its public technical documentation describes a matrix-factorization-based ranking approach and a history of changes that moved away from raw helpful-vote ratios. The system seeks agreement across contributors with different rating histories.
+
+Source:
+
+- X Community Notes, **Note ranking algorithm / under the hood**: https://communitynotes.x.com/guide/en/under-the-hood/ranking-notes
+- Open-source documentation: https://github.com/twitter/communitynotes/blob/main/documentation/under-the-hood/ranking-notes.md
+
+Peer-reviewed work on Community Notes likewise describes the system as using heterogeneous rating histories to surface notes that are broadly helpful:
+
+- **References to unbiased sources increase the helpfulness of community fact-checks**, *Scientific Reports* (2025): https://www.nature.com/articles/s41598-025-09372-6
+
+TruthLens relevance:
+
+- raw vote counts are a weak baseline for fact-checking contexts;
+- disagreement structure and rater history can matter;
+- TruthLens's bounded credibility-weighted reception is directionally consistent with the idea that ratings should not automatically be equal;
+- TruthLens should not claim equivalence to Community Notes' bridging algorithm, because its current model is much simpler.
+
+## 16.4 Why this strengthens the TruthLens design direction
+
+The fact-checking literature does **not** imply that TruthLens should replace professional review with crowd voting.
+
+Instead, it supports a layered design:
+
+```text
+Community contribution
+        ↓
+professional evidence resolution
+        ↓
+eligible community reception
+        ↓
+bounded Community reputation effect
+```
+
+That architecture is especially defensible because:
+
+- the crowd contributes scalable signal;
+- professionally reviewed evidence remains the gate for factual-quality reputation;
+- community ratings remain secondary and bounded;
+- institutional authority remains separate from Community reputation.
+
+---
+
+# 18. Current score ceiling
 
 The nominal range is:
 
@@ -972,7 +1066,7 @@ The formula should not be distorted merely to make 100 reachable.
 
 ---
 
-# 17. Current research-backed strengths
+# 18. Current research-backed strengths
 
 The strongest aspects of the existing model are:
 
@@ -1018,7 +1112,7 @@ The score can be decomposed into named, bounded factors.
 
 ---
 
-# 18. Research-identified risks and open decisions
+# 19. Research-identified risks and open decisions
 
 ## Priority A — reputation integrity
 
@@ -1090,7 +1184,7 @@ Research direction:
 
 ---
 
-# 19. TruthLens-specific calibration choices that require validation
+# 20. TruthLens-specific calibration choices that require validation
 
 The following should **not** be presented as values dictated by the literature:
 
@@ -1115,7 +1209,7 @@ They can still be well-justified if empirical scenario testing demonstrates desi
 
 ---
 
-# 20. Recommended validation methodology
+# 21. Recommended validation methodology
 
 The next phase should validate the specific TruthLens calibration rather than search for a paper containing identical constants.
 
@@ -1219,7 +1313,7 @@ No Community score/rank may independently grant Partner Organization verificatio
 
 ---
 
-# 21. Proposed defense statement
+# 22. Proposed defense statement
 
 A concise defense-ready explanation can be:
 
@@ -1229,7 +1323,7 @@ This wording is stronger and more accurate than claiming that one paper directly
 
 ---
 
-# 22. Literature-to-TruthLens mapping
+# 23. Literature-to-TruthLens mapping
 
 | Literature / source | Main idea relevant here | TruthLens relevance | Direct adoption? |
 |---|---|---|---|
@@ -1253,7 +1347,7 @@ This wording is stronger and more accurate than claiming that one paper directly
 
 ---
 
-# 23. References
+# 24. References
 
 1. Resnick, P., Zeckhauser, R., Friedman, E., & Kuwabara, K. (2000). **Reputation Systems.** *Communications of the ACM, 43*(12), 45-48.  
    https://rzeckhauser.scholars.harvard.edu/publications/reputation-systems
@@ -1290,7 +1384,7 @@ This wording is stronger and more accurate than claiming that one paper directly
 11. Hendrikx, F., Bubendorfer, K., & Chard, R. (2015). **Reputation systems: A survey and taxonomy.** *Journal of Parallel and Distributed Computing, 75*, 184-197.  
     https://doi.org/10.1016/j.jpdc.2014.08.004
 
-12. Škorić et al. (2015). **Flow-based reputation with uncertainty: evidence-based subjective logic.** *International Journal of Information Security.*  
+12. Škorić, B., de Hoogh, S. J. A., & Zannone, N. (2016). **Flow-based reputation with uncertainty: evidence-based subjective logic.** *International Journal of Information Security, 15*, 381-402.  
     https://doi.org/10.1007/s10207-015-0298-5
 
 13. Basheer, G. S., Ahmad, M. S., Tang, A. Y. C., & Graf, S. (2015). **Certainty, trust and evidence: Towards an integrative model of confidence in multi-agent systems.** *Computers in Human Behavior, 45*, 307-315.  
@@ -1308,10 +1402,23 @@ This wording is stronger and more accurate than claiming that one paper directly
 17. Rough, D., De Paoli, S., & Wilson, A. (2021/2023). **Commonshare: A New Approach to Social Reputation for Online Collaborative Communities.** *Social Science Computer Review, 41*(1).  
     https://doi.org/10.1177/08944393211028191
 
-18. Bellini et al. (2022). **Privacy-Preserving Reputation Systems Based on Blockchain and Other Cryptographic Building Blocks: A Survey.** *ACM Computing Surveys.*  
+18. Hasan, O., Brunie, L., & Bertino, E. (2022). **Privacy-Preserving Reputation Systems Based on Blockchain and Other Cryptographic Building Blocks: A Survey.** *ACM Computing Surveys, 55*(2), Article 32.  
     https://doi.org/10.1145/3490236
 
-19. Hamilton, M., & Cui, T. (2024). **Fresh Rating Systems: Structure, Incentives, and Fees.**  
+19. Pröllochs, N. (2022). **Community-Based Fact-Checking on Twitter's Birdwatch Platform.** *Proceedings of the International AAAI Conference on Web and Social Media, 16*(1), 794-805.  
+    https://doi.org/10.1609/icwsm.v16i1.19335
+
+20. La Barbera, D., Maddalena, E., Soprano, M., Roitero, K., Demartini, G., Ceolin, D., Spina, D., & Mizzaro, S. (2024). **Crowdsourced Fact-checking: Does It Actually Work?** *Information Processing & Management, 61*(5), 103792.  
+    https://doi.org/10.1016/j.ipm.2024.103792
+
+21. X Community Notes. **Note ranking algorithm / Under the hood.** Technical documentation.  
+    https://communitynotes.x.com/guide/en/under-the-hood/ranking-notes  
+    https://github.com/twitter/communitynotes/blob/main/documentation/under-the-hood/ranking-notes.md
+
+22. **References to unbiased sources increase the helpfulness of community fact-checks.** (2025). *Scientific Reports.*  
+    https://www.nature.com/articles/s41598-025-09372-6
+
+23. Hamilton, M., & Cui, T. (2024). **Fresh Rating Systems: Structure, Incentives, and Fees.** Working paper.  
     https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4875071
 
 ---
