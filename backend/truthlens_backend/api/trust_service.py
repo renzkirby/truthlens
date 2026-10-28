@@ -240,12 +240,15 @@ def calculate_trust_components(user):
     # Only votes on moderator-verified evidence are counted.
     # Users cannot improve their own score by voting on themselves.
     #
-    # Voter trust is used as a bounded weight:
-    # trust 0   -> 0.50
-    # trust 50  -> 0.75
-    # trust 100 -> 1.00
+    # Each vote carries a frozen reputation-weight snapshot.
     #
-    # We use the voter's stored score and do not recursively recompute it.
+    # New/changed votes combine:
+    # - vote-time Trust Score, mapped to a bounded 0.50..1.00 base weight;
+    # - vote-time resolved-action depth, attenuated by n / (n + 4), where
+    #   4 is the current Beta(2,2) prior mass.
+    #
+    # Legacy votes retain their historical full snapshot weight because their
+    # exact resolved-action depth at the original vote event was never stored.
 
     votes = (
         Vote.objects.filter(
