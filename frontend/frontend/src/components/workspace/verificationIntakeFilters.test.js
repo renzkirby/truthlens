@@ -10,7 +10,7 @@ import {
    getDefaultVerificationIntakeClassification,
 } from "./verificationIntakeFilters.js";
 
-test("intake exposes all internal subject classifications plus Unclassified", () => {
+test("intake exposes subject filters, Campus Affairs, and Unclassified in one flat list", () => {
    assert.deepEqual(
       INTAKE_CLASSIFICATION_OPTIONS.map((option) => option.value),
       [
