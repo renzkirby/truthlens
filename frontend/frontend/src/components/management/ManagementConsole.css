@@ -96,17 +96,32 @@
   top: 68px;
   display: flex;
   height: calc(100vh - 68px);
+  height: calc(100dvh - 68px);
+  min-height: 0;
   flex-direction: column;
-  justify-content: space-between;
-  gap: var(--tl-space-8);
+  gap: var(--tl-space-4);
   padding: var(--tl-space-6) var(--tl-space-4);
+  overflow: hidden;
   color: var(--tl-color-text-inverse);
   background: var(--tl-color-brand-dark);
 }
 
 .management-shell__sidebar nav {
   display: grid;
+  min-height: 0;
   gap: var(--tl-space-1);
+  padding-right: var(--tl-space-1);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color:
+    color-mix(in srgb, var(--tl-color-text-inverse) 28%, transparent)
+    transparent;
+}
+
+.management-shell__sidebar .management-shell__back {
+  flex: 0 0 auto;
+  margin-top: auto;
 }
 
 .management-shell__nav-section {

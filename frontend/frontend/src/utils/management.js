@@ -105,7 +105,7 @@ export const MANAGEMENT_PARTNER_STATUSES = [
 
 export const MANAGEMENT_GOVERNANCE_ACTIONS = [
    ["ORGANIZATION_CREATED", "Organization Created"],
-   ["ORGANIZATION_PLATFORM_TRUST_UPDATED", "Organization Platform Trust Updated"],
+   ["ORGANIZATION_PLATFORM_TRUST_UPDATED", "Partner Organization Status Updated"],
    ["ORGANIZATION_VERIFICATION_SCOPE_APPROVED", "Organization Verification Scope Approved (legacy)"],
    ["ORGANIZATION_VERIFICATION_SPECIALIZATIONS_UPDATED", "Organization Verification Specializations Updated"],
    ["CLAIM_INVESTIGATION_CLASSIFIED", "Claim Investigation Classified"],
