@@ -501,6 +501,7 @@ def get_reputation_progression(components):
                 2,
             ),
             "resolved_actions": resolved_actions,
+            "validated_actions": validated_actions,
             "confidence": confidence,
         }
 
@@ -529,8 +530,10 @@ def get_reputation_progression(components):
             "next_rank": None,
             "score_to_next_rank": 0.0,
             "actions_to_next_rank": 0,
+            "validated_actions_to_next_rank": 0,
             "progress_percent": 100.0,
             "resolved_actions": resolved_actions,
+            "validated_actions": validated_actions,
             "confidence": confidence,
         }
 
@@ -579,11 +582,13 @@ def get_reputation_progression(components):
             next_rank["min_actions"]
             - resolved_actions,
         ),
+        "validated_actions_to_next_rank": 0,
         "progress_percent": round(
             progress_percent,
             2,
         ),
         "resolved_actions": resolved_actions,
+        "validated_actions": validated_actions,
         "confidence": confidence,
     }
 
