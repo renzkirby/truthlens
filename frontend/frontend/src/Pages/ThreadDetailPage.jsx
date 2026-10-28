@@ -1180,11 +1180,13 @@ export default function ThreadDetailPage() {
    const hasConfidence = confidenceValue !== null && confidenceValue !== "" && Number.isFinite(confidence);
    const authorUsername = thread.author?.username || "Unknown";
    const authorProfessionalAffiliation = thread.author?.partner_affiliations?.[0] || null;
-   const authorRoleLabel = authorProfessionalAffiliation
-      ? `${authorProfessionalAffiliation.role_label || "Partner member"} at ${authorProfessionalAffiliation.name}`
-      : getRoleLabel(thread.author?.role);
    const authorTrustVisible =
       thread.author?.trust_score !== null && thread.author?.trust_score !== undefined;
+   const authorRoleLabel = authorProfessionalAffiliation
+      ? `${authorProfessionalAffiliation.role_label || "Partner member"} at ${authorProfessionalAffiliation.name}`
+      : authorTrustVisible
+         ? getRoleLabel(thread.author?.role)
+         : "Partner Organization member";
    const escalationFocus = ESCALATION_OPTIONS.find((option) => option.value === thread.escalation_reason);
    const assessmentKey = String(assessmentVerdict || "UNVERIFIED").toUpperCase();
    const assessmentMeta = VERDICT_CONFIG[assessmentKey] || VERDICT_CONFIG.UNVERIFIED;
