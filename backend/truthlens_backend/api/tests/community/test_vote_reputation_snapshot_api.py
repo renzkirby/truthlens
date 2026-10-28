@@ -94,6 +94,10 @@ class VoteReputationSnapshotApiTests(TestCase):
             vote.vote_resolved_actions_snapshot,
             3,
         )
+        self.assertEqual(
+            vote.vote_validated_actions_snapshot,
+            3,
+        )
         self.assertAlmostEqual(
             vote.vote_reputation_weight_snapshot,
             0.8 * (3 / 7),
@@ -143,6 +147,10 @@ class VoteReputationSnapshotApiTests(TestCase):
             vote.vote_resolved_actions_snapshot,
             10,
         )
+        self.assertEqual(
+            vote.vote_validated_actions_snapshot,
+            10,
+        )
         self.assertAlmostEqual(
             vote.vote_reputation_weight_snapshot,
             0.9 * (10 / 14),
@@ -164,6 +172,7 @@ class VoteReputationSnapshotApiTests(TestCase):
                 "vote_value": True,
                 "vote_trust_snapshot": 100.0,
                 "vote_resolved_actions_snapshot": 999,
+                "vote_validated_actions_snapshot": 999,
                 "vote_reputation_weight_snapshot": 1.0,
             },
             format="json",
@@ -177,6 +186,10 @@ class VoteReputationSnapshotApiTests(TestCase):
         self.assertEqual(vote.vote_trust_snapshot, 60.0)
         self.assertEqual(
             vote.vote_resolved_actions_snapshot,
+            3,
+        )
+        self.assertEqual(
+            vote.vote_validated_actions_snapshot,
             3,
         )
         self.assertLess(
