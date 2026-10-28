@@ -651,7 +651,60 @@ updates applicable Community profiles. Platform staff identities are skipped.
 
 ---
 
-# 17. Decision standard
+# 17. Local migration and reconciliation validation
+
+Local validation after applying migration `0099_vote_reputation_weight_snapshots` produced:
+
+```text
+total_votes=5
+snapshot_coverage_percent=100.00
+weight_coverage_percent=100.00
+history_snapshot_coverage_percent=0.00
+legacy_preserved_votes=5
+hardened_votes=0
+nonstandard_snapshot_rows=0
+```
+
+This is the expected legacy state:
+
+- all five historical votes already had valid Trust Score snapshots;
+- migration froze each historical vote's legacy reputation weight;
+- no historical resolved/validated action counts were fabricated;
+- no malformed snapshot rows were found.
+
+The first Trust Score recomputation preview reported:
+
+```text
+inspected_users=53
+applicable_users=49
+platform_staff_skipped=4
+changed_users=2
+unchanged_users=47
+maximum_absolute_delta=50.00
+```
+
+Aggregate diagnostics then established:
+
+```text
+legacy_zero_to_neutral=2
+changed_with_resolved_actions=0
+changed_with_community_votes=0
+changed_with_moderation_penalty=0
+delta_over_15=2
+```
+
+Both changed profiles were therefore explained by a historical schema transition:
+
+- early TruthLens profiles originally defaulted to Trust Score `0.0`;
+- migration `0012` later changed the schema default to neutral `50.0`;
+- that schema migration did not backfill already-existing zero-valued profiles;
+- deterministic recomputation correctly maps those inactive legacy profiles to the current neutral baseline of 50.
+
+This validation is important because it demonstrates that, in the local dataset, the selected Trust Score hardening does **not** unexpectedly alter existing users' scores. The only previewed persisted-score changes are stale legacy baseline corrections unrelated to the new vote-weighting policy.
+
+---
+
+# 18. Decision standard
 
 These candidates should be implemented in production **only after**:
 
