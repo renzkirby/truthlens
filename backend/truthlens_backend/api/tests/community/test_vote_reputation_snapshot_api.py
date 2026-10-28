@@ -161,6 +161,68 @@ class VoteReputationSnapshotApiTests(TestCase):
         )
 
     @patch("api.views.recompute_user_trust_score_task.delay")
+    def test_failed_history_does_not_gain_reputation_vote_weight(
+        self,
+        recompute_delay,
+    ):
+        failed_voter = User.objects.create_user(
+            username="vote-snapshot-failed-voter",
+            password="pass1234",
+        )
+        failed_voter.profile.trust_score = 28.45
+        failed_voter.profile.save(
+            update_fields=["trust_score"],
+        )
+
+        for index in range(25):
+            claim = Claim.objects.create(
+                claim_type=Claim.ClaimType.URL,
+                url_link=f"https://example.com/failed-voter-history-{index}",
+                verified_via=Claim.VerificationSource.PENDING,
+            )
+            thread = Thread.objects.create(
+                claim=claim,
+                author=self.contributor,
+                caption=f"Failed voter history thread {index}",
+            )
+            EvidenceSubmission.objects.create(
+                thread=thread,
+                contributor=failed_voter,
+                evidence_caption=f"Rejected contribution {index}",
+                evidence_type=EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
+                evidence_status=EvidenceSubmission.EvidenceStatus.REJECTED,
+                verified_at=timezone.now(),
+            )
+
+        self.client.force_authenticate(failed_voter)
+        response = self.client.post(
+            reverse("vote-list"),
+            {
+                "evidence": str(self.target_evidence.pk),
+                "vote_value": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        vote = Vote.objects.get(
+            evidence=self.target_evidence,
+            voter=failed_voter,
+        )
+        self.assertEqual(
+            vote.vote_resolved_actions_snapshot,
+            25,
+        )
+        self.assertEqual(
+            vote.vote_validated_actions_snapshot,
+            0,
+        )
+        self.assertEqual(
+            vote.vote_reputation_weight_snapshot,
+            0.0,
+        )
+
+    @patch("api.views.recompute_user_trust_score_task.delay")
     def test_vote_snapshot_fields_are_read_only(
         self,
         recompute_delay,
