@@ -333,9 +333,11 @@ class ThreadDetailApiTests(TestCase):
                     "name": self.organization.name,
                     "slug": self.organization.slug,
                     "logo_url": self.organization.logo_url,
+                    "role_label": "Lead Verifier",
                 }
             ],
         )
+        self.assertIsNone(response.data["contributor"]["trust_score"])
         self.assertEqual(
             set(response.data["verified_by"]),
             {"id", "username", "avatar_url"},
