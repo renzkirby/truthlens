@@ -550,8 +550,9 @@ def build_hardening_experiment_report(calibration=DEFAULT_CALIBRATION):
                 "account influence."
             ),
             "snapshot_validated_history": (
-                "Freezes historical score and scales influence by n/(n+4), "
-                "where four is the current Beta(2,2) prior mass."
+                "Freezes vote-time Trust and action history, then scales "
+                "influence by validated/(resolved+4), where four is the "
+                "current Beta(2,2) prior mass."
             ),
             "snapshot_contributor_gate": (
                 "Strongest simple anti-Sybil gate tested, but suppresses all "
