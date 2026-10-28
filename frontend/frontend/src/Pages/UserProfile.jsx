@@ -542,9 +542,6 @@ function UserProfile() {
    const numericTrustScore = Number(displayUser.trust_score);
    const hasTrustScore =
       displayUser.trust_score !== null && displayUser.trust_score !== undefined && Number.isFinite(numericTrustScore);
-   const trustLevel = hasTrustScore
-      ? getTrustLevel(numericTrustScore)
-      : { label: "Not available", tone: "unavailable" };
    const isPlatformModerator = isPlatformModeratorRole(displayUser.role);
    const partnerAffiliations = Array.isArray(displayUser.partner_affiliations)
       ? displayUser.partner_affiliations
