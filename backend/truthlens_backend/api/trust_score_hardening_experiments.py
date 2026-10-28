@@ -25,7 +25,8 @@ class VoterObservation:
     name: str
     snapshot_score: float
     current_score: float
-    resolved_actions: int
+    snapshot_resolved_actions: int
+    current_resolved_actions: int
     validated_actions: int
 
 
@@ -116,15 +117,21 @@ def effective_vote_weight(
         else voter.current_score
     )
 
+    history_actions = (
+        voter.snapshot_resolved_actions
+        if policy.use_snapshot
+        else voter.current_resolved_actions
+    )
+
     if policy.contributor_gate:
-        if voter.resolved_actions < 10 or score < 55.0:
+        if history_actions < 10 or score < 55.0:
             return 0.0
 
     weight = base_vote_weight(score)
 
     if policy.evidence_share_scaling:
         weight *= observed_evidence_share(
-            voter.resolved_actions,
+            history_actions,
             calibration,
         )
 
@@ -166,35 +173,40 @@ def voter_archetypes():
             name="fresh",
             snapshot_score=50.0,
             current_score=50.0,
-            resolved_actions=0,
+            snapshot_resolved_actions=0,
+            current_resolved_actions=0,
             validated_actions=0,
         ),
         VoterObservation(
             name="three_successes",
             snapshot_score=61.71,
             current_score=61.71,
-            resolved_actions=3,
+            snapshot_resolved_actions=3,
+            current_resolved_actions=3,
             validated_actions=3,
         ),
         VoterObservation(
             name="three_failures",
             snapshot_score=39.29,
             current_score=39.29,
-            resolved_actions=3,
+            snapshot_resolved_actions=3,
+            current_resolved_actions=3,
             validated_actions=0,
         ),
         VoterObservation(
             name="ten_successes",
             snapshot_score=72.86,
             current_score=72.86,
-            resolved_actions=10,
+            snapshot_resolved_actions=10,
+            current_resolved_actions=10,
             validated_actions=10,
         ),
         VoterObservation(
             name="twenty_five_successes",
             snapshot_score=76.55,
             current_score=76.55,
-            resolved_actions=25,
+            snapshot_resolved_actions=25,
+            current_resolved_actions=25,
             validated_actions=25,
         ),
     )
@@ -354,7 +366,8 @@ def historical_vote_stability(calibration=DEFAULT_CALIBRATION):
         name="historical_voter",
         snapshot_score=50.0,
         current_score=90.0,
-        resolved_actions=10,
+        snapshot_resolved_actions=3,
+        current_resolved_actions=25,
         validated_actions=8,
     )
 
@@ -366,7 +379,8 @@ def historical_vote_stability(calibration=DEFAULT_CALIBRATION):
                     name="historical_voter_at_vote_time",
                     snapshot_score=50.0,
                     current_score=50.0,
-                    resolved_actions=10,
+                    snapshot_resolved_actions=3,
+                    current_resolved_actions=3,
                     validated_actions=8,
                 ),
             ) * 5,
