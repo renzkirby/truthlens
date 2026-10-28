@@ -6,6 +6,7 @@ from django.test import SimpleTestCase
 from api.trust_score_validation import (
     DEFAULT_CALIBRATION,
     TrustScenario,
+    attack_results,
     build_validation_report,
     invariant_results,
     simulate_trust_score,
@@ -129,6 +130,31 @@ class TrustScoreValidationTests(SimpleTestCase):
         self.assertEqual(
             failed,
             {"I8", "I9"},
+        )
+
+    def test_current_attack_threshold_is_five_fresh_account_votes(self):
+        attacks = attack_results()
+
+        promotion = next(
+            row
+            for row in attacks["promotion_probe"]["thresholds"]
+            if row["voter_trust_score"] == 50.0
+        )
+        demotion = next(
+            row
+            for row in attacks["demotion_probe"]["thresholds"]
+            if row["voter_trust_score"] == 50.0
+        )
+
+        self.assertEqual(promotion["minimum_votes"], 5)
+        self.assertEqual(
+            promotion["to_rank"],
+            "Trusted Contributor",
+        )
+        self.assertEqual(demotion["minimum_votes"], 5)
+        self.assertEqual(
+            demotion["to_rank"],
+            "Contributor",
         )
 
     def test_validation_report_includes_sensitivity_rows(self):
