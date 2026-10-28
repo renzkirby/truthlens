@@ -47,16 +47,35 @@ class Command(BaseCommand):
         weight_above_one = Vote.objects.filter(
             vote_reputation_weight_snapshot__gt=1,
         ).count()
-        history_null = Vote.objects.filter(
+        resolved_history_null = Vote.objects.filter(
             vote_resolved_actions_snapshot__isnull=True,
+        ).count()
+        validated_history_null = Vote.objects.filter(
+            vote_validated_actions_snapshot__isnull=True,
+        ).count()
+        complete_history = Vote.objects.filter(
+            vote_resolved_actions_snapshot__isnull=False,
+            vote_validated_actions_snapshot__isnull=False,
+        ).count()
+        partial_history = Vote.objects.filter(
+            Q(
+                vote_resolved_actions_snapshot__isnull=False,
+                vote_validated_actions_snapshot__isnull=True,
+            )
+            | Q(
+                vote_resolved_actions_snapshot__isnull=True,
+                vote_validated_actions_snapshot__isnull=False,
+            )
         ).count()
         legacy_preserved = Vote.objects.filter(
             vote_reputation_weight_snapshot__isnull=False,
             vote_resolved_actions_snapshot__isnull=True,
+            vote_validated_actions_snapshot__isnull=True,
         ).count()
         hardened = Vote.objects.filter(
             vote_reputation_weight_snapshot__isnull=False,
             vote_resolved_actions_snapshot__isnull=False,
+            vote_validated_actions_snapshot__isnull=False,
         ).count()
 
         nonstandard = Vote.objects.filter(
@@ -79,7 +98,10 @@ class Command(BaseCommand):
             "weight_null": weight_null,
             "weight_below_zero": weight_below_zero,
             "weight_above_one": weight_above_one,
-            "history_snapshot_null": history_null,
+            "resolved_history_snapshot_null": resolved_history_null,
+            "validated_history_snapshot_null": validated_history_null,
+            "complete_history_snapshots": complete_history,
+            "partial_history_snapshots": partial_history,
             "legacy_preserved_votes": legacy_preserved,
             "hardened_votes": hardened,
             "snapshot_coverage_percent": (
@@ -100,7 +122,7 @@ class Command(BaseCommand):
             ),
             "history_snapshot_coverage_percent": (
                 round(
-                    ((total - history_null) / total) * 100,
+                    (complete_history / total) * 100,
                     2,
                 )
                 if total
@@ -139,7 +161,16 @@ class Command(BaseCommand):
             f"weight_null={report['weight_null']}"
         )
         self.stdout.write(
-            f"history_snapshot_null={report['history_snapshot_null']}"
+            f"resolved_history_snapshot_null="
+            f"{report['resolved_history_snapshot_null']}"
+        )
+        self.stdout.write(
+            f"validated_history_snapshot_null="
+            f"{report['validated_history_snapshot_null']}"
+        )
+        self.stdout.write(
+            f"partial_history_snapshots="
+            f"{report['partial_history_snapshots']}"
         )
         self.stdout.write(
             f"legacy_preserved_votes={report['legacy_preserved_votes']}"
