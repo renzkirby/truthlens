@@ -5,7 +5,9 @@ import {
    INTAKE_CLASSIFICATION_ALL,
    INTAKE_CLASSIFICATION_OPTIONS,
    INTAKE_CLASSIFICATION_UNCLASSIFIED,
+   INTAKE_CAMPUS_AFFAIRS,
    buildVerificationIntakeQuery,
+   getDefaultVerificationIntakeClassification,
 } from "./verificationIntakeFilters.js";
 
 test("intake exposes all internal subject classifications plus Unclassified", () => {
@@ -25,6 +27,7 @@ test("intake exposes all internal subject classifications plus Unclassified", ()
          "DISASTERS",
          "SPORTS",
          "CULTURE",
+         "CAMPUS_AFFAIRS",
          "UNCLASSIFIED",
       ],
    );
@@ -46,8 +49,13 @@ test("All classifications omits the classification query parameter", () => {
    assert.equal(query.get("classification"), null);
 });
 
-test("domain and Unclassified filters are sent to the intake API", () => {
-   for (const classification of ["SCIENCE", "LAW", INTAKE_CLASSIFICATION_UNCLASSIFIED]) {
+test("domain, Campus Affairs, and Unclassified filters are sent to the intake API", () => {
+   for (const classification of [
+      "SCIENCE",
+      "LAW",
+      INTAKE_CAMPUS_AFFAIRS,
+      INTAKE_CLASSIFICATION_UNCLASSIFIED,
+   ]) {
       const query = new URLSearchParams(
          buildVerificationIntakeQuery({
             organizationId: "org-1",
@@ -59,4 +67,19 @@ test("domain and Unclassified filters are sent to the intake API", () => {
 
       assert.equal(query.get("classification"), classification);
    }
+});
+
+test("student publications default to Campus Affairs while other organizations default to all", () => {
+   assert.equal(
+      getDefaultVerificationIntakeClassification("STUDENT_PUBLICATION"),
+      INTAKE_CAMPUS_AFFAIRS,
+   );
+   assert.equal(
+      getDefaultVerificationIntakeClassification(""),
+      INTAKE_CLASSIFICATION_ALL,
+   );
+   assert.equal(
+      getDefaultVerificationIntakeClassification("OTHER"),
+      INTAKE_CLASSIFICATION_ALL,
+   );
 });
