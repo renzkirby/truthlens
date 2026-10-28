@@ -3683,14 +3683,25 @@ class VoteViewSet(viewsets.ModelViewSet):
         recompute_user_trust_score_task.delay(vote.evidence.contributor_id)
 
     def perform_update(self, serializer):
-        snapshot = build_vote_reputation_snapshot(
-            self.request.user,
+        current_vote = serializer.instance
+        next_value = serializer.validated_data.get(
+            "vote_value",
+            current_vote.vote_value,
         )
-        vote = serializer.save(
-            vote_trust_snapshot=snapshot["trust_score"],
-            vote_resolved_actions_snapshot=snapshot["resolved_actions"],
-            vote_reputation_weight_snapshot=snapshot["reputation_weight"],
-        )
+
+        if next_value == current_vote.vote_value:
+            vote = serializer.save()
+        else:
+            snapshot = build_vote_reputation_snapshot(
+                self.request.user,
+            )
+            vote = serializer.save(
+                vote_trust_snapshot=snapshot["trust_score"],
+                vote_resolved_actions_snapshot=snapshot["resolved_actions"],
+                vote_validated_actions_snapshot=snapshot["validated_actions"],
+                vote_reputation_weight_snapshot=snapshot["reputation_weight"],
+            )
+
         recompute_user_trust_score_task.delay(vote.evidence.contributor_id)
 
     def perform_destroy(self, instance):
