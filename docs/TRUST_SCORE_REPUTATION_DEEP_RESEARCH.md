@@ -1337,7 +1337,7 @@ This wording is stronger and more accurate than claiming that one paper directly
 | Noorian & Ulieru (2010) | Context, reliability, honesty, adaptability | Keep Trust Score contextual; evaluate evidence reliability | Principle only |
 | Friedman, Resnick & Sami (2011) | Whitewashing, feedback honesty, Sybil attacks | Adversarial validation plan | Principle only |
 | Ziaie & Krcmar (2012) | Reputation and promotion in multi-tier communities | Rank/progression design | Principle only |
-| Hendrikx et al. (2015) | Reputation taxonomy and context reference model | Define exactly what Truth Score means and where it applies | Principle only |
+| Hendrikx et al. (2015) | Reputation taxonomy and context reference model | Define exactly what Trust Score means and where it applies | Principle only |
 | Škorić, de Hoogh & Zannone (2016) | Reputation with explicit uncertainty | Separate score from confidence | Principle only |
 | Sänger & Pernul (2018) | Manipulation resistance vs transparency trade-off | Preserve understandable component breakdown | Principle only |
 | Filippas et al. (2019/2022) | Reputation inflation can reduce informativeness | Do not make raw social ratings dominant | Principle only |
@@ -1347,7 +1347,7 @@ This wording is stronger and more accurate than claiming that one paper directly
 | Pröllochs (2022) | Community fact-checks are rated by peers; source quality and polarization affect helpfulness/consensus | Direct fact-checking-domain support for quality-gated community contribution | Domain evidence |
 | La Barbera et al. (2024) | Crowd-worker reliability can be evaluated in fact-checking | Supports studying contributor/rater reliability rather than equal raw votes | Domain evidence |
 | X Community Notes technical documentation | Raw helpful-vote ratios were replaced by models using rater histories and cross-viewpoint agreement | Practical comparison for non-equal vote aggregation; not a model TruthLens directly adopts | Implementation comparison |
-| Scientific Reports Community Notes study (2025) | Heterogeneous rating histories and source characteristics relate to note helpfulness | Supports evaluating source/rater heterogeneity in community fact-checking | Domain evidence |
+| Solovev & Pröllochs (2025) | Heterogeneous rating histories and source characteristics relate to note helpfulness | Supports evaluating source/rater heterogeneity in community fact-checking | Domain evidence |
 | Hamilton & Cui (2024) | Old ratings can become stale | Evaluate decay/recency, do not assume it | Research question |
 
 ---
@@ -1420,8 +1420,8 @@ This wording is stronger and more accurate than claiming that one paper directly
     https://communitynotes.x.com/guide/en/under-the-hood/ranking-notes  
     https://github.com/twitter/communitynotes/blob/main/documentation/under-the-hood/ranking-notes.md
 
-22. **References to unbiased sources increase the helpfulness of community fact-checks.** (2025). *Scientific Reports.*  
-    https://www.nature.com/articles/s41598-025-09372-6
+22. Solovev, K., & Pröllochs, N. (2025). **References to unbiased sources increase the helpfulness of community fact-checks.** *Scientific Reports, 15*, 25749.  
+    https://doi.org/10.1038/s41598-025-09372-6
 
 23. Hamilton, M., & Cui, T. (2024). **Fresh Rating Systems: Structure, Incentives, and Fees.** Working paper.  
     https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4875071
