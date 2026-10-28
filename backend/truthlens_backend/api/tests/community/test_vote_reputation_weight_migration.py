@@ -50,6 +50,7 @@ class VoteReputationWeightMigrationTests(TestCase):
             vote_value=True,
             vote_trust_snapshot=65.0,
             vote_resolved_actions_snapshot=None,
+            vote_validated_actions_snapshot=None,
             vote_reputation_weight_snapshot=None,
         )
         vote_b = Vote.objects.create(
@@ -58,6 +59,7 @@ class VoteReputationWeightMigrationTests(TestCase):
             vote_value=False,
             vote_trust_snapshot=None,
             vote_resolved_actions_snapshot=None,
+            vote_validated_actions_snapshot=None,
             vote_reputation_weight_snapshot=None,
         )
 
@@ -81,7 +83,13 @@ class VoteReputationWeightMigrationTests(TestCase):
             vote_a.vote_resolved_actions_snapshot,
         )
         self.assertIsNone(
+            vote_a.vote_validated_actions_snapshot,
+        )
+        self.assertIsNone(
             vote_b.vote_resolved_actions_snapshot,
+        )
+        self.assertIsNone(
+            vote_b.vote_validated_actions_snapshot,
         )
 
         migration_module.backfill_legacy_vote_reputation_weights(
