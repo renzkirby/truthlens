@@ -32,22 +32,20 @@ def get_organization_admin_onboarding_policy(
             ),
         }
 
-    if has_prior_partner_work is None:
-        has_prior_partner_work = organization_has_prior_partner_work(organization)
+    if organization.partner_status == Organization.PartnerStatus.NONE:
+        if has_prior_partner_work is None:
+            has_prior_partner_work = organization_has_prior_partner_work(organization)
 
-    if (
-        organization.partner_status == Organization.PartnerStatus.NONE
-        and has_prior_partner_work
-    ):
-        return {
-            "allowed": False,
-            "code": "RETIREMENT_REQUIRED",
-            "message": (
-                "This organization has prior Partner verification work and must "
-                "complete the governed retirement lifecycle before Organization "
-                "Admin onboarding can resume."
-            ),
-        }
+        if has_prior_partner_work:
+            return {
+                "allowed": False,
+                "code": "RETIREMENT_REQUIRED",
+                "message": (
+                    "This organization has prior Partner verification work and must "
+                    "complete the governed retirement lifecycle before Organization "
+                    "Admin onboarding can resume."
+                ),
+            }
 
     if organization.verification_status == Organization.VerificationStatus.REJECTED:
         return {
