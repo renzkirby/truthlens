@@ -113,7 +113,10 @@ def get_partner_organization_lifecycle_projection(organization):
     )
     active_factual_corrections = len(active_factual_correction_rows)
     has_prior_partner_work = organization_has_prior_partner_work(organization)
-    admin_onboarding = get_organization_admin_onboarding_policy(organization)
+    admin_onboarding = get_organization_admin_onboarding_policy(
+        organization,
+        has_prior_partner_work=has_prior_partner_work,
+    )
 
     if organization.partner_status == Organization.PartnerStatus.ACTIVE:
         lifecycle_state = "ACTIVE_PARTNER"
