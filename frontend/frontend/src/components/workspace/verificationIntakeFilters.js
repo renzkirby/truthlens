@@ -1,5 +1,6 @@
 export const INTAKE_CLASSIFICATION_ALL = "";
 export const INTAKE_CLASSIFICATION_UNCLASSIFIED = "UNCLASSIFIED";
+export const INTAKE_CAMPUS_AFFAIRS = "CAMPUS_AFFAIRS";
 
 export const INTAKE_CLASSIFICATION_OPTIONS = [
    { value: INTAKE_CLASSIFICATION_ALL, label: "All classifications" },
@@ -15,6 +16,7 @@ export const INTAKE_CLASSIFICATION_OPTIONS = [
    { value: "DISASTERS", label: "Disasters & Public Safety" },
    { value: "SPORTS", label: "Sports" },
    { value: "CULTURE", label: "Culture & Entertainment" },
+   { value: INTAKE_CAMPUS_AFFAIRS, label: "Campus Affairs" },
    { value: INTAKE_CLASSIFICATION_UNCLASSIFIED, label: "Unclassified" },
 ];
 
@@ -35,4 +37,10 @@ export function buildVerificationIntakeQuery({
    }
 
    return query.toString();
+}
+
+export function getDefaultVerificationIntakeClassification(organizationSubtype) {
+   return organizationSubtype === "STUDENT_PUBLICATION"
+      ? INTAKE_CAMPUS_AFFAIRS
+      : INTAKE_CLASSIFICATION_ALL;
 }
