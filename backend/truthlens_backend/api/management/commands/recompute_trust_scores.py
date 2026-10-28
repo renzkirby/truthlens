@@ -43,6 +43,14 @@ class Command(BaseCommand):
         changed = 0
         unchanged = 0
         maximum_absolute_delta = 0.0
+        legacy_zero_to_neutral = 0
+        changed_with_resolved_actions = 0
+        changed_with_community_votes = 0
+        changed_with_moderation_penalty = 0
+        delta_at_most_1 = 0
+        delta_at_most_5 = 0
+        delta_at_most_15 = 0
+        delta_over_15 = 0
 
         for user in users:
             inspected += 1
@@ -66,6 +74,34 @@ class Command(BaseCommand):
                 continue
 
             changed += 1
+
+            absolute_delta = abs(delta)
+            if absolute_delta <= 1.0:
+                delta_at_most_1 += 1
+            elif absolute_delta <= 5.0:
+                delta_at_most_5 += 1
+            elif absolute_delta <= 15.0:
+                delta_at_most_15 += 1
+            else:
+                delta_over_15 += 1
+
+            if components["resolved_actions"] > 0:
+                changed_with_resolved_actions += 1
+            if components["upvotes"] > 0 or components["downvotes"] > 0:
+                changed_with_community_votes += 1
+            if components["moderation_penalty"] > 0:
+                changed_with_moderation_penalty += 1
+
+            if (
+                abs(current) < 0.005
+                and abs(target - 50.0) < 0.005
+                and components["resolved_actions"] == 0
+                and components["upvotes"] == 0
+                and components["downvotes"] == 0
+                and components["moderation_penalty"] == 0
+            ):
+                legacy_zero_to_neutral += 1
+
             if options["apply"]:
                 user.profile.trust_score = target
                 user.profile.save(
@@ -85,6 +121,33 @@ class Command(BaseCommand):
         self.stdout.write(
             "maximum_absolute_delta="
             f"{maximum_absolute_delta:.2f}"
+        )
+        self.stdout.write(
+            f"legacy_zero_to_neutral={legacy_zero_to_neutral}"
+        )
+        self.stdout.write(
+            "changed_with_resolved_actions="
+            f"{changed_with_resolved_actions}"
+        )
+        self.stdout.write(
+            "changed_with_community_votes="
+            f"{changed_with_community_votes}"
+        )
+        self.stdout.write(
+            "changed_with_moderation_penalty="
+            f"{changed_with_moderation_penalty}"
+        )
+        self.stdout.write(
+            f"delta_at_most_1={delta_at_most_1}"
+        )
+        self.stdout.write(
+            f"delta_1_to_5={delta_at_most_5}"
+        )
+        self.stdout.write(
+            f"delta_5_to_15={delta_at_most_15}"
+        )
+        self.stdout.write(
+            f"delta_over_15={delta_over_15}"
         )
 
         if options["apply"]:
