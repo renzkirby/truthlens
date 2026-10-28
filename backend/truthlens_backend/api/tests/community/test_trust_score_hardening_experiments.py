@@ -6,45 +6,68 @@ from django.test import SimpleTestCase
 from api.trust_score_hardening_experiments import (
     BASELINE_DYNAMIC,
     SNAPSHOT_CONTRIBUTOR_GATE,
-    SNAPSHOT_EVIDENCE_SHARE,
+    SNAPSHOT_VALIDATED_HISTORY,
     SNAPSHOT_ONLY,
     VoterObservation,
     build_hardening_experiment_report,
     effective_vote_weight,
-    observed_evidence_share,
+    validated_history_factor,
 )
 
 
 class TrustScoreHardeningExperimentTests(SimpleTestCase):
-    def test_observed_evidence_share_uses_existing_beta_prior_mass(self):
-        self.assertEqual(observed_evidence_share(0), 0.0)
+    def test_validated_history_factor_uses_existing_beta_prior_mass(self):
+        self.assertEqual(
+            validated_history_factor(
+                validated_actions=0,
+                resolved_actions=0,
+            ),
+            0.0,
+        )
         self.assertAlmostEqual(
-            observed_evidence_share(3),
+            validated_history_factor(
+                validated_actions=3,
+                resolved_actions=3,
+            ),
             3 / 7,
         )
         self.assertAlmostEqual(
-            observed_evidence_share(10),
-            10 / 14,
+            validated_history_factor(
+                validated_actions=5,
+                resolved_actions=10,
+            ),
+            5 / 14,
         )
         self.assertAlmostEqual(
-            observed_evidence_share(25),
-            25 / 29,
+            validated_history_factor(
+                validated_actions=10,
+                resolved_actions=10,
+            ),
+            10 / 14,
+        )
+        self.assertEqual(
+            validated_history_factor(
+                validated_actions=0,
+                resolved_actions=25,
+            ),
+            0.0,
         )
 
-    def test_snapshot_evidence_share_removes_fresh_account_influence(self):
+    def test_snapshot_validated_history_removes_fresh_account_influence(self):
         fresh = VoterObservation(
             name="fresh",
             snapshot_score=50.0,
             current_score=50.0,
             snapshot_resolved_actions=0,
             current_resolved_actions=0,
-            validated_actions=0,
+            snapshot_validated_actions=0,
+            current_validated_actions=0,
         )
 
         self.assertEqual(
             effective_vote_weight(
                 fresh,
-                SNAPSHOT_EVIDENCE_SHARE,
+                SNAPSHOT_VALIDATED_HISTORY,
             ),
             0.0,
         )
@@ -63,6 +86,30 @@ class TrustScoreHardeningExperimentTests(SimpleTestCase):
             0.75,
         )
 
+    def test_failed_action_history_cannot_mature_vote_influence(self):
+        report = build_hardening_experiment_report()
+        policy = next(
+            row
+            for row in report["vote_policy_comparison"]["policies"]
+            if row["policy"] == SNAPSHOT_VALIDATED_HISTORY.key
+        )
+        failed_history = next(
+            row
+            for row in policy["archetypes"]
+            if row["voter"] == "twenty_five_failures"
+        )
+
+        self.assertEqual(
+            failed_history["effective_weight"],
+            0.0,
+        )
+        self.assertIsNone(
+            failed_history["promotion"]["minimum_votes"],
+        )
+        self.assertIsNone(
+            failed_history["demotion"]["minimum_votes"],
+        )
+
     def test_snapshot_policies_make_historical_vote_weight_stable(self):
         report = build_hardening_experiment_report()
         by_policy = {
@@ -77,7 +124,7 @@ class TrustScoreHardeningExperimentTests(SimpleTestCase):
             by_policy[SNAPSHOT_ONLY.key]["stable"],
         )
         self.assertTrue(
-            by_policy[SNAPSHOT_EVIDENCE_SHARE.key]["stable"],
+            by_policy[SNAPSHOT_VALIDATED_HISTORY.key]["stable"],
         )
         self.assertTrue(
             by_policy[SNAPSHOT_CONTRIBUTOR_GATE.key]["stable"],
@@ -105,12 +152,12 @@ class TrustScoreHardeningExperimentTests(SimpleTestCase):
             5,
         )
 
-    def test_evidence_share_blocks_fresh_attack_but_preserves_established_signal(self):
+    def test_validated_history_blocks_fresh_attack_but_preserves_established_signal(self):
         report = build_hardening_experiment_report()
         policy = next(
             row
             for row in report["vote_policy_comparison"]["policies"]
-            if row["policy"] == SNAPSHOT_EVIDENCE_SHARE.key
+            if row["policy"] == SNAPSHOT_VALIDATED_HISTORY.key
         )
         fresh = next(
             row
@@ -177,7 +224,7 @@ class TrustScoreHardeningExperimentTests(SimpleTestCase):
             rendered,
         )
         self.assertIn(
-            "snapshot_evidence_share",
+            "snapshot_validated_history",
             rendered,
         )
         self.assertIn(
