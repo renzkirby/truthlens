@@ -1,4 +1,4 @@
-"""Analyze the current Trust Score model without database reads or writes."""
+"""Analyze the pre-hardening Trust Score control without database access."""
 
 import json
 
@@ -9,7 +9,7 @@ from api.trust_score_validation import build_validation_report
 
 class Command(BaseCommand):
     help = (
-        "Offline analysis of the current Trust Score calibration. "
+        "Offline analysis of the pre-hardening Trust Score control calibration. "
         "No database reads/writes and no external calls."
     )
 
@@ -39,7 +39,7 @@ class Command(BaseCommand):
             return
 
         calibration = report["calibration"]
-        self.stdout.write("TRUTHLENS TRUST SCORE VALIDATION")
+        self.stdout.write("TRUTHLENS TRUST SCORE PRE-HARDENING BASELINE")
         self.stdout.write(
             "CALIBRATION "
             f"base={calibration['base_score']:.0f} "
