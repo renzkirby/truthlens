@@ -179,7 +179,7 @@ class TrustScoreValidationTests(SimpleTestCase):
 
         rendered = output.getvalue()
         self.assertIn(
-            "TRUTHLENS TRUST SCORE VALIDATION",
+            "TRUTHLENS TRUST SCORE PRE-HARDENING BASELINE",
             rendered,
         )
         self.assertIn(
