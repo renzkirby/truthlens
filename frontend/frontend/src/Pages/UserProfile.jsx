@@ -598,13 +598,13 @@ function UserProfile() {
                   </div>
 
                   {hasTrustScore && reputationVisible && !hasPartnerAffiliation && (
-                     <div className={`user-profile__trust-compact is-${trustLevel.tone}`} aria-labelledby="trust-heading">
+                     <div className="user-profile__trust-compact" aria-labelledby="trust-heading">
                         <span id="trust-heading" className="user-profile__trust-compact-label">
                            Trust Score
                         </span>
                         <div className="user-profile__trust-compact-value">
                            <strong>{numericTrustScore.toFixed(1)}</strong>
-                           <span>{trustLevel.label}</span>
+                           <span>Community reputation</span>
                         </div>
                         <p className="user-profile__sr-only">
                            Participation reputation on TruthLens, not verification or publication authority.
