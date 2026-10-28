@@ -64,6 +64,14 @@ class Command(BaseCommand):
                 )
             self.stdout.write("")
 
+        self.stdout.write("SELECTED CANDIDATE CHECKS")
+        for check in report["selected_candidate_checks"]:
+            status = "PASS" if check["passed"] else "FAIL"
+            self.stdout.write(
+                f"{status:4} {check['id']} {check['name']}"
+            )
+
+        self.stdout.write("")
         self.stdout.write("HISTORICAL VOTE STABILITY")
         for row in report["historical_vote_stability"]:
             status = "PASS" if row["stable"] else "FAIL"
