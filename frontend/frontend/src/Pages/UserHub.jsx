@@ -1659,7 +1659,9 @@ export default function UserHub() {
                         </div>
                         <p className="hub-rank-guidance">
                            {reputation?.next_rank ? (
-                              reputation.actions_to_next_rank > 0 || reputation.score_to_next_rank > 0 ? (
+                              reputation.actions_to_next_rank > 0 ||
+                              (reputation.validated_actions_to_next_rank ?? 0) > 0 ||
+                              reputation.score_to_next_rank > 0 ? (
                                  <>
                                     Keep contributing high-quality evidence and accurate reports to progress toward{" "}
                                     <strong>{reputation.next_rank}</strong>.
