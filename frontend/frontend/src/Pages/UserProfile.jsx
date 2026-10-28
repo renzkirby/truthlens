@@ -559,13 +559,20 @@ function UserProfile() {
       ? displayUser.partner_affiliations
       : [];
    const hasPartnerAffiliation = partnerAffiliations.length > 0;
+   const ownProfessionalIdentity = isOwnProfile
+      ? authUser?.community_identity?.professional_identity || null
+      : null;
+   const reputationVisible = isOwnProfile
+      ? authUser?.community_identity?.reputation_visible !== false
+      : hasTrustScore;
    const roleLabel = isPlatformModerator
       ? "Platform moderator"
       : hasPartnerAffiliation
          ? null
-         : hasTrustScore
-            ? "Community member"
-            : "Partner Organization member";
+         : ownProfessionalIdentity?.display_label
+            || (hasTrustScore && reputationVisible
+               ? "Community member"
+               : "Partner Organization member");
    const currentTabDescription = getTabDescription(activeTab, isOwnProfile);
    const currentTabEmptyMessage = getEmptyTabMessage(activeTab, isOwnProfile);
    const hasViewableProfileAvatar =
@@ -602,7 +609,7 @@ function UserProfile() {
                      <p className="user-profile__handle">@{displayUser.username.toLowerCase()}</p>
                   </div>
 
-                  {hasTrustScore && !hasPartnerAffiliation && (
+                  {hasTrustScore && reputationVisible && !hasPartnerAffiliation && (
                      <div className={`user-profile__trust-compact is-${trustLevel.tone}`} aria-labelledby="trust-heading">
                         <span id="trust-heading" className="user-profile__trust-compact-label">
                            Trust Score
