@@ -3674,6 +3674,7 @@ class VoteViewSet(viewsets.ModelViewSet):
                 voter=self.request.user,
                 vote_trust_snapshot=snapshot["trust_score"],
                 vote_resolved_actions_snapshot=snapshot["resolved_actions"],
+                vote_validated_actions_snapshot=snapshot["validated_actions"],
                 vote_reputation_weight_snapshot=snapshot["reputation_weight"],
             )
         except IntegrityError:
