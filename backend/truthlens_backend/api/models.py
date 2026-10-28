@@ -3079,6 +3079,10 @@ class Vote(models.Model):
         blank=True,
         null=True,
     )
+    vote_validated_actions_snapshot = models.PositiveIntegerField(
+        blank=True,
+        null=True,
+    )
     vote_reputation_weight_snapshot = models.FloatField(
         blank=True,
         null=True,
