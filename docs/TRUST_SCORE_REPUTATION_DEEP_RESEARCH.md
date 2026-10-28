@@ -1018,7 +1018,7 @@ That architecture is especially defensible because:
 
 ---
 
-# 18. Current score ceiling
+# 17. Current score ceiling
 
 The nominal range is:
 
@@ -1338,11 +1338,16 @@ This wording is stronger and more accurate than claiming that one paper directly
 | Friedman, Resnick & Sami (2011) | Whitewashing, feedback honesty, Sybil attacks | Adversarial validation plan | Principle only |
 | Ziaie & Krcmar (2012) | Reputation and promotion in multi-tier communities | Rank/progression design | Principle only |
 | Hendrikx et al. (2015) | Reputation taxonomy and context reference model | Define exactly what Truth Score means and where it applies | Principle only |
-| Škorić et al. (2015) | Reputation with explicit uncertainty | Separate score from confidence | Principle only |
+| Škorić, de Hoogh & Zannone (2016) | Reputation with explicit uncertainty | Separate score from confidence | Principle only |
 | Sänger & Pernul (2018) | Manipulation resistance vs transparency trade-off | Preserve understandable component breakdown | Principle only |
 | Filippas et al. (2019/2022) | Reputation inflation can reduce informativeness | Do not make raw social ratings dominant | Principle only |
 | Kokkodis (2021) | Dynamic, multidimensional, skill-specific reputation | Question context mixing and static history | Principle only |
 | Rough et al. (2021/2023) | Competitive reputation can conflict with collaborative communities | Avoid excessive gamification and universal-status interpretation | Principle only |
+| Hasan, Brunie & Bertino (2022) | Accountability, feedback aggregation, and common reputation attacks | Adversarial model for Community reputation | Principle only |
+| Pröllochs (2022) | Community fact-checks are rated by peers; source quality and polarization affect helpfulness/consensus | Direct fact-checking-domain support for quality-gated community contribution | Domain evidence |
+| La Barbera et al. (2024) | Crowd-worker reliability can be evaluated in fact-checking | Supports studying contributor/rater reliability rather than equal raw votes | Domain evidence |
+| X Community Notes technical documentation | Raw helpful-vote ratios were replaced by models using rater histories and cross-viewpoint agreement | Practical comparison for non-equal vote aggregation; not a model TruthLens directly adopts | Implementation comparison |
+| Scientific Reports Community Notes study (2025) | Heterogeneous rating histories and source characteristics relate to note helpfulness | Supports evaluating source/rater heterogeneity in community fact-checking | Domain evidence |
 | Hamilton & Cui (2024) | Old ratings can become stale | Evaluate decay/recency, do not assume it | Research question |
 
 ---
