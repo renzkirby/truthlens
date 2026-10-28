@@ -548,6 +548,161 @@ def invariant_results(calibration=DEFAULT_CALIBRATION):
     }
 
 
+def attack_results(calibration=DEFAULT_CALIBRATION):
+    voter_scores = (0.0, 25.0, 50.0, 75.0, 100.0)
+
+    promotion_base = TrustScenario(
+        name="promotion_base",
+        verified_evidence=18,
+        rejected_evidence=7,
+        active_months=5,
+    )
+    demotion_base = TrustScenario(
+        name="demotion_base",
+        verified_evidence=25,
+        active_months=5,
+    )
+
+    promotion_baseline = simulate_trust_score(
+        promotion_base,
+        calibration,
+    )
+    demotion_baseline = simulate_trust_score(
+        demotion_base,
+        calibration,
+    )
+
+    promotion_thresholds = []
+    demotion_thresholds = []
+
+    for voter_score in voter_scores:
+        promotion = None
+        demotion = None
+
+        for count in range(1, 51):
+            promoted = simulate_trust_score(
+                replace(
+                    promotion_base,
+                    name=f"promotion_{voter_score}_{count}",
+                    upvote_trust_scores=(voter_score,) * count,
+                ),
+                calibration,
+            )
+            if (
+                promoted["current_rank"]
+                != promotion_baseline["current_rank"]
+            ):
+                promotion = {
+                    "voter_trust_score": voter_score,
+                    "minimum_votes": count,
+                    "from_rank": promotion_baseline["current_rank"],
+                    "to_rank": promoted["current_rank"],
+                    "score": promoted["trust_score"],
+                }
+                break
+
+        for count in range(1, 51):
+            demoted = simulate_trust_score(
+                replace(
+                    demotion_base,
+                    name=f"demotion_{voter_score}_{count}",
+                    downvote_trust_scores=(voter_score,) * count,
+                ),
+                calibration,
+            )
+            if (
+                demoted["current_rank"]
+                != demotion_baseline["current_rank"]
+            ):
+                demotion = {
+                    "voter_trust_score": voter_score,
+                    "minimum_votes": count,
+                    "from_rank": demotion_baseline["current_rank"],
+                    "to_rank": demoted["current_rank"],
+                    "score": demoted["trust_score"],
+                }
+                break
+
+        promotion_thresholds.append(promotion)
+        demotion_thresholds.append(demotion)
+
+    return {
+        "promotion_probe": {
+            "baseline": promotion_baseline,
+            "thresholds": promotion_thresholds,
+        },
+        "demotion_probe": {
+            "baseline": demotion_baseline,
+            "thresholds": demotion_thresholds,
+        },
+    }
+
+
+def diagnostic_results(calibration=DEFAULT_CALIBRATION):
+    failed_only = simulate_trust_score(
+        TrustScenario(
+            name="three_failed_actions",
+            invalid_reports=3,
+        ),
+        calibration,
+    )
+    evidence_only = simulate_trust_score(
+        TrustScenario(
+            name="verified_evidence_only",
+            verified_evidence=25,
+            active_months=5,
+        ),
+        calibration,
+    )
+    reports_only = simulate_trust_score(
+        TrustScenario(
+            name="valid_reports_only",
+            valid_reports=25,
+            active_months=5,
+        ),
+        calibration,
+    )
+
+    return {
+        "failed_actions_leave_provisional": {
+            "scenario": failed_only,
+            "finding": (
+                "Three resolved failures currently satisfy the action-volume "
+                "gate for New Contributor."
+            ),
+        },
+        "evidence_report_equivalence": {
+            "evidence": evidence_only,
+            "reports": reports_only,
+            "finding": (
+                "Twenty-five verified evidence actions and twenty-five valid "
+                "Safety reports currently produce identical quality/history "
+                "results when other inputs are equal."
+            ),
+        },
+        "positive_component_ceiling": {
+            "nominal_score": (
+                calibration.base_score
+                + calibration.contribution_points_cap
+                + calibration.community_points_cap
+                + calibration.history_points_cap
+            ),
+            "finding": (
+                "The nominal positive-component ceiling is below 100 and the "
+                "Bayesian/tanh components approach their caps asymptotically."
+            ),
+        },
+        "temporal_order": {
+            "status": "NOT_MODELED",
+            "finding": (
+                "The current formula aggregates lifetime resolved outcomes; "
+                "two histories with identical counts but different recency "
+                "produce the same quality result."
+            ),
+        },
+    }
+
+
 SENSITIVITY_VARIANTS = (
     ("prior_1_1", {"prior_success": 1.0, "prior_failure": 1.0}),
     ("prior_2_2", {"prior_success": 2.0, "prior_failure": 2.0}),
@@ -643,5 +798,7 @@ def build_validation_report(calibration=DEFAULT_CALIBRATION):
         },
         "baseline_scenarios": baseline,
         "invariants": invariants,
+        "attacks": attack_results(calibration),
+        "diagnostics": diagnostic_results(calibration),
         "sensitivity": sensitivity_results(calibration),
     }
