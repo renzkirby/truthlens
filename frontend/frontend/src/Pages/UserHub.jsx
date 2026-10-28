@@ -1605,6 +1605,18 @@ export default function UserHub() {
                                        )}
 
                                        {reputation.actions_to_next_rank > 0 &&
+                                          (reputation.validated_actions_to_next_rank > 0 ||
+                                             reputation.score_to_next_rank > 0) &&
+                                          " · "}
+
+                                       {reputation.validated_actions_to_next_rank > 0 && (
+                                          <>
+                                             {reputation.validated_actions_to_next_rank} successful resolved{" "}
+                                             {reputation.validated_actions_to_next_rank === 1 ? "action" : "actions"} needed
+                                          </>
+                                       )}
+
+                                       {reputation.validated_actions_to_next_rank > 0 &&
                                           reputation.score_to_next_rank > 0 &&
                                           " · "}
 
@@ -1616,6 +1628,7 @@ export default function UserHub() {
                                        )}
 
                                        {reputation.actions_to_next_rank === 0 &&
+                                          (reputation.validated_actions_to_next_rank ?? 0) === 0 &&
                                           reputation.score_to_next_rank === 0 &&
                                           "Requirements met"}
                                     </>
