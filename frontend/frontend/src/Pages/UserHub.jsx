@@ -1508,14 +1508,21 @@ export default function UserHub() {
                            <h3>Verification Workspace</h3>
                            <p>Open your organization-scoped investigations, evidence reviews, and adjudication work.</p>
                         </div>
-                        <button
-                           type="button"
-                           className="hub-action hub-action-primary"
-                           onClick={() => navigate("/workspace")}
-                        >
-                           <Icons name="shield-check" size={17} />
-                           Open Workspace
-                        </button>
+                        {professionalIdentity.authority_active ? (
+                           <button
+                              type="button"
+                              className="hub-action hub-action-primary"
+                              onClick={() => navigate("/workspace")}
+                           >
+                              <Icons name="shield-check" size={17} />
+                              Open Workspace
+                           </button>
+                        ) : (
+                           <div className="hub-professional-paused">
+                              <Icons name="pause-circle" size={16} />
+                              <span>Professional verification access is currently inactive.</span>
+                           </div>
+                        )}
                         {professionalOrganization?.public_profile_available && professionalOrganization?.slug && (
                            <button
                               type="button"
