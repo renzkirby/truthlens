@@ -805,6 +805,7 @@ function WorkspacePage() {
                            key={selectedOrganizationId ?? "no-organization"}
                            organizationId={selectedOrganizationId}
                            organizationName={selectedOrganization?.name}
+                           organizationSubtype={selectedOrganization?.organization_subtype}
                            onInvestigationClaimed={openInvestigation}
                         />
                      ) : activeSection.id === "workload" ? (
