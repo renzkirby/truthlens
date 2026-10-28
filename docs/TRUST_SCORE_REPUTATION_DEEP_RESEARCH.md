@@ -3,7 +3,8 @@
 Status: research basis for Trust Score validation and hardening  
 Scope: Community reputation only; not Partner Organization verification authority  
 Current implementation reference: `backend/truthlens_backend/api/trust_service.py`  
-Companion empirical validation: `docs/TRUST_SCORE_CALIBRATION_VALIDATION.md`
+Companion empirical validation: `docs/TRUST_SCORE_CALIBRATION_VALIDATION.md`  
+Candidate hardening experiments: `docs/TRUST_SCORE_HARDENING_EXPERIMENTS.md`
 
 ## Research question
 
