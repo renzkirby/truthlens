@@ -725,6 +725,7 @@ class EvidenceTrustScoreTests(APITestCase):
                 progression = get_reputation_progression(
                     {
                         "resolved_actions": resolved_actions,
+                        "validated_actions": 1,
                         "trust_score": trust_score,
                     }
                 )
@@ -733,10 +734,37 @@ class EvidenceTrustScoreTests(APITestCase):
                     expected_rank,
                 )
 
+    def test_failed_actions_do_not_leave_provisional_without_success(self):
+        progression = get_reputation_progression(
+            {
+                "resolved_actions": 3,
+                "validated_actions": 0,
+                "trust_score": 39.29,
+            }
+        )
+
+        self.assertEqual(
+            progression["current_rank"],
+            "Provisional",
+        )
+        self.assertEqual(
+            progression["next_rank"],
+            "New Contributor",
+        )
+        self.assertEqual(
+            progression["validated_actions_to_next_rank"],
+            1,
+        )
+        self.assertEqual(
+            progression["progress_percent"],
+            0.0,
+        )
+
     def test_rank_can_fall_when_score_no_longer_meets_threshold(self):
         progression = get_reputation_progression(
             {
                 "resolved_actions": 50,
+                "validated_actions": 1,
                 "trust_score": 54.9,
             }
         )
@@ -754,6 +782,7 @@ class EvidenceTrustScoreTests(APITestCase):
         progression = get_reputation_progression(
             {
                 "resolved_actions": 50,
+                "validated_actions": 1,
                 "trust_score": 85.0,
             }
         )
