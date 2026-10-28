@@ -167,6 +167,7 @@ from .organization_public_affiliation_service import (
     prefetch_public_partner_affiliations,
     public_partner_affiliation_prefetch,
 )
+from .organization_member_identity_service import get_partner_professional_identity
 from .public_publication_query_service import (
     PublicPublicationNotFound,
     get_public_partner_fact_check_detail,
@@ -4155,6 +4156,7 @@ class UserHubView(APIView):
                         if hasattr(profile, "avatar_url") and profile.avatar_url
                         else None
                     ),
+                    "professional_identity": get_partner_professional_identity(user),
                 },
                 "reputation": {
                     "trust_score": components["trust_score"],
