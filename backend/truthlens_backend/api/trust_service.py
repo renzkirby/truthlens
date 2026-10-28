@@ -59,18 +59,45 @@ def _clamp(value, minimum, maximum):
     return max(minimum, min(maximum, value))
 
 
-def get_resolved_reputation_action_count(user):
-    evidence_total = EvidenceSubmission.objects.filter(
+def get_reputation_action_counts(user):
+    evidence_counts = EvidenceSubmission.objects.filter(
         contributor=user,
         evidence_status__in=[
             EvidenceSubmission.EvidenceStatus.VERIFIED,
             EvidenceSubmission.EvidenceStatus.REJECTED,
         ],
-    ).count()
-    report_total = FlagResolutionLog.objects.filter(
+    ).aggregate(
+        total=Count("id"),
+        validated=Count(
+            "id",
+            filter=Q(
+                evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            ),
+        ),
+    )
+    report_counts = FlagResolutionLog.objects.filter(
         flagged_by=user,
-    ).count()
-    return evidence_total + report_total
+    ).aggregate(
+        total=Count("id"),
+        validated=Count(
+            "id",
+            filter=Q(is_valid_report=True),
+        ),
+    )
+
+    evidence_total = evidence_counts["total"] or 0
+    evidence_validated = evidence_counts["validated"] or 0
+    report_total = report_counts["total"] or 0
+    report_validated = report_counts["validated"] or 0
+
+    return {
+        "resolved_actions": evidence_total + report_total,
+        "validated_actions": evidence_validated + report_validated,
+    }
+
+
+def get_resolved_reputation_action_count(user):
+    return get_reputation_action_counts(user)["resolved_actions"]
 
 
 def build_vote_reputation_snapshot(user):
@@ -86,19 +113,23 @@ def build_vote_reputation_snapshot(user):
         100.0,
     )
 
-    resolved_actions = get_resolved_reputation_action_count(
+    action_counts = get_reputation_action_counts(
         user,
     )
+    resolved_actions = action_counts["resolved_actions"]
+    validated_actions = action_counts["validated_actions"]
+
     prior_mass = PRIOR_SUCCESS + PRIOR_FAILURE
-    history_depth_factor = (
-        resolved_actions
-        / (resolved_actions + prior_mass)
-        if (resolved_actions + prior_mass) > 0
+    denominator = resolved_actions + prior_mass
+    validated_history_factor = (
+        validated_actions / denominator
+        if denominator > 0
         else 0.0
     )
+
     base_vote_weight = 0.5 + (trust_score / 200.0)
     final_vote_weight = _clamp(
-        base_vote_weight * history_depth_factor,
+        base_vote_weight * validated_history_factor,
         0.0,
         1.0,
     )
@@ -106,7 +137,8 @@ def build_vote_reputation_snapshot(user):
     return {
         "trust_score": trust_score,
         "resolved_actions": resolved_actions,
-        "history_depth_factor": history_depth_factor,
+        "validated_actions": validated_actions,
+        "validated_history_factor": validated_history_factor,
         "reputation_weight": final_vote_weight,
     }
 
@@ -244,8 +276,8 @@ def calculate_trust_components(user):
     #
     # New/changed votes combine:
     # - vote-time Trust Score, mapped to a bounded 0.50..1.00 base weight;
-    # - vote-time resolved-action depth, attenuated by n / (n + 4), where
-    #   4 is the current Beta(2,2) prior mass.
+    # - vote-time validated history, attenuated by successes / (resolved + 4),
+    #   where 4 is the current Beta(2,2) prior mass.
     #
     # Legacy votes retain their historical full snapshot weight because their
     # exact resolved-action depth at the original vote event was never stored.
