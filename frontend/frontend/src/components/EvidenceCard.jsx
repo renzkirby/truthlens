@@ -83,6 +83,7 @@ export default function EvidenceCard({
    const username = evidence.contributor?.username || "Unknown";
    const contributorTrustVisible =
       evidence.contributor?.trust_score !== null && evidence.contributor?.trust_score !== undefined;
+   const hasPublicPartnerAffiliation = Boolean(evidence.contributor?.partner_affiliations?.length);
    const contributorTrust = Number(
       evidence.contributor?.trust_score ?? evidence.contributor_trust_snapshot ?? 0,
    );
@@ -107,9 +108,11 @@ export default function EvidenceCard({
                   <EvidenceAvatar contributor={evidence.contributor} />
                   <span>
                      <strong>@{username}</strong>
-                     {contributorTrustVisible && (
+                     {contributorTrustVisible ? (
                         <small>Trust: <b>{contributorTrust.toFixed(1)}</b></small>
-                     )}
+                     ) : !hasPublicPartnerAffiliation ? (
+                        <small>Partner Organization member</small>
+                     ) : null}
                   </span>
                </Link>
                <PartnerAffiliations affiliations={evidence.contributor?.partner_affiliations} compact />
