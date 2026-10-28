@@ -47,6 +47,8 @@ print(
             "port": str(database.get("PORT", "")),
             "user": database.get("USER", ""),
             "conn_max_age": database.get("CONN_MAX_AGE"),
+            "classification_mode": settings.INVESTIGATION_CLASSIFICATION_MODE,
+            "routing_mode": settings.INVESTIGATION_ROUTING_MODE,
         }}
     )
 )
@@ -357,6 +359,21 @@ class DjangoSettingsInitializationTests(SimpleTestCase):
         self.assertEqual(result["name"], "prod_db")
         self.assertEqual(result["host"], "production.example.test")
         self.assertEqual(result["user"], "production_user")
+        self.assertEqual(result["classification_mode"], "enforce")
+        self.assertEqual(result["routing_mode"], "off")
+
+    def test_production_can_explicitly_disable_automatic_classification(self):
+        result = self.assert_initialization_succeeds(
+            {
+                "APP_ENV": "production",
+                "DEBUG": "False",
+                "SUPABASE_PRODUCTION_DB_URL": PRODUCTION_URL,
+                "INVESTIGATION_CLASSIFICATION_MODE": "off",
+            }
+        )
+
+        self.assertEqual(result["classification_mode"], "off")
+        self.assertEqual(result["routing_mode"], "off")
 
     def test_staging_initialization_does_not_fall_back_to_production(self):
         self.assert_initialization_fails(
@@ -389,6 +406,8 @@ class DjangoSettingsInitializationTests(SimpleTestCase):
         self.assertTrue(result["name"].endswith("test_db.sqlite3"))
         self.assertEqual(result["host"], "")
         self.assertEqual(result["user"], "")
+        self.assertEqual(result["classification_mode"], "off")
+        self.assertEqual(result["routing_mode"], "off")
 
     def test_staging_and_production_initialization_reject_debug_true(self):
         for app_env, database_variable, database_url in (
