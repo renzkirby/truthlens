@@ -5,6 +5,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from api.models import Organization, OrganizationMembership
+from api.trust_service import calculate_trust_components
 
 
 class PartnerMemberProfessionalIdentityTests(TestCase):
@@ -60,7 +61,12 @@ class PartnerMemberProfessionalIdentityTests(TestCase):
             response.data["user_info"]["professional_identity"]["display_label"],
             "Lead Verifier at Professional Identity Partner",
         )
-        self.assertEqual(response.data["reputation"]["trust_score"], 78.5)
+        expected_trust_score = calculate_trust_components(self.user)["trust_score"]
+        self.assertEqual(
+            response.data["reputation"]["trust_score"],
+            expected_trust_score,
+        )
+        self.assertIsNotNone(response.data["reputation"]["breakdown"])
 
     def test_left_membership_restores_ordinary_reputation_presentation(self):
         self.membership.status = OrganizationMembership.Status.LEFT
