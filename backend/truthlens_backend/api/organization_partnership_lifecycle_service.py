@@ -279,7 +279,7 @@ def verify_partner_organization(*, organization_id, actor):
         )
     if (
         organization.partner_status == Organization.PartnerStatus.NONE
-        and _has_prior_partner_work(organization)
+        and organization_has_prior_partner_work(organization)
     ):
         raise OrganizationPartnershipLifecycleConflict(
             "This organization has prior Partner verification work and must complete "
@@ -309,7 +309,7 @@ def reject_partner_organization_verification(*, organization_id, actor):
             "End or resolve the current partnership lifecycle before rejecting "
             "verification."
         )
-    if _has_prior_partner_work(organization):
+    if organization_has_prior_partner_work(organization):
         raise OrganizationPartnershipLifecycleConflict(
             "This organization has prior Partner verification work and must use "
             "the governed retirement flow instead."
@@ -348,7 +348,7 @@ def activate_partner_organization_partnership(*, organization_id, actor):
         raise OrganizationPartnershipLifecycleConflict(
             "Verify this organization before activating its partnership."
         )
-    if _has_prior_partner_work(organization):
+    if organization_has_prior_partner_work(organization):
         raise OrganizationPartnershipLifecycleConflict(
             "This organization has prior Partner verification work and must complete "
             "the governed retirement flow before any later reinstatement."
@@ -426,7 +426,7 @@ def _ensure_endable_partnership(organization):
         )
     if (
         organization.partner_status == Organization.PartnerStatus.NONE
-        and not _has_prior_partner_work(organization)
+        and not organization_has_prior_partner_work(organization)
     ):
         raise OrganizationPartnershipLifecycleConflict(
             "This organization has no prior Partner verification work to retire."
