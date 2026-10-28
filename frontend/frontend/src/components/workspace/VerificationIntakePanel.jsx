@@ -14,9 +14,9 @@ import { VERDICT_CONFIG } from "../../utils/constants";
 import "./VerificationIntakePanel.css";
 import InvestigationContextLinks from "./InvestigationContextLinks.jsx";
 import {
-   INTAKE_CLASSIFICATION_ALL,
    INTAKE_CLASSIFICATION_OPTIONS,
    buildVerificationIntakeQuery,
+   getDefaultVerificationIntakeClassification,
 } from "./verificationIntakeFilters.js";
 
 const PAGE_SIZE = 10;
@@ -79,14 +79,19 @@ function formatAvailableInvestigations(count) {
    return `${normalizedCount} available ${normalizedCount === 1 ? "investigation" : "investigations"}`;
 }
 
-function VerificationIntakePanel({ organizationId, organizationName, onInvestigationClaimed }) {
+function VerificationIntakePanel({
+   organizationId,
+   organizationName,
+   organizationSubtype,
+   onInvestigationClaimed,
+}) {
    const { authFetch } = useAuth();
    const { addToast } = useNotification();
 
    const [offset, setOffset] = useState(0);
 
-   const [classificationFilter, setClassificationFilter] = useState(
-      INTAKE_CLASSIFICATION_ALL,
+   const [classificationFilter, setClassificationFilter] = useState(() =>
+      getDefaultVerificationIntakeClassification(organizationSubtype),
    );
 
    const [requestVersion, setRequestVersion] = useState(0);
