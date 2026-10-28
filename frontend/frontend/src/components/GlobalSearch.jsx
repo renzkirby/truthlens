@@ -94,9 +94,11 @@ function SearchResults({ idPrefix, query, loading, error, users, organizations, 
                               </span>
                            </span>
                            <span className="tl-global-search__user-signals">
-                              <span className="tl-global-search__trust">
-                                 Trust {Number(searchUser.trust_score || 0).toFixed(1)}
-                              </span>
+                              {searchUser.trust_score !== null && searchUser.trust_score !== undefined && (
+                                 <span className="tl-global-search__trust">
+                                    Trust {Number(searchUser.trust_score).toFixed(1)}
+                                 </span>
+                              )}
                               {isModeratorRole(searchUser.role) && (
                                  <span className="tl-global-search__platform-role" aria-label="Platform Safety moderator">
                                     Safety
