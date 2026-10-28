@@ -1,6 +1,10 @@
 from django.db.models import Prefetch
 
 from .models import OrganizationMembership
+from .organization_member_identity_service import (
+    get_organization_membership_role_label,
+    partner_professional_membership_prefetch,
+)
 from .organization_public_presence_service import PUBLIC_PARTNER_ELIGIBILITY
 
 
@@ -36,9 +40,15 @@ def public_partner_affiliation_prefetch(user_path=""):
 
 def prefetch_public_partner_affiliations(queryset, *user_paths):
     paths = user_paths or ("",)
-    return queryset.prefetch_related(
-        *(public_partner_affiliation_prefetch(path) for path in paths)
-    )
+    prefetches = []
+    for path in paths:
+        prefetches.extend(
+            [
+                public_partner_affiliation_prefetch(path),
+                partner_professional_membership_prefetch(path),
+            ]
+        )
+    return queryset.prefetch_related(*prefetches)
 
 
 def get_public_partner_affiliations(user):
@@ -57,6 +67,7 @@ def get_public_partner_affiliations(user):
                 and membership.organization.logo_url
                 else None
             ),
+            "role_label": get_organization_membership_role_label(membership.role),
         }
         for membership in memberships
     ]
