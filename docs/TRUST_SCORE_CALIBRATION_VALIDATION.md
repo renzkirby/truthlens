@@ -2,6 +2,7 @@
 
 Status: baseline validation of the current production formula  
 Companion research: `docs/TRUST_SCORE_REPUTATION_DEEP_RESEARCH.md`  
+Candidate hardening experiments: `docs/TRUST_SCORE_HARDENING_EXPERIMENTS.md`  
 Validation implementation: `backend/truthlens_backend/api/trust_score_validation.py`  
 Management command: `analyze_trust_score_model`
 
