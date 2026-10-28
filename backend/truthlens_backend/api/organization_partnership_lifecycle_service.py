@@ -16,6 +16,10 @@ from .organization_invitation_service import (
     generate_invitation_token,
     hash_invitation_token,
 )
+from .organization_partnership_policy import (
+    get_organization_admin_onboarding_policy,
+    organization_has_prior_partner_work,
+)
 
 
 MANAGE_PARTNER_ORGANIZATION = "MANAGE_PARTNER_ORGANIZATION"
@@ -88,13 +92,6 @@ def _record_platform_event(
     )
 
 
-def _has_prior_partner_work(organization):
-    return (
-        organization.verification_assignments.exists()
-        or organization.official_fact_checks.exists()
-    )
-
-
 def get_partner_organization_lifecycle_projection(organization):
     """Return derived governance state without mutating organization records."""
 
@@ -115,7 +112,11 @@ def get_partner_organization_lifecycle_projection(organization):
         .order_by("requested_at", "id")
     )
     active_factual_corrections = len(active_factual_correction_rows)
-    has_prior_partner_work = _has_prior_partner_work(organization)
+    has_prior_partner_work = organization_has_prior_partner_work(organization)
+    admin_onboarding = get_organization_admin_onboarding_policy(
+        organization,
+        has_prior_partner_work=has_prior_partner_work,
+    )
 
     if organization.partner_status == Organization.PartnerStatus.ACTIVE:
         lifecycle_state = "ACTIVE_PARTNER"
@@ -219,7 +220,9 @@ def get_partner_organization_lifecycle_projection(organization):
             "can_suspend_partnership": can_suspend_partnership,
             "can_reinstate_partnership": can_reinstate_partnership,
             "can_end_partnership": end_partnership_eligible and not blockers,
+            "can_provision_organization_admin": admin_onboarding["allowed"],
         },
+        "admin_onboarding": admin_onboarding,
         "can_end_partnership": end_partnership_eligible and not blockers,
         "end_partnership_blockers": blockers,
         "active_factual_corrections": [
@@ -276,7 +279,7 @@ def verify_partner_organization(*, organization_id, actor):
         )
     if (
         organization.partner_status == Organization.PartnerStatus.NONE
-        and _has_prior_partner_work(organization)
+        and organization_has_prior_partner_work(organization)
     ):
         raise OrganizationPartnershipLifecycleConflict(
             "This organization has prior Partner verification work and must complete "
@@ -306,7 +309,7 @@ def reject_partner_organization_verification(*, organization_id, actor):
             "End or resolve the current partnership lifecycle before rejecting "
             "verification."
         )
-    if _has_prior_partner_work(organization):
+    if organization_has_prior_partner_work(organization):
         raise OrganizationPartnershipLifecycleConflict(
             "This organization has prior Partner verification work and must use "
             "the governed retirement flow instead."
@@ -345,7 +348,7 @@ def activate_partner_organization_partnership(*, organization_id, actor):
         raise OrganizationPartnershipLifecycleConflict(
             "Verify this organization before activating its partnership."
         )
-    if _has_prior_partner_work(organization):
+    if organization_has_prior_partner_work(organization):
         raise OrganizationPartnershipLifecycleConflict(
             "This organization has prior Partner verification work and must complete "
             "the governed retirement flow before any later reinstatement."
@@ -423,7 +426,7 @@ def _ensure_endable_partnership(organization):
         )
     if (
         organization.partner_status == Organization.PartnerStatus.NONE
-        and not _has_prior_partner_work(organization)
+        and not organization_has_prior_partner_work(organization)
     ):
         raise OrganizationPartnershipLifecycleConflict(
             "This organization has no prior Partner verification work to retire."

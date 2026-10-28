@@ -107,6 +107,12 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
                     "can_suspend_partnership": True,
                     "can_reinstate_partnership": False,
                     "can_end_partnership": True,
+                    "can_provision_organization_admin": True,
+                },
+                "admin_onboarding": {
+                    "allowed": True,
+                    "code": None,
+                    "message": None,
                 },
                 "can_end_partnership": True,
                 "end_partnership_blockers": [],
@@ -152,6 +158,15 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
                     "can_suspend_partnership": False,
                     "can_reinstate_partnership": True,
                     "can_end_partnership": False,
+                    "can_provision_organization_admin": False,
+                },
+                "admin_onboarding": {
+                    "allowed": False,
+                    "code": "FORMER_PARTNER",
+                    "message": (
+                        "This organization is a Former Partner. Reinstate the partnership "
+                        "before provisioning or accepting a new Organization Admin."
+                    ),
                 },
                 "can_end_partnership": False,
                 "end_partnership_blockers": [
@@ -197,6 +212,11 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
         self.assertEqual(response.data["lifecycle"]["state"], "SUSPENDED_PARTNER")
         self.assertEqual(response.data["lifecycle"]["operational_access"], "DISABLED")
         self.assertTrue(response.data["lifecycle"]["can_end_partnership"])
+        self.assertTrue(
+            response.data["lifecycle"]["actions"][
+                "can_provision_organization_admin"
+            ]
+        )
 
     def test_legacy_none_partner_with_prior_work_projects_retirement_required(self):
         self.organization.partner_status = Organization.PartnerStatus.NONE
@@ -217,6 +237,15 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
             "DISABLED",
         )
         self.assertTrue(response.data["lifecycle"]["can_end_partnership"])
+        self.assertFalse(
+            response.data["lifecycle"]["actions"][
+                "can_provision_organization_admin"
+            ]
+        )
+        self.assertEqual(
+            response.data["lifecycle"]["admin_onboarding"]["code"],
+            "RETIREMENT_REQUIRED",
+        )
 
     def test_onboarding_organization_is_not_endable(self):
         onboarding = Organization.objects.create(
@@ -232,6 +261,11 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
         self.assertEqual(response.data["lifecycle"]["state"], "ONBOARDING")
         self.assertEqual(response.data["lifecycle"]["operational_access"], "SETUP_ONLY")
         self.assertFalse(response.data["lifecycle"]["can_end_partnership"])
+        self.assertTrue(
+            response.data["lifecycle"]["actions"][
+                "can_provision_organization_admin"
+            ]
+        )
         self.assertEqual(
             response.data["lifecycle"]["end_partnership_blockers"][0]["code"],
             "PARTNERSHIP_NOT_ENDABLE",
@@ -304,6 +338,7 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
                 "can_suspend_partnership": False,
                 "can_reinstate_partnership": False,
                 "can_end_partnership": False,
+                "can_provision_organization_admin": True,
             },
         )
 
@@ -401,6 +436,15 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
             response.data["organization"]["lifecycle"]["actions"][
                 "can_reject_verification"
             ]
+        )
+        self.assertFalse(
+            response.data["organization"]["lifecycle"]["actions"][
+                "can_provision_organization_admin"
+            ]
+        )
+        self.assertEqual(
+            response.data["organization"]["lifecycle"]["admin_onboarding"]["code"],
+            "VERIFICATION_REJECTED",
         )
 
     def test_explicit_action_conflict_returns_409(self):

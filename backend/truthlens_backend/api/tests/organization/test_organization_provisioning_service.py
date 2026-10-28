@@ -178,6 +178,78 @@ class OrganizationProvisioningServiceTests(TestCase):
         invitation.refresh_from_db()
         self.assertEqual(invitation.status, OrganizationInvitation.Status.PENDING)
 
+    def test_former_partner_blocks_admin_provisioning(self):
+        self.organization.partner_status = Organization.PartnerStatus.FORMER
+        self.organization.save(update_fields=["partner_status"])
+
+        with self.assertRaisesRegex(
+            OrganizationProvisioningConflict,
+            "Reinstate the partnership",
+        ):
+            self.provision()
+
+        self.assertFalse(self.organization.invitations.exists())
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_former_partner_blocks_admin_resend_but_allows_cancellation(self):
+        invitation = self.provision()
+        original_digest = invitation.token_digest
+
+        self.organization.partner_status = Organization.PartnerStatus.FORMER
+        self.organization.save(update_fields=["partner_status"])
+
+        with self.assertRaisesRegex(
+            OrganizationProvisioningConflict,
+            "Reinstate the partnership",
+        ):
+            resend_organization_admin_invitation(
+                invitation=invitation,
+                actor=self.developer,
+            )
+
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, OrganizationInvitation.Status.PENDING)
+        self.assertEqual(invitation.token_digest, original_digest)
+        self.assertEqual(invitation.send_count, 1)
+
+        cancelled = cancel_organization_admin_invitation(
+            invitation=invitation,
+            actor=self.developer,
+        )
+        self.assertEqual(
+            cancelled.status,
+            OrganizationInvitation.Status.CANCELLED,
+        )
+
+    def test_admin_acceptance_rechecks_partnership_lifecycle(self):
+        raw_token = "retired-organization-admin-token"
+        with patch(
+            "api.organization_provisioning_service.generate_invitation_token",
+            return_value=raw_token,
+        ):
+            invitation = self.provision()
+
+        self.organization.partner_status = Organization.PartnerStatus.FORMER
+        self.organization.save(update_fields=["partner_status"])
+
+        with self.assertRaisesRegex(
+            OrganizationInvitationConflict,
+            "Reinstate the partnership",
+        ):
+            accept_organization_invitation(
+                raw_token=raw_token,
+                actor=self.recipient,
+            )
+
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, OrganizationInvitation.Status.PENDING)
+        self.assertFalse(
+            OrganizationMembership.objects.filter(
+                organization=self.organization,
+                user=self.recipient,
+            ).exists()
+        )
+
     def test_left_membership_in_other_org_does_not_block_admin_provisioning(self):
         former = Organization.objects.create(
             name="Former Provisioning Partner",
