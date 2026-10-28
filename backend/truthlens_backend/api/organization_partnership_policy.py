@@ -8,7 +8,11 @@ def organization_has_prior_partner_work(organization):
     )
 
 
-def get_organization_admin_onboarding_policy(organization):
+def get_organization_admin_onboarding_policy(
+    organization,
+    *,
+    has_prior_partner_work=None,
+):
     """
     Return whether platform-managed Organization Admin onboarding is valid.
 
@@ -28,9 +32,12 @@ def get_organization_admin_onboarding_policy(organization):
             ),
         }
 
+    if has_prior_partner_work is None:
+        has_prior_partner_work = organization_has_prior_partner_work(organization)
+
     if (
         organization.partner_status == Organization.PartnerStatus.NONE
-        and organization_has_prior_partner_work(organization)
+        and has_prior_partner_work
     ):
         return {
             "allowed": False,
