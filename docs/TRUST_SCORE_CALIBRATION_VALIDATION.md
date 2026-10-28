@@ -1,6 +1,6 @@
 # TruthLens Trust Score — Calibration & Adversarial Validation
 
-Status: baseline validation of the current production formula  
+Status: pre-hardening control validation used to identify I8/I9  
 Companion research: `docs/TRUST_SCORE_REPUTATION_DEEP_RESEARCH.md`  
 Candidate hardening experiments: `docs/TRUST_SCORE_HARDENING_EXPERIMENTS.md`  
 Validation implementation: `backend/truthlens_backend/api/trust_score_validation.py`  
@@ -8,7 +8,7 @@ Management command: `analyze_trust_score_model`
 
 ## Purpose
 
-This document evaluates the **current** TruthLens Trust Score calibration without changing production scoring behavior.
+This document records the **pre-hardening control** calibration that exposed the I8/I9 weaknesses. The selected hardening candidate and its implementation are documented separately in `TRUST_SCORE_HARDENING_EXPERIMENTS.md`.
 
 The research document establishes the theoretical basis for the architecture. This document asks a different question:
 
