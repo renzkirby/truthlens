@@ -380,6 +380,7 @@ function VerificationScopeSection({ organization }) {
 function OrganizationAdminState({
    organizationId,
    primaryAdmin,
+   adminOnboarding,
    onRefresh,
    onFeedback,
    returnFocusAfterRefreshRef,
@@ -391,17 +392,25 @@ function OrganizationAdminState({
    const cancelInvitationButtonRef = useRef(null);
    const provisionButtonRef = useRef(null);
    const { mutate, pending, error, reset } = useManagementMutation();
+   const adminOnboardingAllowed = adminOnboarding?.allowed !== false;
+   const adminOnboardingMessage = adminOnboarding?.message
+      || "Organization Admin onboarding is unavailable in the current lifecycle state.";
 
    useEffect(() => {
       if (
-         primaryAdmin?.state === "NONE"
+         adminOnboardingAllowed
+         && primaryAdmin?.state === "NONE"
          && returnFocusAfterRefreshRef.current
          && provisionButtonRef.current
       ) {
          returnFocusAfterRefreshRef.current = false;
          provisionButtonRef.current.focus();
       }
-   }, [primaryAdmin?.state, returnFocusAfterRefreshRef]);
+   }, [
+      adminOnboardingAllowed,
+      primaryAdmin?.state,
+      returnFocusAfterRefreshRef,
+   ]);
 
    const submitProvision = async (event) => {
       event.preventDefault();
@@ -485,15 +494,17 @@ function OrganizationAdminState({
             <div className="management-record-actions">
                <Link className="management-inline-link" to={`/management/invitations/${invitation.id}`}>View invitation record</Link>
                <div className="management-inline-actions">
-                  <Button
-                     variant="secondary"
-                     onClick={() => {
-                        reset();
-                        setResendConfirmationOpen(true);
-                     }}
-                  >
-                     Resend invitation
-                  </Button>
+                  {adminOnboardingAllowed ? (
+                     <Button
+                        variant="secondary"
+                        onClick={() => {
+                           reset();
+                           setResendConfirmationOpen(true);
+                        }}
+                     >
+                        Resend invitation
+                     </Button>
+                  ) : null}
                   <Button
                      ref={cancelInvitationButtonRef}
                      variant="destructive"
@@ -506,9 +517,14 @@ function OrganizationAdminState({
                   </Button>
                </div>
             </div>
+            {!adminOnboardingAllowed ? (
+               <ManagementFeedback tone="error">
+                  {adminOnboardingMessage}
+               </ManagementFeedback>
+            ) : null}
             {error ? <ManagementFeedback tone="error">{error.message}</ManagementFeedback> : null}
             <ManagementConfirmDialog
-               open={resendConfirmationOpen}
+               open={adminOnboardingAllowed && resendConfirmationOpen}
                title="Resend Organization Admin invitation?"
                description={`Send a new invitation link to ${invitation.email}?`}
                warning="Resending invalidates the previous invitation link."
@@ -531,6 +547,20 @@ function OrganizationAdminState({
                onConfirm={cancelInvitation}
                onClose={() => setCancelConfirmationOpen(false)}
             />
+         </>
+      );
+   }
+
+   if (!adminOnboardingAllowed) {
+      return (
+         <>
+            <h2>Organization Admin onboarding</h2>
+            <p className="management-section__description">
+               New Organization Admin authority cannot be created in this lifecycle state.
+            </p>
+            <ManagementFeedback tone="error">
+               {adminOnboardingMessage}
+            </ManagementFeedback>
          </>
       );
    }
@@ -641,6 +671,7 @@ function ManagementOrganizationDetailPage() {
                      <OrganizationAdminState
                         organizationId={data.id}
                         primaryAdmin={data.organization_admin ?? data.primary_admin}
+                        adminOnboarding={data.lifecycle?.admin_onboarding}
                         onRefresh={retry}
                         onFeedback={showFeedback}
                         returnFocusAfterRefreshRef={returnFocusAfterPrimaryAdminRefreshRef}
