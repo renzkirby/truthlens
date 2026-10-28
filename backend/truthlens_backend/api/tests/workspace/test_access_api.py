@@ -181,6 +181,11 @@ class WorkspaceAccessApiTests(APITestCase):
         )
 
         self.assertEqual(
+            membership["organization"]["organization_subtype"],
+            self.organization.organization_subtype,
+        )
+
+        self.assertEqual(
             membership["role"],
             OrganizationMembership.Role.LEAD_VERIFIER,
         )

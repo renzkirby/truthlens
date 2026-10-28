@@ -2879,7 +2879,7 @@ def verification_intake(request):
     )
     if (
         classification_filter
-        and classification_filter != "UNCLASSIFIED"
+        and classification_filter not in {"UNCLASSIFIED", "CAMPUS_AFFAIRS"}
         and classification_filter not in DOMAIN_CODES
     ):
         return Response(
@@ -2932,6 +2932,13 @@ def verification_intake(request):
             )
             if classification_filter == "UNCLASSIFIED":
                 if classification is None or not domains:
+                    filtered.append(assignment)
+            elif classification_filter == "CAMPUS_AFFAIRS":
+                if (
+                    classification is not None
+                    and classification.campus_context_state
+                    == ClaimInvestigationClassification.CampusContextState.CONFIRMED
+                ):
                     filtered.append(assignment)
             elif classification_filter in domains:
                 filtered.append(assignment)

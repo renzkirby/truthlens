@@ -162,6 +162,33 @@ class WorkspaceAccessContextTests(TestCase):
             str(self.organization.id),
         )
 
+    def test_workspace_context_exposes_student_publication_subtype(self):
+        self.organization.organization_type = Organization.OrganizationType.NEWS
+        self.organization.organization_subtype = (
+            Organization.OrganizationSubtype.STUDENT_PUBLICATION
+        )
+        self.organization.save(
+            update_fields=["organization_type", "organization_subtype"]
+        )
+
+        user = User.objects.create_user(
+            username="workspace-student-publication-lead",
+            password="test-password",
+        )
+        OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=user,
+            role=OrganizationMembership.Role.LEAD_VERIFIER,
+            status=OrganizationMembership.Status.ACTIVE,
+        )
+
+        context = get_workspace_access_context(user)
+
+        self.assertEqual(
+            context["memberships"][0]["organization"]["organization_subtype"],
+            Organization.OrganizationSubtype.STUDENT_PUBLICATION,
+        )
+
     def test_partner_contributor_does_not_gain_workspace_access(
         self,
     ):

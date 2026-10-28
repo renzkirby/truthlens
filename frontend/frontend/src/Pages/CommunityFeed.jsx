@@ -1,5 +1,5 @@
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import Icons from "../components/Icons.jsx";
 import PartnerAffiliations from "../components/partners/PartnerAffiliations.jsx";
@@ -9,7 +9,6 @@ import { buildApiUrl, resolveApiEndpoint } from "../utils/api";
 import timeAgo from "../utils/timeAgo";
 import { getEffectiveVerdict } from "../utils/verdict";
 import {
-   CAMPUS_AFFAIRS_TOPIC,
    TOPIC_ALL,
    TOPIC_FILTERS,
    buildCommunityFeedQuery,
@@ -745,26 +744,19 @@ function CommunityFeed() {
                            onKeyDown={(event) => moveMenuFocus(event, closeTopicMenu)}
                         >
                            {TOPIC_FILTERS.map((topic) => (
-                              <Fragment key={topic.value}>
-                                 {topic.value === CAMPUS_AFFAIRS_TOPIC && (
-                                    <>
-                                       <div className="feed-popup-divider" role="separator" />
-                                       <span className="feed-popup-section-label">Context</span>
-                                    </>
+                              <button
+                                 key={topic.value}
+                                 type="button"
+                                 role="menuitemradio"
+                                 aria-checked={activeTopic === topic.value}
+                                 className="feed-popup-item"
+                                 onClick={() => selectTopic(topic.value)}
+                              >
+                                 <span>{topic.label}</span>
+                                 {activeTopic === topic.value && (
+                                    <Icons name="check" size={15} aria-hidden="true" />
                                  )}
-                                 <button
-                                    type="button"
-                                    role="menuitemradio"
-                                    aria-checked={activeTopic === topic.value}
-                                    className="feed-popup-item"
-                                    onClick={() => selectTopic(topic.value)}
-                                 >
-                                    <span>{topic.label}</span>
-                                    {activeTopic === topic.value && (
-                                       <Icons name="check" size={15} aria-hidden="true" />
-                                    )}
-                                 </button>
-                              </Fragment>
+                              </button>
                            ))}
                         </div>
                      )}
