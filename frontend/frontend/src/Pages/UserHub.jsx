@@ -1186,6 +1186,8 @@ export default function UserHub() {
    }
 
    const { reputation, impact, user_info: userInfo } = hubData;
+   const professionalIdentity = userInfo?.professional_identity || null;
+   const professionalOrganization = professionalIdentity?.organization || null;
 
    const username = userInfo?.username || "User";
    const avatarUrl = userInfo?.avatar_url;
@@ -1398,14 +1400,24 @@ export default function UserHub() {
                         <h1 className="hub-title">Welcome back, @{username}</h1>
 
                         <p className="hub-subtitle">
-                           Track your investigations, reputation, and contribution to TruthLens.
+                           {professionalIdentity
+                              ? "Track your verification work, organization activity, and contributions to TruthLens."
+                              : "Track your investigations, reputation, and contribution to TruthLens."}
                         </p>
 
                         <div className="hub-status-row">
-                           <span className="hub-status-badge">{reputation?.status || "Provisional"}</span>
-
-                           {reputation?.confidence?.label && (
-                              <span className="hub-confidence-label">{reputation.confidence.label} confidence</span>
+                           {professionalIdentity ? (
+                              <>
+                                 <span className="hub-status-badge">{professionalIdentity.role_label}</span>
+                                 <span className="hub-confidence-label">{professionalOrganization?.name}</span>
+                              </>
+                           ) : (
+                              <>
+                                 <span className="hub-status-badge">{reputation?.status || "Provisional"}</span>
+                                 {reputation?.confidence?.label && (
+                                    <span className="hub-confidence-label">{reputation.confidence.label} confidence</span>
+                                 )}
+                              </>
                            )}
 
                            {lastUpdated && (
@@ -1460,7 +1472,70 @@ export default function UserHub() {
                   </div>
                </header>
 
-               {/* Trust & Reputation */}
+               {professionalIdentity ? (
+                  <section className="hub-professional-card box-panel">
+                     <div className="hub-professional-main">
+                        <span className="hub-section-eyebrow">YOUR ORGANIZATION</span>
+                        <h2 className="hub-professional-title">{professionalIdentity.display_label}</h2>
+                        <p className="hub-professional-description">
+                           Your professional verification authority comes from your Partner Organization role.
+                           Community participation remains available, but it is not presented as a public Trust Score while this affiliation is current.
+                        </p>
+
+                        <div className="hub-professional-facts">
+                           <article>
+                              <span>Role</span>
+                              <strong>{professionalIdentity.role_label}</strong>
+                           </article>
+                           <article>
+                              <span>Partner Organization</span>
+                              <strong>{professionalOrganization?.name || "Organization unavailable"}</strong>
+                           </article>
+                           <article>
+                              <span>Authority</span>
+                              <strong>
+                                 {professionalIdentity.authority_active
+                                    ? "Active verification authority"
+                                    : `${professionalIdentity.membership_status_label || "Current"} affiliation`}
+                              </strong>
+                           </article>
+                        </div>
+                     </div>
+
+                     <aside className="hub-professional-actions">
+                        <div>
+                           <span className="hub-section-eyebrow">PROFESSIONAL WORK</span>
+                           <h3>Verification Workspace</h3>
+                           <p>Open your organization-scoped investigations, evidence reviews, and adjudication work.</p>
+                        </div>
+                        {professionalIdentity.authority_active ? (
+                           <button
+                              type="button"
+                              className="hub-action hub-action-primary"
+                              onClick={() => navigate("/workspace")}
+                           >
+                              <Icons name="shield-check" size={17} />
+                              Open Workspace
+                           </button>
+                        ) : (
+                           <div className="hub-professional-paused">
+                              <Icons name="pause-circle" size={16} />
+                              <span>Professional verification access is currently inactive.</span>
+                           </div>
+                        )}
+                        {professionalOrganization?.public_profile_available && professionalOrganization?.slug && (
+                           <button
+                              type="button"
+                              className="hub-action hub-action-secondary"
+                              onClick={() => navigate(`/community/partners/${encodeURIComponent(professionalOrganization.slug)}`)}
+                           >
+                              <Icons name="landmark" size={17} />
+                              View Organization
+                           </button>
+                        )}
+                     </aside>
+                  </section>
+               ) : (
                <section className="hub-reputation-card box-panel">
                   <div className="hub-reputation-main">
                      <div className="hub-reputation-heading">
@@ -1636,6 +1711,7 @@ export default function UserHub() {
                      </div>
                   </aside>
                </section>
+               )}
 
                {/* Impact Overview */}
                <section className="hub-impact-section">

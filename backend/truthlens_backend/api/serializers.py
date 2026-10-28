@@ -58,6 +58,7 @@ from .organization_public_presence_service import (
 from .organization_public_affiliation_service import (
     get_public_partner_affiliations,
 )
+from .organization_member_identity_service import get_partner_professional_identity
 from .public_publication_query_service import (
     PublicPublicationNotFound,
     get_public_partner_fact_check_detail,
@@ -125,6 +126,12 @@ class PublicPartnerAffiliationsField(serializers.Field):
         return get_public_partner_affiliations(user)
 
 
+def _public_trust_score(user):
+    if is_platform_staff_identity(user) or get_partner_professional_identity(user):
+        return None
+    return user.profile.trust_score
+
+
 class PublicIdentityProfileSerializer(serializers.ModelSerializer):
     trust_score = serializers.SerializerMethodField()
     role = serializers.CharField(source="profile.role", read_only=True)
@@ -139,9 +146,7 @@ class PublicIdentityProfileSerializer(serializers.ModelSerializer):
     )
 
     def get_trust_score(self, obj):
-        if is_platform_staff_identity(obj):
-            return None
-        return obj.profile.trust_score
+        return _public_trust_score(obj)
 
     def get_followers_count(self, obj):
         return exclude_platform_staff_identities(
@@ -180,13 +185,16 @@ class PublicIdentityProfileSerializer(serializers.ModelSerializer):
 
 
 class CommunityUserIdentitySerializer(serializers.ModelSerializer):
-    trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
+    trust_score = serializers.SerializerMethodField()
     role = serializers.CharField(source="profile.role", read_only=True)
     avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
     partner_affiliations = PublicPartnerAffiliationsField(
         source="*",
         read_only=True,
     )
+
+    def get_trust_score(self, obj):
+        return _public_trust_score(obj)
 
     class Meta:
         model = User
@@ -383,7 +391,7 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class PublicUserSearchSerializer(serializers.ModelSerializer):
-    trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
+    trust_score = serializers.SerializerMethodField()
     role = serializers.CharField(source="profile.role", read_only=True)
     avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
     bio = serializers.CharField(source="profile.bio", read_only=True)
@@ -397,6 +405,9 @@ class PublicUserSearchSerializer(serializers.ModelSerializer):
         return exclude_platform_staff_identities(
             obj.profile.followers.select_related("profile")
         ).count()
+
+    def get_trust_score(self, obj):
+        return _public_trust_score(obj)
 
     class Meta:
         model = User
@@ -2335,11 +2346,14 @@ class EvidenceCaseDetailSerializer(EvidenceCaseSummarySerializer):
 class ThreadDetailAuthorSerializer(serializers.ModelSerializer):
     avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
     role = serializers.CharField(source="profile.role", read_only=True)
-    trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
+    trust_score = serializers.SerializerMethodField()
     partner_affiliations = PublicPartnerAffiliationsField(
         source="*",
         read_only=True,
     )
+
+    def get_trust_score(self, obj):
+        return _public_trust_score(obj)
 
     class Meta:
         model = User
@@ -2370,11 +2384,14 @@ class ThreadDetailCommenterSerializer(serializers.ModelSerializer):
 
 class ThreadDetailEvidenceContributorSerializer(serializers.ModelSerializer):
     avatar_url = serializers.CharField(source="profile.avatar_url", read_only=True)
-    trust_score = serializers.FloatField(source="profile.trust_score", read_only=True)
+    trust_score = serializers.SerializerMethodField()
     partner_affiliations = PublicPartnerAffiliationsField(
         source="*",
         read_only=True,
     )
+
+    def get_trust_score(self, obj):
+        return _public_trust_score(obj)
 
     class Meta:
         model = User

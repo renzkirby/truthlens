@@ -12,33 +12,37 @@ function PartnerAffiliations({ affiliations, compact = false, className = "" }) 
          className={`partner-affiliations ${compact ? "partner-affiliations--compact" : ""} ${className}`.trim()}
          aria-label="Partner organization affiliations"
       >
-         {safeAffiliations.map((organization) => (
-            <li key={organization.id || organization.slug}>
-               <Link to={`/community/partners/${encodeURIComponent(organization.slug)}`}>
-                  {!compact && (
-                     <PartnerLogo
-                        logoUrl={organization.logo_url}
-                        organizationName={organization.name}
-                        size="compact"
-                     />
-                  )}
-                  <span>
-                     {compact ? (
-                        <>
-                           <small>Partner</small>
-                           <span aria-hidden="true">·</span>
-                           <strong>{organization.name}</strong>
-                        </>
-                     ) : (
-                        <>
-                           <small>Partner Organization Member</small>
-                           <strong>{organization.name}</strong>
-                        </>
+         {safeAffiliations.map((organization) => {
+            const roleLabel = organization.role_label || "Partner Organization Member";
+
+            return (
+               <li key={organization.id || organization.slug}>
+                  <Link to={`/community/partners/${encodeURIComponent(organization.slug)}`}>
+                     {!compact && (
+                        <PartnerLogo
+                           logoUrl={organization.logo_url}
+                           organizationName={organization.name}
+                           size="compact"
+                        />
                      )}
-                  </span>
-               </Link>
-            </li>
-         ))}
+                     <span>
+                        {compact ? (
+                           <>
+                              <small>{roleLabel}</small>
+                              <span aria-hidden="true">·</span>
+                              <strong>{organization.name}</strong>
+                           </>
+                        ) : (
+                           <>
+                              <small>{roleLabel} at</small>
+                              <strong>{organization.name}</strong>
+                           </>
+                        )}
+                     </span>
+                  </Link>
+               </li>
+            );
+         })}
       </ul>
    );
 }

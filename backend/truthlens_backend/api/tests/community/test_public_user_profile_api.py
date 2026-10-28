@@ -88,12 +88,36 @@ class PublicUserProfileApiTests(TestCase):
                     "name": organization.name,
                     "slug": organization.slug,
                     "logo_url": None,
+                    "role_label": "Administrator",
                 }
             ],
         )
+        self.assertIsNone(response.data["trust_score"])
         serialized = str(response.data)
         self.assertNotIn(OrganizationMembership.Role.ADMIN, serialized)
         self.assertNotIn(self.member.email, serialized)
+
+    def test_professional_identity_hides_trust_without_exposing_private_org_profile(self):
+        organization = Organization.objects.create(
+            name="Private Profile Partner",
+            slug="private-profile-partner",
+            verification_status=Organization.VerificationStatus.VERIFIED,
+            partner_status=Organization.PartnerStatus.ACTIVE,
+            public_profile_enabled=False,
+        )
+        OrganizationMembership.objects.create(
+            organization=organization,
+            user=self.member,
+            role=OrganizationMembership.Role.LEAD_VERIFIER,
+            status=OrganizationMembership.Status.ACTIVE,
+        )
+
+        response = self.client.get(self._url())
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data["trust_score"])
+        self.assertEqual(response.data["partner_affiliations"], [])
+        self.assertNotIn(organization.name, str(response.data))
 
     def test_profile_activity_endpoints_require_authentication(self):
         self.client.force_authenticate(user=None)

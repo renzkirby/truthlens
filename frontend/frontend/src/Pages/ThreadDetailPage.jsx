@@ -1179,7 +1179,14 @@ export default function ThreadDetailPage() {
    const confidence = Number(confidenceValue);
    const hasConfidence = confidenceValue !== null && confidenceValue !== "" && Number.isFinite(confidence);
    const authorUsername = thread.author?.username || "Unknown";
-   const authorRoleLabel = getRoleLabel(thread.author?.role);
+   const authorProfessionalAffiliation = thread.author?.partner_affiliations?.[0] || null;
+   const authorTrustVisible =
+      thread.author?.trust_score !== null && thread.author?.trust_score !== undefined;
+   const authorRoleLabel = authorProfessionalAffiliation
+      ? `${authorProfessionalAffiliation.role_label || "Partner member"} at ${authorProfessionalAffiliation.name}`
+      : authorTrustVisible
+         ? getRoleLabel(thread.author?.role)
+         : "Partner Organization member";
    const escalationFocus = ESCALATION_OPTIONS.find((option) => option.value === thread.escalation_reason);
    const assessmentKey = String(assessmentVerdict || "UNVERIFIED").toUpperCase();
    const assessmentMeta = VERDICT_CONFIG[assessmentKey] || VERDICT_CONFIG.UNVERIFIED;
@@ -1548,28 +1555,34 @@ export default function ThreadDetailPage() {
                            <small>{authorRoleLabel}</small>
                         </span>
                      </Link>
-                     <div
-                        className="thread-detail-trust-ring"
-                        style={{ "--trust-value": `${Math.max(0, Math.min(100, Number(thread.author?.trust_score || 0)))}%` }}
-                        aria-label={`Community trust score ${Number(thread.author?.trust_score || 0).toFixed(1)}`}
-                     >
-                        <span>{Math.round(Number(thread.author?.trust_score || 0))}</span>
-                     </div>
+                     {authorTrustVisible && (
+                        <div
+                           className="thread-detail-trust-ring"
+                           style={{ "--trust-value": `${Math.max(0, Math.min(100, Number(thread.author.trust_score)))}%` }}
+                           aria-label={`Community trust score ${Number(thread.author.trust_score).toFixed(1)}`}
+                        >
+                           <span>{Math.round(Number(thread.author.trust_score))}</span>
+                        </div>
+                     )}
                   </div>
                   <div className="thread-detail-poster-stats">
-                     <div><strong>{Number(thread.author?.trust_score || 0).toFixed(1)}</strong><span>Trust</span></div>
+                     {authorTrustVisible && (
+                        <div><strong>{Number(thread.author.trust_score).toFixed(1)}</strong><span>Trust</span></div>
+                     )}
                      <div><strong>{evidenceList.length}</strong><span>Evidence</span></div>
                      <div><strong>{activeCommentCount}</strong><span>Comments</span></div>
                   </div>
                </section>
 
-               <section className="thread-detail-sidebar-card thread-detail-sidebar-card--trust">
-                  <p className="thread-detail-sidebar-label">Community trust score</p>
-                  <div className="thread-detail-trust-meter-row"><span>Reputation</span><strong>{Number(thread.author?.trust_score || 0).toFixed(1)}%</strong></div>
-                  <div className="thread-detail-trust-meter"><span style={{ width: `${Math.max(0, Math.min(100, Number(thread.author?.trust_score || 0)))}%` }} /></div>
-                  <p className="thread-detail-trust-note">Trust reflects community reputation and participation. It does not determine whether this claim is true.</p>
-                  <Link className="thread-detail-profile-link" to={`/user/${encodeURIComponent(authorUsername)}`}>View full profile <Icons name="arrow-right" size={13} /></Link>
-               </section>
+               {authorTrustVisible && (
+                  <section className="thread-detail-sidebar-card thread-detail-sidebar-card--trust">
+                     <p className="thread-detail-sidebar-label">Community trust score</p>
+                     <div className="thread-detail-trust-meter-row"><span>Reputation</span><strong>{Number(thread.author.trust_score).toFixed(1)}%</strong></div>
+                     <div className="thread-detail-trust-meter"><span style={{ width: `${Math.max(0, Math.min(100, Number(thread.author.trust_score)))}%` }} /></div>
+                     <p className="thread-detail-trust-note">Trust reflects community reputation and participation. It does not determine whether this claim is true.</p>
+                     <Link className="thread-detail-profile-link" to={`/user/${encodeURIComponent(authorUsername)}`}>View full profile <Icons name="arrow-right" size={13} /></Link>
+                  </section>
+               )}
 
                <div className="thread-detail-sidebar-actions thread-detail-sidebar-actions--classic" role="group" aria-label="Thread actions">
                   {canParticipateInCommunity && (

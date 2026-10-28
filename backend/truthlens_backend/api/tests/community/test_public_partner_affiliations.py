@@ -55,6 +55,7 @@ class PublicPartnerAffiliationProjectionTests(TestCase):
                     "name": organization.name,
                     "slug": organization.slug,
                     "logo_url": organization.logo_url,
+                    "role_label": "Administrator",
                 }
             ],
         )
@@ -138,7 +139,7 @@ class PublicPartnerAffiliationProjectionTests(TestCase):
             status=OrganizationMembership.Status.ACTIVE,
         )
 
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(3):
             users = list(
                 prefetch_public_partner_affiliations(
                     User.objects.filter(pk__in=(self.user.pk, second_user.pk))
