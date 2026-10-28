@@ -13,15 +13,6 @@ const TAB_PAGE_SIZE = 6;
 const TAB_SKELETON_COUNT = 3;
 const ACTIVITY_TABS = ["threads", "contributions"];
 
-function getTrustLevel(score) {
-   if (score <= 25) return { label: "Untrusted", tone: "untrusted" };
-   if (score < 40) return { label: "At risk", tone: "at-risk" };
-   if (score < 60) return { label: "Newcomer", tone: "newcomer" };
-   if (score < 75) return { label: "Contributor", tone: "contributor" };
-   if (score < 90) return { label: "Trusted analyst", tone: "trusted" };
-   return { label: "Expert analyst", tone: "expert" };
-}
-
 function isPlatformModeratorRole(role) {
    return role === "MOD" || role === "MODERATOR";
 }
@@ -551,9 +542,6 @@ function UserProfile() {
    const numericTrustScore = Number(displayUser.trust_score);
    const hasTrustScore =
       displayUser.trust_score !== null && displayUser.trust_score !== undefined && Number.isFinite(numericTrustScore);
-   const trustLevel = hasTrustScore
-      ? getTrustLevel(numericTrustScore)
-      : { label: "Not available", tone: "unavailable" };
    const isPlatformModerator = isPlatformModeratorRole(displayUser.role);
    const partnerAffiliations = Array.isArray(displayUser.partner_affiliations)
       ? displayUser.partner_affiliations
@@ -610,13 +598,13 @@ function UserProfile() {
                   </div>
 
                   {hasTrustScore && reputationVisible && !hasPartnerAffiliation && (
-                     <div className={`user-profile__trust-compact is-${trustLevel.tone}`} aria-labelledby="trust-heading">
+                     <div className="user-profile__trust-compact" aria-labelledby="trust-heading">
                         <span id="trust-heading" className="user-profile__trust-compact-label">
                            Trust Score
                         </span>
                         <div className="user-profile__trust-compact-value">
                            <strong>{numericTrustScore.toFixed(1)}</strong>
-                           <span>{trustLevel.label}</span>
+                           <span>Community reputation</span>
                         </div>
                         <p className="user-profile__sr-only">
                            Participation reputation on TruthLens, not verification or publication authority.

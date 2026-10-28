@@ -59,6 +59,120 @@ def _clamp(value, minimum, maximum):
     return max(minimum, min(maximum, value))
 
 
+def get_reputation_action_counts(user):
+    evidence_counts = EvidenceSubmission.objects.filter(
+        contributor=user,
+        evidence_status__in=[
+            EvidenceSubmission.EvidenceStatus.VERIFIED,
+            EvidenceSubmission.EvidenceStatus.REJECTED,
+        ],
+    ).aggregate(
+        total=Count("id"),
+        validated=Count(
+            "id",
+            filter=Q(
+                evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
+            ),
+        ),
+    )
+    report_counts = FlagResolutionLog.objects.filter(
+        flagged_by=user,
+    ).aggregate(
+        total=Count("id"),
+        validated=Count(
+            "id",
+            filter=Q(is_valid_report=True),
+        ),
+    )
+
+    evidence_total = evidence_counts["total"] or 0
+    evidence_validated = evidence_counts["validated"] or 0
+    report_total = report_counts["total"] or 0
+    report_validated = report_counts["validated"] or 0
+
+    return {
+        "resolved_actions": evidence_total + report_total,
+        "validated_actions": evidence_validated + report_validated,
+    }
+
+
+def get_resolved_reputation_action_count(user):
+    return get_reputation_action_counts(user)["resolved_actions"]
+
+
+def build_vote_reputation_snapshot(user):
+    profile = getattr(user, "profile", None)
+    trust_score = float(
+        profile.trust_score
+        if profile
+        else BASE_SCORE
+    )
+    trust_score = _clamp(
+        trust_score,
+        0.0,
+        100.0,
+    )
+
+    action_counts = get_reputation_action_counts(
+        user,
+    )
+    resolved_actions = action_counts["resolved_actions"]
+    validated_actions = action_counts["validated_actions"]
+
+    prior_mass = PRIOR_SUCCESS + PRIOR_FAILURE
+    denominator = resolved_actions + prior_mass
+    validated_history_factor = (
+        validated_actions / denominator
+        if denominator > 0
+        else 0.0
+    )
+
+    base_vote_weight = 0.5 + (trust_score / 200.0)
+    final_vote_weight = _clamp(
+        base_vote_weight * validated_history_factor,
+        0.0,
+        1.0,
+    )
+
+    return {
+        "trust_score": trust_score,
+        "resolved_actions": resolved_actions,
+        "validated_actions": validated_actions,
+        "validated_history_factor": validated_history_factor,
+        "reputation_weight": final_vote_weight,
+    }
+
+
+def _get_vote_reputation_weight(vote):
+    if vote.vote_reputation_weight_snapshot is not None:
+        return _clamp(
+            float(vote.vote_reputation_weight_snapshot),
+            0.0,
+            1.0,
+        )
+
+    if vote.vote_trust_snapshot is not None:
+        snapshot_score = _clamp(
+            float(vote.vote_trust_snapshot),
+            0.0,
+            100.0,
+        )
+        return 0.5 + (snapshot_score / 200.0)
+
+    voter_profile = getattr(vote.voter, "profile", None)
+    voter_score = (
+        voter_profile.trust_score
+        if voter_profile
+        else BASE_SCORE
+    )
+    voter_score = _clamp(
+        float(voter_score),
+        0.0,
+        100.0,
+    )
+    return 0.5 + (voter_score / 200.0)
+
+
 def _get_confidence_level(resolved_actions):
     if resolved_actions < 3:
         return {
@@ -158,12 +272,15 @@ def calculate_trust_components(user):
     # Only votes on moderator-verified evidence are counted.
     # Users cannot improve their own score by voting on themselves.
     #
-    # Voter trust is used as a bounded weight:
-    # trust 0   -> 0.50
-    # trust 50  -> 0.75
-    # trust 100 -> 1.00
+    # Each vote carries a frozen reputation-weight snapshot.
     #
-    # We use the voter's stored score and do not recursively recompute it.
+    # New/changed votes combine:
+    # - vote-time Trust Score, mapped to a bounded 0.50..1.00 base weight;
+    # - vote-time validated history, attenuated by successes / (resolved + 4),
+    #   where 4 is the current Beta(2,2) prior mass.
+    #
+    # Legacy votes retain their historical full snapshot weight because their
+    # exact resolved-action depth at the original vote event was never stored.
 
     votes = (
         Vote.objects.filter(
@@ -181,20 +298,7 @@ def calculate_trust_components(user):
     downvotes = 0
 
     for vote in votes:
-        voter_profile = getattr(vote.voter, "profile", None)
-        voter_score = (
-            voter_profile.trust_score
-            if voter_profile
-            else BASE_SCORE
-        )
-
-        voter_score = _clamp(
-            float(voter_score),
-            0.0,
-            100.0,
-        )
-
-        vote_weight = 0.5 + (voter_score / 200.0)
+        vote_weight = _get_vote_reputation_weight(vote)
 
         if vote.vote_value is True:
             weighted_vote_signal += vote_weight
@@ -380,22 +484,37 @@ def get_reputation_progression(components):
         )
     )
 
+    validated_actions = int(
+        components.get(
+            "validated_actions",
+            0,
+        )
+    )
+
     confidence = components.get(
         "confidence",
         _get_confidence_level(resolved_actions),
     )
 
-    if resolved_actions < 3:
+    if resolved_actions < 3 or validated_actions < 1:
         next_rank = RANK_REQUIREMENTS[0]
 
-        progress_percent = _clamp(
-            (
-                resolved_actions
-                / next_rank["min_actions"]
-            )
-            * 100,
+        action_progress = _clamp(
+            resolved_actions / next_rank["min_actions"],
             0.0,
-            100.0,
+            1.0,
+        )
+        positive_evidence_progress = _clamp(
+            float(validated_actions),
+            0.0,
+            1.0,
+        )
+        progress_percent = (
+            min(
+                action_progress,
+                positive_evidence_progress,
+            )
+            * 100
         )
 
         return {
@@ -408,11 +527,16 @@ def get_reputation_progression(components):
                 next_rank["min_actions"]
                 - resolved_actions,
             ),
+            "validated_actions_to_next_rank": max(
+                0,
+                1 - validated_actions,
+            ),
             "progress_percent": round(
                 progress_percent,
                 2,
             ),
             "resolved_actions": resolved_actions,
+            "validated_actions": validated_actions,
             "confidence": confidence,
         }
 
@@ -441,8 +565,10 @@ def get_reputation_progression(components):
             "next_rank": None,
             "score_to_next_rank": 0.0,
             "actions_to_next_rank": 0,
+            "validated_actions_to_next_rank": 0,
             "progress_percent": 100.0,
             "resolved_actions": resolved_actions,
+            "validated_actions": validated_actions,
             "confidence": confidence,
         }
 
@@ -491,11 +617,13 @@ def get_reputation_progression(components):
             next_rank["min_actions"]
             - resolved_actions,
         ),
+        "validated_actions_to_next_rank": 0,
         "progress_percent": round(
             progress_percent,
             2,
         ),
         "resolved_actions": resolved_actions,
+        "validated_actions": validated_actions,
         "confidence": confidence,
     }
 

@@ -218,6 +218,7 @@ from .adjudication_provenance import (
     prefetch_claim_adjudication_provenance,
 )
 from .trust_service import (
+    build_vote_reputation_snapshot,
     calculate_trust_components,
     get_reputation_progression,
     recompute_user_trust_score,
@@ -3664,10 +3665,17 @@ class VoteViewSet(viewsets.ModelViewSet):
         if evidence.contributor_id == self.request.user.id:
             raise ValidationError({"detail": "You cannot vote on your own evidence."})
 
+        snapshot = build_vote_reputation_snapshot(
+            self.request.user,
+        )
+
         try:
             vote = serializer.save(
                 voter=self.request.user,
-                vote_trust_snapshot=self.request.user.profile.trust_score,
+                vote_trust_snapshot=snapshot["trust_score"],
+                vote_resolved_actions_snapshot=snapshot["resolved_actions"],
+                vote_validated_actions_snapshot=snapshot["validated_actions"],
+                vote_reputation_weight_snapshot=snapshot["reputation_weight"],
             )
         except IntegrityError:
             raise ValidationError({"detail": "You already voted on this evidence."})
@@ -3675,7 +3683,25 @@ class VoteViewSet(viewsets.ModelViewSet):
         recompute_user_trust_score_task.delay(vote.evidence.contributor_id)
 
     def perform_update(self, serializer):
-        vote = serializer.save()
+        current_vote = serializer.instance
+        next_value = serializer.validated_data.get(
+            "vote_value",
+            current_vote.vote_value,
+        )
+
+        if next_value == current_vote.vote_value:
+            vote = serializer.save()
+        else:
+            snapshot = build_vote_reputation_snapshot(
+                self.request.user,
+            )
+            vote = serializer.save(
+                vote_trust_snapshot=snapshot["trust_score"],
+                vote_resolved_actions_snapshot=snapshot["resolved_actions"],
+                vote_validated_actions_snapshot=snapshot["validated_actions"],
+                vote_reputation_weight_snapshot=snapshot["reputation_weight"],
+            )
+
         recompute_user_trust_score_task.delay(vote.evidence.contributor_id)
 
     def perform_destroy(self, instance):
@@ -4165,8 +4191,12 @@ class UserHubView(APIView):
                     "next_rank": progression["next_rank"],
                     "score_to_next_rank": progression["score_to_next_rank"],
                     "actions_to_next_rank": progression["actions_to_next_rank"],
+                    "validated_actions_to_next_rank": progression[
+                        "validated_actions_to_next_rank"
+                    ],
                     "progress_percent": progression["progress_percent"],
                     "resolved_actions": progression["resolved_actions"],
+                    "validated_actions": progression["validated_actions"],
                     "confidence": progression["confidence"],
                     "breakdown": {
                         "base_score": components["base_score"],

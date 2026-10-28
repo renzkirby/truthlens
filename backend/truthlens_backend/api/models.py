@@ -3075,6 +3075,18 @@ class Vote(models.Model):
     )
     vote_value = models.BooleanField()  # True for upvote, False for downvote
     vote_trust_snapshot = models.FloatField(blank=True, null=True)
+    vote_resolved_actions_snapshot = models.PositiveIntegerField(
+        blank=True,
+        null=True,
+    )
+    vote_validated_actions_snapshot = models.PositiveIntegerField(
+        blank=True,
+        null=True,
+    )
+    vote_reputation_weight_snapshot = models.FloatField(
+        blank=True,
+        null=True,
+    )
     voted_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

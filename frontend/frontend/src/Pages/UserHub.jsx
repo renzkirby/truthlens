@@ -1413,9 +1413,11 @@ export default function UserHub() {
                               </>
                            ) : (
                               <>
-                                 <span className="hub-status-badge">{reputation?.status || "Provisional"}</span>
+                                 <span className="hub-status-badge">{reputation?.current_rank || "Provisional"}</span>
                                  {reputation?.confidence?.label && (
-                                    <span className="hub-confidence-label">{reputation.confidence.label} confidence</span>
+                                    <span className="hub-confidence-label">
+                                       {reputation.confidence.label} reputation confidence
+                                    </span>
                                  )}
                               </>
                            )}
@@ -1603,6 +1605,18 @@ export default function UserHub() {
                                        )}
 
                                        {reputation.actions_to_next_rank > 0 &&
+                                          (reputation.validated_actions_to_next_rank > 0 ||
+                                             reputation.score_to_next_rank > 0) &&
+                                          " · "}
+
+                                       {reputation.validated_actions_to_next_rank > 0 && (
+                                          <>
+                                             {reputation.validated_actions_to_next_rank} successful resolved{" "}
+                                             {reputation.validated_actions_to_next_rank === 1 ? "action" : "actions"} needed
+                                          </>
+                                       )}
+
+                                       {reputation.validated_actions_to_next_rank > 0 &&
                                           reputation.score_to_next_rank > 0 &&
                                           " · "}
 
@@ -1614,6 +1628,7 @@ export default function UserHub() {
                                        )}
 
                                        {reputation.actions_to_next_rank === 0 &&
+                                          (reputation.validated_actions_to_next_rank ?? 0) === 0 &&
                                           reputation.score_to_next_rank === 0 &&
                                           "Requirements met"}
                                     </>
@@ -1644,9 +1659,11 @@ export default function UserHub() {
                         </div>
                         <p className="hub-rank-guidance">
                            {reputation?.next_rank ? (
-                              reputation.actions_to_next_rank > 0 || reputation.score_to_next_rank > 0 ? (
+                              reputation.actions_to_next_rank > 0 ||
+                              (reputation.validated_actions_to_next_rank ?? 0) > 0 ||
+                              reputation.score_to_next_rank > 0 ? (
                                  <>
-                                    Keep contributing high-quality, verified evidence to progress toward{" "}
+                                    Keep contributing high-quality evidence and accurate reports to progress toward{" "}
                                     <strong>{reputation.next_rank}</strong>.
                                  </>
                               ) : (

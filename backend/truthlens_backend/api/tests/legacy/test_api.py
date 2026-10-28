@@ -706,6 +706,94 @@ class EvidenceTrustScoreTests(APITestCase):
             "Provisional",
         )
 
+    def test_rank_progression_requires_both_score_and_resolved_actions(self):
+        cases = [
+            (3, 0.0, "New Contributor"),
+            (10, 54.9, "New Contributor"),
+            (10, 55.0, "Contributor"),
+            (25, 69.9, "Contributor"),
+            (25, 70.0, "Trusted Contributor"),
+            (50, 84.9, "Trusted Contributor"),
+            (50, 85.0, "Expert Contributor"),
+        ]
+
+        for resolved_actions, trust_score, expected_rank in cases:
+            with self.subTest(
+                resolved_actions=resolved_actions,
+                trust_score=trust_score,
+            ):
+                progression = get_reputation_progression(
+                    {
+                        "resolved_actions": resolved_actions,
+                        "validated_actions": 1,
+                        "trust_score": trust_score,
+                    }
+                )
+                self.assertEqual(
+                    progression["current_rank"],
+                    expected_rank,
+                )
+
+    def test_failed_actions_do_not_leave_provisional_without_success(self):
+        progression = get_reputation_progression(
+            {
+                "resolved_actions": 3,
+                "validated_actions": 0,
+                "trust_score": 39.29,
+            }
+        )
+
+        self.assertEqual(
+            progression["current_rank"],
+            "Provisional",
+        )
+        self.assertEqual(
+            progression["next_rank"],
+            "New Contributor",
+        )
+        self.assertEqual(
+            progression["validated_actions_to_next_rank"],
+            1,
+        )
+        self.assertEqual(
+            progression["progress_percent"],
+            0.0,
+        )
+
+    def test_rank_can_fall_when_score_no_longer_meets_threshold(self):
+        progression = get_reputation_progression(
+            {
+                "resolved_actions": 50,
+                "validated_actions": 1,
+                "trust_score": 54.9,
+            }
+        )
+
+        self.assertEqual(
+            progression["current_rank"],
+            "New Contributor",
+        )
+        self.assertEqual(
+            progression["next_rank"],
+            "Contributor",
+        )
+
+    def test_expert_rank_is_terminal_progression(self):
+        progression = get_reputation_progression(
+            {
+                "resolved_actions": 50,
+                "validated_actions": 1,
+                "trust_score": 85.0,
+            }
+        )
+
+        self.assertEqual(
+            progression["current_rank"],
+            "Expert Contributor",
+        )
+        self.assertIsNone(progression["next_rank"])
+        self.assertEqual(progression["progress_percent"], 100.0)
+
     def test_recompute_persists_calculated_score(self):
         self.evidence.evidence_status = EvidenceSubmission.EvidenceStatus.VERIFIED
         self.evidence.verified_at = timezone.now()
