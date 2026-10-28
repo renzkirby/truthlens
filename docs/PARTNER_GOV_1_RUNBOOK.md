@@ -91,6 +91,51 @@ skips already classified and ACTIVE/COMPLETED assigned claims. Bulk enqueue
 is intentionally permitted only in `shadow` mode to prevent unreviewed
 retroactive authority. It does not itself assign subjects.
 
+### Historical Community classification backfill
+
+After the automatic-classification rollout is accepted in `enforce` mode,
+historical Community claims may be backfilled with
+`backfill_community_classifications`. This command is separate from the
+shadow-evaluation backlog command above.
+
+The Community backfill is dry-run first and only considers claims that:
+- have at least one Community `Thread`;
+- do not already have authoritative `ClaimInvestigationClassification`;
+- have persisted `Claim.context_text` between the classifier's 20-2400
+  character bounds;
+- do not have ACTIVE or COMPLETED verification assignments; and
+- do not already have an `InvestigationClassificationAssessment`.
+
+The command never inserts classification rows directly. Enqueue mode dispatches
+the normal asynchronous classifier, preserving response validation,
+assessment records, authoritative classification rules, and accountability
+events.
+
+Enqueue mode is intentionally allowed only when:
+- `INVESTIGATION_CLASSIFICATION_MODE=enforce`; and
+- `INVESTIGATION_ROUTING_MODE=off`.
+
+This prevents a historical maintenance batch from changing partner
+authorization while routing enforcement is active.
+
+Preview a small batch:
+
+```bash
+python manage.py backfill_community_classifications --limit 25
+```
+
+After reviewing the dry-run counts, explicitly queue the selected claims:
+
+```bash
+python manage.py backfill_community_classifications --enqueue --limit 25
+```
+
+Each batch is capped at 100 eligible claims. Prefer small batches and inspect
+Celery logs plus `InvestigationClassificationAssessment` and
+`ClaimInvestigationClassification` records between batches. Claims skipped for
+invalid text, an existing assignment, or a previous assessment require a
+separate explicit decision; do not bypass those safeguards with direct SQL.
+
 ### Shadow evaluation before enforcement
 
 1. To reproduce the earlier shadow-evaluation workflow, explicitly set
