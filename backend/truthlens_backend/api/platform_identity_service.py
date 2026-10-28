@@ -2,6 +2,7 @@ from django.db.models import Q
 
 from .management_permissions import can_access_management_console
 from .models import UserProfile
+from .organization_member_identity_service import get_partner_professional_identity
 
 
 PLATFORM_SAFETY_PROFILE_ROLES = frozenset(
@@ -53,6 +54,9 @@ def can_participate_in_community(user):
 
 def get_community_identity_context(user):
     eligible = can_participate_in_community(user)
+    professional_identity = (
+        get_partner_professional_identity(user) if eligible else None
+    )
 
     if is_platform_management_admin(user):
         platform_role = "PLATFORM_ADMIN"
@@ -68,6 +72,8 @@ def get_community_identity_context(user):
         "can_participate": eligible,
         "public_profile_available": eligible,
         "reputation_applicable": eligible,
+        "reputation_visible": bool(eligible and professional_identity is None),
+        "professional_identity": professional_identity,
         "platform_role": platform_role,
         "platform_role_label": platform_role_label,
     }
