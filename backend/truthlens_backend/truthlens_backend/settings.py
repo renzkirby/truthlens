@@ -261,11 +261,15 @@ CSRF_TRUSTED_ORIGINS = _split_csv_env(
 )
 
 # Automatic subject classification is separate from factual verification.
+# The accepted rollout defaults classification to enforce so fresh deployments
+# classify new claims without requiring a separate environment-variable toggle.
+# An explicit environment override remains available for emergency disablement
+# or controlled shadow evaluation.
 # off: no provider calls; shadow: non-authoritative suggestions; enforce:
 # persist validated authoritative subject/domain results for downstream use
 # such as Community topic projection.
 INVESTIGATION_CLASSIFICATION_MODE = os.getenv(
-    "INVESTIGATION_CLASSIFICATION_MODE", "off"
+    "INVESTIGATION_CLASSIFICATION_MODE", "enforce"
 ).strip().lower()
 if INVESTIGATION_CLASSIFICATION_MODE not in {"off", "shadow", "enforce"}:
     raise ValueError("INVESTIGATION_CLASSIFICATION_MODE must be off, shadow, or enforce.")
