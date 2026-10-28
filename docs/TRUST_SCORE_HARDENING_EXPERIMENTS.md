@@ -720,6 +720,24 @@ changed_with_moderation_penalty=0
 
 The two stale profiles were corrected to the current neutral baseline. No Community-reputation change driven by contributions, voting, or moderation was required by this local reconciliation.
 
+A subsequent preview confirmed full convergence and idempotence:
+
+```text
+mode=PREVIEW
+inspected_users=53
+applicable_users=49
+platform_staff_skipped=4
+changed_users=0
+unchanged_users=49
+maximum_absolute_delta=0.00
+legacy_zero_to_neutral=0
+changed_with_resolved_actions=0
+changed_with_community_votes=0
+changed_with_moderation_penalty=0
+```
+
+This establishes that the persisted local Community Trust Scores now exactly match the deterministic calculation after reconciliation.
+
 Frontend validation also passed:
 
 ```text
