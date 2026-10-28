@@ -4429,9 +4429,18 @@ class VoteSerializer(serializers.ModelSerializer):
             "voter",
             "vote_value",
             "vote_trust_snapshot",
+            "vote_resolved_actions_snapshot",
+            "vote_reputation_weight_snapshot",
             "voted_at",
         ]
-        read_only_fields = ["id", "voter", "vote_trust_snapshot", "voted_at"]
+        read_only_fields = [
+            "id",
+            "voter",
+            "vote_trust_snapshot",
+            "vote_resolved_actions_snapshot",
+            "vote_reputation_weight_snapshot",
+            "voted_at",
+        ]
 
     def validate(self, attrs):
         if self.instance and "evidence" in attrs:
