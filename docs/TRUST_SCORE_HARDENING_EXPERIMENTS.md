@@ -507,9 +507,9 @@ Community Notes similarly describes reputation weighting alongside suspicious-ac
 
 ---
 
-# 14. Current recommendation
+# 14. Selected implementation package
 
-Before implementation, the strongest candidate package is:
+The feature branch implements the strongest validated package:
 
 ## H1 — immutable vote-time weight
 
@@ -572,63 +572,35 @@ This minimizes simultaneous variables and makes post-change validation interpret
 
 ---
 
-# 15. Vote lifecycle semantics required before implementation
+# 15. Vote lifecycle semantics implemented
 
-Snapshot weighting also exposes an existing vote-lifecycle ambiguity.
+The feature branch now treats vote weighting as event-time evidence.
 
-Current API behavior:
+Implemented behavior:
 
 ```text
-POST vote
--> stores vote_trust_snapshot
+POST new vote
+-> snapshot current Trust Score
+-> snapshot current resolved-action count
+-> snapshot current validated-action count
+-> persist final reputation weight
 
-PATCH vote_value (upvote <-> downvote)
--> changes vote_value
--> does NOT refresh vote_trust_snapshot
+PATCH vote_value to the opposite direction
+-> refresh all three source snapshots
+-> refresh final reputation weight
+
+PATCH with the same vote_value
+-> keep the existing snapshots and weight unchanged
 
 DELETE vote
--> removes the vote
+-> remove the vote and its reputation effect
 ```
 
-If snapshot-based weighting is adopted, TruthLens should explicitly define a vote change as a **new rating event** for reputation-weight purposes.
+The no-op PATCH rule is deliberate. Without it, a client could refresh an old vote's weight merely by resubmitting the same direction after gaining reputation.
 
-Recommended semantics to validate:
+A genuine direction change is treated as a new rating event for weighting purposes because the substantive judgment changed.
 
-```text
-POST:
-  snapshot current Trust Score
-  snapshot current resolved-action count
-  snapshot current validated-action count
-  persist final reputation weight
-
-PATCH upvote <-> downvote:
-  refresh all three source snapshots
-  refresh final reputation weight
-
-DELETE:
-  remove the vote and its reputation effect
-```
-
-Why:
-
-- changing an old upvote into a downvote changes the substantive rating;
-- retaining a years-old credibility snapshot for a newly changed rating would be difficult to explain;
-- refreshing only some snapshot inputs would make the weighting state inconsistent.
-
-The current implementation keeps `voted_at` as creation time. A vote-direction change is treated as a new weighting event for snapshot purposes, while the original creation timestamp remains unchanged.
-
-## Legacy/null snapshot consideration
-
-`vote_trust_snapshot` has been nullable since the initial schema, although the normal vote-creation API currently supplies it.
-
-Before production migration, audit:
-
-- total votes;
-- null Trust snapshots;
-- snapshots outside 0-100;
-- votes created through nonstandard/manual paths.
-
-Do not silently fall back to the voter's current Trust Score for null historical snapshots without documenting that exception, because that would preserve I9 for those rows.
+The original `voted_at` timestamp remains the creation time; snapshot refresh does not silently rewrite that historical creation timestamp.
 
 ---
 
