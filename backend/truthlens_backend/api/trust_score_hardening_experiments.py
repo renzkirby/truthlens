@@ -27,7 +27,8 @@ class VoterObservation:
     current_score: float
     snapshot_resolved_actions: int
     current_resolved_actions: int
-    validated_actions: int
+    snapshot_validated_actions: int
+    current_validated_actions: int
 
 
 @dataclass(frozen=True)
@@ -51,9 +52,9 @@ SNAPSHOT_ONLY = VotePolicy(
     use_snapshot=True,
 )
 
-SNAPSHOT_EVIDENCE_SHARE = VotePolicy(
-    key="snapshot_evidence_share",
-    label="Snapshot Trust × observed-evidence share",
+SNAPSHOT_VALIDATED_HISTORY = VotePolicy(
+    key="snapshot_validated_history",
+    label="Snapshot Trust × validated-history factor",
     use_snapshot=True,
     evidence_share_scaling=True,
 )
@@ -68,7 +69,7 @@ SNAPSHOT_CONTRIBUTOR_GATE = VotePolicy(
 VOTE_POLICIES = (
     BASELINE_DYNAMIC,
     SNAPSHOT_ONLY,
-    SNAPSHOT_EVIDENCE_SHARE,
+    SNAPSHOT_VALIDATED_HISTORY,
     SNAPSHOT_CONTRIBUTOR_GATE,
 )
 
@@ -82,28 +83,36 @@ def base_vote_weight(score):
     return 0.5 + (bounded / 200.0)
 
 
-def observed_evidence_share(
+def validated_history_factor(
+    *,
+    validated_actions,
     resolved_actions,
     calibration=DEFAULT_CALIBRATION,
 ):
-    """Return how much posterior evidence comes from observed actions.
+    """Shrink voter influence toward zero until successful history exists.
 
-    TruthLens currently uses a Beta(2,2) prior. The prior contributes four
-    pseudo-observations. With n resolved actions, n / (n + 4) is the share of
-    posterior observation mass supplied by real resolved history.
+    The denominator keeps the same Beta(2,2) prior mass used by TruthLens
+    contribution quality. The numerator counts only successful resolved
+    actions, so rejected/dismissed actions cannot be farmed merely to mature
+    somebody's influence over other users' Community reputation.
 
-    This is a transparent shrinkage factor, not a Bayesian credible interval.
+    This is a transparent TruthLens calibration rule, not a Bayesian credible
+    interval or a literature-prescribed voting formula.
     """
 
-    observed = max(0, int(resolved_actions))
+    resolved = max(0, int(resolved_actions))
+    validated = max(
+        0,
+        min(int(validated_actions), resolved),
+    )
     prior_mass = (
         calibration.prior_success
         + calibration.prior_failure
     )
-    denominator = observed + prior_mass
+    denominator = resolved + prior_mass
     if denominator <= 0:
         return 0.0
-    return observed / denominator
+    return validated / denominator
 
 
 def effective_vote_weight(
@@ -122,6 +131,11 @@ def effective_vote_weight(
         if policy.use_snapshot
         else voter.current_resolved_actions
     )
+    validated_actions = (
+        voter.snapshot_validated_actions
+        if policy.use_snapshot
+        else voter.current_validated_actions
+    )
 
     if policy.contributor_gate:
         if history_actions < 10 or score < 55.0:
@@ -130,9 +144,10 @@ def effective_vote_weight(
     weight = base_vote_weight(score)
 
     if policy.evidence_share_scaling:
-        weight *= observed_evidence_share(
-            history_actions,
-            calibration,
+        weight *= validated_history_factor(
+            validated_actions=validated_actions,
+            resolved_actions=history_actions,
+            calibration=calibration,
         )
 
     return weight
@@ -175,7 +190,8 @@ def voter_archetypes():
             current_score=50.0,
             snapshot_resolved_actions=0,
             current_resolved_actions=0,
-            validated_actions=0,
+            snapshot_validated_actions=0,
+            current_validated_actions=0,
         ),
         VoterObservation(
             name="three_successes",
@@ -183,7 +199,8 @@ def voter_archetypes():
             current_score=61.71,
             snapshot_resolved_actions=3,
             current_resolved_actions=3,
-            validated_actions=3,
+            snapshot_validated_actions=3,
+            current_validated_actions=3,
         ),
         VoterObservation(
             name="three_failures",
@@ -191,7 +208,17 @@ def voter_archetypes():
             current_score=39.29,
             snapshot_resolved_actions=3,
             current_resolved_actions=3,
-            validated_actions=0,
+            snapshot_validated_actions=0,
+            current_validated_actions=0,
+        ),
+        VoterObservation(
+            name="twenty_five_failures",
+            snapshot_score=28.45,
+            current_score=28.45,
+            snapshot_resolved_actions=25,
+            current_resolved_actions=25,
+            snapshot_validated_actions=0,
+            current_validated_actions=0,
         ),
         VoterObservation(
             name="ten_successes",
@@ -199,7 +226,8 @@ def voter_archetypes():
             current_score=72.86,
             snapshot_resolved_actions=10,
             current_resolved_actions=10,
-            validated_actions=10,
+            snapshot_validated_actions=10,
+            current_validated_actions=10,
         ),
         VoterObservation(
             name="twenty_five_successes",
@@ -207,7 +235,8 @@ def voter_archetypes():
             current_score=76.55,
             snapshot_resolved_actions=25,
             current_resolved_actions=25,
-            validated_actions=25,
+            snapshot_validated_actions=25,
+            current_validated_actions=25,
         ),
     )
 
@@ -368,7 +397,8 @@ def historical_vote_stability(calibration=DEFAULT_CALIBRATION):
         current_score=90.0,
         snapshot_resolved_actions=3,
         current_resolved_actions=25,
-        validated_actions=8,
+        snapshot_validated_actions=3,
+        current_validated_actions=20,
     )
 
     rows = []
@@ -381,7 +411,8 @@ def historical_vote_stability(calibration=DEFAULT_CALIBRATION):
                     current_score=50.0,
                     snapshot_resolved_actions=3,
                     current_resolved_actions=3,
-                    validated_actions=8,
+                    snapshot_validated_actions=3,
+                    current_validated_actions=3,
                 ),
             ) * 5,
             policy=policy,
@@ -518,7 +549,7 @@ def build_hardening_experiment_report(calibration=DEFAULT_CALIBRATION):
                 "Fixes historical reinterpretation but does not reduce fresh "
                 "account influence."
             ),
-            "snapshot_evidence_share": (
+            "snapshot_validated_history": (
                 "Freezes historical score and scales influence by n/(n+4), "
                 "where four is the current Beta(2,2) prior mass."
             ),
