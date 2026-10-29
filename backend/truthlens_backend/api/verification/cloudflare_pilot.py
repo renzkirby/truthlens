@@ -30,6 +30,7 @@ CLASSIFICATION_BUDGET_FLAG = "CLOUDFLARE_PILOT_CLASSIFICATION_MAX_TOKENS"
 PILOT_OPERATION = "persisted_evidence_evaluation"
 EQUIVALENCE_OPERATION = "claim_equivalence"
 RELEVANCE_OPERATION = "fact_check_relevance"
+CLAIM_GATE_OPERATION = "claim_gate"
 GFC_EVALUATION_OPERATION = "gfc_evaluation"
 TAVILY_EVALUATION_OPERATION = "tavily_evaluation"
 ASSESSMENT_OPERATION = "evidence_assessment"
@@ -68,6 +69,7 @@ def cloudflare_pilot_enabled(operation):
             PILOT_OPERATION, ASSESSMENT_OPERATION, CLASSIFICATION_OPERATION,
             EQUIVALENCE_OPERATION, RELEVANCE_OPERATION,
             GFC_EVALUATION_OPERATION, TAVILY_EVALUATION_OPERATION,
+            CLAIM_GATE_OPERATION,
         }
 
     # Preserve the original, development-only pilot semantics.
@@ -432,8 +434,40 @@ def _valid_small_decision(operation, raw):
     return False
 
 
+def _valid_claim_gate(raw):
+    """Validate the extraction and retrieval-query envelope before acceptance."""
+    try:
+        value = json.loads(raw)
+    except (TypeError, ValueError):
+        return False
+    if not isinstance(value, dict) or set(value) != {
+        "cleaned_claim", "search_query", "search_queries", "article_stance",
+    }:
+        return False
+    claim = value["cleaned_claim"]
+    query = value["search_query"]
+    queries = value["search_queries"]
+    if not isinstance(claim, str) or not claim.strip():
+        return False
+    if value["article_stance"] not in {"DEBUNKING", "REPORTING", "NEUTRAL"}:
+        return False
+    if not isinstance(query, str) or not isinstance(queries, list):
+        return False
+    if claim == "OUT_OF_SCOPE":
+        return not queries and not query.strip()
+    if not query.strip() or not 1 <= len(queries) <= 3:
+        return False
+    return (
+        all(isinstance(q, str) and bool(q.strip()) for q in queries)
+        and query == queries[0]
+        and len(set(q.strip().casefold() for q in queries)) == len(queries)
+    )
+
+
 def validate_pilot_response(operation, raw, user_prompt):
     """A valid response must satisfy the exact operation-specific contract."""
+    if operation == CLAIM_GATE_OPERATION:
+        return _valid_claim_gate(raw)
     if operation in {EQUIVALENCE_OPERATION, RELEVANCE_OPERATION}:
         return _valid_small_decision(operation, raw)
     if operation in {PILOT_OPERATION, GFC_EVALUATION_OPERATION, TAVILY_EVALUATION_OPERATION}:
@@ -454,6 +488,7 @@ def call_validated_cloudflare_pilot(
         PILOT_OPERATION, ASSESSMENT_OPERATION, CLASSIFICATION_OPERATION,
         EQUIVALENCE_OPERATION, RELEVANCE_OPERATION,
         GFC_EVALUATION_OPERATION, TAVILY_EVALUATION_OPERATION,
+        CLAIM_GATE_OPERATION,
     }:
         raise CloudflareEvaluationError("INVALID_PILOT_OPERATION")
     if operation == ASSESSMENT_OPERATION:
