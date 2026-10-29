@@ -16,6 +16,14 @@ from api.services import (
 
 class LLMProviderReliabilityTests(SimpleTestCase):
     def setUp(self):
+        # These tests exercise the legacy Gemini/Groq reliability contract.
+        # Keep them deterministic even on developer machines with live
+        # Cloudflare credentials that would auto-enable universal routing.
+        self.enterContext(patch.dict(
+            os.environ,
+            {"ENABLE_UNIVERSAL_LLM_HIERARCHY": "0"},
+            clear=False,
+        ))
         self.gemini_client = Mock()
         self.groq_client = Mock()
         self.gemini_client.models.generate_content.return_value = (
