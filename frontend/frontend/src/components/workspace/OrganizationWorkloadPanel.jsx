@@ -323,7 +323,7 @@ function OrganizationWorkloadPanel({
                      id="investigation-search"
                      value={searchInput}
                      onChange={(event) => setSearchInput(event.target.value)}
-                     placeholder="Search claim or owner…"
+                     placeholder="Search claims…"
                      leadingIcon={<Icons name="search" size={15} />}
                      density="standard"
                   />
