@@ -15,6 +15,17 @@ DEFAULT_HTTP_TIMEOUT = (5, 45)
 ACCOUNT_ID_PATTERN = re.compile(r"^[a-fA-F0-9]{32}$")
 
 
+def cloudflare_credentials_configured():
+    """Return True only when the deployed Cloudflare credential pair is usable."""
+    account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
+    api_token = os.getenv("CLOUDFLARE_API_TOKEN", "")
+    return bool(
+        ACCOUNT_ID_PATTERN.fullmatch(account_id)
+        and isinstance(api_token, str)
+        and api_token.strip()
+    )
+
+
 class CloudflareEvaluationError(RuntimeError):
     """Sanitized provider failure from the bounded Cloudflare adapter."""
 
