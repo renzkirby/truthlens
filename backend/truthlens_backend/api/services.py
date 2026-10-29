@@ -398,6 +398,7 @@ def call_llm_with_fallback(
             else:
                 cloudflare_text = call_validated_cloudflare_pilot(
                     system_instructions, user_prompt,
+                    operation=operation,
                     audit_metadata=cloudflare_metrics,
                 )
         except Exception as cloudflare_err:
