@@ -22,6 +22,8 @@ STAGE_CONTRACT_OPERATIONS = frozenset({
     CLASSIFICATION_OPERATION,
     "claim_equivalence",
     "fact_check_relevance",
+    "gfc_evaluation",
+    "tavily_evaluation",
 })
 # These indicate the user's account cannot currently accept this request.
 # Do not repeatedly retry them within a single verification job.
