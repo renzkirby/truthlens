@@ -22,6 +22,7 @@ STAGE_CONTRACT_OPERATIONS = frozenset({
     CLASSIFICATION_OPERATION,
     "claim_equivalence",
     "fact_check_relevance",
+    "claim_gate",
     "gfc_evaluation",
     "tavily_evaluation",
 })
