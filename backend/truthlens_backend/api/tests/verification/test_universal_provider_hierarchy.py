@@ -1,11 +1,13 @@
 """Offline policy checks for the opt-in universal provider hierarchy."""
 
 import json
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from django.test import SimpleTestCase, override_settings
 
 from api.verification.cloudflare_pilot import (cloudflare_pilot_enabled, validate_pilot_response)
+from api.services import call_llm_with_fallback
 from api.verification.provider_hierarchy import (
     hierarchy_enabled, requires_strict_stage_contract,
 )
@@ -142,3 +144,118 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
                 **example, "cleaned_claim": "OUT_OF_SCOPE",
             }), "",
         ))
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_universal_three_provider_fallback_order_for_all_stages(self):
+        responses = {
+            "persisted_evidence_evaluation": {
+                "reasoning": "Evidence addresses the claim.",
+                "verdict": "FACT", "summary": "Confirmed by evidence.",
+                "confidence_score": 86, "score_context": "Direct support.",
+            },
+            "gfc_evaluation": {
+                "reasoning": "Evidence addresses the claim.",
+                "verdict": "FACT", "summary": "Confirmed by evidence.",
+                "confidence_score": 86, "score_context": "Direct support.",
+            },
+            "tavily_evaluation": {
+                "reasoning": "Evidence addresses the claim.",
+                "verdict": "FACT", "summary": "Confirmed by evidence.",
+                "confidence_score": 86, "score_context": "Direct support.",
+            },
+            "claim_equivalence": {
+                "equivalent": False, "reasoning": "Different factual events.",
+                "material_differences": ["different date"],
+            },
+            "fact_check_relevance": {
+                "reasoning": "Different events.", "is_relevant": False,
+            },
+            "claim_gate": {
+                "cleaned_claim": "An announcement occurred.",
+                "search_query": "official announcement details",
+                "search_queries": ["official announcement details"],
+                "article_stance": "NEUTRAL",
+            },
+            "investigation_classification": {
+                "decision": "ABSTAIN", "primary_subject": None, "domains": [],
+            },
+            "evidence_assessment": {
+                "assessments": [
+                    {"key": "item_0", "stance": "SUPPORTS",
+                     "relevance_score": 0.9, "directness_score": 0.8},
+                ],
+            },
+        }
+        assessment_prompt = (
+            'UNTRUSTED ASSESSMENT DATA:\\n'
+            + json.dumps({
+                "claim_text": "An announcement occurred.",
+                "evidence_items": [{"key": "item_0", "evidence_content": "Public record"}],
+            })
+        ).replace('\\\\n', '\\n')
+        with patch.dict("os.environ", {"ENABLE_UNIVERSAL_LLM_HIERARCHY": "1"}):
+            for operation, expected in responses.items():
+                with self.subTest(operation=operation):
+                    prompt = assessment_prompt if operation == "evidence_assessment" else (
+                        "The claim subject is undetermined." * 2
+                        if operation == "investigation_classification" else "Input"
+                    )
+                    sequence = []
+                    gemini = Mock()
+                    def gemini_call(**kwargs):
+                        sequence.append("gemini")
+                        raise RuntimeError("simulated primary outage")
+                    gemini.models.generate_content.side_effect = gemini_call
+                    def cloudflare_call(*args, **kwargs):
+                        sequence.append("cloudflare")
+                        return json.dumps(expected)
+                    groq = Mock()
+                    def groq_call(**kwargs):
+                        sequence.append("groq")
+                        return SimpleNamespace(choices=[SimpleNamespace(
+                            message=SimpleNamespace(content=json.dumps(expected))
+                        )])
+                    groq.with_options.return_value.chat.completions.create.side_effect = groq_call
+                    with (
+                        patch("api.services.gemini_client", gemini),
+                        patch("api.services.groq_client", groq),
+                        patch("api.services.call_validated_cloudflare_pilot", side_effect=cloudflare_call),
+                        patch("api.services.cloudflare_assessment_bypass_reason", return_value=None),
+                    ):
+                        result = call_llm_with_fallback(
+                            "Instructions", prompt, operation=operation,
+                        )
+                    self.assertEqual(json.loads(result), expected)
+                    self.assertEqual(sequence, ["gemini", "cloudflare"])
+                    groq.with_options.return_value.chat.completions.create.assert_not_called()
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_universal_uses_groq_after_cloudflare_failure(self):
+        payload = json.dumps({
+            "reasoning": "Grounded in evidence.", "verdict": "FACT",
+            "summary": "The claim is supported.", "confidence_score": 77,
+            "score_context": "Direct supporting evidence.",
+        })
+        sequence = []
+        gemini = Mock()
+        gemini.models.generate_content.side_effect = RuntimeError("provider unavailable")
+        cloudflare = Mock(side_effect=RuntimeError("provider unavailable"))
+        groq = Mock()
+        groq.with_options.return_value.chat.completions.create.return_value = (
+            SimpleNamespace(choices=[SimpleNamespace(
+                message=SimpleNamespace(content=payload)
+            )])
+        )
+        with (
+            patch.dict("os.environ", {"ENABLE_UNIVERSAL_LLM_HIERARCHY": "1"}),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.call_validated_cloudflare_pilot", cloudflare),
+        ):
+            result = call_llm_with_fallback(
+                "Instructions", "Evidence", operation="gfc_evaluation",
+            )
+        self.assertEqual(result, payload)
+        gemini.models.generate_content.assert_called_once()
+        cloudflare.assert_called_once()
+        groq.with_options.return_value.chat.completions.create.assert_called_once()
