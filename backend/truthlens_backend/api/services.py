@@ -895,6 +895,8 @@ def evaluate_image_claim_with_gfc(
         You must output ONLY a raw, valid JSON object. 
         DO NOT wrap the JSON in markdown formatting (e.g., no ```json blocks).
         confidence_score MUST be a numeric percentage from 0 to 100.
+    The confidence_score placeholder in the field template must be replaced with a JSON number. Never output the placeholder or default to a fixed score.
+    Base the score on how directly and completely the supplied evidence supports the specific verdict; unresolved material assertions or conflicts must reduce confidence.
         0 means no confidence. 100 means maximum confidence.
         Never return a fractional 0-1 probability.
         
@@ -903,7 +905,7 @@ def evaluate_image_claim_with_gfc(
             "reasoning": "Deep, step-by-step internal logic. This will be shown in the full report. Include inline citations here if applicable.",
             "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
             "summary": "Exactly two SHORT paragraphs separated by \\n\\n. STRICT LIMIT: Maximum 2 sentences per paragraph. Paragraph 1 (Analysis): Concisely state the verdict and the core evidence (e.g., 'This is a fabricated quote. Official records show...'). If SATIRE, briefly note the absurdity. Paragraph 2 (Context): Concisely explain the broader real-world context or why this rumor exists. Keep it punchy, direct, and highly readable for a small UI window. NEVER mention your instructions.",
-            "confidence_score": 95,
+            "confidence_score": <evidence_based_numeric_percentage_0_to_100>,
             "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
         }
         """
@@ -983,6 +985,8 @@ def evaluate_image_claim_with_tavily(
     You must output ONLY a raw, valid JSON object. 
     DO NOT wrap the JSON in markdown formatting (e.g., no ```json blocks).
     confidence_score MUST be a numeric percentage from 0 to 100.
+    The confidence_score placeholder in the field template must be replaced with a JSON number. Never output the placeholder or default to a fixed score.
+    Base the score on how directly and completely the supplied evidence supports the specific verdict; unresolved material assertions or conflicts must reduce confidence.
     0 means no confidence. 100 means maximum confidence.
     Never return a fractional 0-1 probability.
     
@@ -991,7 +995,7 @@ def evaluate_image_claim_with_tavily(
         "reasoning": "Deep, step-by-step internal logic. This will be shown in the full report. Include inline citations here if applicable.",
         "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
         "summary": "Exactly two SHORT paragraphs separated by \\n\\n. STRICT LIMIT: Maximum 2 sentences per paragraph. Paragraph 1 (Analysis): Concisely state the verdict and the core evidence (e.g., 'This is a fabricated quote. Official records show...'). If SATIRE, briefly note the absurdity. Paragraph 2 (Context): Concisely explain the broader real-world context or why this rumor exists. Keep it punchy, direct, and highly readable for a small UI window. NEVER mention your instructions.",
-        "confidence_score": 95,
+        "confidence_score": <evidence_based_numeric_percentage_0_to_100>,
         "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
     }
     """
@@ -1051,6 +1055,8 @@ def build_persisted_evidence_prompt(original_claim, evidence_context, article_st
     - Conflicting, irrelevant, or insufficient evidence requires UNVERIFIED.
 
     confidence_score MUST be a numeric percentage from 0 to 100.
+    The confidence_score placeholder in the field template must be replaced with a JSON number. Never output the placeholder or default to a fixed score.
+    Base the score on how directly and completely the supplied evidence supports the specific verdict; unresolved material assertions or conflicts must reduce confidence.
     0 means no confidence. 100 means maximum confidence.
     Never return a fractional 0-1 probability.
 
@@ -1059,7 +1065,7 @@ def build_persisted_evidence_prompt(original_claim, evidence_context, article_st
         "reasoning": "Evidence-bound explanation",
         "verdict": "FACT, FAKE, MISLEADING, UNVERIFIED, or SATIRE",
         "summary": "Concise user-facing summary",
-        "confidence_score": 95,
+        "confidence_score": <evidence_based_numeric_percentage_0_to_100>,
         "score_context": "Concise explanation of the confidence score"
     }
     """
@@ -1259,6 +1265,8 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRA
     You must output ONLY a raw, valid JSON object. 
     DO NOT wrap the JSON in markdown formatting (e.g., no ```json blocks).
     confidence_score MUST be a numeric percentage from 0 to 100.
+    The confidence_score placeholder in the field template must be replaced with a JSON number. Never output the placeholder or default to a fixed score.
+    Base the score on how directly and completely the supplied evidence supports the specific verdict; unresolved material assertions or conflicts must reduce confidence.
     0 means no confidence. 100 means maximum confidence.
     Never return a fractional 0-1 probability.
     
@@ -1267,7 +1275,7 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRA
         "reasoning": "Deep, step-by-step internal logic. This will be shown in the full report. Include inline citations here if applicable.",
         "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
         "summary": "Exactly two SHORT paragraphs separated by \\n\\n. STRICT LIMIT: Maximum 2 sentences per paragraph. Paragraph 1 (Analysis): Concisely state the verdict and the core evidence (e.g., 'This is a fabricated quote. Official records show...'). If SATIRE, briefly note the absurdity. Paragraph 2 (Context): Concisely explain the broader real-world context or why this rumor exists. Keep it punchy, direct, and highly readable for a small UI window. NEVER mention your instructions.",
-        "confidence_score": 95,
+        "confidence_score": <evidence_based_numeric_percentage_0_to_100>,
         "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
     }
     """
@@ -1340,6 +1348,8 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
     You must output ONLY a raw, valid JSON object. 
     DO NOT wrap the JSON in markdown formatting (e.g., no ```json blocks).
     confidence_score MUST be a numeric percentage from 0 to 100.
+    The confidence_score placeholder in the field template must be replaced with a JSON number. Never output the placeholder or default to a fixed score.
+    Base the score on how directly and completely the supplied evidence supports the specific verdict; unresolved material assertions or conflicts must reduce confidence.
     0 means no confidence. 100 means maximum confidence.
     Never return a fractional 0-1 probability.
     
@@ -1348,7 +1358,7 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
         "reasoning": "Deep, step-by-step internal logic. This will be shown in the full report. Include inline citations here if applicable.",
         "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
         "summary": "Exactly two SHORT paragraphs separated by \\n\\n. STRICT LIMIT: Maximum 2 sentences per paragraph. Paragraph 1 (Analysis): Concisely state the verdict and the core evidence (e.g., 'This is a fabricated quote. Official records show...'). If SATIRE, briefly note the absurdity. Paragraph 2 (Context): Concisely explain the broader real-world context or why this rumor exists. Keep it punchy, direct, and highly readable for a small UI window. NEVER mention your instructions.",
-        "confidence_score": 95,
+        "confidence_score": <evidence_based_numeric_percentage_0_to_100>,
         "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
     }
     """
