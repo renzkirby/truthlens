@@ -39,6 +39,7 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
                 "investigation_classification",
                 "claim_equivalence",
                 "fact_check_relevance",
+                "claim_gate",
                 "gfc_evaluation",
                 "tavily_evaluation",
             ):
@@ -113,3 +114,31 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
                 self.assertTrue(requires_strict_stage_contract(
                     operation, pilot_active=True, hierarchy_active=True,
                 ))
+
+    def test_claim_gate_contract_preserves_out_of_scope_and_query_structure(self):
+        example = {
+            "cleaned_claim": "A named official announced a new policy.",
+            "search_query": "named official announcement new policy",
+            "search_queries": ["named official announcement new policy"],
+            "article_stance": "REPORTING",
+        }
+        self.assertTrue(validate_pilot_response(
+            "claim_gate", json.dumps(example), "Text: ...",
+        ))
+        self.assertFalse(validate_pilot_response(
+            "claim_gate", json.dumps({**example, "article_stance": []}), "",
+        ))
+        self.assertFalse(validate_pilot_response(
+            "claim_gate", json.dumps({**example, "search_queries": []}), "",
+        ))
+        self.assertTrue(validate_pilot_response(
+            "claim_gate", json.dumps({
+                **example, "cleaned_claim": "OUT_OF_SCOPE",
+                "search_query": "", "search_queries": [],
+            }), "",
+        ))
+        self.assertFalse(validate_pilot_response(
+            "claim_gate", json.dumps({
+                **example, "cleaned_claim": "OUT_OF_SCOPE",
+            }), "",
+        ))
