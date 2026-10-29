@@ -192,7 +192,7 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
                 "claim_text": "An announcement occurred.",
                 "evidence_items": [{"key": "item_0", "evidence_content": "Public record"}],
             })
-        ).replace('\\\\n', '\\n')
+        )
         with patch.dict("os.environ", {"ENABLE_UNIVERSAL_LLM_HIERARCHY": "1"}):
             for operation, expected in responses.items():
                 with self.subTest(operation=operation):
@@ -236,7 +236,6 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
             "summary": "The claim is supported.", "confidence_score": 77,
             "score_context": "Direct supporting evidence.",
         })
-        sequence = []
         gemini = Mock()
         gemini.models.generate_content.side_effect = RuntimeError("provider unavailable")
         cloudflare = Mock(side_effect=RuntimeError("provider unavailable"))
