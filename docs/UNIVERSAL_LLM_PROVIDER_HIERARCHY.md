@@ -6,17 +6,15 @@ TruthLens can route supported runtime AI operations through the following order:
 2. Cloudflare Workers AI / Gemma
 3. Groq
 
-The policy is **off by default**. Merging the implementation does not activate it.
+The policy is **credential-aware and automatic**. After this code is deployed,
+the universal hierarchy turns on automatically when the backend has a valid
+Cloudflare account ID and a non-empty Cloudflare API token.
 
-## Activation
+No separate `=1` deployment step is required for normal activation.
 
-Set the following environment variable on the backend worker/runtime:
+## Activation and override
 
-```
-ENABLE_UNIVERSAL_LLM_HIERARCHY=1
-```
-
-Cloudflare also requires its existing credentials:
+Automatic activation requires the existing Cloudflare credentials:
 
 ```
 CLOUDFLARE_ACCOUNT_ID=<account id>
@@ -25,6 +23,25 @@ CLOUDFLARE_API_TOKEN=<API token>
 
 Gemini and Groq continue to use their existing provider credentials and model
 configuration.
+
+When those Cloudflare credentials are present and
+`ENABLE_UNIVERSAL_LLM_HIERARCHY` is unset, TruthLens automatically uses the
+universal hierarchy.
+
+Optional explicit overrides:
+
+```
+ENABLE_UNIVERSAL_LLM_HIERARCHY=1
+```
+
+forces the hierarchy on for controlled diagnostics, while:
+
+```
+ENABLE_UNIVERSAL_LLM_HIERARCHY=0
+```
+
+is the emergency kill switch and disables automatic activation even when
+Cloudflare credentials are configured.
 
 Do not commit credentials to the repository.
 
@@ -62,20 +79,22 @@ within one verification execution.
 
 ## Rollback
 
-Remove or unset:
+Set:
 
 ```
-ENABLE_UNIVERSAL_LLM_HIERARCHY
+ENABLE_UNIVERSAL_LLM_HIERARCHY=0
 ```
 
 and restart the backend/Celery workers that loaded the old environment.
 
+Leaving the variable unset allows automatic activation whenever valid
+Cloudflare credentials are present.
+
 The legacy development-only AI-RQ-2 pilot flags remain supported separately.
-They are not required when the universal hierarchy is explicitly enabled.
 
 ## Validation before deployment
 
 Run the focused provider, Cloudflare, verdict-contract, and relatedness tests
-before enabling the flag. Production activation should happen only after the
-feature branch has been merged and the deployed workers have the Cloudflare
-credentials available.
+before deployment. After merge, automatic activation occurs on the first
+backend/Celery process start that sees valid Cloudflare credentials, unless the
+kill switch is set to `0`.
