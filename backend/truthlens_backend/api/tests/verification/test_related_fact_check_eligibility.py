@@ -33,6 +33,12 @@ class RelatednessClassifierTests(SimpleTestCase):
             "claim_anchor": "Sara Duterte took", "publication_anchor": "Sara Duterte took",
         })
 
+    def setUp(self):
+        super().setUp()
+        self.enterContext(patch.dict(
+            "os.environ", {"ENABLE_UNIVERSAL_LLM_HIERARCHY": ""}, clear=False,
+        ))
+
     def test_related_chronology_and_equivalent_contract_are_separate(self):
         self.assertEqual(related.validate_response(self.response(), self.claim, self.representation),
                          ("RELATED", "CHRONOLOGY"))
@@ -79,6 +85,60 @@ class RelatednessClassifierTests(SimpleTestCase):
             "max_completion_tokens"], related.OUTPUT_TOKENS)
         for text in (secret, self.claim, self.representation["canonical_claim"]):
             self.assertNotIn(text, "\n".join(logs.output))
+
+    def test_universal_hierarchy_inserts_cloudflare_before_groq(self):
+        with patch.dict(
+            "os.environ", {"ENABLE_UNIVERSAL_LLM_HIERARCHY": "1"}, clear=False,
+        ), patch("api.services.gemini_client") as gemini, patch(
+            "api.services.groq_client"
+        ) as groq, patch(
+            "api.verification.cloudflare_evaluation.generate_evaluation_json",
+            return_value=self.response(),
+        ) as cloudflare:
+            gemini.models.generate_content.side_effect = RuntimeError(
+                "simulated primary outage"
+            )
+            self.assertEqual(
+                related.classify_relatedness(self.claim, self.representation)[0],
+                ("RELATED", "CHRONOLOGY"),
+            )
+        gemini.models.generate_content.assert_called_once()
+        cloudflare.assert_called_once()
+        self.assertEqual(
+            cloudflare.call_args.kwargs["max_completion_tokens"],
+            related.OUTPUT_TOKENS,
+        )
+        self.assertEqual(
+            cloudflare.call_args.kwargs["http_timeout"],
+            (3, related.PROVIDER_TIMEOUT_SECONDS),
+        )
+        groq.with_options.assert_not_called()
+
+    def test_invalid_cloudflare_relatedness_falls_through_to_groq(self):
+        with patch.dict(
+            "os.environ", {"ENABLE_UNIVERSAL_LLM_HIERARCHY": "1"}, clear=False,
+        ), patch("api.services.gemini_client") as gemini, patch(
+            "api.services.groq_client"
+        ) as groq, patch(
+            "api.verification.cloudflare_evaluation.generate_evaluation_json",
+            return_value='{"classification":"RELATED"}',
+        ) as cloudflare:
+            gemini.models.generate_content.side_effect = RuntimeError(
+                "simulated primary outage"
+            )
+            groq.with_options.return_value.chat.completions.create.return_value = (
+                SimpleNamespace(choices=[SimpleNamespace(
+                    finish_reason="stop",
+                    message=SimpleNamespace(content=self.response()),
+                )])
+            )
+            self.assertEqual(
+                related.classify_relatedness(self.claim, self.representation)[0],
+                ("RELATED", "CHRONOLOGY"),
+            )
+        gemini.models.generate_content.assert_called_once()
+        cloudflare.assert_called_once()
+        groq.with_options.return_value.chat.completions.create.assert_called_once()
 
     def test_valid_gemini_response_avoids_groq_and_over_budget_avoids_both(self):
         with patch("api.services.gemini_client") as gemini, patch("api.services.groq_client") as groq:
