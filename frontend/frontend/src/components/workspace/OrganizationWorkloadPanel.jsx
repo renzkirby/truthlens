@@ -15,7 +15,7 @@ import "./OrganizationWorkloadPanel.css";
 const PAGE_SIZE = 10;
 
 const CLAIM_TYPE_OPTIONS = [
-   { value: "", label: "All claim types" },
+   { value: "", label: "All content types" },
    { value: "TEXT", label: "Text" },
    { value: "IMAGE", label: "Image" },
    { value: "URL", label: "URL" },
@@ -323,14 +323,14 @@ function OrganizationWorkloadPanel({
                      id="investigation-search"
                      value={searchInput}
                      onChange={(event) => setSearchInput(event.target.value)}
-                     placeholder="Search claims…"
+                     placeholder="Search investigations…"
                      leadingIcon={<Icons name="search" size={15} />}
                      density="standard"
                   />
                </div>
 
                <div className="workload-filter-field">
-                  <label htmlFor="investigation-type-filter">Claim type</label>
+                  <label htmlFor="investigation-type-filter">Content type</label>
                   <Select
                      id="investigation-type-filter"
                      value={claimType}
@@ -448,7 +448,7 @@ function OrganizationWorkloadPanel({
                                  </div>
 
                                  <h3 id={claimHeadingId} className="workload-claim-text">
-                                    {claim.context_text || "Claim text unavailable"}
+                                    {claim.context_text || "Investigation text unavailable"}
                                  </h3>
 
                                  <dl className="workload-row-meta">
