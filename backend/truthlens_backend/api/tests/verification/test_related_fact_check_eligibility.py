@@ -36,7 +36,11 @@ class RelatednessClassifierTests(SimpleTestCase):
     def setUp(self):
         super().setUp()
         self.enterContext(patch.dict(
-            "os.environ", {"ENABLE_UNIVERSAL_LLM_HIERARCHY": ""}, clear=False,
+            "os.environ", {
+                "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
+                "CLOUDFLARE_ACCOUNT_ID": "",
+                "CLOUDFLARE_API_TOKEN": "",
+            }, clear=False,
         ))
 
     def test_related_chronology_and_equivalent_contract_are_separate(self):
