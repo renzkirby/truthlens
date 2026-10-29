@@ -305,6 +305,10 @@ class CloudflarePilotValidationTests(SimpleTestCase):
                 **json.loads(VALID_EVALUATION),
                 "confidence_score": True,
             }),
+            json.dumps({
+                **json.loads(VALID_EVALUATION),
+                "unexpected": "must not be accepted",
+            }),
         ):
             with self.subTest(output=bad[:20]), patch(
                 "api.verification.cloudflare_pilot.generate_evaluation_json",
