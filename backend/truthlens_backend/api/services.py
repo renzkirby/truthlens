@@ -395,6 +395,11 @@ def call_llm_with_fallback(
                     system_instructions, user_prompt,
                     operation=operation, audit_metadata=cloudflare_metrics,
                 )
+            elif operation == PILOT_OPERATION:
+                cloudflare_text = call_validated_cloudflare_pilot(
+                    system_instructions, user_prompt,
+                    audit_metadata=cloudflare_metrics,
+                )
             else:
                 cloudflare_text = call_validated_cloudflare_pilot(
                     system_instructions, user_prompt,
