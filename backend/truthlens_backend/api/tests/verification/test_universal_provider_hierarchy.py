@@ -6,7 +6,9 @@ from unittest.mock import patch
 from django.test import SimpleTestCase, override_settings
 
 from api.verification.cloudflare_pilot import (cloudflare_pilot_enabled, validate_pilot_response)
-from api.verification.provider_hierarchy import hierarchy_enabled
+from api.verification.provider_hierarchy import (
+    hierarchy_enabled, requires_strict_stage_contract,
+)
 
 
 class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
@@ -80,3 +82,13 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
             "fact_check_relevance",
             '{"is_relevant": "false", "reasoning": "Different event."}', "",
         ))
+
+    def test_new_decision_stages_use_strict_contract_when_hierarchy_enabled(self):
+        for operation in ("claim_equivalence", "fact_check_relevance"):
+            with self.subTest(operation=operation):
+                self.assertTrue(requires_strict_stage_contract(
+                    operation, pilot_active=True, hierarchy_active=True,
+                ))
+                self.assertTrue(requires_strict_stage_contract(
+                    operation, pilot_active=False, hierarchy_active=True,
+                ))
