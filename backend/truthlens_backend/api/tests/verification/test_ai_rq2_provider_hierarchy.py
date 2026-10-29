@@ -66,6 +66,7 @@ class ExampleGroqRateLimit(RuntimeError):
 class AIRQ2ProviderHierarchyTests(SimpleTestCase):
     def setUp(self):
         self.enterContext(patch.dict(os.environ, {
+            "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
             "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "1",
             "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
             "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT": "0",
