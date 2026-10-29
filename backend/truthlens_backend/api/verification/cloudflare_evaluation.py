@@ -16,7 +16,7 @@ ACCOUNT_ID_PATTERN = re.compile(r"^[a-fA-F0-9]{32}$")
 
 
 class CloudflareEvaluationError(RuntimeError):
-    """Sanitized provider failure during a development-only comparison."""
+    """Sanitized provider failure from the bounded Cloudflare adapter."""
 
 
 # Only known adapter-generated codes may appear in logs or run telemetry.
