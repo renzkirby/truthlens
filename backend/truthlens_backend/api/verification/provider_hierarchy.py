@@ -1,8 +1,4 @@
-"""Opt-in development routing policy for the AI-RQ-2 verification pilot.
-
-Legacy provider order stays unchanged until a separate deployment decision.
-No network access or prompt manipulation occurs in this policy module.
-"""
+"""Provider-routing policy for legacy pilots and the universal hierarchy.\n\nUniversal routing auto-activates when valid Cloudflare credentials are deployed,\nunless the explicit kill switch is set to 0. No network access occurs here.\n"""
 import os
 
 from django.conf import settings
