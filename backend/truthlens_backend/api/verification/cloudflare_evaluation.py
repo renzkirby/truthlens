@@ -1,8 +1,4 @@
-"""Opt-in, development-only Cloudflare Workers AI model evaluation.
-
-Not imported by the live factual-verification provider router. Never logs
-prompts, evidence, responses, credentials or vendor error bodies.
-"""
+"""Bounded Cloudflare Workers AI adapter used by validated fallback routing.\n\nNever logs prompts, evidence, responses, credentials or vendor error bodies.\n"""
 import os
 import re
 
