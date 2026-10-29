@@ -62,9 +62,9 @@ def cloudflare_pilot_enabled(operation):
     The universal hierarchy is independently opt-in in any environment.
     Unvalidated operations must not be sent to the Cloudflare pilot adapter.
     """
-    from .provider_hierarchy import UNIVERSAL_HIERARCHY_FLAG, hierarchy_enabled
+    from .provider_hierarchy import hierarchy_enabled, universal_hierarchy_enabled
 
-    if os.getenv(UNIVERSAL_HIERARCHY_FLAG, "") == "1":
+    if universal_hierarchy_enabled():
         return operation in {
             PILOT_OPERATION, ASSESSMENT_OPERATION, CLASSIFICATION_OPERATION,
             EQUIVALENCE_OPERATION, RELEVANCE_OPERATION,
