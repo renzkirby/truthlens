@@ -171,8 +171,10 @@ def validate_response(raw, claim_text, representation):
 
 
 def classify_relatedness(claim_text, representation):
-    """Isolated operation: at most one Gemini and one Groq HTTP attempt."""
+    """Bounded relatedness operation with optional Gemini -> Gemma -> Groq routing."""
     from .. import services
+    from .cloudflare_evaluation import generate_evaluation_json
+    from .provider_hierarchy import universal_hierarchy_enabled
     if (not isinstance(claim_text, str) or not claim_text.strip()
             or len(claim_text) > MAX_CLAIM_CHARS
             or not isinstance(representation, dict)
@@ -185,7 +187,8 @@ def classify_relatedness(claim_text, representation):
     estimate = estimate_prompt_tokens(SYSTEM, user)
     if estimate > MAX_PROMPT_TOKENS:
         return UNCERTAIN, "INPUT_BUDGET"
-    for provider in ("gemini", "groq"):
+    providers = ("gemini", "cloudflare", "groq") if universal_hierarchy_enabled() else ("gemini", "groq")
+    for provider in providers:
         try:
             if provider == "gemini":
                 model = services._model_from_env("GEMINI_MODEL", services.DEFAULT_GEMINI_MODEL)
@@ -211,6 +214,13 @@ def classify_relatedness(claim_text, representation):
                 if reason not in (types.FinishReason.STOP, "STOP"):
                     raise ValueError("Incomplete relatedness response")
                 raw = response.text
+            elif provider == "cloudflare":
+                raw = generate_evaluation_json(
+                    SYSTEM,
+                    user,
+                    max_completion_tokens=OUTPUT_TOKENS,
+                    http_timeout=(3, PROVIDER_TIMEOUT_SECONDS),
+                )
             else:
                 model = services._model_from_env("GROQ_MODEL", services.DEFAULT_GROQ_MODEL)
                 options = {"reasoning_effort": "low"} if model in {

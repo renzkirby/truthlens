@@ -30,6 +30,7 @@ from .verification.cloudflare_pilot import (
     cloudflare_assessment_chunking_bypass_reason,
     call_validated_cloudflare_assessment_chunks,
     ASSESSMENT_OPERATION,
+    PILOT_OPERATION,
 )
 from .verification.provider_audit_metrics import validate_user_facing_evaluation
 from .verification.classification_contract import CLASSIFICATION_OPERATION
@@ -395,9 +396,15 @@ def call_llm_with_fallback(
                     system_instructions, user_prompt,
                     operation=operation, audit_metadata=cloudflare_metrics,
                 )
+            elif operation == PILOT_OPERATION:
+                cloudflare_text = call_validated_cloudflare_pilot(
+                    system_instructions, user_prompt,
+                    audit_metadata=cloudflare_metrics,
+                )
             else:
                 cloudflare_text = call_validated_cloudflare_pilot(
                     system_instructions, user_prompt,
+                    operation=operation,
                     audit_metadata=cloudflare_metrics,
                 )
         except Exception as cloudflare_err:

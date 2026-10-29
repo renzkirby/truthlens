@@ -66,6 +66,7 @@ class ExampleGroqRateLimit(RuntimeError):
 class AIRQ2ProviderHierarchyTests(SimpleTestCase):
     def setUp(self):
         self.enterContext(patch.dict(os.environ, {
+            "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
             "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "1",
             "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
             "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT": "0",
@@ -307,7 +308,10 @@ class AIRQ2ProviderHierarchyTests(SimpleTestCase):
 
     def test_unapproved_cloudflare_operation_remains_gemini_then_groq(self):
         self.gemini.models.generate_content.side_effect = ExampleGeminiError(402)
-        data = '{"cleaned_claim":"An event occurred.","search_query":"event"}'
+        data = ('{"cleaned_claim":"An event occurred.",'
+                '"search_query":"event",'
+                '"search_queries":["event"],'
+                '"article_stance":"NEUTRAL"}')
         self.groq_lane.chat.completions.create.return_value = SimpleNamespace(
             choices=[SimpleNamespace(message=SimpleNamespace(content=data))],
         )
@@ -358,7 +362,7 @@ class AIRQ2ProviderPolicyTests(SimpleTestCase):
             "evidence_assessment", pilot_active=True,
             hierarchy_active=False,
         ))
-        self.assertFalse(requires_strict_stage_contract(
+        self.assertTrue(requires_strict_stage_contract(
             "claim_gate", pilot_active=False, hierarchy_active=True,
         ))
         self.assertFalse(requires_strict_stage_contract(

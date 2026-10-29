@@ -37,6 +37,7 @@ class CloudflarePilotRoutingTests(SimpleTestCase):
         self.flags = self.enterContext(patch.dict(
             os.environ,
             {
+                "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
                 "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "0",
                 "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0",
                 "CLOUDFLARE_PILOT_ASSESSMENT_CHUNKING": "0",
@@ -304,6 +305,10 @@ class CloudflarePilotValidationTests(SimpleTestCase):
             json.dumps({
                 **json.loads(VALID_EVALUATION),
                 "confidence_score": True,
+            }),
+            json.dumps({
+                **json.loads(VALID_EVALUATION),
+                "unexpected": "must not be accepted",
             }),
         ):
             with self.subTest(output=bad[:20]), patch(

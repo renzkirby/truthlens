@@ -1,8 +1,4 @@
-"""Opt-in, development-only Cloudflare Workers AI model evaluation.
-
-Not imported by the live factual-verification provider router. Never logs
-prompts, evidence, responses, credentials or vendor error bodies.
-"""
+"""Bounded Cloudflare Workers AI adapter used by validated fallback routing.\n\nNever logs prompts, evidence, responses, credentials or vendor error bodies.\n"""
 import os
 import re
 
@@ -15,8 +11,19 @@ DEFAULT_HTTP_TIMEOUT = (5, 45)
 ACCOUNT_ID_PATTERN = re.compile(r"^[a-fA-F0-9]{32}$")
 
 
+def cloudflare_credentials_configured():
+    """Return True only when the deployed Cloudflare credential pair is usable."""
+    account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
+    api_token = os.getenv("CLOUDFLARE_API_TOKEN", "")
+    return bool(
+        ACCOUNT_ID_PATTERN.fullmatch(account_id)
+        and isinstance(api_token, str)
+        and api_token.strip()
+    )
+
+
 class CloudflareEvaluationError(RuntimeError):
-    """Sanitized provider failure during a development-only comparison."""
+    """Sanitized provider failure from the bounded Cloudflare adapter."""
 
 
 # Only known adapter-generated codes may appear in logs or run telemetry.

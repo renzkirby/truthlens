@@ -50,6 +50,7 @@ def result_for(*keys):
 class CloudflareAssessmentRoutingTests(SimpleTestCase):
     def setUp(self):
         self.enterContext(patch.dict(os.environ, {
+            "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
             "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "0",
             "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT": "0",
             "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0",
@@ -319,7 +320,7 @@ class CloudflareAssessmentContractTests(SimpleTestCase):
             "api.verification.cloudflare_pilot.generate_evaluation_json"
         ) as provider, self.assertRaises(CloudflareEvaluationError):
             call_validated_cloudflare_pilot(
-                "System", "Dossier", operation="claim_equivalence",
+                "System", "Dossier", operation="unsupported_stage",
             )
         provider.assert_not_called()
 
