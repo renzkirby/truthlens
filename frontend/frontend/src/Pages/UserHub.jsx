@@ -1851,7 +1851,6 @@ export default function UserHub() {
                               <option value="TEXT">Text</option>
                               <option value="IMAGE">Image</option>
                               <option value="URL">URL</option>
-                              <option value="VIDEO">Video</option>
                               <option value="FILE">File</option>
                            </select>
                         </label>

@@ -18,7 +18,6 @@ const CLAIM_TYPE_OPTIONS = [
    { value: "", label: "All claim types" },
    { value: "TEXT", label: "Text" },
    { value: "IMAGE", label: "Image" },
-   { value: "VIDEO", label: "Video" },
    { value: "URL", label: "URL" },
    { value: "FILE", label: "File" },
 ];
@@ -324,7 +323,7 @@ function OrganizationWorkloadPanel({
                      id="investigation-search"
                      value={searchInput}
                      onChange={(event) => setSearchInput(event.target.value)}
-                     placeholder="Search claim or owner…"
+                     placeholder="Search investigations…"
                      leadingIcon={<Icons name="search" size={15} />}
                      density="standard"
                   />
@@ -354,8 +353,8 @@ function OrganizationWorkloadPanel({
                      onChange={(event) => updateSortOrder(event.target.value)}
                      density="standard"
                   >
-                     <option value="newest">Newest claimed</option>
-                     <option value="oldest">Oldest claimed</option>
+                     <option value="newest">Newest investigations</option>
+                     <option value="oldest">Oldest investigations</option>
                   </Select>
                </div>
 
@@ -449,7 +448,7 @@ function OrganizationWorkloadPanel({
                                  </div>
 
                                  <h3 id={claimHeadingId} className="workload-claim-text">
-                                    {claim.context_text || "Claim text unavailable"}
+                                    {claim.context_text || "Investigation text unavailable"}
                                  </h3>
 
                                  <dl className="workload-row-meta">
