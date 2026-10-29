@@ -52,7 +52,19 @@ _ASSESSMENT_STANCES = frozenset({"SUPPORTS", "REFUTES", "CONTEXT", "UNKNOWN"})
 
 
 def cloudflare_pilot_enabled(operation):
-    """Staging/production cannot be enabled via environment flags."""
+    """Select only validated Cloudflare stages under either routing policy.
+
+    The universal hierarchy is independently opt-in in any environment.
+    Unvalidated operations must not be sent to the Cloudflare pilot adapter.
+    """
+    from .provider_hierarchy import UNIVERSAL_HIERARCHY_FLAG, hierarchy_enabled
+
+    if os.getenv(UNIVERSAL_HIERARCHY_FLAG, "") == "1":
+        return operation in {
+            PILOT_OPERATION, ASSESSMENT_OPERATION, CLASSIFICATION_OPERATION,
+        }
+
+    # Preserve the original, development-only pilot semantics.
     if not (
         getattr(settings, "APP_ENV", None) == "development"
         and getattr(settings, "DEBUG", False) is True
@@ -62,8 +74,6 @@ def cloudflare_pilot_enabled(operation):
     if operation == PILOT_OPERATION:
         return True
     if operation == CLASSIFICATION_OPERATION:
-        # This new operation is not activated by the legacy pilot flag.
-        from .provider_hierarchy import hierarchy_enabled
         return (
             hierarchy_enabled()
             and os.getenv(CLASSIFICATION_PILOT_FLAG, "") == "1"
@@ -72,7 +82,6 @@ def cloudflare_pilot_enabled(operation):
         operation == ASSESSMENT_OPERATION
         and os.getenv(ASSESSMENT_PILOT_FLAG, "") == "1"
     )
-
 
 def cloudflare_assessment_reject_if_busy_enabled():
     """Dev-only experiment: bypass Workers AI capacity queue for assessment.
