@@ -20,6 +20,8 @@ STAGE_CONTRACT_OPERATIONS = frozenset({
     ASSESSMENT_OPERATION,
     PILOT_OPERATION,
     CLASSIFICATION_OPERATION,
+    "claim_equivalence",
+    "fact_check_relevance",
 })
 # These indicate the user's account cannot currently accept this request.
 # Do not repeatedly retry them within a single verification job.
