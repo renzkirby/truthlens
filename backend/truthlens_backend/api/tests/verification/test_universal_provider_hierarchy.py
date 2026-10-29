@@ -46,7 +46,7 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
                 with self.subTest(operation=operation):
                     self.assertTrue(cloudflare_pilot_enabled(operation))
             for operation in (
-                "claim_gate",
+                "unsupported_operation",
                 None,
             ):
                 with self.subTest(operation=operation):
