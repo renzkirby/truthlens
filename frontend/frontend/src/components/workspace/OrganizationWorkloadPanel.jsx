@@ -15,7 +15,7 @@ import "./OrganizationWorkloadPanel.css";
 const PAGE_SIZE = 10;
 
 const CLAIM_TYPE_OPTIONS = [
-   { value: "", label: "All content types" },
+   { value: "", label: "All claim types" },
    { value: "TEXT", label: "Text" },
    { value: "IMAGE", label: "Image" },
    { value: "URL", label: "URL" },
@@ -330,7 +330,7 @@ function OrganizationWorkloadPanel({
                </div>
 
                <div className="workload-filter-field">
-                  <label htmlFor="investigation-type-filter">Content type</label>
+                  <label htmlFor="investigation-type-filter">Claim type</label>
                   <Select
                      id="investigation-type-filter"
                      value={claimType}
@@ -353,8 +353,8 @@ function OrganizationWorkloadPanel({
                      onChange={(event) => updateSortOrder(event.target.value)}
                      density="standard"
                   >
-                     <option value="newest">Newest claimed</option>
-                     <option value="oldest">Oldest claimed</option>
+                     <option value="newest">Newest first</option>
+                     <option value="oldest">Oldest first</option>
                   </Select>
                </div>
 
