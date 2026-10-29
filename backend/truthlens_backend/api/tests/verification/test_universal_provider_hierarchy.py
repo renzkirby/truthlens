@@ -39,13 +39,13 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
                 "investigation_classification",
                 "claim_equivalence",
                 "fact_check_relevance",
+                "gfc_evaluation",
+                "tavily_evaluation",
             ):
                 with self.subTest(operation=operation):
                     self.assertTrue(cloudflare_pilot_enabled(operation))
             for operation in (
                 "claim_gate",
-                "gfc_evaluation",
-                "tavily_evaluation",
                 None,
             ):
                 with self.subTest(operation=operation):
@@ -91,4 +91,25 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
                 ))
                 self.assertTrue(requires_strict_stage_contract(
                     operation, pilot_active=False, hierarchy_active=True,
+                ))
+
+    def test_verdict_stages_require_complete_validated_json(self):
+        valid = {
+            "reasoning": "The evidence directly addresses the factual statement.",
+            "verdict": "FAKE",
+            "summary": "The statement is contradicted.",
+            "confidence_score": 83,
+            "score_context": "Direct evidence contradicts the claim.",
+        }
+        for operation in ("gfc_evaluation", "tavily_evaluation"):
+            with self.subTest(operation=operation):
+                self.assertTrue(validate_pilot_response(
+                    operation, json.dumps(valid), "Evidence",
+                ))
+                invalid = {**valid, "confidence_score": "95"}
+                self.assertFalse(validate_pilot_response(
+                    operation, json.dumps(invalid), "Evidence",
+                ))
+                self.assertTrue(requires_strict_stage_contract(
+                    operation, pilot_active=True, hierarchy_active=True,
                 ))
