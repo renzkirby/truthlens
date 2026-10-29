@@ -449,7 +449,7 @@ def _valid_claim_gate(raw):
     queries = value["search_queries"]
     if not isinstance(claim, str) or not claim.strip():
         return False
-    if value["article_stance"] not in {"DEBUNKING", "REPORTING", "NEUTRAL"}:
+    if not isinstance(value["article_stance"], str) or value["article_stance"] not in {"DEBUNKING", "REPORTING", "NEUTRAL"}:
         return False
     if not isinstance(query, str) or not isinstance(queries, list):
         return False
