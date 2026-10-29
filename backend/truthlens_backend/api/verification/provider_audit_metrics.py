@@ -43,7 +43,7 @@ def validate_user_facing_evaluation(raw_text):
     except (TypeError, ValueError):
         return None
     allowed = {"reasoning", "verdict", "summary", "confidence_score", "score_context"}
-    if not isinstance(result, dict) or not allowed.issubset(result):
+    if not isinstance(result, dict) or set(result) != allowed:
         return None
     if not all(
         isinstance(result.get(key), str) and result.get(key).strip()
