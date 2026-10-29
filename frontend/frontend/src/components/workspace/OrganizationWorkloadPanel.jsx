@@ -353,8 +353,8 @@ function OrganizationWorkloadPanel({
                      onChange={(event) => updateSortOrder(event.target.value)}
                      density="standard"
                   >
-                     <option value="newest">Newest first</option>
-                     <option value="oldest">Oldest first</option>
+                     <option value="newest">Newest investigations</option>
+                     <option value="oldest">Oldest investigations</option>
                   </Select>
                </div>
 
