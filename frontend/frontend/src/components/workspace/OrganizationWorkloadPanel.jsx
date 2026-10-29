@@ -18,7 +18,6 @@ const CLAIM_TYPE_OPTIONS = [
    { value: "", label: "All claim types" },
    { value: "TEXT", label: "Text" },
    { value: "IMAGE", label: "Image" },
-   { value: "VIDEO", label: "Video" },
    { value: "URL", label: "URL" },
    { value: "FILE", label: "File" },
 ];
