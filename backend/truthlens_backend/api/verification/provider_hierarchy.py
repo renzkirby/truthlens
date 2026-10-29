@@ -32,8 +32,20 @@ GEMINI_JOB_BLOCKING_CODES = frozenset({402, 429})
 
 
 def universal_hierarchy_enabled():
-    """Whether the cross-environment universal provider policy is explicitly on."""
-    return os.getenv(UNIVERSAL_HIERARCHY_FLAG, "") == "1"
+    """Enable universal routing automatically when Cloudflare is configured.
+
+    An explicit "0" is the emergency kill switch. An explicit "1" still
+    forces the hierarchy on for controlled diagnostics. When the flag is
+    unset, valid deployed Cloudflare credentials activate the hierarchy.
+    """
+    configured = os.getenv(UNIVERSAL_HIERARCHY_FLAG)
+    if configured == "0":
+        return False
+    if configured == "1":
+        return True
+
+    from .cloudflare_evaluation import cloudflare_credentials_configured
+    return cloudflare_credentials_configured()
 
 
 def hierarchy_enabled():
