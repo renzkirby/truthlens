@@ -20,17 +20,51 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
             self.assertTrue(hierarchy_enabled())
 
     @override_settings(APP_ENV="production", DEBUG=False)
-    def test_universal_hierarchy_remains_off_without_opt_in(self):
+    def test_universal_hierarchy_auto_enables_with_cloudflare_credentials(self):
+        with patch.dict(
+            "os.environ",
+            {
+                "ENABLE_UNIVERSAL_LLM_HIERARCHY": "",
+                "CLOUDFLARE_ACCOUNT_ID": "a" * 32,
+                "CLOUDFLARE_API_TOKEN": "configured-token",
+            },
+        ):
+            self.assertTrue(hierarchy_enabled())
+            self.assertTrue(cloudflare_pilot_enabled(
+                "persisted_evidence_evaluation",
+            ))
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_explicit_zero_disables_automatic_hierarchy(self):
+        with patch.dict(
+            "os.environ",
+            {
+                "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
+                "CLOUDFLARE_ACCOUNT_ID": "a" * 32,
+                "CLOUDFLARE_API_TOKEN": "configured-token",
+            },
+        ):
+            self.assertFalse(hierarchy_enabled())
+            self.assertFalse(cloudflare_pilot_enabled(
+                "persisted_evidence_evaluation",
+            ))
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_universal_hierarchy_remains_off_without_cloudflare_credentials(self):
         with patch.dict(
             "os.environ",
             {
                 "ENABLE_UNIVERSAL_LLM_HIERARCHY": "",
                 "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "1",
                 "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
+                "CLOUDFLARE_ACCOUNT_ID": "",
+                "CLOUDFLARE_API_TOKEN": "",
             },
         ):
             self.assertFalse(hierarchy_enabled())
-            self.assertFalse(cloudflare_pilot_enabled("persisted_evidence_evaluation"))
+            self.assertFalse(cloudflare_pilot_enabled(
+                "persisted_evidence_evaluation",
+            ))
 
     @override_settings(APP_ENV="production", DEBUG=False)
     def test_universal_mode_enables_only_validated_cloudflare_stages(self):
