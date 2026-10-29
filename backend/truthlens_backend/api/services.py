@@ -30,6 +30,7 @@ from .verification.cloudflare_pilot import (
     cloudflare_assessment_chunking_bypass_reason,
     call_validated_cloudflare_assessment_chunks,
     ASSESSMENT_OPERATION,
+    PILOT_OPERATION,
 )
 from .verification.provider_audit_metrics import validate_user_facing_evaluation
 from .verification.classification_contract import CLASSIFICATION_OPERATION
