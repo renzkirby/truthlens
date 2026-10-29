@@ -30,6 +30,8 @@ CLASSIFICATION_BUDGET_FLAG = "CLOUDFLARE_PILOT_CLASSIFICATION_MAX_TOKENS"
 PILOT_OPERATION = "persisted_evidence_evaluation"
 EQUIVALENCE_OPERATION = "claim_equivalence"
 RELEVANCE_OPERATION = "fact_check_relevance"
+GFC_EVALUATION_OPERATION = "gfc_evaluation"
+TAVILY_EVALUATION_OPERATION = "tavily_evaluation"
 ASSESSMENT_OPERATION = "evidence_assessment"
 PILOT_COMPLETION_TOKENS = 2048
 ASSESSMENT_COMPLETION_TOKENS = 2048
@@ -65,6 +67,7 @@ def cloudflare_pilot_enabled(operation):
         return operation in {
             PILOT_OPERATION, ASSESSMENT_OPERATION, CLASSIFICATION_OPERATION,
             EQUIVALENCE_OPERATION, RELEVANCE_OPERATION,
+            GFC_EVALUATION_OPERATION, TAVILY_EVALUATION_OPERATION,
         }
 
     # Preserve the original, development-only pilot semantics.
@@ -433,7 +436,7 @@ def validate_pilot_response(operation, raw, user_prompt):
     """A valid response must satisfy the exact operation-specific contract."""
     if operation in {EQUIVALENCE_OPERATION, RELEVANCE_OPERATION}:
         return _valid_small_decision(operation, raw)
-    if operation == PILOT_OPERATION:
+    if operation in {PILOT_OPERATION, GFC_EVALUATION_OPERATION, TAVILY_EVALUATION_OPERATION}:
         return validate_user_facing_evaluation(raw) is not None
     if operation == ASSESSMENT_OPERATION:
         return _valid_assessment_batch(raw, user_prompt)
@@ -450,6 +453,7 @@ def call_validated_cloudflare_pilot(
     if operation not in {
         PILOT_OPERATION, ASSESSMENT_OPERATION, CLASSIFICATION_OPERATION,
         EQUIVALENCE_OPERATION, RELEVANCE_OPERATION,
+        GFC_EVALUATION_OPERATION, TAVILY_EVALUATION_OPERATION,
     }:
         raise CloudflareEvaluationError("INVALID_PILOT_OPERATION")
     if operation == ASSESSMENT_OPERATION:
