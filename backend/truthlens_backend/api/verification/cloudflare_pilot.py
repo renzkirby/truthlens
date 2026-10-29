@@ -28,6 +28,8 @@ CLASSIFICATION_REJECT_BUSY_FLAG = "CLOUDFLARE_PILOT_CLASSIFICATION_REJECT_IF_BUS
 CLASSIFICATION_READ_TIMEOUT_FLAG = "CLOUDFLARE_PILOT_CLASSIFICATION_READ_TIMEOUT_SEC"
 CLASSIFICATION_BUDGET_FLAG = "CLOUDFLARE_PILOT_CLASSIFICATION_MAX_TOKENS"
 PILOT_OPERATION = "persisted_evidence_evaluation"
+EQUIVALENCE_OPERATION = "claim_equivalence"
+RELEVANCE_OPERATION = "fact_check_relevance"
 ASSESSMENT_OPERATION = "evidence_assessment"
 PILOT_COMPLETION_TOKENS = 2048
 ASSESSMENT_COMPLETION_TOKENS = 2048
@@ -62,6 +64,7 @@ def cloudflare_pilot_enabled(operation):
     if os.getenv(UNIVERSAL_HIERARCHY_FLAG, "") == "1":
         return operation in {
             PILOT_OPERATION, ASSESSMENT_OPERATION, CLASSIFICATION_OPERATION,
+            EQUIVALENCE_OPERATION, RELEVANCE_OPERATION,
         }
 
     # Preserve the original, development-only pilot semantics.
@@ -392,8 +395,44 @@ def _valid_assessment_batch(raw, user_prompt):
     return seen == expected
 
 
+def _valid_small_decision(operation, raw):
+    """Strict JSON shape for the two bounded decision-only operations."""
+    try:
+        value = json.loads(raw)
+    except (ValueError, TypeError):
+        return False
+    if not isinstance(value, dict):
+        return False
+    if operation == RELEVANCE_OPERATION:
+        return (
+            set(value) == {"reasoning", "is_relevant"}
+            and type(value["is_relevant"]) is bool
+            and isinstance(value["reasoning"], str)
+            and bool(value["reasoning"].strip())
+        )
+    if operation == EQUIVALENCE_OPERATION:
+        return (
+            set(value) == {"equivalent", "reasoning", "material_differences"}
+            and type(value["equivalent"]) is bool
+            and isinstance(value["reasoning"], str)
+            and bool(value["reasoning"].strip())
+            and isinstance(value["material_differences"], list)
+            and all(
+                isinstance(v, str) and bool(v.strip())
+                for v in value["material_differences"]
+            )
+            and (
+                not value["equivalent"]
+                or not value["material_differences"]
+            )
+        )
+    return False
+
+
 def validate_pilot_response(operation, raw, user_prompt):
     """A valid response must satisfy the exact operation-specific contract."""
+    if operation in {EQUIVALENCE_OPERATION, RELEVANCE_OPERATION}:
+        return _valid_small_decision(operation, raw)
     if operation == PILOT_OPERATION:
         return validate_user_facing_evaluation(raw) is not None
     if operation == ASSESSMENT_OPERATION:
@@ -410,6 +449,7 @@ def call_validated_cloudflare_pilot(
     """Only return a fully validated JSON response; one provider attempt."""
     if operation not in {
         PILOT_OPERATION, ASSESSMENT_OPERATION, CLASSIFICATION_OPERATION,
+        EQUIVALENCE_OPERATION, RELEVANCE_OPERATION,
     }:
         raise CloudflareEvaluationError("INVALID_PILOT_OPERATION")
     if operation == ASSESSMENT_OPERATION:
