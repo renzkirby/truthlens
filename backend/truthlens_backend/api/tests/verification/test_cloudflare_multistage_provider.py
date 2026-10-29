@@ -319,7 +319,7 @@ class CloudflareAssessmentContractTests(SimpleTestCase):
             "api.verification.cloudflare_pilot.generate_evaluation_json"
         ) as provider, self.assertRaises(CloudflareEvaluationError):
             call_validated_cloudflare_pilot(
-                "System", "Dossier", operation="claim_equivalence",
+                "System", "Dossier", operation="unsupported_stage",
             )
         provider.assert_not_called()
 
