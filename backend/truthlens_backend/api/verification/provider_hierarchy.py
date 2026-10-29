@@ -15,6 +15,7 @@ from .classification_contract import CLASSIFICATION_OPERATION
 
 
 HIERARCHY_FLAG = "ENABLE_AI_RQ2_PROVIDER_HIERARCHY"
+UNIVERSAL_HIERARCHY_FLAG = "ENABLE_UNIVERSAL_LLM_HIERARCHY"
 STAGE_CONTRACT_OPERATIONS = frozenset({
     ASSESSMENT_OPERATION,
     PILOT_OPERATION,
@@ -26,7 +27,9 @@ GEMINI_JOB_BLOCKING_CODES = frozenset({402, 429})
 
 
 def hierarchy_enabled():
-    """Explicit opt-in; stage and production never activate the pilot."""
+    """Explicit opt-in universal routing, preserving the legacy development pilot."""
+    if os.getenv(UNIVERSAL_HIERARCHY_FLAG, "") == "1":
+        return True
     return (
         getattr(settings, "APP_ENV", None) == "development"
         and getattr(settings, "DEBUG", False) is True
