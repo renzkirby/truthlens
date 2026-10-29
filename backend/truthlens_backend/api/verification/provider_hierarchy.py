@@ -31,9 +31,14 @@ STAGE_CONTRACT_OPERATIONS = frozenset({
 GEMINI_JOB_BLOCKING_CODES = frozenset({402, 429})
 
 
+def universal_hierarchy_enabled():
+    """Whether the cross-environment universal provider policy is explicitly on."""
+    return os.getenv(UNIVERSAL_HIERARCHY_FLAG, "") == "1"
+
+
 def hierarchy_enabled():
     """Explicit opt-in universal routing, preserving the legacy development pilot."""
-    if os.getenv(UNIVERSAL_HIERARCHY_FLAG, "") == "1":
+    if universal_hierarchy_enabled():
         return True
     return (
         getattr(settings, "APP_ENV", None) == "development"
