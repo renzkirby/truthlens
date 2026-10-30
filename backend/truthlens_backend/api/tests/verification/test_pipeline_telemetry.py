@@ -17,6 +17,11 @@ from api.verification.telemetry import (
 
 class PipelineTelemetryCollectorTests(TestCase):
     def setUp(self):
+        self.enterContext(patch.dict(
+            "os.environ",
+            {"ENABLE_UNIVERSAL_LLM_HIERARCHY": "0"},
+            clear=False,
+        ))
         self.claim = Claim.objects.create(
             claim_type=Claim.ClaimType.TEXT,
             context_text="Private claim text",
