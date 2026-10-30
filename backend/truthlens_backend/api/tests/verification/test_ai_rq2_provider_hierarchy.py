@@ -199,13 +199,16 @@ class AIRQ2ProviderHierarchyTests(SimpleTestCase):
             original,
         )
         self.cloudflare.assert_called_once()
+        # Routine and reasoning stages now share Flash-Lite by default.
+        # The assessment-stage 402 degrades that model for this scoped job,
+        # so final evaluation must not spend another request on the same
+        # unavailable model before proceeding to Cloudflare.
         self.assertEqual(
             [(call.args[1], call.args[4]) for call in record.call_args_list],
             [
                 ("gemini", "failed"),
                 ("cloudflare", "skipped"),
                 ("groq", "success"),
-                ("gemini", "failed"),
                 ("cloudflare", "success"),
             ],
         )
@@ -248,12 +251,14 @@ class AIRQ2ProviderHierarchyTests(SimpleTestCase):
             original,
         )
         self.cloudflare.assert_called_once()
+        # The same Flash-Lite model backs routine and reasoning by default.
+        # Once its assessment-stage 402 marks it unavailable for this job,
+        # final evaluation should continue directly to the eligible fallback.
         self.assertEqual(
             [(call.args[1], call.args[4]) for call in record.call_args_list],
             [
                 ("gemini", "failed"),
                 ("groq", "success"),
-                ("gemini", "failed"),
                 ("cloudflare", "success"),
             ],
         )
