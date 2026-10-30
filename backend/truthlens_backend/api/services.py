@@ -72,6 +72,12 @@ DEFAULT_GEMINI_REASONING_MODEL = DEFAULT_GEMINI_MODEL
 DEFAULT_GEMINI_ROUTINE_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
 
+PERSISTED_EVIDENCE_EVALUATION_OPERATION = "persisted_evidence_evaluation"
+DEFAULT_PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS = 60_000
+DEFAULT_PERSISTED_EVIDENCE_GEMINI_THINKING_LEVEL = "low"
+DEFAULT_PERSISTED_EVIDENCE_GEMINI_ATTEMPTS = 1
+GEMINI_THINKING_LEVELS = frozenset({"low", "medium", "high"})
+
 # Keep scarce high-reasoning quota for operations that can directly determine
 # or reuse a factual verdict. Unlisted/new operations fail toward the stronger
 # reasoning model rather than silently reducing quality.
@@ -211,6 +217,47 @@ def _model_from_env(name, default):
     return os.environ.get(name, "").strip() or default
 
 
+def _int_env(name, default, *, minimum=1):
+    raw_value = os.environ.get(name, "").strip()
+    if not raw_value:
+        return default
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        logger.warning("Invalid %s value '%s'; using default %s", name, raw_value, default)
+        return default
+    if parsed < minimum:
+        logger.warning("Invalid %s value '%s'; using default %s", name, raw_value, default)
+        return default
+    return parsed
+
+
+def _persisted_evidence_gemini_policy():
+    thinking_level = os.environ.get(
+        "GEMINI_PERSISTED_EVIDENCE_THINKING_LEVEL", ""
+    ).strip().lower() or DEFAULT_PERSISTED_EVIDENCE_GEMINI_THINKING_LEVEL
+    if thinking_level not in GEMINI_THINKING_LEVELS:
+        logger.warning(
+            "Invalid GEMINI_PERSISTED_EVIDENCE_THINKING_LEVEL value '%s'; "
+            "using default %s",
+            thinking_level,
+            DEFAULT_PERSISTED_EVIDENCE_GEMINI_THINKING_LEVEL,
+        )
+        thinking_level = DEFAULT_PERSISTED_EVIDENCE_GEMINI_THINKING_LEVEL
+
+    return {
+        "timeout_ms": _int_env(
+            "GEMINI_PERSISTED_EVIDENCE_TIMEOUT_MS",
+            DEFAULT_PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
+        ),
+        "attempts": _int_env(
+            "GEMINI_PERSISTED_EVIDENCE_ATTEMPTS",
+            DEFAULT_PERSISTED_EVIDENCE_GEMINI_ATTEMPTS,
+        ),
+        "thinking_level": thinking_level,
+    }
+
+
 def _gemini_model_for_operation(operation):
     """Route routine stages to Flash-Lite and verdict-sensitive stages to 3.8.
 
@@ -327,7 +374,27 @@ def call_llm_with_fallback(
                 "response_mime_type": "application/json",
             }
             try:
-                if (
+                if operation == PERSISTED_EVIDENCE_EVALUATION_OPERATION:
+                    final_policy = _persisted_evidence_gemini_policy()
+                    timeout_ms = (
+                        gemini_timeout_ms
+                        if (
+                            isinstance(gemini_timeout_ms, int)
+                            and not isinstance(gemini_timeout_ms, bool)
+                            and gemini_timeout_ms > 0
+                        )
+                        else final_policy["timeout_ms"]
+                    )
+                    gemini_config["thinking_config"] = types.ThinkingConfig(
+                        thinking_level=final_policy["thinking_level"],
+                    )
+                    gemini_config["http_options"] = types.HttpOptions(
+                        timeout=timeout_ms,
+                        retry_options=types.HttpRetryOptions(
+                            attempts=final_policy["attempts"],
+                        ),
+                    )
+                elif (
                     isinstance(gemini_timeout_ms, int)
                     and not isinstance(gemini_timeout_ms, bool)
                     and gemini_timeout_ms > 0
