@@ -1746,8 +1746,18 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
     pipeline_started_at = time.perf_counter()
     outcome = "completed"
 
-    # Step 1 — Extract and clean text from URL
+    # Create the lifecycle record before extraction so a provider/extraction
+    # failure remains visible to polling instead of making the Claim disappear.
+    run_claim = Claim.objects.filter(id=claim_id).first()
+    run = None
+    if run_claim is not None:
+        run = create_verification_run(
+            run_claim, triggered_by=_resolve_triggered_by(triggered_by_id)
+        )
+        run = start_verification_run(run)
+        bind_verification_run(run)
 
+    # Step 1 — Extract and clean text from URL
     url_extract_started_at = time.perf_counter()
     try:
         response = requests.post(
@@ -1766,8 +1776,14 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
         )
 
         if not tavily_data.get("results"):
-            Claim.objects.filter(id=claim_id).delete()
-            outcome = "url_extract_empty_deleted"
+            outcome = "url_extract_empty_failed"
+            if run is not None:
+                fail_verification_run(
+                    run,
+                    failure_stage="url_extraction",
+                    failure_code="URL_EXTRACTION_EMPTY",
+                    failure_message="No extractable article content was returned.",
+                )
             _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
             return
 
@@ -1777,22 +1793,19 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
     except Exception as e:
         logger.error("URL extraction error for claim %s: %s", claim_id, e)
         _log_stage(
-            claim_id, "url_extract_failed", url_extract_started_at, error=str(e)[:120]
+            claim_id, "url_extract_failed", url_extract_started_at,
+            error=type(e).__name__,
         )
-        Claim.objects.filter(id=claim_id).delete()
-        outcome = "url_extraction_failed_deleted"
+        outcome = "url_extraction_failed"
+        if run is not None:
+            fail_verification_run(
+                run,
+                failure_stage="url_extraction",
+                failure_code="URL_EXTRACTION_FAILED",
+                failure_message="URL content extraction failed.",
+            )
         _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
         return
-
-    # Extraction failures above delete the claim and must not create a run.
-    run_claim = Claim.objects.filter(id=claim_id).first()
-    run = None
-    if run_claim is not None:
-        run = create_verification_run(
-            run_claim, triggered_by=_resolve_triggered_by(triggered_by_id)
-        )
-        run = start_verification_run(run)
-        bind_verification_run(run)
 
     selected_verdict = None
     published_resolution = False
