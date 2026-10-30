@@ -67,8 +67,21 @@ groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
+DEFAULT_GEMINI_REASONING_MODEL = DEFAULT_GEMINI_MODEL
+DEFAULT_GEMINI_ROUTINE_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
+
+# Keep scarce high-reasoning quota for operations that can directly determine
+# or reuse a factual verdict. Unlisted/new operations fail toward the stronger
+# reasoning model rather than silently reducing quality.
+GEMINI_ROUTINE_OPERATIONS = frozenset({
+    "claim_gate",
+    "fact_check_relevance",
+    "evidence_assessment",
+    "investigation_classification",
+    "related_context",
+})
 
 
 _gemini_degraded = ContextVar("gemini_degraded", default=None)
@@ -198,6 +211,26 @@ def _model_from_env(name, default):
     return os.environ.get(name, "").strip() or default
 
 
+def _gemini_model_for_operation(operation):
+    """Route routine stages to Flash-Lite and verdict-sensitive stages to 3.8.
+
+    GEMINI_MODEL remains a global emergency/compatibility override. Otherwise
+    the two model classes can be overridden independently without code changes.
+    """
+    global_override = os.environ.get("GEMINI_MODEL", "").strip()
+    if global_override:
+        return global_override
+    if operation in GEMINI_ROUTINE_OPERATIONS:
+        return _model_from_env(
+            "GEMINI_ROUTINE_MODEL",
+            DEFAULT_GEMINI_ROUTINE_MODEL,
+        )
+    return _model_from_env(
+        "GEMINI_REASONING_MODEL",
+        DEFAULT_GEMINI_REASONING_MODEL,
+    )
+
+
 def _provider_error_label(error):
     """Return useful error metadata without including provider secrets."""
     if isinstance(error, CloudflareEvaluationError):
@@ -276,10 +309,10 @@ def call_llm_with_fallback(
 
     def _try_gemini():
         if not _gemini_degraded.get():
+            gemini_model = _gemini_model_for_operation(operation)
             gemini_config = {
                 "system_instruction": system_instructions,
                 "response_mime_type": "application/json",
-                "temperature": 0.1,
             }
             try:
                 if (
@@ -300,7 +333,7 @@ def call_llm_with_fallback(
                 gemini_started_at = time.perf_counter()
                 try:
                     response = gemini_client.models.generate_content(
-                        model=_model_from_env("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
+                        model=gemini_model,
                         contents=user_prompt,
                         config=request_config,
                     )
@@ -330,6 +363,7 @@ def call_llm_with_fallback(
                         gemini_started_at,
                         "failed",
                         gemini_err,
+                        metadata={"model_id": gemini_model},
                     )
                     logger.warning(
                         "Gemini API failed (%s); continuing fallback routing.",
@@ -342,6 +376,7 @@ def call_llm_with_fallback(
                         provider_call_id,
                         gemini_started_at,
                         "success",
+                        metadata={"model_id": gemini_model},
                     )
                     return content
 
