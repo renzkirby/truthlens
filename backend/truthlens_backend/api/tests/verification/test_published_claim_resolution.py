@@ -2149,11 +2149,13 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.assert_ai_path(self.persisted_eval)
         self.gfc_retrieval.assert_called_once()
 
-    def test_shared_text_pipeline_does_not_gain_unrequested_authority_transfer(self):
+    def test_shared_text_pipeline_exact_canonical_uses_authoritative_publication(self):
         self.target.claim_type = Claim.ClaimType.TEXT
-        self.target.save()
+        self.target.save(update_fields=["claim_type"])
+
         tasks.execute_core_text_pipeline("Submitted text", self.target.pk)
-        self.assert_ai_path(self.persisted_eval)
+
+        self.assert_exact_bypass()
 
     def test_exact_resolution_survives_analytics_failure_in_image_pipeline(self):
         with patch(
@@ -2574,17 +2576,14 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.url_tavily.assert_not_called()
         self.persisted_eval.assert_not_called()
 
-    def test_text_vault_candidate_never_runs_equivalence_or_gains_authority(self):
+    def test_text_vault_candidate_requires_equivalence_before_authority(self):
         self.equivalent_context()
         self.target.claim_type = Claim.ClaimType.TEXT
-        self.target.save()
-        tasks.execute_core_text_pipeline("Submitted text", self.target.pk)
-        self.assert_ai_path(self.image_gfc)
-        self.llm.assert_not_called()
+        self.target.save(update_fields=["claim_type"])
 
-        # A Vault candidate may inform the AI assessment, but it must never
-        # replace the submitted claim that Community and subject classification
-        # consume.
+        tasks.execute_core_text_pipeline("Submitted text", self.target.pk)
+
+        self.assert_equivalent_bypass()
         self.target.refresh_from_db()
         self.assertEqual(
             self.target.context_text,
@@ -2593,10 +2592,6 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.assertNotEqual(
             self.target.context_text,
             self.vault.return_value["summary"],
-        )
-        self.assertEqual(
-            self.save_claim.call_args.args[3],
-            self.cleaned["cleaned_claim"],
         )
 
     def test_non_equivalent_image_semantic_context_keeps_telemetry_and_durable_provenance(
@@ -2742,14 +2737,15 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.vault.assert_not_called()
         self.assertFalse(self.target.fact_check_references.exists())
 
-    def test_text_vault_use_never_enters_related_persistence(self):
+    def test_text_non_equivalent_vault_candidate_never_enters_related_persistence(self):
         self.semantic_context()
         self.target.claim_type = Claim.ClaimType.TEXT
-        self.target.save()
+        self.target.save(update_fields=["claim_type"])
         with patch("api.tasks._record_related_published_claim") as recorder:
             tasks.execute_core_text_pipeline("Submitted text", self.target.pk)
         recorder.assert_not_called()
-        self.assert_ai_path(self.image_gfc)
+        self.assert_ai_path(self.persisted_eval)
+        self.llm.assert_not_called()
 
     def test_vault_analytics_failure_does_not_suppress_equivalent_resolution(self):
         self.equivalent_context()
