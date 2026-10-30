@@ -8,7 +8,7 @@ from unittest.mock import patch
 from django.db import close_old_connections, connection
 from django.test import SimpleTestCase, TestCase, TransactionTestCase
 
-from api import tasks
+from api import services, tasks
 from api.claim_matching import get_match_result
 from api.knowledge_reuse_service import (
     build_query_fingerprint, get_related_published_fact_check_payloads,
@@ -84,6 +84,11 @@ class RelatednessClassifierTests(SimpleTestCase):
         self.assertEqual(config.http_options.retry_options.attempts, 1)
         self.assertEqual(config.http_options.timeout, related.PROVIDER_TIMEOUT_SECONDS * 1000)
         self.assertEqual(config.max_output_tokens, related.OUTPUT_TOKENS)
+        self.assertIsNone(config.temperature)
+        self.assertEqual(
+            gemini.models.generate_content.call_args.kwargs["model"],
+            services.DEFAULT_GEMINI_ROUTINE_MODEL,
+        )
         groq.with_options.assert_called_once_with(timeout=related.PROVIDER_TIMEOUT_SECONDS, max_retries=0)
         self.assertEqual(groq.with_options.return_value.chat.completions.create.call_args.kwargs[
             "max_completion_tokens"], related.OUTPUT_TOKENS)
