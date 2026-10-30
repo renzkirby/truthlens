@@ -604,7 +604,13 @@ def _should_retry_unresolved_cached_claim(matched_claim):
         return False
 
     latest_run = matched_claim.verification_runs.only("status").first()
-    if latest_run is None or latest_run.status in {
+    # A claim with no lifecycle record is not proof of healthy in-flight work.
+    # This can happen if a broker/worker interruption occurs after Claim
+    # persistence but before the task reaches execute_core_text_pipeline().
+    # Allow a fresh Claim/task so the submission is not trapped forever.
+    if latest_run is None:
+        return True
+    if latest_run.status in {
         VerificationRun.Status.PENDING,
         VerificationRun.Status.RUNNING,
     }:
