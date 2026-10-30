@@ -449,12 +449,15 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.retrieve_tavily.assert_not_called()
         self.assess_evidence.assert_not_called()
 
-    def test_satire_shortcut_completes(self):
+    def test_satire_shortcut_completes_after_publication_authority_check(self):
         self.cleaned["article_stance"] = "SATIRE"
         self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, "SATIRE")
-        self.vault.assert_not_called()
+        self.vault.assert_called_once_with(
+            self.cleaned["cleaned_claim"],
+            target_claim=self.claim,
+        )
         self.retrieve_gfc.assert_not_called()
         self.retrieve_tavily.assert_not_called()
         self.assess_evidence.assert_not_called()
