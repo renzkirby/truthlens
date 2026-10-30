@@ -296,6 +296,13 @@ CELERY_WORKER_PREFETCH_MULTIPLIER = int(
 if CELERY_WORKER_PREFETCH_MULTIPLIER < 1:
     raise ValueError("CELERY_WORKER_PREFETCH_MULTIPLIER must be at least 1.")
 
+# Redis-backed Celery 5.6 can fetch work only when an execution slot is free.
+# This preserves early-ack semantics while avoiding hidden reservation of long
+# verification jobs behind occupied worker slots.
+CELERY_WORKER_DISABLE_PREFETCH = (
+    os.getenv("CELERY_WORKER_DISABLE_PREFETCH", "True").lower() == "true"
+)
+
 CELERY_WORKER_POOL = os.getenv("CELERY_WORKER_POOL", "solo").strip().lower()
 if CELERY_WORKER_POOL not in {"solo", "prefork", "threads"}:
     raise ValueError("CELERY_WORKER_POOL must be solo, prefork, or threads.")
