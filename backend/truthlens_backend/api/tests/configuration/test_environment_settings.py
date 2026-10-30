@@ -49,6 +49,11 @@ print(
             "conn_max_age": database.get("CONN_MAX_AGE"),
             "classification_mode": settings.INVESTIGATION_CLASSIFICATION_MODE,
             "routing_mode": settings.INVESTIGATION_ROUTING_MODE,
+            "celery_pool": settings.CELERY_WORKER_POOL,
+            "celery_concurrency": settings.CELERY_WORKER_CONCURRENCY,
+            "celery_prefetch": settings.CELERY_WORKER_PREFETCH_MULTIPLIER,
+            "cache_backend": settings.CACHES["default"]["BACKEND"],
+            "cache_location": settings.CACHES["default"].get("LOCATION", ""),
         }}
     )
 )
@@ -374,6 +379,67 @@ class DjangoSettingsInitializationTests(SimpleTestCase):
 
         self.assertEqual(result["classification_mode"], "off")
         self.assertEqual(result["routing_mode"], "off")
+
+
+    def test_default_runtime_capacity_settings_preserve_single_worker_behavior(self):
+        result = self.assert_initialization_succeeds(
+            {
+                "APP_ENV": "production",
+                "DEBUG": "False",
+                "SUPABASE_PRODUCTION_DB_URL": PRODUCTION_URL,
+            }
+        )
+
+        self.assertEqual(result["celery_pool"], "solo")
+        self.assertEqual(result["celery_concurrency"], 1)
+        self.assertEqual(result["celery_prefetch"], 1)
+
+    def test_production_can_opt_into_two_prefork_worker_slots(self):
+        result = self.assert_initialization_succeeds(
+            {
+                "APP_ENV": "production",
+                "DEBUG": "False",
+                "SUPABASE_PRODUCTION_DB_URL": PRODUCTION_URL,
+                "CELERY_WORKER_POOL": "prefork",
+                "CELERY_WORKER_CONCURRENCY": "2",
+                "CELERY_WORKER_PREFETCH_MULTIPLIER": "1",
+            }
+        )
+
+        self.assertEqual(result["celery_pool"], "prefork")
+        self.assertEqual(result["celery_concurrency"], 2)
+        self.assertEqual(result["celery_prefetch"], 1)
+
+    def test_solo_pool_rejects_false_multi_concurrency_configuration(self):
+        self.assert_initialization_fails(
+            {
+                "APP_ENV": "production",
+                "DEBUG": "False",
+                "SUPABASE_PRODUCTION_DB_URL": PRODUCTION_URL,
+                "CELERY_WORKER_POOL": "solo",
+                "CELERY_WORKER_CONCURRENCY": "2",
+            },
+            "CELERY_WORKER_POOL=solo requires CELERY_WORKER_CONCURRENCY=1",
+        )
+
+    def test_dedicated_redis_cache_can_back_shared_throttles(self):
+        result = self.assert_initialization_succeeds(
+            {
+                "APP_ENV": "production",
+                "DEBUG": "False",
+                "SUPABASE_PRODUCTION_DB_URL": PRODUCTION_URL,
+                "DJANGO_CACHE_URL": "redis://cache.example.test:6379/1",
+            }
+        )
+
+        self.assertEqual(
+            result["cache_backend"],
+            "django.core.cache.backends.redis.RedisCache",
+        )
+        self.assertEqual(
+            result["cache_location"],
+            "redis://cache.example.test:6379/1",
+        )
 
     def test_staging_initialization_does_not_fall_back_to_production(self):
         self.assert_initialization_fails(
