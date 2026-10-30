@@ -52,6 +52,7 @@ print(
             "celery_pool": settings.CELERY_WORKER_POOL,
             "celery_concurrency": settings.CELERY_WORKER_CONCURRENCY,
             "celery_prefetch": settings.CELERY_WORKER_PREFETCH_MULTIPLIER,
+            "celery_disable_prefetch": settings.CELERY_WORKER_DISABLE_PREFETCH,
             "cache_backend": settings.CACHES["default"]["BACKEND"],
             "cache_location": settings.CACHES["default"].get("LOCATION", ""),
         }}
@@ -393,6 +394,7 @@ class DjangoSettingsInitializationTests(SimpleTestCase):
         self.assertEqual(result["celery_pool"], "solo")
         self.assertEqual(result["celery_concurrency"], 1)
         self.assertEqual(result["celery_prefetch"], 1)
+        self.assertIs(result["celery_disable_prefetch"], True)
 
     def test_production_can_opt_into_two_prefork_worker_slots(self):
         result = self.assert_initialization_succeeds(
