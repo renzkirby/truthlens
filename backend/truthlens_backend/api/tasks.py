@@ -1148,6 +1148,9 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
         is_image_claim = (
             run_claim is not None and run_claim.claim_type == Claim.ClaimType.IMAGE
         )
+        is_text_claim = (
+            run_claim is not None and run_claim.claim_type == Claim.ClaimType.TEXT
+        )
 
         # IMAGE claims get a deterministic exact-authority opportunity on
         # raw OCR text before any LLM ClaimGate rewriting. This preserves the
@@ -1200,16 +1203,14 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
             _persist_subject_classification_input(claim_id, cleaned_claim)
             target_claim = Claim.objects.filter(id=claim_id).first()
 
-            # This shared pipeline also serves TEXT. IMAGE claims get both
-            # deterministic canonical authority and strict proposition-equivalence
-            # authority before any copied AI cache or automated SATIRE shortcut.
+            # TEXT and IMAGE claims share the same publication-authority rule:
+            # semantic/full-text Vault similarity only discovers candidates. A
+            # publication becomes authoritative only after exact canonical identity
+            # or strict proposition-equivalence validation.
             vault_started_at = None
             vault_match = None
             related_candidate = None
-            if (
-                target_claim is not None
-                and target_claim.claim_type == Claim.ClaimType.IMAGE
-            ):
+            if target_claim is not None and (is_image_claim or is_text_claim):
                 if _resolve_exact_published_claim(
                     target_claim,
                     cleaned_claim,
@@ -1218,6 +1219,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     published_resolution = True
                     return
 
+                vault_started_at = time.perf_counter()
                 vault_match = search_official_vault(
                     cleaned_claim,
                     target_claim=target_claim,
@@ -1232,19 +1234,29 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     ):
                         published_resolution = True
                         return
-                    related_candidate = vault_match
-                    # This stage only records a candidate awaiting optional,
-                    # post-save validation. It MUST NOT claim relevance yet.
-                    _log_stage(
-                        claim_id, "vault_related_validation_deferred",
-                        time.perf_counter(), outcome="awaiting_primary_result",
-                    )
-                    # IMAGE candidates have completed their only permitted
-                    # authority/context gates and must not reach the historical
-                    # TEXT Vault verdict evaluator below.
+
+                    if is_image_claim:
+                        related_candidate = vault_match
+                        # IMAGE may retain a non-authoritative Vault candidate
+                        # for optional post-save related-context validation.
+                        _log_stage(
+                            claim_id,
+                            "vault_related_validation_deferred",
+                            time.perf_counter(),
+                            outcome="awaiting_primary_result",
+                        )
+                    else:
+                        # TEXT has no related-context binding. A merely similar
+                        # publication must not influence or terminate the verdict.
+                        _log_stage(
+                            claim_id,
+                            "vault_equivalence_rejected",
+                            time.perf_counter(),
+                            outcome="fresh_retrieval_required",
+                        )
                     vault_match = None
 
-                if has_second_chance_match:
+                if is_image_claim and has_second_chance_match:
                     selected_verdict = _reuse_second_chance_ai_analysis(
                         matched_claim,
                         claim_id,
@@ -1287,59 +1299,8 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 )
                 return
 
-            # Preserve historical TEXT ordering. IMAGE already handled its Vault
-            # candidate above and rejected candidates must not reach this evaluator.
-            if not is_image_claim:
-                vault_started_at = time.perf_counter()
-                vault_match = search_official_vault(
-                    cleaned_claim,
-                    target_claim=target_claim,
-                )
-
-            if vault_match and not is_image_claim:
-                logger.info("Vault match found for claim %s!", claim_id)
-
-                # We found a highly similar past rumor. Now we ask Gemini to evaluate the NEW claim
-                # against the VERIFIED vault context to avoid the "Negation Trap".
-                vault_eval_started_at = time.perf_counter()
-                ai_verdict = evaluate_image_claim_with_gfc(
-                    cleaned_claim,
-                    {
-                        "claims": [
-                            {
-                                "text": vault_match["canonical_claim"],
-                                "claimReview": [
-                                    {
-                                        "textualRating": vault_match["verdict"],
-                                        "publisher": {
-                                            "name": "TruthLens Official Vault"
-                                        },
-                                    }
-                                ],
-                            }
-                        ]
-                    },
-                    article_stance,
-                )
-
-                # The Vault payload is verification context, not the
-                # submitted claim. Preserve the normalized incoming claim as
-                # Claim.context_text so Community and subject classification
-                # never inherit a matched publication's summary.
-                _save_claim(
-                    claim_id,
-                    ai_verdict,
-                    "TruthLens Verified Vault",
-                    cleaned_claim,
-                    vault_match.get("sources", []),
-                )
-
-                _log_stage(claim_id, "vault_search_success", vault_started_at)
-                outcome = "completed_vault"
-                selected_verdict = (
-                    ai_verdict.get("verdict") if isinstance(ai_verdict, dict) else None
-                )
-                return
+            # Similar Vault candidates that were not proven equivalent never
+            # become verdict evidence. Continue with fresh GFC/Tavily retrieval.
 
             # Try GFC first — return early if relevant result found
             gfc_started_at = time.perf_counter()
@@ -1785,8 +1746,18 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
     pipeline_started_at = time.perf_counter()
     outcome = "completed"
 
-    # Step 1 — Extract and clean text from URL
+    # Create the lifecycle record before extraction so a provider/extraction
+    # failure remains visible to polling instead of making the Claim disappear.
+    run_claim = Claim.objects.filter(id=claim_id).first()
+    run = None
+    if run_claim is not None:
+        run = create_verification_run(
+            run_claim, triggered_by=_resolve_triggered_by(triggered_by_id)
+        )
+        run = start_verification_run(run)
+        bind_verification_run(run)
 
+    # Step 1 — Extract and clean text from URL
     url_extract_started_at = time.perf_counter()
     try:
         response = requests.post(
@@ -1805,8 +1776,14 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
         )
 
         if not tavily_data.get("results"):
-            Claim.objects.filter(id=claim_id).delete()
-            outcome = "url_extract_empty_deleted"
+            outcome = "url_extract_empty_failed"
+            if run is not None:
+                fail_verification_run(
+                    run,
+                    failure_stage="url_extraction",
+                    failure_code="URL_EXTRACTION_EMPTY",
+                    failure_message="No extractable article content was returned.",
+                )
             _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
             return
 
@@ -1816,22 +1793,19 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
     except Exception as e:
         logger.error("URL extraction error for claim %s: %s", claim_id, e)
         _log_stage(
-            claim_id, "url_extract_failed", url_extract_started_at, error=str(e)[:120]
+            claim_id, "url_extract_failed", url_extract_started_at,
+            error=type(e).__name__,
         )
-        Claim.objects.filter(id=claim_id).delete()
-        outcome = "url_extraction_failed_deleted"
+        outcome = "url_extraction_failed"
+        if run is not None:
+            fail_verification_run(
+                run,
+                failure_stage="url_extraction",
+                failure_code="URL_EXTRACTION_FAILED",
+                failure_message="URL content extraction failed.",
+            )
         _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
         return
-
-    # Extraction failures above delete the claim and must not create a run.
-    run_claim = Claim.objects.filter(id=claim_id).first()
-    run = None
-    if run_claim is not None:
-        run = create_verification_run(
-            run_claim, triggered_by=_resolve_triggered_by(triggered_by_id)
-        )
-        run = start_verification_run(run)
-        bind_verification_run(run)
 
     selected_verdict = None
     published_resolution = False
