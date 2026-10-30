@@ -22,9 +22,9 @@ STAGE_CONTRACT_OPERATIONS = frozenset({
     "gfc_evaluation",
     "tavily_evaluation",
 })
-# These indicate the user's account cannot currently accept this request.
+# These indicate the project/model cannot currently accept this request.
 # Do not repeatedly retry them within a single verification job.
-GEMINI_JOB_BLOCKING_CODES = frozenset({402, 429})
+GEMINI_JOB_BLOCKING_CODES = frozenset({402, 404, 429})
 
 
 def universal_hierarchy_enabled():
