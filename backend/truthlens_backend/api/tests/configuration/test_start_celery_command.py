@@ -11,6 +11,7 @@ class StartCeleryCommandTests(SimpleTestCase):
         CELERY_WORKER_POOL="solo",
         CELERY_WORKER_CONCURRENCY=1,
         CELERY_WORKER_PREFETCH_MULTIPLIER=1,
+        CELERY_WORKER_DISABLE_PREFETCH=True,
     )
     @patch("api.management.commands.start_celery.subprocess.Popen")
     def test_default_worker_command_preserves_single_slot_behavior(self, popen):
@@ -25,6 +26,7 @@ class StartCeleryCommandTests(SimpleTestCase):
         self.assertIn("pool=solo", output.getvalue())
         self.assertIn("concurrency=1", output.getvalue())
         self.assertIn("prefetch=1", output.getvalue())
+        self.assertIn("disable_prefetch=True", output.getvalue())
 
     @override_settings(
         CELERY_WORKER_POOL="prefork",
