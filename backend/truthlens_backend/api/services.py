@@ -73,6 +73,12 @@ DEFAULT_GEMINI_REASONING_MODEL = DEFAULT_GEMINI_MODEL
 DEFAULT_GEMINI_ROUTINE_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
 
+# Bound the high-reasoning Gemini tier so a slow-but-eventually-successful
+# request cannot consume the entire interactive verification window before
+# Gemma/Groq receive a chance to serve the same operation.
+CLAIM_EQUIVALENCE_GEMINI_TIMEOUT_MS = 20_000
+PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS = 30_000
+
 # Keep scarce high-reasoning quota for operations that can directly determine
 # or reuse a factual verdict. Unlisted/new operations fail toward the stronger
 # reasoning model rather than silently reducing quality.
@@ -861,6 +867,7 @@ Never include a factual verdict."""
             "published_canonical_claim": published_canonical_claim,
         }),
         operation="claim_equivalence",
+        gemini_timeout_ms=CLAIM_EQUIVALENCE_GEMINI_TIMEOUT_MS,
     )
     try:
         result = _parse_llm_json(response_text)
@@ -1174,6 +1181,7 @@ def evaluate_claim_with_persisted_evidence(
             system_instructions,
             user_data,
             operation="persisted_evidence_evaluation",
+            gemini_timeout_ms=PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
         )
         parsed_result = _parse_llm_json(response_text)
         required_fields = {
