@@ -313,7 +313,11 @@ def record_equivalent_claim_fact_check_reference(
         target_claim = Claim.objects.select_for_update(of=("self",)).get(
             pk=target_claim.pk
         )
-        if target_claim.claim_type not in (Claim.ClaimType.IMAGE, Claim.ClaimType.URL):
+        if target_claim.claim_type not in (
+            Claim.ClaimType.TEXT,
+            Claim.ClaimType.IMAGE,
+            Claim.ClaimType.URL,
+        ):
             return None
 
         publication = (
@@ -719,7 +723,7 @@ def find_published_fact_check_candidates(
     except Exception:
         query_embedding = None
 
-    if query_embedding:
+    if query_embedding and connection.vendor == "postgresql":
         max_distance = 1.0 - semantic_threshold
         semantic_candidates = list(
             queryset.exclude(embedding__isnull=True)
