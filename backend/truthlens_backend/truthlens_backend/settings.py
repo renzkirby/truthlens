@@ -285,9 +285,40 @@ if INVESTIGATION_ROUTING_MODE not in {"off", "enforce"}:
 
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
-# Verification tasks are long-running and often perform several remote calls.
-# Keep a worker from reserving multiple later verifications behind one slow job.
-CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+
+# Long-running verification tasks should not reserve later work behind an
+# occupied execution slot. Pool and concurrency remain deployment choices:
+# local Windows development safely defaults to solo/1, while production can
+# opt into a validated prefork concurrency after resource/quota checks.
+CELERY_WORKER_PREFETCH_MULTIPLIER = int(
+    os.getenv("CELERY_WORKER_PREFETCH_MULTIPLIER", "1")
+)
+if CELERY_WORKER_PREFETCH_MULTIPLIER < 1:
+    raise ValueError("CELERY_WORKER_PREFETCH_MULTIPLIER must be at least 1.")
+
+CELERY_WORKER_POOL = os.getenv("CELERY_WORKER_POOL", "solo").strip().lower()
+if CELERY_WORKER_POOL not in {"solo", "prefork", "threads"}:
+    raise ValueError("CELERY_WORKER_POOL must be solo, prefork, or threads.")
+
+CELERY_WORKER_CONCURRENCY = int(os.getenv("CELERY_WORKER_CONCURRENCY", "1"))
+if CELERY_WORKER_CONCURRENCY < 1:
+    raise ValueError("CELERY_WORKER_CONCURRENCY must be at least 1.")
+if CELERY_WORKER_POOL == "solo" and CELERY_WORKER_CONCURRENCY != 1:
+    raise ValueError("CELERY_WORKER_POOL=solo requires CELERY_WORKER_CONCURRENCY=1.")
+
+# DRF throttles use Django's default cache. Configure a dedicated Redis database
+# (for example redis://host:6379/1) in multi-process deployments so throttle
+# counters are shared. Do not reuse the Celery broker database because cache
+# clearing must never remove broker keys.
+DJANGO_CACHE_URL = os.getenv("DJANGO_CACHE_URL", "").strip()
+if DJANGO_CACHE_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": DJANGO_CACHE_URL,
+            "KEY_PREFIX": "truthlens",
+        }
+    }
 
 # Realtime notifications are optional. REST remains authoritative when disabled
 # or when Redis/stream delivery is unavailable.
