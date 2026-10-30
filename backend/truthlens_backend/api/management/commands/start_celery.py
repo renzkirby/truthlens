@@ -31,7 +31,8 @@ class Command(BaseCommand):
                 self.style.SUCCESS(
                     "Celery worker started with PID "
                     f"{process.pid} (pool={pool}, concurrency={concurrency}, "
-                    f"prefetch={settings.CELERY_WORKER_PREFETCH_MULTIPLIER})"
+                    f"prefetch={settings.CELERY_WORKER_PREFETCH_MULTIPLIER}, "
+                    f"disable_prefetch={settings.CELERY_WORKER_DISABLE_PREFETCH})"
                 )
             )
         except Exception as e:
