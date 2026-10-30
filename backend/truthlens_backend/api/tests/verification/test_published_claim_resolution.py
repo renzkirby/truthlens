@@ -122,6 +122,13 @@ class ClaimEquivalenceClassifierTests(SimpleTestCase):
             ) as provider:
                 result = services.assess_claim_equivalence(incoming, canonical)
                 self.assertIs(result["equivalent"], equivalent)
+                self.assertEqual(
+                    provider.call_args.kwargs,
+                    {
+                        "operation": "claim_equivalence",
+                        "gemini_timeout_ms": services.CLAIM_EQUIVALENCE_GEMINI_TIMEOUT_MS,
+                    },
+                )
                 instructions, user_prompt = provider.call_args.args
                 self.assertEqual(
                     json.loads(user_prompt),
