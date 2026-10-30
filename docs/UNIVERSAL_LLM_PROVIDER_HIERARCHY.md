@@ -107,10 +107,11 @@ within one verification execution.
 Gemini HTTP 402 (billing), 404 (model/project unavailable), and 429 (quota/rate
 limit) failures are job-blocking for the selected Gemini model. After one such
 failure, the same verification job stops repeating requests to that model and
-continues through the remaining provider hierarchy. The routine and reasoning
-Gemini tiers are tracked independently. The current defaults happen to resolve
-to the same Flash-Lite model, while independent environment overrides preserve
-the ability to separate them later.
+continues through the remaining provider hierarchy. Gemini degradation is tracked by the selected model ID. Because the current
+routine and reasoning defaults both resolve to Flash-Lite, a job-scoped
+quota/model failure for that shared model suppresses later calls to it in the
+same verification. If independent model overrides are configured, degradation
+state remains independent for the distinct model IDs.
 
 ## Rollback
 
