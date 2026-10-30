@@ -65,6 +65,7 @@ class PilotEvidenceBudgetTests(SimpleTestCase):
     def setUp(self):
         self.enterContext(patch.dict(os.environ, {
             "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
+            "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
         }))
 
     def _length(self, context):
@@ -285,6 +286,20 @@ class PilotEvidenceBudgetTests(SimpleTestCase):
                 groups, "The claim is precisely described here.", "NEUTRAL",
             )
         provider.assert_not_called()
+
+    def test_universal_hierarchy_keeps_full_oversize_dossier_for_other_providers(self):
+        groups = _groups(content_length=3000)
+        expected = render_reasoning_evidence_dossier(groups)
+        self.assertGreater(self._length(expected), PILOT_MAX_INPUT_CHARS)
+
+        with patch.dict(os.environ, {
+            "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+        }):
+            got = _render_bounded_persisted_evidence_context(
+                groups, "The claim is precisely described here.", "NEUTRAL",
+            )
+
+        self.assertEqual(got, expected)
 
     def test_pilot_flag_off_keeps_existing_renderer(self):
         groups = _groups(content_length=2900)

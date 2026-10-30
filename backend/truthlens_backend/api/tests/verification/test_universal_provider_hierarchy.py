@@ -292,3 +292,45 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
         gemini.models.generate_content.assert_called_once()
         cloudflare.assert_called_once()
         groq.with_options.return_value.chat.completions.create.assert_called_once()
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_universal_skips_oversize_cloudflare_request_and_preserves_groq_fallback(self):
+        payload = json.dumps({
+            "reasoning": "Grounded in the complete evidence dossier.",
+            "verdict": "FACT",
+            "summary": "The claim is supported.",
+            "confidence_score": 82,
+            "score_context": "Direct supporting evidence.",
+        })
+        gemini = Mock()
+        gemini.models.generate_content.side_effect = RuntimeError("provider unavailable")
+        cloudflare = Mock()
+        groq = Mock()
+        groq.with_options.return_value.chat.completions.create.return_value = (
+            SimpleNamespace(choices=[SimpleNamespace(
+                message=SimpleNamespace(content=payload)
+            )])
+        )
+        oversized_evidence = "E" * 30000
+
+        with (
+            patch.dict("os.environ", {"ENABLE_UNIVERSAL_LLM_HIERARCHY": "1"}),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.call_validated_cloudflare_pilot", cloudflare),
+        ):
+            result = call_llm_with_fallback(
+                "Instructions",
+                oversized_evidence,
+                operation="persisted_evidence_evaluation",
+            )
+
+        self.assertEqual(result, payload)
+        gemini.models.generate_content.assert_called_once()
+        cloudflare.assert_not_called()
+        groq.with_options.return_value.chat.completions.create.assert_called_once()
+        sent_messages = (
+            groq.with_options.return_value.chat.completions.create
+            .call_args.kwargs["messages"]
+        )
+        self.assertEqual(sent_messages[1]["content"], oversized_evidence)

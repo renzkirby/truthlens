@@ -264,7 +264,11 @@ def record_equivalent_claim_fact_check_reference(
         raise InvalidKnowledgeReuse("An adequate incoming claim is required.")
     if not isinstance(target_claim, Claim) or target_claim._state.adding:
         raise InvalidKnowledgeReuse("A persisted target claim is required.")
-    if target_claim.claim_type not in (Claim.ClaimType.IMAGE, Claim.ClaimType.URL):
+    if target_claim.claim_type not in (
+        Claim.ClaimType.TEXT,
+        Claim.ClaimType.IMAGE,
+        Claim.ClaimType.URL,
+    ):
         return None
 
     if fact_check is not None and (
@@ -309,7 +313,11 @@ def record_equivalent_claim_fact_check_reference(
         target_claim = Claim.objects.select_for_update(of=("self",)).get(
             pk=target_claim.pk
         )
-        if target_claim.claim_type not in (Claim.ClaimType.IMAGE, Claim.ClaimType.URL):
+        if target_claim.claim_type not in (
+            Claim.ClaimType.TEXT,
+            Claim.ClaimType.IMAGE,
+            Claim.ClaimType.URL,
+        ):
             return None
 
         publication = (
@@ -369,7 +377,11 @@ def record_related_claim_fact_check_reference(
         or fact_check._state.adding
     ):
         raise InvalidKnowledgeReuse("Persisted target and publication are required.")
-    if target_claim.claim_type not in (Claim.ClaimType.IMAGE, Claim.ClaimType.URL):
+    if target_claim.claim_type not in (
+        Claim.ClaimType.TEXT,
+        Claim.ClaimType.IMAGE,
+        Claim.ClaimType.URL,
+    ):
         return None
     if match_method not in (
         ClaimFactCheckReference.MatchMethod.EXACT_CANONICAL,
@@ -711,7 +723,7 @@ def find_published_fact_check_candidates(
     except Exception:
         query_embedding = None
 
-    if query_embedding:
+    if query_embedding and connection.vendor == "postgresql":
         max_distance = 1.0 - semantic_threshold
         semantic_candidates = list(
             queryset.exclude(embedding__isnull=True)

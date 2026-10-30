@@ -41,6 +41,7 @@ from .verification.provider_hierarchy import (
 )
 from .verification.cloudflare_evaluation import (
     CloudflareEvaluationError,
+    MAX_INPUT_CHARS as CLOUDFLARE_MAX_INPUT_CHARS,
     sanitized_cloudflare_error_code,
 )
 
@@ -71,6 +72,12 @@ DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_GEMINI_REASONING_MODEL = DEFAULT_GEMINI_MODEL
 DEFAULT_GEMINI_ROUTINE_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
+
+# Bound verdict-sensitive Gemini stages so an overridden slower reasoning model
+# cannot consume the entire interactive verification window before fallbacks run.
+# With the current Flash-Lite default these are defensive ceilings.
+CLAIM_EQUIVALENCE_GEMINI_TIMEOUT_MS = 20_000
+PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS = 30_000
 
 # Keep routine and reasoning model seams separate even though the defense-period
 # defaults currently use the same low-latency free-tier model. Operators can
@@ -428,10 +435,28 @@ def call_llm_with_fallback(
                 time.perf_counter(), "skipped",
                 CloudflareEvaluationError(assessment_bypass_reason),
             )
+
+    cloudflare_bypass_reason = assessment_bypass_reason
     if (
         pilot_active
         and not cloudflare_degraded
-        and assessment_bypass_reason is None
+        and cloudflare_bypass_reason is None
+        and not use_assessment_chunks
+        and len(system_instructions) + len(user_prompt) > CLOUDFLARE_MAX_INPUT_CHARS
+    ):
+        cloudflare_bypass_reason = "PROMPT_TOO_LONG"
+        # Local request ineligibility is not a provider outage. Preserve the
+        # complete prompt for downstream Groq instead of degrading Cloudflare.
+        _log_llm_provider_call(
+            operation, "cloudflare", provider_call_id,
+            time.perf_counter(), "skipped",
+            CloudflareEvaluationError(cloudflare_bypass_reason),
+        )
+
+    if (
+        pilot_active
+        and not cloudflare_degraded
+        and cloudflare_bypass_reason is None
     ):
         cloudflare_started_at = time.perf_counter()
         cloudflare_metrics = {}
@@ -847,6 +872,7 @@ Never include a factual verdict."""
             "published_canonical_claim": published_canonical_claim,
         }),
         operation="claim_equivalence",
+        gemini_timeout_ms=CLAIM_EQUIVALENCE_GEMINI_TIMEOUT_MS,
     )
     try:
         result = _parse_llm_json(response_text)
@@ -1160,6 +1186,7 @@ def evaluate_claim_with_persisted_evidence(
             system_instructions,
             user_data,
             operation="persisted_evidence_evaluation",
+            gemini_timeout_ms=PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
         )
         parsed_result = _parse_llm_json(response_text)
         required_fields = {

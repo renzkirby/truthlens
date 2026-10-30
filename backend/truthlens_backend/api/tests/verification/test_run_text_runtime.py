@@ -24,6 +24,18 @@ from api.verification.telemetry import record_pipeline_stage
 
 class VerificationRunTextRuntimeTests(TestCase):
     def setUp(self):
+        # These runtime tests exercise the legacy/non-universal call shapes
+        # unless a test explicitly opts into another routing mode. Keep local
+        # Cloudflare credentials from silently auto-enabling universal routing.
+        self.enterContext(patch.dict(
+            os.environ,
+            {
+                "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
+                "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0",
+                "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "0",
+            },
+            clear=False,
+        ))
         self.claim = Claim.objects.create(
             claim_type=Claim.ClaimType.TEXT,
             context_text="Raw submitted claim.",
@@ -441,91 +453,106 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.retrieve_tavily.assert_not_called()
         self.assess_evidence.assert_not_called()
 
-    def test_satire_shortcut_completes(self):
+    def test_satire_shortcut_completes_after_publication_authority_check(self):
         self.cleaned["article_stance"] = "SATIRE"
         self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, "SATIRE")
-        self.vault.assert_not_called()
+        self.vault.assert_called_once_with(
+            self.cleaned["cleaned_claim"],
+            target_claim=self.claim,
+        )
         self.retrieve_gfc.assert_not_called()
         self.retrieve_tavily.assert_not_called()
         self.assess_evidence.assert_not_called()
 
-    def test_vault_substantive_verdict_completes(self):
+    def test_non_equivalent_vault_candidate_continues_to_fresh_evidence(self):
         self.vault.return_value = {
-            "canonical_claim": "Verified public claim.", "verdict": "False",
-            "summary": "Verified summary.", "sources": ["https://example.com/vault"],
+            "canonical_claim": "Different public claim.",
+            "verdict": "False",
+            "summary": "Different publication.",
+            "sources": ["https://example.com/vault"],
         }
-        self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
-        self.save_claim.assert_called_once_with(
-            self.claim.id, self.verdict, "TruthLens Verified Vault",
-            self.cleaned["cleaned_claim"], ["https://example.com/vault"],
+
+        with patch(
+            "api.tasks._resolve_equivalent_published_claim",
+            return_value=False,
+        ) as resolve_equivalent:
+            self._assert_terminal(
+                self._execute(),
+                VerificationRun.Status.COMPLETED,
+            )
+
+        resolve_equivalent.assert_called_once_with(
+            self.claim,
+            self.cleaned["cleaned_claim"],
+            self.vault.return_value,
+            schedule_classification=False,
+        )
+        self.retrieve_gfc.assert_called_once()
+        self.retrieve_tavily.assert_not_called()
+        self.save_claim.assert_called_once()
+        self.assertEqual(
+            self.save_claim.call_args.args[2],
+            "Official Fact Check",
         )
         self.claim.refresh_from_db()
-        self.assertEqual(
-            self.claim.context_text,
+        self.assertEqual(self.claim.ai_verdict, self.verdict["verdict"])
+        self.assertNotEqual(self.claim.source_type, "TruthLens Verified Vault")
+
+    def test_equivalent_vault_candidate_resolves_before_fresh_evidence(self):
+        self.vault.return_value = {
+            "canonical_claim": self.cleaned["cleaned_claim"],
+            "verdict": "FACT",
+            "summary": "Equivalent publication.",
+            "sources": ["https://example.com/vault"],
+        }
+
+        with patch(
+            "api.tasks._resolve_equivalent_published_claim",
+            return_value=True,
+        ) as resolve_equivalent:
+            self._assert_terminal(
+                self._execute(),
+                VerificationRun.Status.COMPLETED,
+            )
+
+        resolve_equivalent.assert_called_once_with(
+            self.claim,
             self.cleaned["cleaned_claim"],
-        )
-        self.assertNotEqual(
-            self.claim.context_text,
-            self.vault.return_value["summary"],
+            self.vault.return_value,
+            schedule_classification=False,
         )
         self.retrieve_gfc.assert_not_called()
         self.retrieve_tavily.assert_not_called()
-        self.assess_evidence.assert_not_called()
+        self.save_claim.assert_not_called()
 
-    def test_vault_final_llm_unavailable_fails_without_verdict_or_fallback(self):
+    def test_vault_equivalence_provider_unavailable_fails_without_fresh_retrieval(self):
         self.vault.return_value = {
-            "canonical_claim": "Verified public claim.", "verdict": "FAKE",
-            "summary": "Verified summary.", "sources": ["https://example.com/vault"],
+            "canonical_claim": "Possible equivalent publication.",
+            "verdict": "FAKE",
+            "summary": "Publication summary.",
+            "sources": ["https://example.com/vault"],
         }
-        original_ai_verdict = self.claim.ai_verdict
-        original_final_verdict = self.claim.final_verdict
-        original_score = self.claim.consensus_score
-        self.evaluate_gfc.side_effect = services.evaluate_image_claim_with_gfc
         error = LLMProviderUnavailableError(
             "No configured LLM provider successfully completed this request."
         )
 
-        with patch("api.services.call_llm_with_fallback", side_effect=error) as call_llm:
+        with patch(
+            "api.tasks._resolve_equivalent_published_claim",
+            side_effect=error,
+        ):
             with self.assertRaises(LLMProviderUnavailableError) as raised:
                 self._execute()
 
         self.assertIs(raised.exception, error)
-        self.clean.assert_called_once()
-        self.vault.assert_called_once_with(
-            self.cleaned["cleaned_claim"], target_claim=self.claim,
-        )
-        self.evaluate_gfc.assert_called_once_with(
-            self.cleaned["cleaned_claim"],
-            {"claims": [{
-                "text": self.vault.return_value["canonical_claim"],
-                "claimReview": [{
-                    "textualRating": self.vault.return_value["verdict"],
-                    "publisher": {"name": "TruthLens Official Vault"},
-                }],
-            }]},
-            self.cleaned["article_stance"],
-        )
-        call_llm.assert_called_once()
-        self.save_claim.assert_not_called()
         run = self.claim.verification_runs.get()
         self._assert_terminal(run, VerificationRun.Status.FAILED)
         self.assertEqual(run.failure_stage, "final_evaluator")
         self.assertEqual(run.failure_code, "LLM_UNAVAILABLE")
-        self.assertEqual(self._terminal_count(), 1)
-        self.claim.refresh_from_db()
-        self.assertEqual(self.claim.ai_verdict, original_ai_verdict)
-        self.assertEqual(self.claim.final_verdict, original_final_verdict)
-        self.assertEqual(self.claim.consensus_score, original_score)
-        self.assertNotEqual(self.claim.ai_verdict, "UNVERIFIED")
-        self.assertNotEqual(self.claim.consensus_score, 40)
-        self.assertNotEqual(self.claim.ai_verdict, self.vault.return_value["verdict"])
-        self.assertNotEqual(self.claim.final_verdict, self.vault.return_value["verdict"])
+        self.save_claim.assert_not_called()
         self.retrieve_gfc.assert_not_called()
-        self.relevance.assert_not_called()
         self.retrieve_tavily.assert_not_called()
-        self.evaluate_tavily.assert_not_called()
         self.evaluate_persisted.assert_not_called()
         self.assess_evidence.assert_not_called()
 

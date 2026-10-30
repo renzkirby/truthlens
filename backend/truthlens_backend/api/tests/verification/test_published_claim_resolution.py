@@ -53,6 +53,17 @@ from api.public_publication_query_service import (
 
 
 class ClaimEquivalenceClassifierTests(SimpleTestCase):
+    def setUp(self):
+        self.enterContext(patch.dict(
+            "os.environ",
+            {
+                "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
+                "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0",
+                "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "0",
+            },
+            clear=False,
+        ))
+
     def test_strict_proposition_examples_and_material_conflicts(self):
         cases = (
             (
@@ -111,6 +122,13 @@ class ClaimEquivalenceClassifierTests(SimpleTestCase):
             ) as provider:
                 result = services.assess_claim_equivalence(incoming, canonical)
                 self.assertIs(result["equivalent"], equivalent)
+                self.assertEqual(
+                    provider.call_args.kwargs,
+                    {
+                        "operation": "claim_equivalence",
+                        "gemini_timeout_ms": services.CLAIM_EQUIVALENCE_GEMINI_TIMEOUT_MS,
+                    },
+                )
                 instructions, user_prompt = provider.call_args.args
                 self.assertEqual(
                     json.loads(user_prompt),
@@ -522,12 +540,19 @@ class EquivalentReferencePersistenceTests(PublicationResolutionFixture):
                 self.equivalent_reference(**changes)
         self.provider.assert_not_called()
 
-    def test_text_target_is_ineligible_even_with_equivalent_wording(self):
+    def test_text_target_may_resolve_only_through_strict_equivalence(self):
         self.target.claim_type = Claim.ClaimType.TEXT
-        self.target.save()
-        self.assertIsNone(self.equivalent_reference())
-        self.assertFalse(self.target.fact_check_references.exists())
-        self.provider.assert_not_called()
+        self.target.save(update_fields=["claim_type"])
+
+        reference = self.equivalent_reference()
+
+        self.assertIsNotNone(reference)
+        self.assertEqual(reference.relationship_kind, "AUTHORITATIVE")
+        self.assertEqual(reference.match_method, "EQUIVALENT_CLAIM")
+        self.assertEqual(reference.fact_check_id, self.publication.pk)
+        self.assertEqual(reference.target_claim_id, self.target.pk)
+        self.provider.assert_called_once()
+        self.assert_no_target_verdicts()
 
     def test_multiple_equivalent_publications_with_identical_verdict_fail_closed(self):
         competing = self.create_competing_publication(verdict=self.publication.verdict)
@@ -2135,11 +2160,13 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.assert_ai_path(self.persisted_eval)
         self.gfc_retrieval.assert_called_once()
 
-    def test_shared_text_pipeline_does_not_gain_unrequested_authority_transfer(self):
+    def test_shared_text_pipeline_exact_canonical_uses_authoritative_publication(self):
         self.target.claim_type = Claim.ClaimType.TEXT
-        self.target.save()
+        self.target.save(update_fields=["claim_type"])
+
         tasks.execute_core_text_pipeline("Submitted text", self.target.pk)
-        self.assert_ai_path(self.persisted_eval)
+
+        self.assert_exact_bypass()
 
     def test_exact_resolution_survives_analytics_failure_in_image_pipeline(self):
         with patch(
@@ -2560,17 +2587,14 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.url_tavily.assert_not_called()
         self.persisted_eval.assert_not_called()
 
-    def test_text_vault_candidate_never_runs_equivalence_or_gains_authority(self):
+    def test_text_vault_candidate_requires_equivalence_before_authority(self):
         self.equivalent_context()
         self.target.claim_type = Claim.ClaimType.TEXT
-        self.target.save()
-        tasks.execute_core_text_pipeline("Submitted text", self.target.pk)
-        self.assert_ai_path(self.image_gfc)
-        self.llm.assert_not_called()
+        self.target.save(update_fields=["claim_type"])
 
-        # A Vault candidate may inform the AI assessment, but it must never
-        # replace the submitted claim that Community and subject classification
-        # consume.
+        tasks.execute_core_text_pipeline("Submitted text", self.target.pk)
+
+        self.assert_equivalent_bypass()
         self.target.refresh_from_db()
         self.assertEqual(
             self.target.context_text,
@@ -2579,10 +2603,6 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.assertNotEqual(
             self.target.context_text,
             self.vault.return_value["summary"],
-        )
-        self.assertEqual(
-            self.save_claim.call_args.args[3],
-            self.cleaned["cleaned_claim"],
         )
 
     def test_non_equivalent_image_semantic_context_keeps_telemetry_and_durable_provenance(
@@ -2728,14 +2748,15 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.vault.assert_not_called()
         self.assertFalse(self.target.fact_check_references.exists())
 
-    def test_text_vault_use_never_enters_related_persistence(self):
+    def test_text_non_equivalent_vault_candidate_never_enters_related_persistence(self):
         self.semantic_context()
         self.target.claim_type = Claim.ClaimType.TEXT
-        self.target.save()
+        self.target.save(update_fields=["claim_type"])
         with patch("api.tasks._record_related_published_claim") as recorder:
             tasks.execute_core_text_pipeline("Submitted text", self.target.pk)
         recorder.assert_not_called()
-        self.assert_ai_path(self.image_gfc)
+        self.assert_ai_path(self.persisted_eval)
+        self.llm.assert_not_called()
 
     def test_vault_analytics_failure_does_not_suppress_equivalent_resolution(self):
         self.equivalent_context()

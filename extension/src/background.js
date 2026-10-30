@@ -314,7 +314,11 @@ function startPollingClaim({
          }
 
          if (claim.run_status === "FAILED") {
-            stopWithError("TruthLens couldn't complete this analysis. Please try again.");
+            stopWithError(
+               typeof claim.detail === "string" && claim.detail.trim()
+                  ? claim.detail
+                  : "TruthLens couldn't complete this analysis. Please try again.",
+            );
             return;
          }
 
@@ -742,7 +746,9 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
                successType: "DISPLAY_URL_RESULT",
                timeoutMessage: "DISPLAY_URL_ERROR",
                onResolved: (claim) => cacheGuestScanIfCurrentGuest(claim, "URL"),
-               maxPolls: 50,
+               // Allow bounded provider fallbacks to finish without declaring
+               // failure while the backend still reports RUNNING.
+               maxPolls: 80,
                pollEveryMs: 3000,
             });
          } catch (err) {
@@ -807,7 +813,9 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
                successType: "DISPLAY_TEXT_RESULT",
                timeoutMessage: "DISPLAY_TEXT_ERROR",
                onResolved: (claim) => cacheGuestScanIfCurrentGuest(claim, "TEXT"),
-               maxPolls: 50,
+               // High-reasoning stages now have provider-level deadlines, but
+               // the UI keeps a wider end-to-end safety window for fallback.
+               maxPolls: 80,
                pollEveryMs: 3000,
             });
          } catch (err) {

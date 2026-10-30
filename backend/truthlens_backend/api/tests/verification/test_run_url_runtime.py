@@ -17,6 +17,18 @@ from api.services import ClaimGateError, LLMProviderUnavailableError
 
 class VerificationRunURLRuntimeTests(TestCase):
     def setUp(self):
+        # These runtime tests exercise the legacy/non-universal call shapes
+        # unless a test explicitly opts into another routing mode. Keep local
+        # Cloudflare credentials from silently auto-enabling universal routing.
+        self.enterContext(patch.dict(
+            os.environ,
+            {
+                "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
+                "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0",
+                "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "0",
+            },
+            clear=False,
+        ))
         self.url = "https://example.com/article"
         self.claim = Claim.objects.create(
             claim_type=Claim.ClaimType.URL,
@@ -220,19 +232,29 @@ class VerificationRunURLRuntimeTests(TestCase):
     def _execute(self):
         before = self._terminal_count()
         tavily_before = self.retrieve_tavily.call_count
+        run_ids_before = set(
+            self.claim.verification_runs.values_list("pk", flat=True)
+        )
         try:
             self._invoke()
         finally:
             self.assertEqual(self._terminal_count() - before, 1)
-            if self.retrieve_tavily.call_count > tavily_before:
-                self.assertEqual(self.retrieve_tavily.call_count - tavily_before, 1)
-                self.retrieve_tavily.assert_called_with(
-                    self.cleaned["search_query"][:300],
-                    self.claim.pk,
-                    stage_prefix="url_",
-                    verification_run=self.claim.verification_runs.latest("created_at"),
-                )
-        return self.claim.verification_runs.latest("created_at")
+
+        new_runs = list(
+            self.claim.verification_runs.exclude(pk__in=run_ids_before)
+        )
+        self.assertEqual(len(new_runs), 1)
+        run = new_runs[0]
+
+        if self.retrieve_tavily.call_count > tavily_before:
+            self.assertEqual(self.retrieve_tavily.call_count - tavily_before, 1)
+            self.retrieve_tavily.assert_called_with(
+                self.cleaned["search_query"][:300],
+                self.claim.pk,
+                stage_prefix="url_",
+                verification_run=run,
+            )
+        return run
 
     def _assert_terminal(self, run, status):
         self.assertEqual(run.status, status)
@@ -258,18 +280,38 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.assess_evidence.assert_not_called()
         self.save_claim.assert_not_called()
 
-    def test_extraction_no_results_deletes_claim_without_run(self):
+    def test_extraction_no_results_preserves_claim_and_marks_run_failed(self):
         self.response.json.return_value = {"results": []}
-        self._invoke()
-        self.assertFalse(Claim.objects.filter(pk=self.claim.pk).exists())
-        self._assert_no_run_or_verification()
-        self.clean.assert_not_called()
 
-    def test_extraction_failure_deletes_claim_without_run(self):
-        self.extract.side_effect = requests.Timeout("Extraction timed out")
         self._invoke()
-        self.assertFalse(Claim.objects.filter(pk=self.claim.pk).exists())
-        self._assert_no_run_or_verification()
+
+        self.assertTrue(Claim.objects.filter(pk=self.claim.pk).exists())
+        run = self.claim.verification_runs.get()
+        self._assert_terminal(run, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "url_extraction")
+        self.assertEqual(run.failure_code, "URL_EXTRACTION_EMPTY")
+        self.clean.assert_not_called()
+        self.vault.assert_not_called()
+        self.bridge.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
+        self.evaluate_persisted.assert_not_called()
+        self.save_claim.assert_not_called()
+
+    def test_extraction_failure_preserves_claim_and_marks_run_failed(self):
+        self.extract.side_effect = requests.Timeout("Extraction timed out")
+
+        self._invoke()
+
+        self.assertTrue(Claim.objects.filter(pk=self.claim.pk).exists())
+        run = self.claim.verification_runs.get()
+        self._assert_terminal(run, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "url_extraction")
+        self.assertEqual(run.failure_code, "URL_EXTRACTION_FAILED")
+        self.vault.assert_not_called()
+        self.bridge.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
+        self.evaluate_persisted.assert_not_called()
+        self.save_claim.assert_not_called()
 
     def test_navigation_only_extract_abstains_before_claim_gate_or_search(self):
         raw = (
