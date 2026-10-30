@@ -383,6 +383,9 @@ class CloudflareAssessmentCapacityFastFailTests(SimpleTestCase):
         self.enterContext(patch.dict(os.environ, {
             "CLOUDFLARE_ACCOUNT_ID": "a" * 32,
             "CLOUDFLARE_API_TOKEN": "secret-never-output",
+            # This class validates the legacy development capacity experiment,
+            # not credential-aware universal routing.
+            "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
             "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "1",
             "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
             "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT": "1",
