@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase
 
+from api import services
 from api.services import (
     LLMProviderUnavailableError,
     evaluate_claim_with_persisted_evidence,
@@ -36,6 +37,13 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
             )
 
         user_prompt = call_llm.call_args.args[1]
+        self.assertEqual(
+            call_llm.call_args.kwargs,
+            {
+                "operation": "persisted_evidence_evaluation",
+                "gemini_timeout_ms": services.PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
+            },
+        )
         self.assertIn(evidence_context, user_prompt)
         self.assertIn("<claim>Example claim.</claim>", user_prompt)
         self.assertNotIn("claimReview", user_prompt)
