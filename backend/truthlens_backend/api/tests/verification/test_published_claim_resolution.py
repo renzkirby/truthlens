@@ -53,6 +53,13 @@ from api.public_publication_query_service import (
 
 
 class ClaimEquivalenceClassifierTests(SimpleTestCase):
+    def setUp(self):
+        self.enterContext(patch.dict(
+            "os.environ",
+            {"ENABLE_UNIVERSAL_LLM_HIERARCHY": "0"},
+            clear=False,
+        ))
+
     def test_strict_proposition_examples_and_material_conflicts(self):
         cases = (
             (
