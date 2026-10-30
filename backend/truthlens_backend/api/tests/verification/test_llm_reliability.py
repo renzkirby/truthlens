@@ -7,6 +7,8 @@ from google.genai import errors, types
 
 from api.services import (
     DEFAULT_GEMINI_MODEL,
+    DEFAULT_GEMINI_REASONING_MODEL,
+    DEFAULT_GEMINI_ROUTINE_MODEL,
     DEFAULT_GROQ_MODEL,
     LLMProviderUnavailableError,
     call_llm_with_fallback,
@@ -57,7 +59,7 @@ class LLMProviderReliabilityTests(SimpleTestCase):
         self.assertIsNone(config.http_options)
         self.assertEqual(config.system_instruction, "System instructions")
         self.assertEqual(config.response_mime_type, "application/json")
-        self.assertEqual(config.temperature, 0.1)
+        self.assertIsNone(config.temperature)
 
     def test_positive_timeout_uses_supported_request_http_options(self):
         result = self._call(
@@ -182,7 +184,7 @@ class LLMProviderReliabilityTests(SimpleTestCase):
 
     def test_gemini_success_uses_configured_model_without_groq(self):
         with patch.dict(os.environ, {"GEMINI_MODEL": " custom-gemini "}):
-            result = self._call()
+            result = self._call(operation="claim_gate")
 
         self.assertEqual(result, '{"provider": "gemini"}')
         self.assertEqual(
@@ -190,6 +192,54 @@ class LLMProviderReliabilityTests(SimpleTestCase):
             "custom-gemini",
         )
         self.groq_client.chat.completions.create.assert_not_called()
+
+    def test_routine_and_reasoning_operations_use_separate_free_tier_models(self):
+        with patch.dict(
+            os.environ,
+            {
+                "GEMINI_MODEL": "",
+                "GEMINI_ROUTINE_MODEL": "",
+                "GEMINI_REASONING_MODEL": "",
+            },
+            clear=False,
+        ):
+            self._call(operation="claim_gate")
+            routine_model = (
+                self.gemini_client.models.generate_content.call_args.kwargs["model"]
+            )
+            self._call(operation="persisted_evidence_evaluation")
+            reasoning_model = (
+                self.gemini_client.models.generate_content.call_args.kwargs["model"]
+            )
+            self._call(operation="claim_equivalence")
+            equivalence_model = (
+                self.gemini_client.models.generate_content.call_args.kwargs["model"]
+            )
+
+        self.assertEqual(routine_model, DEFAULT_GEMINI_ROUTINE_MODEL)
+        self.assertEqual(reasoning_model, DEFAULT_GEMINI_REASONING_MODEL)
+        self.assertEqual(equivalence_model, DEFAULT_GEMINI_REASONING_MODEL)
+
+    def test_separate_gemini_model_overrides_are_respected(self):
+        with patch.dict(
+            os.environ,
+            {
+                "GEMINI_MODEL": "",
+                "GEMINI_ROUTINE_MODEL": " custom-routine ",
+                "GEMINI_REASONING_MODEL": " custom-reasoning ",
+            },
+            clear=False,
+        ):
+            self._call(operation="evidence_assessment")
+            self.assertEqual(
+                self.gemini_client.models.generate_content.call_args.kwargs["model"],
+                "custom-routine",
+            )
+            self._call(operation="tavily_evaluation")
+            self.assertEqual(
+                self.gemini_client.models.generate_content.call_args.kwargs["model"],
+                "custom-reasoning",
+            )
 
     def test_missing_or_blank_model_variables_use_defaults(self):
         with patch.dict(
@@ -222,7 +272,7 @@ class LLMProviderReliabilityTests(SimpleTestCase):
 
         self.assertEqual(
             self.gemini_client.models.generate_content.call_args.kwargs["model"],
-            "gemini-2.5-flash",
+            "gemini-3.8-flash",
         )
         self.assertEqual(
             self.groq_client.chat.completions.create.call_args.kwargs["model"],
