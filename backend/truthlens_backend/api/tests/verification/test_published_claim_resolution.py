@@ -522,12 +522,19 @@ class EquivalentReferencePersistenceTests(PublicationResolutionFixture):
                 self.equivalent_reference(**changes)
         self.provider.assert_not_called()
 
-    def test_text_target_is_ineligible_even_with_equivalent_wording(self):
+    def test_text_target_may_resolve_only_through_strict_equivalence(self):
         self.target.claim_type = Claim.ClaimType.TEXT
-        self.target.save()
-        self.assertIsNone(self.equivalent_reference())
-        self.assertFalse(self.target.fact_check_references.exists())
-        self.provider.assert_not_called()
+        self.target.save(update_fields=["claim_type"])
+
+        reference = self.equivalent_reference()
+
+        self.assertIsNotNone(reference)
+        self.assertEqual(reference.relationship_kind, "AUTHORITATIVE")
+        self.assertEqual(reference.match_method, "EQUIVALENT_CLAIM")
+        self.assertEqual(reference.fact_check_id, self.publication.pk)
+        self.assertEqual(reference.target_claim_id, self.target.pk)
+        self.provider.assert_called_once()
+        self.assert_no_target_verdicts()
 
     def test_multiple_equivalent_publications_with_identical_verdict_fail_closed(self):
         competing = self.create_competing_publication(verdict=self.publication.verdict)
