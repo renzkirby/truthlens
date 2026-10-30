@@ -725,11 +725,18 @@ def claim_polling_endpoint(request, claim_id):
                 "run_status": latest_run.status,
             }
             if latest_run.status == VerificationRun.Status.FAILED:
+                failure_detail = (
+                    "TruthLens couldn't extract enough article content from this "
+                    "URL to verify it."
+                    if latest_run.failure_code in {
+                        "URL_EXTRACTION_EMPTY",
+                        "URL_EXTRACTION_FAILED",
+                    }
+                    else "TruthLens couldn't complete this analysis. Please try again."
+                )
                 terminal_payload.update({
                     "failure_code": latest_run.failure_code,
-                    "detail": (
-                        "TruthLens couldn't complete this analysis. Please try again."
-                    ),
+                    "detail": failure_detail,
                 })
             elif latest_run.status == VerificationRun.Status.CANCELLED:
                 terminal_payload["detail"] = "This analysis was cancelled."
