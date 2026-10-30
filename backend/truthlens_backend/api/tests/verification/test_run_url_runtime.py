@@ -258,18 +258,38 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.assess_evidence.assert_not_called()
         self.save_claim.assert_not_called()
 
-    def test_extraction_no_results_deletes_claim_without_run(self):
+    def test_extraction_no_results_preserves_claim_and_marks_run_failed(self):
         self.response.json.return_value = {"results": []}
-        self._invoke()
-        self.assertFalse(Claim.objects.filter(pk=self.claim.pk).exists())
-        self._assert_no_run_or_verification()
-        self.clean.assert_not_called()
 
-    def test_extraction_failure_deletes_claim_without_run(self):
-        self.extract.side_effect = requests.Timeout("Extraction timed out")
         self._invoke()
-        self.assertFalse(Claim.objects.filter(pk=self.claim.pk).exists())
-        self._assert_no_run_or_verification()
+
+        self.assertTrue(Claim.objects.filter(pk=self.claim.pk).exists())
+        run = self.claim.verification_runs.get()
+        self._assert_terminal(run, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "url_extraction")
+        self.assertEqual(run.failure_code, "URL_EXTRACTION_EMPTY")
+        self.clean.assert_not_called()
+        self.vault.assert_not_called()
+        self.bridge.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
+        self.evaluate_persisted.assert_not_called()
+        self.save_claim.assert_not_called()
+
+    def test_extraction_failure_preserves_claim_and_marks_run_failed(self):
+        self.extract.side_effect = requests.Timeout("Extraction timed out")
+
+        self._invoke()
+
+        self.assertTrue(Claim.objects.filter(pk=self.claim.pk).exists())
+        run = self.claim.verification_runs.get()
+        self._assert_terminal(run, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "url_extraction")
+        self.assertEqual(run.failure_code, "URL_EXTRACTION_FAILED")
+        self.vault.assert_not_called()
+        self.bridge.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
+        self.evaluate_persisted.assert_not_called()
+        self.save_claim.assert_not_called()
 
     def test_navigation_only_extract_abstains_before_claim_gate_or_search(self):
         raw = (
