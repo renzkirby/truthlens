@@ -148,6 +148,13 @@ def _render_bounded_persisted_evidence_context(groups, claim_text, stance):
     ):
         return evidence_context
 
+    # Under the universal hierarchy, Cloudflare's input cap is provider-specific.
+    # Preserve the full evidence dossier here; the router may skip Gemma locally
+    # and still pass the unchanged request to Groq.
+    from .verification.provider_hierarchy import universal_hierarchy_enabled
+    if universal_hierarchy_enabled():
+        return evidence_context
+
     from .services import build_persisted_evidence_prompt
 
     def prompt_size(context):
