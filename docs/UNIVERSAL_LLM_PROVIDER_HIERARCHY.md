@@ -23,16 +23,20 @@ CLOUDFLARE_API_TOKEN=<API token>
 
 Gemini and Groq continue to use their existing provider credentials.
 
-Gemini model selection is operation-aware by default:
-
-- routine/high-volume operations use `gemini-3.5-flash-lite`;
-- verdict-sensitive or otherwise unclassified operations use `gemini-3.8-flash`.
+Gemini model selection keeps separate routine and reasoning override seams.
+For the defense-period synchronous verification path, both tiers default to
+`gemini-3.5-flash-lite`. This rollback is based on measured local telemetry:
+`gemini-3.8-flash` final persisted-evidence evaluations repeatedly required
+roughly 171-209 seconds, while a same-claim/same-dossier Flash-Lite replay
+completed in about 1.5 seconds with the same verdict and materially consistent
+reasoning.
 
 The routine set currently includes ClaimGate, fact-check relevance, evidence
 assessment, investigation subject classification, and related published-fact-
-check contextual classification. Claim equivalence deliberately remains on
-the stronger reasoning model because a false-positive equivalence can reuse
-authoritative published fact-check authority.
+check contextual classification. Verdict-sensitive and unclassified operations
+still route through the separate reasoning-model selector, so
+`GEMINI_REASONING_MODEL` can re-enable a stronger model after latency and
+quality validation without changing code.
 
 Optional model overrides are:
 
@@ -103,9 +107,11 @@ within one verification execution.
 Gemini HTTP 402 (billing), 404 (model/project unavailable), and 429 (quota/rate
 limit) failures are job-blocking for the selected Gemini model. After one such
 failure, the same verification job stops repeating requests to that model and
-continues through the remaining provider hierarchy. The routine and reasoning
-Gemini tiers are tracked independently so a Flash-Lite quota/model failure does
-not suppress a later 3.8 attempt, or vice versa.
+continues through the remaining provider hierarchy. Gemini degradation is tracked by the selected model ID. Because the current
+routine and reasoning defaults both resolve to Flash-Lite, a job-scoped
+quota/model failure for that shared model suppresses later calls to it in the
+same verification. If independent model overrides are configured, degradation
+state remains independent for the distinct model IDs.
 
 ## Rollback
 
@@ -126,7 +132,8 @@ The legacy development-only AI-RQ-2 pilot flags remain supported separately.
 
 Run the focused provider, Cloudflare, verdict-contract, telemetry, and
 relatedness tests before deployment. Confirm the deployed Gemini key can call
-both `gemini-3.5-flash-lite` and `gemini-3.8-flash`. After merge, automatic
-activation occurs on the first
+`gemini-3.5-flash-lite`. If `GEMINI_REASONING_MODEL` is explicitly overridden
+to another model, validate that model separately before deployment. After merge,
+automatic activation occurs on the first
 backend/Celery process start that sees valid Cloudflare credentials, unless the
 kill switch is set to `0`.

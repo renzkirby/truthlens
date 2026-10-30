@@ -67,14 +67,14 @@ groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 
-DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_GEMINI_REASONING_MODEL = DEFAULT_GEMINI_MODEL
 DEFAULT_GEMINI_ROUTINE_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
 
-# Keep scarce high-reasoning quota for operations that can directly determine
-# or reuse a factual verdict. Unlisted/new operations fail toward the stronger
-# reasoning model rather than silently reducing quality.
+# Keep routine and reasoning model seams separate even though the defense-period
+# defaults currently use the same low-latency free-tier model. Operators can
+# still override GEMINI_REASONING_MODEL independently after validation.
 GEMINI_ROUTINE_OPERATIONS = frozenset({
     "claim_gate",
     "fact_check_relevance",
@@ -212,10 +212,13 @@ def _model_from_env(name, default):
 
 
 def _gemini_model_for_operation(operation):
-    """Route routine stages to Flash-Lite and verdict-sensitive stages to 3.8.
+    """Route Gemini operations through independently overrideable model tiers.
 
-    GEMINI_MODEL remains a global emergency/compatibility override. Otherwise
-    the two model classes can be overridden independently without code changes.
+    The defense-period defaults use Flash-Lite for both routine and reasoning
+    stages because measured 3.8 latency was unsuitable for the synchronous
+    verification path. GEMINI_MODEL remains a global emergency/compatibility
+    override, while GEMINI_ROUTINE_MODEL and GEMINI_REASONING_MODEL preserve
+    an explicit seam for later re-evaluation.
     """
     global_override = os.environ.get("GEMINI_MODEL", "").strip()
     if global_override:
