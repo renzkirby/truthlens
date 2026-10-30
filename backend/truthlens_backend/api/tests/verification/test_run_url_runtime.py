@@ -17,6 +17,14 @@ from api.services import ClaimGateError, LLMProviderUnavailableError
 
 class VerificationRunURLRuntimeTests(TestCase):
     def setUp(self):
+        # These runtime tests exercise the legacy/non-universal call shapes
+        # unless a test explicitly opts into another routing mode. Keep local
+        # Cloudflare credentials from silently auto-enabling universal routing.
+        self.enterContext(patch.dict(
+            os.environ,
+            {"ENABLE_UNIVERSAL_LLM_HIERARCHY": "0"},
+            clear=False,
+        ))
         self.url = "https://example.com/article"
         self.claim = Claim.objects.create(
             claim_type=Claim.ClaimType.URL,
