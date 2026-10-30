@@ -232,19 +232,29 @@ class VerificationRunURLRuntimeTests(TestCase):
     def _execute(self):
         before = self._terminal_count()
         tavily_before = self.retrieve_tavily.call_count
+        run_ids_before = set(
+            self.claim.verification_runs.values_list("pk", flat=True)
+        )
         try:
             self._invoke()
         finally:
             self.assertEqual(self._terminal_count() - before, 1)
-            if self.retrieve_tavily.call_count > tavily_before:
-                self.assertEqual(self.retrieve_tavily.call_count - tavily_before, 1)
-                self.retrieve_tavily.assert_called_with(
-                    self.cleaned["search_query"][:300],
-                    self.claim.pk,
-                    stage_prefix="url_",
-                    verification_run=self.claim.verification_runs.latest("created_at"),
-                )
-        return self.claim.verification_runs.latest("created_at")
+
+        new_runs = list(
+            self.claim.verification_runs.exclude(pk__in=run_ids_before)
+        )
+        self.assertEqual(len(new_runs), 1)
+        run = new_runs[0]
+
+        if self.retrieve_tavily.call_count > tavily_before:
+            self.assertEqual(self.retrieve_tavily.call_count - tavily_before, 1)
+            self.retrieve_tavily.assert_called_with(
+                self.cleaned["search_query"][:300],
+                self.claim.pk,
+                stage_prefix="url_",
+                verification_run=run,
+            )
+        return run
 
     def _assert_terminal(self, run, status):
         self.assertEqual(run.status, status)
