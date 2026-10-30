@@ -355,6 +355,42 @@ class LLMProviderReliabilityTests(SimpleTestCase):
         self.gemini_client.models.generate_content.assert_called_once()
         self.assertEqual(self.groq_client.chat.completions.create.call_count, 2)
 
+    def test_routine_model_takeover_does_not_suppress_reasoning_model(self):
+        self.gemini_client.models.generate_content.side_effect = [
+            errors.ClientError(
+                429, {"error": {"status": "RESOURCE_EXHAUSTED"}},
+            ),
+            SimpleNamespace(text='{"provider": "gemini-reasoning"}'),
+        ]
+
+        with llm_provider_scope():
+            self.assertEqual(
+                self._call(operation="claim_gate"),
+                '{"provider": "groq"}',
+            )
+            self.assertEqual(
+                self._call(operation="tavily_evaluation"),
+                '{"provider": "gemini-reasoning"}',
+            )
+            # A second routine operation should remain on the takeover path.
+            self.assertEqual(
+                self._call(operation="evidence_assessment"),
+                '{"provider": "groq"}',
+            )
+
+        gemini_models = [
+            call.kwargs["model"]
+            for call in self.gemini_client.models.generate_content.call_args_list
+        ]
+        self.assertEqual(
+            gemini_models,
+            [DEFAULT_GEMINI_ROUTINE_MODEL, DEFAULT_GEMINI_REASONING_MODEL],
+        )
+        self.assertEqual(
+            self.groq_client.chat.completions.create.call_count,
+            2,
+        )
+
     def test_new_scope_restores_gemini_first_after_broad_provider_failure(self):
         self.gemini_client.models.generate_content.side_effect = [
             RuntimeError("Gemini unavailable"),
