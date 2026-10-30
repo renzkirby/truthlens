@@ -10,12 +10,16 @@ class Command(BaseCommand):
     def handle(self, *args, **kwargs):
         self.stdout.write(self.style.SUCCESS("Starting Celery worker..."))
 
+        pool = settings.CELERY_WORKER_POOL
+        concurrency = settings.CELERY_WORKER_CONCURRENCY
+
         celery_cmd = [
             sys.executable, "-m", "celery",
             "-A", "truthlens_backend",
             "worker",
             "--loglevel=info",
-            "--pool=solo",
+            f"--pool={pool}",
+            f"--concurrency={concurrency}",
         ]
 
         try:
@@ -24,7 +28,11 @@ class Command(BaseCommand):
                 cwd=str(settings.BASE_DIR),
             )
             self.stdout.write(
-                self.style.SUCCESS(f"Celery worker started with PID {process.pid}")
+                self.style.SUCCESS(
+                    "Celery worker started with PID "
+                    f"{process.pid} (pool={pool}, concurrency={concurrency}, "
+                    f"prefetch={settings.CELERY_WORKER_PREFETCH_MULTIPLIER})"
+                )
             )
         except Exception as e:
             self.stdout.write(
