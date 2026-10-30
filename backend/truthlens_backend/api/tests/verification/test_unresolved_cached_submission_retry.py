@@ -79,6 +79,34 @@ class UnresolvedCachedSubmissionRetryTests(APITestCase):
                 previous.refresh_from_db()
                 self.assertEqual(previous.status, status)
 
+    def test_no_run_cache_is_retryable_instead_of_trapped_as_inflight(self):
+        media_hash = "orphaned-image-hash"
+        old = Claim.objects.create(
+            claim_type=Claim.ClaimType.IMAGE,
+            media_hash=media_hash,
+            claim_fingerprint=compute_fingerprint(Claim.ClaimType.IMAGE, media_hash),
+        )
+        self.assertFalse(old.verification_runs.exists())
+
+        with (
+            patch("api.views.process_image", return_value=(media_hash, None)),
+            patch(
+                "api.views.upload_image_to_database",
+                return_value="https://example.com/retry-media.png",
+            ),
+            patch("api.views.snippet_fact_check_process.delay") as enqueue,
+        ):
+            response = self.client.post(
+                reverse("analyze_snippet"),
+                {"image_data": "aGVsbG8=", "check_deepfake": False},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["cached"])
+        self.assertNotEqual(response.json()["claim_id"], str(old.pk))
+        enqueue.assert_called_once()
+
     def test_pending_and_running_cache_remains_single_inflight_verification(self):
         for status in (VerificationRun.Status.PENDING, VerificationRun.Status.RUNNING):
             with self.subTest(status=status):

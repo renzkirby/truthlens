@@ -193,7 +193,7 @@ class LLMProviderReliabilityTests(SimpleTestCase):
         )
         self.groq_client.chat.completions.create.assert_not_called()
 
-    def test_routine_and_reasoning_operations_use_separate_free_tier_models(self):
+    def test_routine_and_reasoning_operations_use_separate_override_seams(self):
         with patch.dict(
             os.environ,
             {
@@ -279,7 +279,7 @@ class LLMProviderReliabilityTests(SimpleTestCase):
 
         self.assertEqual(
             self.gemini_client.models.generate_content.call_args.kwargs["model"],
-            "gemini-3.8-flash",
+            "gemini-3.5-flash-lite",
         )
         self.assertEqual(
             self.groq_client.chat.completions.create.call_args.kwargs["model"],
@@ -355,7 +355,7 @@ class LLMProviderReliabilityTests(SimpleTestCase):
         self.gemini_client.models.generate_content.assert_called_once()
         self.assertEqual(self.groq_client.chat.completions.create.call_count, 2)
 
-    def test_routine_model_takeover_does_not_suppress_reasoning_model(self):
+    def test_separate_model_overrides_keep_independent_takeover_state(self):
         self.gemini_client.models.generate_content.side_effect = [
             errors.ClientError(
                 429, {"error": {"status": "RESOURCE_EXHAUSTED"}},
@@ -363,29 +363,65 @@ class LLMProviderReliabilityTests(SimpleTestCase):
             SimpleNamespace(text='{"provider": "gemini-reasoning"}'),
         ]
 
-        with llm_provider_scope():
-            self.assertEqual(
-                self._call(operation="claim_gate"),
-                '{"provider": "groq"}',
-            )
-            self.assertEqual(
-                self._call(operation="tavily_evaluation"),
-                '{"provider": "gemini-reasoning"}',
-            )
-            # A second routine operation should remain on the takeover path.
-            self.assertEqual(
-                self._call(operation="evidence_assessment"),
-                '{"provider": "groq"}',
-            )
+        with patch.dict(
+            os.environ,
+            {
+                "GEMINI_MODEL": "",
+                "GEMINI_ROUTINE_MODEL": "routine-model",
+                "GEMINI_REASONING_MODEL": "reasoning-model",
+            },
+            clear=False,
+        ):
+            with llm_provider_scope():
+                self.assertEqual(
+                    self._call(operation="claim_gate"),
+                    '{"provider": "groq"}',
+                )
+                self.assertEqual(
+                    self._call(operation="tavily_evaluation"),
+                    '{"provider": "gemini-reasoning"}',
+                )
+                # A second routine operation should remain on the takeover path.
+                self.assertEqual(
+                    self._call(operation="evidence_assessment"),
+                    '{"provider": "groq"}',
+                )
 
         gemini_models = [
             call.kwargs["model"]
             for call in self.gemini_client.models.generate_content.call_args_list
         ]
+        self.assertEqual(gemini_models, ["routine-model", "reasoning-model"])
         self.assertEqual(
-            gemini_models,
-            [DEFAULT_GEMINI_ROUTINE_MODEL, DEFAULT_GEMINI_REASONING_MODEL],
+            self.groq_client.chat.completions.create.call_count,
+            2,
         )
+
+    def test_shared_default_model_takeover_applies_across_operation_tiers(self):
+        self.gemini_client.models.generate_content.side_effect = errors.ClientError(
+            429, {"error": {"status": "RESOURCE_EXHAUSTED"}},
+        )
+
+        with patch.dict(
+            os.environ,
+            {
+                "GEMINI_MODEL": "",
+                "GEMINI_ROUTINE_MODEL": "",
+                "GEMINI_REASONING_MODEL": "",
+            },
+            clear=False,
+        ):
+            with llm_provider_scope():
+                self.assertEqual(
+                    self._call(operation="claim_gate"),
+                    '{"provider": "groq"}',
+                )
+                self.assertEqual(
+                    self._call(operation="tavily_evaluation"),
+                    '{"provider": "groq"}',
+                )
+
+        self.gemini_client.models.generate_content.assert_called_once()
         self.assertEqual(
             self.groq_client.chat.completions.create.call_count,
             2,

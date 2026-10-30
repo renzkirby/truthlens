@@ -285,6 +285,9 @@ if INVESTIGATION_ROUTING_MODE not in {"off", "enforce"}:
 
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+# Verification tasks are long-running and often perform several remote calls.
+# Keep a worker from reserving multiple later verifications behind one slow job.
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 
 # Realtime notifications are optional. REST remains authoritative when disabled
 # or when Redis/stream delivery is unavailable.
