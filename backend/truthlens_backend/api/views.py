@@ -603,6 +603,15 @@ def _should_retry_unresolved_cached_claim(matched_claim):
     if matched_claim.ai_verdict in {"FACT", "FAKE", "MISLEADING", "SATIRE"}:
         return False
 
+    # Institutional conclusions override absent/abstaining AI results. Check
+    # authority before lifecycle recovery because a historical institutional
+    # resolution may legitimately exist without an automated VerificationRun.
+    result = get_match_result(matched_claim)
+    if result.get("resolution_source") in {
+        "OFFICIAL_FACT_CHECK", "ADJUDICATION",
+    } and result.get("verdict"):
+        return False
+
     latest_run = matched_claim.verification_runs.only("status").first()
     # A claim with no lifecycle record is not proof of healthy in-flight work.
     # This can happen if a broker/worker interruption occurs after Claim
@@ -614,14 +623,6 @@ def _should_retry_unresolved_cached_claim(matched_claim):
         VerificationRun.Status.PENDING,
         VerificationRun.Status.RUNNING,
     }:
-        return False
-
-    # Institutional conclusions override absent/abstaining AI results. Do not
-    # bypass an authoritative published or attributable adjudicated verdict.
-    result = get_match_result(matched_claim)
-    if result.get("resolution_source") in {
-        "OFFICIAL_FACT_CHECK", "ADJUDICATION",
-    } and result.get("verdict"):
         return False
 
     return True
