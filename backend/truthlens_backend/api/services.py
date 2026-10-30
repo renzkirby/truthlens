@@ -348,8 +348,8 @@ def call_llm_with_fallback(
                     ):
                         raise ValueError("INVALID_PILOT_FALLBACK_JSON")
                 except Exception as gemini_err:
-                    # The 402/429 classification is job-scoped. No repeated
-                    # requests to an exhausted billing/quota provider this job.
+                    # Billing, model-availability, and quota failures are job-scoped.
+                    # Do not repeatedly call a provider that cannot serve this job.
                     if (
                         hierarchy_active
                         and gemini_job_blocking_error(gemini_err)
