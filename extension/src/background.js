@@ -314,7 +314,11 @@ function startPollingClaim({
          }
 
          if (claim.run_status === "FAILED") {
-            stopWithError("TruthLens couldn't complete this analysis. Please try again.");
+            stopWithError(
+               typeof claim.detail === "string" && claim.detail.trim()
+                  ? claim.detail
+                  : "TruthLens couldn't complete this analysis. Please try again.",
+            );
             return;
          }
 
