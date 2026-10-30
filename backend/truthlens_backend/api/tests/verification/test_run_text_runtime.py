@@ -24,6 +24,14 @@ from api.verification.telemetry import record_pipeline_stage
 
 class VerificationRunTextRuntimeTests(TestCase):
     def setUp(self):
+        # These runtime tests exercise the legacy/non-universal call shapes
+        # unless a test explicitly opts into another routing mode. Keep local
+        # Cloudflare credentials from silently auto-enabling universal routing.
+        self.enterContext(patch.dict(
+            os.environ,
+            {"ENABLE_UNIVERSAL_LLM_HIERARCHY": "0"},
+            clear=False,
+        ))
         self.claim = Claim.objects.create(
             claim_type=Claim.ClaimType.TEXT,
             context_text="Raw submitted claim.",
