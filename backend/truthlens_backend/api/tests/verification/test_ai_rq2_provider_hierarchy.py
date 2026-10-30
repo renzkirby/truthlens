@@ -339,10 +339,10 @@ class AIRQ2ProviderHierarchyTests(SimpleTestCase):
 
 
 class AIRQ2ProviderPolicyTests(SimpleTestCase):
-    def test_only_http_402_and_429_block_gemini_for_job(self):
-        for code in (402, 429):
+    def test_http_402_404_and_429_block_gemini_for_job(self):
+        for code in (402, 404, 429):
             self.assertTrue(gemini_job_blocking_error(ExampleGeminiError(code)))
-        for code in (400, 401, 403, 404, 500, 503, "402", True, None):
+        for code in (400, 401, 403, 500, 503, "402", True, None):
             self.assertFalse(gemini_job_blocking_error(ExampleGeminiError(code)))
 
     def test_stage_contract_selection_is_operation_aware(self):
