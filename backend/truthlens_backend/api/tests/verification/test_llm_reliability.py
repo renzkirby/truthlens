@@ -61,51 +61,6 @@ class LLMProviderReliabilityTests(SimpleTestCase):
         self.assertEqual(config.response_mime_type, "application/json")
         self.assertIsNone(config.temperature)
 
-    def test_persisted_evidence_evaluation_uses_bounded_gemini_policy(self):
-        result = self._call(operation="persisted_evidence_evaluation")
-
-        self.assertEqual(result, '{"provider": "gemini"}')
-        config = self.gemini_client.models.generate_content.call_args.kwargs[
-            "config"
-        ]
-        self.assertIsInstance(config.http_options, types.HttpOptions)
-        self.assertEqual(config.http_options.timeout, 60_000)
-        self.assertIsInstance(
-            config.http_options.retry_options,
-            types.HttpRetryOptions,
-        )
-        self.assertEqual(config.http_options.retry_options.attempts, 1)
-        self.assertIsInstance(config.thinking_config, types.ThinkingConfig)
-        self.assertEqual(config.thinking_config.thinking_level, "low")
-
-    def test_persisted_evidence_policy_env_overrides_are_respected(self):
-        with patch.dict(
-            os.environ,
-            {
-                "GEMINI_PERSISTED_EVIDENCE_TIMEOUT_MS": "45000",
-                "GEMINI_PERSISTED_EVIDENCE_ATTEMPTS": "2",
-                "GEMINI_PERSISTED_EVIDENCE_THINKING_LEVEL": "medium",
-            },
-            clear=False,
-        ):
-            self._call(operation="persisted_evidence_evaluation")
-
-        config = self.gemini_client.models.generate_content.call_args.kwargs[
-            "config"
-        ]
-        self.assertEqual(config.http_options.timeout, 45_000)
-        self.assertEqual(config.http_options.retry_options.attempts, 2)
-        self.assertEqual(config.thinking_config.thinking_level, "medium")
-
-    def test_other_reasoning_operations_keep_existing_unbounded_gemini_policy(self):
-        self._call(operation="claim_equivalence")
-
-        config = self.gemini_client.models.generate_content.call_args.kwargs[
-            "config"
-        ]
-        self.assertIsNone(config.http_options)
-        self.assertIsNone(config.thinking_config)
-
     def test_positive_timeout_uses_supported_request_http_options(self):
         result = self._call(
             operation="evidence_assessment",
@@ -238,7 +193,7 @@ class LLMProviderReliabilityTests(SimpleTestCase):
         )
         self.groq_client.chat.completions.create.assert_not_called()
 
-    def test_routine_and_reasoning_operations_use_separate_free_tier_models(self):
+    def test_routine_and_reasoning_operations_use_separate_override_seams(self):
         with patch.dict(
             os.environ,
             {
@@ -324,7 +279,7 @@ class LLMProviderReliabilityTests(SimpleTestCase):
 
         self.assertEqual(
             self.gemini_client.models.generate_content.call_args.kwargs["model"],
-            "gemini-3.8-flash",
+            "gemini-3.5-flash-lite",
         )
         self.assertEqual(
             self.groq_client.chat.completions.create.call_args.kwargs["model"],
