@@ -56,7 +56,11 @@ class ClaimEquivalenceClassifierTests(SimpleTestCase):
     def setUp(self):
         self.enterContext(patch.dict(
             "os.environ",
-            {"ENABLE_UNIVERSAL_LLM_HIERARCHY": "0"},
+            {
+                "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
+                "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0",
+                "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "0",
+            },
             clear=False,
         ))
 
