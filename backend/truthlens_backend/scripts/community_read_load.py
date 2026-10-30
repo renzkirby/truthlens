@@ -103,7 +103,10 @@ def main():
     parser.add_argument(
         "--base-url",
         required=True,
-        help="Production backend origin, e.g. https://api.example.com",
+        help=(
+            "Production backend origin or API base, e.g. "
+            "https://api.example.com or https://api.example.com/api"
+        ),
     )
     parser.add_argument(
         "--stages",
@@ -146,7 +149,11 @@ def main():
             "the throttle window resets."
         )
 
-    url = args.base_url.rstrip("/") + "/api/threads/"
+    base_url = args.base_url.rstrip("/")
+    if base_url.endswith("/api"):
+        url = base_url + "/threads/"
+    else:
+        url = base_url + "/api/threads/"
 
     print("TruthLens Community read-load probe")
     print("Endpoint:", url)
