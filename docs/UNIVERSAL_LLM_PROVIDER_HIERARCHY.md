@@ -101,9 +101,11 @@ job-scoped degradation behavior prevents repeatedly calling a failed provider
 within one verification execution.
 
 Gemini HTTP 402 (billing), 404 (model/project unavailable), and 429 (quota/rate
-limit) failures are job-blocking. After one such failure, the same verification
-job stops spending Gemini requests and continues through the remaining
-provider hierarchy.
+limit) failures are job-blocking for the selected Gemini model. After one such
+failure, the same verification job stops repeating requests to that model and
+continues through the remaining provider hierarchy. The routine and reasoning
+Gemini tiers are tracked independently so a Flash-Lite quota/model failure does
+not suppress a later 3.8 attempt, or vice versa.
 
 ## Rollback
 
