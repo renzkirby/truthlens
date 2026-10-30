@@ -161,6 +161,29 @@ class ClaimPollingThrottleTests(APITestCase):
         self.assertNotIn("failure_message", payload)
         self.assertNotIn("SECRET", str(payload))
 
+    def test_url_extraction_failure_returns_specific_safe_terminal_detail(self):
+        VerificationRun.objects.create(
+            claim=self.claim,
+            status=VerificationRun.Status.FAILED,
+            failure_stage="url_extraction",
+            failure_code="URL_EXTRACTION_EMPTY",
+            failure_message="SECRET raw extraction detail",
+        )
+
+        response = APIClient().get(self.polling_url)
+        payload = response.json()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(payload["verdict"], "PENDING")
+        self.assertEqual(payload["run_status"], "FAILED")
+        self.assertEqual(payload["failure_code"], "URL_EXTRACTION_EMPTY")
+        self.assertEqual(
+            payload["detail"],
+            "TruthLens couldn't extract enough article content from this URL to verify it.",
+        )
+        self.assertNotIn("failure_message", payload)
+        self.assertNotIn("SECRET", str(payload))
+
     def test_cancelled_run_returns_safe_terminal_contract(self):
         VerificationRun.objects.create(
             claim=self.claim,
