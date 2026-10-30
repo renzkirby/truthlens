@@ -205,6 +205,7 @@ class AIRQ2ProviderHierarchyTests(SimpleTestCase):
                 ("gemini", "failed"),
                 ("cloudflare", "skipped"),
                 ("groq", "success"),
+                ("gemini", "failed"),
                 ("cloudflare", "success"),
             ],
         )
@@ -252,6 +253,7 @@ class AIRQ2ProviderHierarchyTests(SimpleTestCase):
             [
                 ("gemini", "failed"),
                 ("groq", "success"),
+                ("gemini", "failed"),
                 ("cloudflare", "success"),
             ],
         )
