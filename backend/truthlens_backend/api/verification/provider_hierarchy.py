@@ -22,9 +22,9 @@ STAGE_CONTRACT_OPERATIONS = frozenset({
     "gfc_evaluation",
     "tavily_evaluation",
 })
-# These indicate the user's account cannot currently accept this request.
+# These indicate the project/model cannot currently accept this request.
 # Do not repeatedly retry them within a single verification job.
-GEMINI_JOB_BLOCKING_CODES = frozenset({402, 429})
+GEMINI_JOB_BLOCKING_CODES = frozenset({402, 404, 429})
 
 
 def universal_hierarchy_enabled():
@@ -64,6 +64,6 @@ def requires_strict_stage_contract(operation, *, pilot_active, hierarchy_active)
 
 
 def gemini_job_blocking_error(error):
-    """Classify quota/billing rejection without logging remote error bodies."""
+    """Classify billing/model/quota rejection without logging remote error bodies."""
     code = getattr(error, "code", None)
     return type(code) is int and code in GEMINI_JOB_BLOCKING_CODES

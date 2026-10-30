@@ -191,10 +191,10 @@ def classify_relatedness(claim_text, representation):
     for provider in providers:
         try:
             if provider == "gemini":
-                model = services._model_from_env("GEMINI_MODEL", services.DEFAULT_GEMINI_MODEL)
+                model = services._gemini_model_for_operation("related_context")
                 config = dict(
                     system_instruction=SYSTEM, response_mime_type="application/json",
-                    temperature=0.1, max_output_tokens=OUTPUT_TOKENS,
+                    max_output_tokens=OUTPUT_TOKENS,
                     http_options=types.HttpOptions(
                         timeout=PROVIDER_TIMEOUT_SECONDS * 1000,
                         retry_options=types.HttpRetryOptions(attempts=1),

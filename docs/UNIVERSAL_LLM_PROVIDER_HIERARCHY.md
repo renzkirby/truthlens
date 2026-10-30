@@ -21,8 +21,31 @@ CLOUDFLARE_ACCOUNT_ID=<account id>
 CLOUDFLARE_API_TOKEN=<API token>
 ```
 
-Gemini and Groq continue to use their existing provider credentials and model
-configuration.
+Gemini and Groq continue to use their existing provider credentials.
+
+Gemini model selection is operation-aware by default:
+
+- routine/high-volume operations use `gemini-3.5-flash-lite`;
+- verdict-sensitive or otherwise unclassified operations use `gemini-3.8-flash`.
+
+The routine set currently includes ClaimGate, fact-check relevance, evidence
+assessment, investigation subject classification, and related published-fact-
+check contextual classification. Claim equivalence deliberately remains on
+the stronger reasoning model because a false-positive equivalence can reuse
+authoritative published fact-check authority.
+
+Optional model overrides are:
+
+```
+GEMINI_ROUTINE_MODEL=<model id>
+GEMINI_REASONING_MODEL=<model id>
+```
+
+The legacy `GEMINI_MODEL` variable remains a global override for emergency
+rollback/compatibility. If it is set, it overrides both tiers. Production
+deployments migrating from Gemini 2.5 must therefore remove any stale
+`GEMINI_MODEL=gemini-2.5-flash` value unless a deliberate global override is
+intended.
 
 When those Cloudflare credentials are present and
 `ENABLE_UNIVERSAL_LLM_HIERARCHY` is unset, TruthLens automatically uses the
@@ -77,6 +100,13 @@ Cloudflare is attempted at most once for a routed operation. Existing
 job-scoped degradation behavior prevents repeatedly calling a failed provider
 within one verification execution.
 
+Gemini HTTP 402 (billing), 404 (model/project unavailable), and 429 (quota/rate
+limit) failures are job-blocking for the selected Gemini model. After one such
+failure, the same verification job stops repeating requests to that model and
+continues through the remaining provider hierarchy. The routine and reasoning
+Gemini tiers are tracked independently so a Flash-Lite quota/model failure does
+not suppress a later 3.8 attempt, or vice versa.
+
 ## Rollback
 
 Set:
@@ -94,7 +124,9 @@ The legacy development-only AI-RQ-2 pilot flags remain supported separately.
 
 ## Validation before deployment
 
-Run the focused provider, Cloudflare, verdict-contract, and relatedness tests
-before deployment. After merge, automatic activation occurs on the first
+Run the focused provider, Cloudflare, verdict-contract, telemetry, and
+relatedness tests before deployment. Confirm the deployed Gemini key can call
+both `gemini-3.5-flash-lite` and `gemini-3.8-flash`. After merge, automatic
+activation occurs on the first
 backend/Celery process start that sees valid Cloudflare credentials, unless the
 kill switch is set to `0`.

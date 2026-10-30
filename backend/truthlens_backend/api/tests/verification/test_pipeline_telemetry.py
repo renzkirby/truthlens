@@ -17,6 +17,11 @@ from api.verification.telemetry import (
 
 class PipelineTelemetryCollectorTests(TestCase):
     def setUp(self):
+        self.enterContext(patch.dict(
+            "os.environ",
+            {"ENABLE_UNIVERSAL_LLM_HIERARCHY": "0"},
+            clear=False,
+        ))
         self.claim = Claim.objects.create(
             claim_type=Claim.ClaimType.TEXT,
             context_text="Private claim text",
@@ -137,6 +142,31 @@ class PipelineTelemetryCollectorTests(TestCase):
             "private payload",
         ):
             self.assertNotIn(unsafe, serialized)
+
+    def test_gemini_model_metadata_is_allowlisted_without_private_fields(self):
+        @verification_telemetry_scope()
+        def execute(claim_id):
+            bind_verification_run(self.run)
+            record_llm_provider_call(
+                "claim_gate",
+                "gemini",
+                self.run.id,
+                9,
+                "success",
+                metadata={
+                    "model_id": "gemini-3.5-flash-lite",
+                    "prompt": "PRIVATE PROMPT",
+                    "api_key": "PRIVATE KEY",
+                },
+            )
+
+        execute(self.claim.id)
+        event = self.run.telemetry_events.get()
+        self.assertEqual(
+            event.metadata,
+            {"model_id": "gemini-3.5-flash-lite"},
+        )
+        self.assertNotIn("PRIVATE", repr(event.metadata))
 
     def test_flush_failure_never_propagates_or_logs_exception_secret(self):
         @verification_telemetry_scope()

@@ -64,6 +64,10 @@ class GeminiQuotaError(RuntimeError):
 class CloudflareAssessmentChunkingTests(SimpleTestCase):
     def setUp(self):
         self.enterContext(patch.dict(os.environ, {
+            # These tests exercise the legacy dev-only chunking gate. Disable
+            # credential-aware universal auto-activation so developer machine
+            # Cloudflare credentials cannot bypass the legacy flag assertions.
+            "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
             "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "1",
             "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
             "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT": "1",
