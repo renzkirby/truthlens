@@ -47,6 +47,11 @@ SAFE_LLM_OPERATION_LABELS = frozenset(
     }
 )
 SAFE_LLM_PROVIDERS = frozenset({"gemini", "groq", "cloudflare"})
+SAFE_GEMINI_MODEL_IDS = frozenset({
+    "gemini-2.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.8-flash",
+})
 
 
 @dataclass
@@ -112,6 +117,10 @@ def record_llm_provider_call(
     operation_label = operation if operation in SAFE_LLM_OPERATION_LABELS else "unspecified"
     provider_label = provider if provider in SAFE_LLM_PROVIDERS else ""
     safe_metadata = {}
+    if provider_label == "gemini" and isinstance(metadata, dict):
+        model_id = metadata.get("model_id")
+        if model_id in SAFE_GEMINI_MODEL_IDS:
+            safe_metadata["model_id"] = model_id
     if provider_label == "cloudflare" and isinstance(metadata, dict):
         for key in (
             "prompt_tokens", "completion_tokens", "total_tokens",
