@@ -244,7 +244,12 @@ class LLMProviderReliabilityTests(SimpleTestCase):
     def test_missing_or_blank_model_variables_use_defaults(self):
         with patch.dict(
             os.environ,
-            {"GEMINI_MODEL": "  ", "GROQ_MODEL": "\t"},
+            {
+                "GEMINI_MODEL": "  ",
+                "GEMINI_ROUTINE_MODEL": "  ",
+                "GEMINI_REASONING_MODEL": "  ",
+                "GROQ_MODEL": "\t",
+            },
             clear=False,
         ):
             self.gemini_client.models.generate_content.side_effect = RuntimeError(
@@ -264,6 +269,8 @@ class LLMProviderReliabilityTests(SimpleTestCase):
     def test_missing_model_variables_use_defaults(self):
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("GEMINI_MODEL", None)
+            os.environ.pop("GEMINI_ROUTINE_MODEL", None)
+            os.environ.pop("GEMINI_REASONING_MODEL", None)
             os.environ.pop("GROQ_MODEL", None)
             self.gemini_client.models.generate_content.side_effect = RuntimeError(
                 "Gemini unavailable"
