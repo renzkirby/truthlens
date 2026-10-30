@@ -41,6 +41,7 @@ from .verification.provider_hierarchy import (
 )
 from .verification.cloudflare_evaluation import (
     CloudflareEvaluationError,
+    MAX_INPUT_CHARS as CLOUDFLARE_MAX_INPUT_CHARS,
     sanitized_cloudflare_error_code,
 )
 
@@ -425,10 +426,26 @@ def call_llm_with_fallback(
                 time.perf_counter(), "skipped",
                 CloudflareEvaluationError(assessment_bypass_reason),
             )
+    cloudflare_bypass_reason = assessment_bypass_reason
     if (
         pilot_active
         and not cloudflare_degraded
-        and assessment_bypass_reason is None
+        and cloudflare_bypass_reason is None
+        and len(system_instructions) + len(user_prompt) > CLOUDFLARE_MAX_INPUT_CHARS
+    ):
+        cloudflare_bypass_reason = "PROMPT_TOO_LONG"
+        # Local request ineligibility is not a provider outage. Preserve the
+        # complete prompt for downstream Groq instead of degrading Cloudflare.
+        _log_llm_provider_call(
+            operation, "cloudflare", provider_call_id,
+            time.perf_counter(), "skipped",
+            CloudflareEvaluationError(cloudflare_bypass_reason),
+        )
+
+    if (
+        pilot_active
+        and not cloudflare_degraded
+        and cloudflare_bypass_reason is None
     ):
         cloudflare_started_at = time.perf_counter()
         cloudflare_metrics = {}
