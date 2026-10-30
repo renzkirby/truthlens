@@ -64,6 +64,6 @@ def requires_strict_stage_contract(operation, *, pilot_active, hierarchy_active)
 
 
 def gemini_job_blocking_error(error):
-    """Classify quota/billing rejection without logging remote error bodies."""
+    """Classify billing/model/quota rejection without logging remote error bodies."""
     code = getattr(error, "code", None)
     return type(code) is int and code in GEMINI_JOB_BLOCKING_CODES
