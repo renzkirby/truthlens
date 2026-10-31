@@ -96,6 +96,10 @@ class VerificationRunURLRuntimeTests(TestCase):
             "api.tasks.evaluate_claim_with_persisted_evidence",
             return_value=self.verdict,
         )
+        self.calibrate_confidence = self._patch(
+            "api.tasks.calibrate_verdict_confidence",
+            side_effect=lambda verdict, _groups: verdict,
+        )
         self.load_dossier = self._patch(
             "api.tasks.load_reasoning_evidence_dossier_for_run",
             return_value=["persisted dossier"],
@@ -539,6 +543,10 @@ class VerificationRunURLRuntimeTests(TestCase):
             self.cleaned["cleaned_claim"],
             "Persisted evidence context.",
             "NEUTRAL",
+        )
+        self.calibrate_confidence.assert_called_once_with(
+            self.verdict,
+            ["selected evidence"],
         )
         self.evaluate_gfc.assert_not_called()
         self.save_claim.assert_called_once_with(
