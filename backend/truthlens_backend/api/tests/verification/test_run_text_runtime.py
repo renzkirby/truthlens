@@ -593,6 +593,37 @@ class VerificationRunTextRuntimeTests(TestCase):
             self.save_claim.call_args.args[4], self.tavily_report_sources
         )
 
+    def test_persistence_caps_automated_absolute_certainty(self):
+        self.verdict.update({
+            "confidence_score": 100,
+            "score_context": "Provider supplied absolute certainty.",
+        })
+
+        self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
+
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.consensus_score, 99)
+        self.assertIn(
+            "never represent absolute certainty",
+            self.claim.score_context,
+        )
+
+    def test_persistence_caps_unverified_confidence_below_decisive_range(self):
+        self.verdict.update({
+            "verdict": "UNVERIFIED",
+            "confidence_score": 98,
+            "score_context": "Provider supplied high uncertainty confidence.",
+        })
+
+        self._assert_terminal(self._execute(), VerificationRun.Status.ABSTAINED)
+
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.consensus_score, 49)
+        self.assertIn(
+            "insufficient for a decisive verdict",
+            self.claim.score_context,
+        )
+
     def test_provider_selected_abstaining_verdicts_abstain(self):
         for provider in ("vault", "gfc", "tavily"):
             for verdict in ("OUT_OF_SCOPE", "UNVERIFIED", None, "UNKNOWN"):
