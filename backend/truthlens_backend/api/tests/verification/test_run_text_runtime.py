@@ -627,7 +627,11 @@ class VerificationRunTextRuntimeTests(TestCase):
         self._assert_terminal(self._execute(), VerificationRun.Status.ABSTAINED)
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
-        self.assertEqual(self.claim.consensus_score, 40)
+        self.assertEqual(self.claim.consensus_score, 0)
+        self.assertIn(
+            "insufficient for a decisive verdict",
+            self.claim.score_context,
+        )
         self.fail_run.assert_not_called()
 
     def test_fatal_core_exception_fails_with_original_metadata(self):
