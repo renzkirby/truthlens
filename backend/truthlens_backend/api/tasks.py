@@ -50,6 +50,7 @@ from .verification.evidence_dossier import (
     render_compact_reasoning_evidence_dossier,
     render_shared_metadata_reasoning_evidence_dossier,
 )
+from .verification.confidence_policy import calibrate_verdict_confidence
 from .verification.cloudflare_pilot import (
     PILOT_MAX_INPUT_CHARS,
     cloudflare_pilot_enabled,
@@ -1388,6 +1389,10 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                                 evidence_context,
                                 article_stance,
                             )
+                            ai_verdict = calibrate_verdict_confidence(
+                                ai_verdict,
+                                fact_check_groups,
+                            )
                         except LLMProviderUnavailableError:
                             raise
                         except Exception as exc:
@@ -1565,6 +1570,10 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             cleaned_claim,
                             evidence_context,
                             article_stance,
+                        )
+                        ai_verdict = calibrate_verdict_confidence(
+                            ai_verdict,
+                            secondary_groups,
                         )
                     else:
                         _log_stage(
@@ -1988,6 +1997,10 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                             evidence_context,
                             article_stance,
                         )
+                        ai_verdict = calibrate_verdict_confidence(
+                            ai_verdict,
+                            fact_check_groups,
+                        )
                     except LLMProviderUnavailableError:
                         raise
                     except Exception as e:
@@ -2188,6 +2201,10 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         evidence_context,
                         article_stance,
                     )
+                    ai_verdict = calibrate_verdict_confidence(
+                        ai_verdict,
+                        secondary_groups,
+                    )
                 else:
                     _log_stage(
                         claim_id,
@@ -2349,8 +2366,7 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None, 
         if isinstance(confidence, bool):
             raise TypeError("confidence score must not be boolean")
         if confidence is None:
-            if ai_verdict_value == "UNVERIFIED":
-                confidence = 40
+            confidence = 0 if ai_verdict_value == "UNVERIFIED" else None
         else:
             if not isinstance(confidence, Number):
                 raise TypeError("confidence score must be numeric")
@@ -2363,10 +2379,23 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None, 
             if normalized_confidence < 0 or normalized_confidence > 100:
                 raise ValueError("confidence score must be between 0 and 100")
             confidence = normalized_confidence
-            if ai_verdict_value == "UNVERIFIED" and confidence == 0:
-                confidence = 40
 
         score_context = verdict.get("score_context")
+        if confidence is not None and ai_verdict_value == "UNVERIFIED":
+            confidence = min(confidence, 49.0)
+            score_context = (
+                "Evidence remains insufficient for a decisive verdict; "
+                f"final confidence is {confidence:g}%."
+            )
+        elif confidence is not None and ai_verdict_value in {
+            "FACT", "FAKE", "MISLEADING", "SATIRE",
+        } and confidence > 99.0:
+            confidence = 99.0
+            score_context = (
+                "Automated verdicts never represent absolute certainty; "
+                "final confidence is 99%."
+            )
+
         if score_context is not None:
             score_context = str(score_context)
             score_context_max_length = Claim._meta.get_field("score_context").max_length
