@@ -159,6 +159,50 @@ def assign_claim_to_partner(
     )
 
 
+def _ensure_legacy_evidence_review_basis(*, claim, actor, organization):
+    """Upgrade resolved legacy evidence fixtures to the current review contract.
+
+    Historical tests often marked evidence VERIFIED/REJECTED directly. Preserve
+    tests that intentionally exercise UNVERIFIED readiness failures, but route
+    already-resolved fixture evidence through the production review service so
+    adjudication receives organization-scoped provenance.
+    """
+
+    for evidence in EvidenceSubmission.objects.filter(
+        thread__claim=claim
+    ).order_by("pk"):
+        if evidence.evidence_status == EvidenceSubmission.EvidenceStatus.UNVERIFIED:
+            continue
+
+        latest_basis = (
+            EvidenceReviewDecision.objects.filter(
+                evidence_submission=evidence,
+                organization=organization,
+            )
+            .order_by("-reviewed_at", "-id")
+            .first()
+        )
+        if latest_basis and latest_basis.disposition == evidence.evidence_status:
+            continue
+
+        rejection_reason = None
+        if evidence.evidence_status == EvidenceSubmission.EvidenceStatus.REJECTED:
+            rejection_reason = (
+                evidence.rejection_reason
+                or EvidenceSubmission.RejectionReason.OTHER
+            )
+
+        review_evidence_submission(
+            evidence=evidence,
+            actor=actor,
+            evidence_status=evidence.evidence_status,
+            rejection_reason=rejection_reason,
+            moderator_notes="Historical test fixture evidence review basis.",
+            expected_status=evidence.evidence_status,
+            expected_organization_id=organization.id,
+        )
+
+
 def issue_adjudication_decision(
     *,
     claim,
@@ -184,6 +228,12 @@ def issue_adjudication_decision(
     )
     if selected_organization is None:
         raise AssertionError("The test claim needs an active organization assignment.")
+
+    _ensure_legacy_evidence_review_basis(
+        claim=claim,
+        actor=actor,
+        organization=selected_organization,
+    )
 
     case = ensure_adjudication_case(
         claim=claim,
