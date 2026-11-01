@@ -2618,7 +2618,7 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
         if value in (None, ""):
             return value
 
-        safe_url, url_error = validate_public_url(value)
+        safe_url, url_error = validate_public_url(value, strip_tracking=False)
         if url_error:
             raise serializers.ValidationError(url_error)
 
