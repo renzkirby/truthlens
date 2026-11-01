@@ -7,6 +7,7 @@ import {
    clearAuthSession,
 } from "./modules/auth.js";
 import { state } from "./modules/state.js";
+import { extensionErrorPresentation } from "./modules/userFacingError.js";
 
 const GUEST_SCANS_STORAGE_KEY = "guest_scans";
 const GUEST_SCANS_CAP = 3;
@@ -272,6 +273,24 @@ async function postJsonWithAuth(path, payload) {
    );
 }
 
+function responseVerificationError(response, payload, options = {}) {
+   const presentation = extensionErrorPresentation({
+      status: response?.status ?? null,
+      payload,
+      ...options,
+   });
+   const error = new Error(presentation.message);
+   error.kind = presentation.kind;
+   return error;
+}
+
+function caughtVerificationError(error, options = {}) {
+   if (error?.kind && error?.message) {
+      return { kind: error.kind, message: error.message };
+   }
+   return extensionErrorPresentation({ error, ...options });
+}
+
 function startPollingClaim({
    claimId,
    tabId,
@@ -300,7 +319,10 @@ function startPollingClaim({
 
       if (pollCount >= maxPolls) {
          console.error("Polling timed out");
-         stopWithError("Verification timed out. Please try again.");
+         stopWithError(
+            "Verification took longer than expected. Start a new scan when you're ready to try again.",
+            "timeout",
+         );
          return;
       }
 
@@ -315,23 +337,17 @@ function startPollingClaim({
          }
 
          if (claim.run_status === "FAILED") {
-            const failureKind =
-               claim.failure_code === "URL_KNOWN_THREAT"
-                  ? "security_threat"
-                  : claim.failure_code === "URL_POLICY_BLOCKED"
-                    ? "input"
-                    : "service";
-            stopWithError(
-               typeof claim.detail === "string" && claim.detail.trim()
-                  ? claim.detail
-                  : "TruthLens couldn't complete this analysis. Please try again.",
-               failureKind,
-            );
+            const presentation = extensionErrorPresentation({
+               payload: claim,
+               failureCode: claim.failure_code,
+               fallback: "TruthLens couldn't complete this analysis.",
+            });
+            stopWithError(presentation.message, presentation.kind);
             return;
          }
 
          if (claim.run_status === "CANCELLED") {
-            stopWithError("This analysis was cancelled. Please start the verification again.");
+            stopWithError("This verification was cancelled.", "cancelled");
             return;
          }
 
@@ -339,13 +355,19 @@ function startPollingClaim({
             claim.run_status === "ABSTAINED" &&
             !(claim.abstention_reason === "OUT_OF_SCOPE" && claim.verdict === "OUT_OF_SCOPE")
          ) {
-            stopWithError("Analysis finished without a supported automated conclusion.");
+            stopWithError(
+               "TruthLens finished the analysis but could not support an automated conclusion.",
+               "unsupported",
+            );
             return;
          }
 
          if (claim.verdict === "PENDING") {
             if (claim.run_status && claim.run_status !== "PENDING" && claim.run_status !== "RUNNING") {
-               stopWithError("Analysis finished without a supported automated conclusion.");
+               stopWithError(
+                  "TruthLens finished the analysis but could not support an automated conclusion.",
+                  "unsupported",
+               );
                return;
             }
             return;
@@ -370,17 +392,19 @@ function startPollingClaim({
          const isTerminalFailure = errorStatus !== null && errorStatus < 500;
 
          if (isTerminalFailure) {
-            const message =
-               errorStatus === 404
-                  ? "The claim result was not found. Please start the verification again."
-                  : "Unable to retrieve the verification result. Please try again.";
-            stopWithError(message);
+            const presentation = extensionErrorPresentation({
+               status: errorStatus,
+               error,
+               notFoundMessage: "This verification result is no longer available. Start a new scan.",
+            });
+            stopWithError(presentation.message, presentation.kind);
             return;
          }
 
          console.warn("Transient claim polling failure:", error?.message || error);
          if (pollCount >= maxPolls) {
-            stopWithError("Unable to retrieve the verification result. Please try again.");
+            const presentation = caughtVerificationError(error);
+            stopWithError(presentation.message, presentation.kind);
          }
       } finally {
          isPollInFlight = false;
