@@ -110,20 +110,42 @@ def _score_context(verdict, final_score, supporting_group_count, conflict_level)
             "Conflicting assessed source identities limit automated evidence "
             f"confidence to {score}%."
         )
+
+    contextual_verdict = verdict in {"MISLEADING", "SATIRE"}
     if supporting_group_count == 0:
+        if contextual_verdict:
+            return (
+                "No usable assessed evidence contributes to this verdict; "
+                f"final confidence is {score}%."
+            )
         return (
             "No usable assessed evidence supports this verdict; "
             f"final confidence is {score}%."
         )
     if supporting_group_count == 1:
+        if contextual_verdict:
+            return (
+                "One distinct source identity contributes assessed evidence "
+                f"to this verdict; final confidence is {score}%."
+            )
         return (
             "One distinct source identity supports this verdict; "
             f"final confidence is {score}%."
         )
     if supporting_group_count == 2:
+        if contextual_verdict:
+            return (
+                "Two distinct source identities contribute assessed evidence "
+                f"to this verdict; final confidence is {score}%."
+            )
         return (
             "Two distinct source identities support this verdict; "
             f"final confidence is {score}%."
+        )
+    if contextual_verdict:
+        return (
+            f"{supporting_group_count} distinct source identities contribute "
+            f"assessed evidence to this verdict; final confidence is {score}%."
         )
     return (
         f"{supporting_group_count} distinct source identities support this verdict; "
