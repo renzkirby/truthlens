@@ -23,20 +23,21 @@ _STRONG_CONFLICT_FLOOR = 0.80
 _CONSISTENT_STANCES = {
     "FACT": frozenset({VerificationEvidence.Stance.SUPPORTS}),
     "FAKE": frozenset({VerificationEvidence.Stance.REFUTES}),
-    # MISLEADING and SATIRE often require contextual or mixed evidence rather
-    # than one simple supporting/refuting stance. Count any materially assessed
-    # non-UNKNOWN item, but still only once per source identity.
-    "MISLEADING": frozenset({
-        VerificationEvidence.Stance.SUPPORTS,
-        VerificationEvidence.Stance.REFUTES,
-        VerificationEvidence.Stance.CONTEXT,
-    }),
-    "SATIRE": frozenset({
-        VerificationEvidence.Stance.SUPPORTS,
-        VerificationEvidence.Stance.REFUTES,
-        VerificationEvidence.Stance.CONTEXT,
-    }),
 }
+_CONTEXTUAL_VERDICTS = frozenset({"MISLEADING", "SATIRE"})
+_MISLEADING_BASIS_KINDS = frozenset({
+    "MISSING_CONTEXT",
+    "PARTIAL_TRUTH",
+    "FALSE_CONTEXT",
+    "SATIRE_ORIGIN_OF_MISINFORMATION",
+})
+_SATIRE_BASIS_KINDS = frozenset({"SATIRE_PROVENANCE"})
+_CONTEXTUAL_BASIS_STANCES = frozenset({
+    VerificationEvidence.Stance.SUPPORTS,
+    VerificationEvidence.Stance.REFUTES,
+    VerificationEvidence.Stance.CONTEXT,
+})
+_CONTEXTUAL_INCOMPLETE_MAX = 60.0
 _OPPOSING_STANCES = {
     "FACT": frozenset({VerificationEvidence.Stance.REFUTES}),
     "FAKE": frozenset({VerificationEvidence.Stance.SUPPORTS}),
@@ -153,6 +154,132 @@ def _score_context(verdict, final_score, supporting_group_count, conflict_level)
     )
 
 
+def _contextual_basis_score_context(
+    verdict,
+    final_score,
+    source_identity_count,
+    *,
+    complete,
+):
+    score = _score_text(final_score)
+    if not complete:
+        if verdict == "MISLEADING":
+            return (
+                "Required misleading-context basis is not tied to usable persisted "
+                f"evidence; final confidence is {score}%."
+            )
+        return (
+            "Satirical provenance is not tied to usable persisted evidence; "
+            f"final confidence is {score}%."
+        )
+
+    if verdict == "MISLEADING":
+        label = "Validated misleading-context basis"
+    else:
+        label = "Validated satire provenance"
+
+    if source_identity_count == 1:
+        identities = "one distinct source identity"
+    elif source_identity_count == 2:
+        identities = "two distinct source identities"
+    else:
+        identities = f"{source_identity_count} distinct source identities"
+    return (
+        f"{label} spans {identities}; final confidence is {score}%."
+    )
+
+
+def _contextual_basis_qualities(verdict_result, verdict, evidence_groups):
+    basis_kind = verdict_result.get("contextual_basis_kind")
+    basis_ids = verdict_result.get("contextual_basis_evidence_ids")
+
+    if (
+        not isinstance(basis_ids, list)
+        or not basis_ids
+        or any(type(value) is not str or not value for value in basis_ids)
+        or len(set(basis_ids)) != len(basis_ids)
+    ):
+        return None
+
+    allowed_kinds = (
+        _MISLEADING_BASIS_KINDS
+        if verdict == "MISLEADING"
+        else _SATIRE_BASIS_KINDS
+    )
+    if basis_kind not in allowed_kinds:
+        return None
+
+    requested_ids = set(basis_ids)
+    matched_ids = set()
+    basis_qualities = []
+
+    for group in evidence_groups:
+        best_quality = None
+        for item in group.evidence:
+            evidence_link_id = str(item.evidence_link_id)
+            if evidence_link_id not in requested_ids:
+                continue
+
+            matched_ids.add(evidence_link_id)
+            quality = _item_quality(item)
+            if (
+                quality is None
+                or quality < _USABLE_SCORE_FLOOR
+                or item.stance not in _CONTEXTUAL_BASIS_STANCES
+            ):
+                return None
+            best_quality = (
+                quality if best_quality is None else max(best_quality, quality)
+            )
+
+        if best_quality is not None:
+            basis_qualities.append(best_quality)
+
+    if matched_ids != requested_ids or not basis_qualities:
+        return None
+    return basis_qualities
+
+
+def _calibrate_contextual_verdict(verdict_result, verdict, confidence, evidence_groups):
+    basis_qualities = _contextual_basis_qualities(
+        verdict_result,
+        verdict,
+        evidence_groups,
+    )
+    if basis_qualities is None:
+        final_score = min(
+            confidence,
+            _ABSOLUTE_AI_MAX,
+            _CONTEXTUAL_INCOMPLETE_MAX,
+        )
+        result = dict(verdict_result)
+        result["confidence_score"] = final_score
+        result["score_context"] = _contextual_basis_score_context(
+            verdict,
+            final_score,
+            0,
+            complete=False,
+        )
+        return result
+
+    source_identity_count = len(basis_qualities)
+    ceiling = min(
+        _ABSOLUTE_AI_MAX,
+        _topology_cap(source_identity_count),
+        _quality_cap(basis_qualities),
+    )
+    final_score = min(confidence, ceiling)
+    result = dict(verdict_result)
+    result["confidence_score"] = final_score
+    result["score_context"] = _contextual_basis_score_context(
+        verdict,
+        final_score,
+        source_identity_count,
+        complete=True,
+    )
+    return result
+
+
 def calibrate_verdict_confidence(
     verdict_result: dict,
     evidence_groups: Iterable[ReasoningEvidenceGroup],
@@ -171,6 +298,7 @@ def calibrate_verdict_confidence(
         verdict_result.get("confidence_score", 0)
     )
     result = dict(verdict_result)
+    evidence_groups = tuple(evidence_groups)
 
     if verdict == "UNVERIFIED":
         final_score = min(confidence, _UNVERIFIED_MAX)
@@ -179,6 +307,14 @@ def calibrate_verdict_confidence(
             verdict, final_score, 0, None,
         )
         return result
+
+    if verdict in _CONTEXTUAL_VERDICTS:
+        return _calibrate_contextual_verdict(
+            result,
+            verdict,
+            confidence,
+            evidence_groups,
+        )
 
     consistent_stances = _CONSISTENT_STANCES.get(verdict)
     if consistent_stances is None:
@@ -190,7 +326,7 @@ def calibrate_verdict_confidence(
     supporting_qualities = []
     conflict_qualities = []
 
-    for group in tuple(evidence_groups):
+    for group in evidence_groups:
         best_support = None
         best_conflict = None
         for item in group.evidence:
