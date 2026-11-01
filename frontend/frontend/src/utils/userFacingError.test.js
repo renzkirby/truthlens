@@ -33,7 +33,7 @@ test("does not surface internal server diagnostics", () => {
 });
 
 test("distinguishes network and timeout failures", () => {
-   assert.equal(classifyUserFacingError({ message: "Network Error" }), "network");
+   assert.equal(classifyUserFacingError({ status: null, message: "Network Error" }), "network");
    assert.equal(classifyUserFacingError({ code: "ECONNABORTED", message: "timeout exceeded" }), "timeout");
 });
 
