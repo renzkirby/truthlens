@@ -56,6 +56,16 @@ class UrlSafetyFoundationTests(SimpleTestCase):
             "https://example.com/source?signature=a%2Fb%2Bc&ref=required",
         )
 
+    def test_basic_validator_rejects_legacy_private_ipv4_forms(self):
+        for value in (
+            "http://2130706433/",
+            "http://0177.0.0.1/",
+        ):
+            with self.subTest(value=value):
+                safe_url, error = validate_public_url(value)
+                self.assertIsNone(safe_url)
+                self.assertIsNotNone(error)
+
     def test_reputation_states_do_not_call_clear_result_safe(self):
         self.assertEqual(
             normalize_url_safety_result({"status": "SAFE"})["status"],
