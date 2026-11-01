@@ -21,6 +21,7 @@ from api.models import (
     AdjudicationDecision,
     Claim,
     ClaimCheckHistory,
+    EvidenceReviewDecision,
     EvidenceSubmission,
     ModerationCase,
     Organization,
@@ -91,8 +92,47 @@ class AuthoritativeVerdictIntegrityTests(TestCase):
                 contributor=self.contributor,
                 evidence_caption="Reviewed evidence for adjudication.",
                 evidence_type=EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
-                evidence_status=EvidenceSubmission.EvidenceStatus.VERIFIED,
             )
+
+        for evidence in EvidenceSubmission.objects.filter(
+            thread__claim=claim
+        ).order_by("pk"):
+            current_status = evidence.evidence_status
+            target_status = (
+                current_status
+                if current_status
+                in {
+                    EvidenceSubmission.EvidenceStatus.VERIFIED,
+                    EvidenceSubmission.EvidenceStatus.REJECTED,
+                }
+                else EvidenceSubmission.EvidenceStatus.VERIFIED
+            )
+            latest_basis = (
+                EvidenceReviewDecision.objects.filter(
+                    evidence_submission=evidence,
+                    organization=self.organization,
+                )
+                .order_by("-reviewed_at", "-id")
+                .first()
+            )
+            if latest_basis and latest_basis.disposition == target_status:
+                continue
+
+            review_evidence_submission(
+                evidence=evidence,
+                actor=self.reviewer,
+                evidence_status=target_status,
+                rejection_reason=(
+                    evidence.rejection_reason
+                    or EvidenceSubmission.RejectionReason.OTHER
+                    if target_status == EvidenceSubmission.EvidenceStatus.REJECTED
+                    else None
+                ),
+                moderator_notes="Test fixture evidence review basis.",
+                expected_status=current_status,
+                expected_organization_id=self.organization.id,
+            )
+
         case = ensure_adjudication_case(
             claim=claim,
             actor=self.reviewer,
