@@ -569,6 +569,10 @@ class TavilyTextRuntimeIngestionTests(TestCase):
             "api.tasks.evaluate_claim_with_persisted_evidence",
             return_value=self.verdict,
         )
+        self.calibrate_confidence = self._patch(
+            "api.tasks.calibrate_verdict_confidence",
+            side_effect=lambda verdict, _groups: verdict,
+        )
         self._patch("api.embedding_service.generate_embedding", return_value=None)
         self.log_stage = self._patch("api.tasks._log_stage")
         self.assess_evidence = self._patch(
