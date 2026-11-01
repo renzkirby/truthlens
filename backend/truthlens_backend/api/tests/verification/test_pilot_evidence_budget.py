@@ -87,14 +87,20 @@ class PilotEvidenceBudgetTests(SimpleTestCase):
         ]
         original = render_reasoning_evidence_dossier(groups, include_evidence_link_ids=True)
         compact = render_compact_reasoning_evidence_dossier(groups, include_evidence_link_ids=True)
-        self.assertEqual(compact, render_compact_reasoning_evidence_dossier(iter(groups)))
+        self.assertEqual(
+            compact,
+            render_compact_reasoning_evidence_dossier(
+                iter(groups),
+                include_evidence_link_ids=True,
+            ),
+        )
         self.assertLess(len(compact), len(original))
         self.assertEqual(compact.count("=== SOURCE IDENTITY GROUP "), 2)
         self.assertEqual(compact.count("--- EVIDENCE ITEM "), 3)
         self.assertIn("must not be counted as multiple independent confirmations", compact)
         self.assertIn("not guaranteed to be editorially independent", compact)
         records = re.findall(
-            r"--- EVIDENCE ITEM [0-9]+ ---\n([^\n]+)\nContent:",
+            r"--- EVIDENCE ITEM [0-9]+ ---\nEvidence link ID: [^\n]+\n([^\n]+)\nContent:",
             compact,
         )
         self.assertEqual(len(records), 3)
@@ -139,7 +145,8 @@ class PilotEvidenceBudgetTests(SimpleTestCase):
         rendered = render_shared_metadata_reasoning_evidence_dossier(groups, include_evidence_link_ids=True)
         self.assertEqual(
             rendered, render_shared_metadata_reasoning_evidence_dossier(
-                iter(groups)
+                iter(groups),
+                include_evidence_link_ids=True,
             ),
         )
         self.assertLess(
@@ -199,7 +206,10 @@ class PilotEvidenceBudgetTests(SimpleTestCase):
             chosen, "The claim is precisely described here.", "NEUTRAL",
         )
         self.assertEqual(
-            result, render_shared_metadata_reasoning_evidence_dossier(chosen),
+            result, render_shared_metadata_reasoning_evidence_dossier(
+                chosen,
+                include_evidence_link_ids=True,
+            ),
         )
         self.assertEqual(result.count("=== SOURCE IDENTITY GROUP "), 7)
         self.assertEqual(result.count("--- EVIDENCE ITEM "), 12)
