@@ -725,7 +725,13 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-               throw new Error(data?.detail || "URL verification failed.");
+               const error = new Error(data?.detail || "URL verification failed.");
+               const safetyStatus = data?.url_safety?.status;
+               error.kind =
+                  safetyStatus === "UNSAFE" || safetyStatus === "KNOWN_THREAT"
+                     ? "security_threat"
+                     : "service";
+               throw error;
             }
 
             // Add this inside VERIFY_URL and VERIFY_FILE in background.js
@@ -756,7 +762,8 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 
             sendTabMessage(tabId, {
                type: "DISPLAY_URL_ERROR",
-               message: "Unable to verify this URL. Please try again.",
+               message: err?.message || "Unable to verify this URL. Please try again.",
+               kind: err?.kind || "service",
             });
          }
       })();
