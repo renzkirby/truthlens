@@ -733,9 +733,15 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       const payload = request.payload;
 
       if (!Number.isInteger(tabId)) {
-         sendResponse({ accepted: false, error: "No active tab" });
+         sendResponse({ accepted: false, error: "No active tab found for AI image analysis." });
          return false;
       }
+
+      if (!payload?.image_data) {
+         sendResponse({ accepted: false, error: "Choose an image before starting the AI image check." });
+         return false;
+      }
+
       sendResponse({ accepted: true });
 
       (async () => {
@@ -897,9 +903,19 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
    }
 
    if (request.type === "VERIFY_FILE") {
-      const tabId = request.tabId ?? sender?.tab?.id; // <--- Grabs the tabId we passed from the popup
+      const tabId = request.tabId ?? sender?.tab?.id;
       const payload = request.payload;
       const endpoint = "verify-file/";
+
+      if (!Number.isInteger(tabId)) {
+         sendResponse({ accepted: false, error: "No active tab found for document verification." });
+         return false;
+      }
+
+      if (!payload?.file_data) {
+         sendResponse({ accepted: false, error: "Choose a document before starting verification." });
+         return false;
+      }
 
       sendResponse({ accepted: true, success: true });
       (async () => {
