@@ -32,6 +32,8 @@ from .services import (
     evaluate_url_claim_with_tavily,
     detect_ai_image,
     search_official_vault,
+    validate_public_url,
+    check_url_threat_reputation,
 )
 from .models import (
     Claim,
@@ -1748,6 +1750,88 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 )
 
 
+def _validate_url_worker_safety(url, claim_id, run):
+    """Revalidate queued URL work before any extraction provider sees the URL.
+
+    The API endpoint performs the same policy and reputation checks before
+    queueing. Repeating them here protects stale tasks, direct task invocation,
+    and future enqueue paths that could otherwise bypass the HTTP boundary.
+    Reputation-provider outages remain fail-open, matching the endpoint.
+    """
+    safety_started_at = time.perf_counter()
+    safe_url, url_error = validate_public_url(url)
+    if url_error:
+        logger.warning(
+            "URL worker safety policy blocked claim %s: %s",
+            claim_id,
+            url_error,
+        )
+        _log_stage(
+            claim_id,
+            "url_safety_check",
+            safety_started_at,
+            outcome="blocked_policy",
+        )
+        if run is not None:
+            fail_verification_run(
+                run,
+                failure_stage="url_safety",
+                failure_code="URL_POLICY_BLOCKED",
+                failure_message="The submitted URL does not meet URL safety policy.",
+            )
+        return None
+
+    reputation = check_url_threat_reputation(safe_url)
+    reputation_status = str(reputation.get("status") or "UNKNOWN").upper()
+    provider = str(reputation.get("provider") or "")[:64]
+
+    if reputation_status == "UNSAFE":
+        threat_types = [
+            str(value)[:64]
+            for value in (reputation.get("threat_types") or [])
+            if value
+        ]
+        logger.warning(
+            "URL worker reputation check blocked claim %s; threat_types=%s",
+            claim_id,
+            threat_types,
+        )
+        _log_stage(
+            claim_id,
+            "url_safety_check",
+            safety_started_at,
+            outcome="blocked_known_threat",
+            provider=provider,
+            threat_types=threat_types,
+        )
+        if run is not None:
+            fail_verification_run(
+                run,
+                failure_stage="url_safety",
+                failure_code="URL_KNOWN_THREAT",
+                failure_message="The submitted URL is flagged for a known security threat.",
+            )
+        return None
+
+    _log_stage(
+        claim_id,
+        "url_safety_check",
+        safety_started_at,
+        outcome=(
+            "no_known_threats"
+            if reputation_status == "SAFE"
+            else "check_unavailable"
+        ),
+        provider=provider,
+    )
+    if reputation_status != "SAFE":
+        logger.info(
+            "URL worker reputation check unavailable for claim %s; continuing.",
+            claim_id,
+        )
+    return safe_url
+
+
 # URL PIPELINE
 @shared_task
 @verification_telemetry_scope()
@@ -1766,6 +1850,17 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
         )
         run = start_verification_run(run)
         bind_verification_run(run)
+
+    safe_url = _validate_url_worker_safety(url, claim_id, run)
+    if safe_url is None:
+        _log_stage(
+            claim_id,
+            "url_task_total",
+            pipeline_started_at,
+            outcome="url_safety_blocked",
+        )
+        return
+    url = safe_url
 
     # Step 1 — Extract and clean text from URL
     url_extract_started_at = time.perf_counter()
