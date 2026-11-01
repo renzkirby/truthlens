@@ -196,6 +196,50 @@ class ConfidencePolicyTests(SimpleTestCase):
 
         self.assertEqual(result["confidence_score"], 95)
 
+    def test_fact_and_fake_score_context_still_says_supports_verdict(self):
+        fact = calibrate_verdict_confidence(
+            _verdict(verdict="FACT"),
+            [_group(_item(stance=VerificationEvidence.Stance.SUPPORTS))],
+        )
+        fake = calibrate_verdict_confidence(
+            _verdict(verdict="FAKE"),
+            [_group(_item(stance=VerificationEvidence.Stance.REFUTES))],
+        )
+
+        self.assertIn("supports this verdict", fact["score_context"])
+        self.assertIn("supports this verdict", fake["score_context"])
+        self.assertNotIn("contributes assessed evidence", fact["score_context"])
+        self.assertNotIn("contributes assessed evidence", fake["score_context"])
+
+    def test_misleading_score_context_uses_assessed_evidence_wording_without_score_change(self):
+        result = calibrate_verdict_confidence(
+            _verdict(verdict="MISLEADING"),
+            [
+                _group(_item(stance=VerificationEvidence.Stance.SUPPORTS)),
+                _group(_item(stance=VerificationEvidence.Stance.CONTEXT)),
+            ],
+        )
+
+        self.assertEqual(result["confidence_score"], 95)
+        self.assertIn(
+            "contribute assessed evidence to this verdict",
+            result["score_context"],
+        )
+        self.assertNotIn("support this verdict", result["score_context"])
+
+    def test_satire_score_context_uses_assessed_evidence_wording_without_score_change(self):
+        result = calibrate_verdict_confidence(
+            _verdict(verdict="SATIRE"),
+            [_group(_item(stance=VerificationEvidence.Stance.CONTEXT))],
+        )
+
+        self.assertEqual(result["confidence_score"], 90)
+        self.assertIn(
+            "contributes assessed evidence to this verdict",
+            result["score_context"],
+        )
+        self.assertNotIn("supports this verdict", result["score_context"])
+
     def test_score_context_never_claims_editorial_independence(self):
         result = calibrate_verdict_confidence(
             _verdict(),
