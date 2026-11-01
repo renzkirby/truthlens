@@ -157,7 +157,7 @@ class PilotEvidenceBudgetTests(SimpleTestCase):
         defaults = json.loads(re.search(r"^DEFAULTS:(\{.*\})$",
                                         rendered, re.MULTILINE).group(1))
         raw_rows = re.findall(
-            r"--- EVIDENCE ITEM [0-9]+ ---\n([^\n]+)\nContent:", rendered,
+            r"--- EVIDENCE ITEM [0-9]+ ---\nEvidence link ID: [^\n]+\n([^\n]+)\nContent:", rendered,
         )
         items = [item for group in groups for item in group.evidence]
         self.assertEqual(len(raw_rows), len(items))
