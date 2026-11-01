@@ -166,7 +166,7 @@ def _open_pinned_socket(record, *, hostname: str, scheme: str):
 
 
 def _fetch_once(url: str):
-    safe_url, error = validate_public_url(url)
+    safe_url, error = validate_public_url(url, strip_tracking=False)
     if error:
         raise UrlPreviewFetchError("INVALID_URL")
 
