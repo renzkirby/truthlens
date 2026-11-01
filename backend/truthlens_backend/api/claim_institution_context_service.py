@@ -162,7 +162,7 @@ def set_claim_institution_context(
         )
 
     classification = (
-        ClaimInvestigationClassification.objects.select_for_update()
+        ClaimInvestigationClassification.objects.select_for_update(of=("self",))
         .select_related("campus_context_reviewed_by")
         .filter(claim_id=claim_id)
         .first()
@@ -174,7 +174,7 @@ def set_claim_institution_context(
         )
 
     current_associations = list(
-        ClaimInstitutionAssociation.objects.select_for_update()
+        ClaimInstitutionAssociation.objects.select_for_update(of=("self",))
         .select_related("institution", "assigned_by")
         .filter(classification=classification)
         .order_by("institution__name", "institution_id")
