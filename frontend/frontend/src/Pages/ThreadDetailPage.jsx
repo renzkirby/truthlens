@@ -7,6 +7,7 @@ import Icons from "../components/Icons";
 import EvidenceCard from "../components/EvidenceCard";
 import PartnerAffiliations from "../components/partners/PartnerAffiliations.jsx";
 import { VERDICT_CONFIG, EVIDENCE_VERDICT_META, ESCALATION_OPTIONS } from "../utils/constants";
+import { evidenceSubmissionErrorMessage } from "../utils/evidenceSubmissionError";
 import "./ThreadDetailPage.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
@@ -1117,7 +1118,7 @@ export default function ThreadDetailPage() {
          addToast({ type: "success", message: "Evidence submitted for community review.", duration: 2200 });
       } catch (error) {
          console.error("Failed to submit evidence", error);
-         addToast({ type: "error", message: safeActionMessage(error, "We couldn't submit this evidence. Please review it and try again.") });
+         addToast({ type: "error", message: evidenceSubmissionErrorMessage(error) });
       } finally {
          setSubmittingEvidence(false);
       }
