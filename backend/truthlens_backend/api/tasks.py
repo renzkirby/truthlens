@@ -2499,11 +2499,24 @@ def build_evidence_url_preview(evidence_id, expected_url):
     try:
         metadata = fetch_url_preview_metadata(expected_url)
     except UrlPreviewFetchError as exc:
+        security_block_codes = {
+            "INVALID_URL",
+            "INVALID_HOSTNAME",
+            "INVALID_PORT",
+            "UNSUPPORTED_PORT",
+            "DNS_INVALID_ADDRESS",
+            "NON_PUBLIC_ADDRESS",
+        }
+        preview_status = (
+            EvidenceSubmission.UrlPreviewStatus.BLOCKED
+            if exc.code in security_block_codes
+            else EvidenceSubmission.UrlPreviewStatus.UNAVAILABLE
+        )
         EvidenceSubmission.objects.filter(
             pk=evidence_id,
             evidence_url=expected_url,
         ).update(
-            url_preview_status=EvidenceSubmission.UrlPreviewStatus.UNAVAILABLE,
+            url_preview_status=preview_status,
             url_preview_title="",
             url_preview_description="",
             url_preview_site_name="",
