@@ -4,6 +4,7 @@ import { useAuth } from "../hooks/useAuth";
 import ImageLightbox from "../components/ImageLightbox";
 import Icons from "../components/Icons";
 import { API_BASE_URL, VERDICT_META } from "../utils/constants";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 import "./DeepAnalysisPage.css";
 
 const SUPPORTED_VERDICTS = new Set(["FACT", "FAKE", "MISLEADING", "SATIRE", "UNVERIFIED", "OUT_OF_SCOPE", "PENDING"]);
@@ -383,7 +384,7 @@ function DeepAnalysisPage() {
    const [statusData, setStatusData] = useState(null);
    const [statusSettled, setStatusSettled] = useState(false);
    const [loading, setLoading] = useState(true);
-   const [error, setError] = useState(false);
+   const [error, setError] = useState("");
    const [requestVersion, setRequestVersion] = useState(0);
    const [isOriginalImageOpen, setIsOriginalImageOpen] = useState(false);
    const [originalMediaFailed, setOriginalMediaFailed] = useState(false);
@@ -397,7 +398,7 @@ function DeepAnalysisPage() {
          setClaimData(null);
          setStatusData(null);
          setStatusSettled(false);
-         setError(false);
+         setError("");
          setLoading(true);
          setIsOriginalImageOpen(false);
          setOriginalMediaFailed(false);
@@ -422,14 +423,20 @@ function DeepAnalysisPage() {
             if (!active) return;
 
             if (!data || typeof data !== "object") {
-               setError(true);
+               setError("TruthLens returned an incomplete analysis report. Try loading it again.");
                return;
             }
 
             setClaimData(data);
          })
-         .catch(() => {
-            if (active) setError(true);
+         .catch((requestError) => {
+            if (!active) return;
+            setError(userFacingErrorMessage(requestError, {
+               fallback: "We couldn't load this analysis report. Please try again.",
+               notFoundMessage: "This analysis report is no longer available.",
+               permissionMessage: "Your account can't access this analysis report.",
+               serviceMessage: "This analysis report is temporarily unavailable. Try again shortly.",
+            }));
          })
          .finally(() => {
             if (active) setLoading(false);
@@ -454,11 +461,25 @@ function DeepAnalysisPage() {
    const runStatus = statusData?.run_status;
 
    if (runStatus === "FAILED") {
+      const failureCode = statusData?.failure_code;
+      const isKnownThreat = failureCode === "URL_KNOWN_THREAT";
+      const isPolicyBlock = failureCode === "URL_POLICY_BLOCKED";
+      const title = isKnownThreat
+         ? "TruthLens blocked this URL"
+         : isPolicyBlock
+           ? "This URL cannot be analyzed"
+           : "TruthLens couldn't complete this analysis";
+      const detail = isKnownThreat
+         ? "This URL was flagged for a known security threat and was blocked before content extraction."
+         : isPolicyBlock
+           ? "This URL does not meet TruthLens URL safety requirements. Check the URL before submitting another verification."
+           : "A service or processing problem prevented the automated analysis from finishing. You can start a new verification.";
+
       return (
          <DeepAnalysisTerminalState
             icon="alert-triangle"
-            title="TruthLens couldn't complete this analysis"
-            detail="A technical problem prevented the automated analysis from finishing. Please try the verification again."
+            title={title}
+            detail={detail}
             onBack={handleBack}
          />
       );
@@ -505,7 +526,7 @@ function DeepAnalysisPage() {
          <DeepAnalysisTerminalState
             icon="alert-triangle"
             title="We couldn't load this analysis report"
-            detail="The report may be temporarily unavailable. Try again, or return to Verify to check another claim."
+            detail={error || "The report may be temporarily unavailable. Try again, or return to Verify to check another claim."}
             onBack={handleBack}
             onRetry={retry}
          />
