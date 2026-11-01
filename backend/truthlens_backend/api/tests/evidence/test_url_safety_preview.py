@@ -234,7 +234,7 @@ class EvidenceUrlPreviewTests(TestCase):
         evidence.refresh_from_db()
         self.assertEqual(
             evidence.url_preview_status,
-            EvidenceSubmission.UrlPreviewStatus.UNAVAILABLE,
+            EvidenceSubmission.UrlPreviewStatus.BLOCKED,
         )
         self.assertEqual(
             evidence.url_preview_failure_reason,
