@@ -292,6 +292,51 @@ class ConfidencePolicyTests(SimpleTestCase):
 
         self.assertEqual(result["confidence_score"], 60)
 
+    def test_malformed_contextual_basis_kind_fails_closed_without_crashing(self):
+        item = _item(stance=VerificationEvidence.Stance.CONTEXT)
+        result = calibrate_verdict_confidence(
+            _verdict(
+                verdict="MISLEADING",
+                contextual_basis_kind=[],
+                contextual_basis_evidence_ids=[str(item.evidence_link_id)],
+            ),
+            [_group(item)],
+        )
+
+        self.assertEqual(result["verdict"], "MISLEADING")
+        self.assertEqual(result["confidence_score"], 60)
+
+    def test_contextual_basis_quality_still_limits_confidence(self):
+        item = _item(
+            stance=VerificationEvidence.Stance.CONTEXT,
+            relevance=0.95,
+            directness=0.55,
+        )
+        result = calibrate_verdict_confidence(
+            _verdict(
+                verdict="MISLEADING",
+                contextual_basis_kind="MISSING_CONTEXT",
+                contextual_basis_evidence_ids=[str(item.evidence_link_id)],
+            ),
+            [_group(item)],
+        )
+
+        self.assertEqual(result["confidence_score"], 70)
+
+    def test_contextual_calibration_never_raises_lower_model_score(self):
+        item = _item(stance=VerificationEvidence.Stance.CONTEXT)
+        result = calibrate_verdict_confidence(
+            _verdict(
+                verdict="MISLEADING",
+                confidence=55,
+                contextual_basis_kind="MISSING_CONTEXT",
+                contextual_basis_evidence_ids=[str(item.evidence_link_id)],
+            ),
+            [_group(item)],
+        )
+
+        self.assertEqual(result["confidence_score"], 55)
+
     def test_fact_and_fake_score_context_still_says_supports_verdict(self):
         fact = calibrate_verdict_confidence(
             _verdict(verdict="FACT"),
