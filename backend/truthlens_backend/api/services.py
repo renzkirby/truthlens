@@ -615,23 +615,30 @@ def validate_public_url(raw_url):
     parsed = urlparse(candidate)
     scheme = (parsed.scheme or "").lower()
     host = (parsed.hostname or "").lower()
+    normalized_host = host.rstrip(".")
 
     if scheme not in {"http", "https"}:
         return None, "Only http/https URLs are allowed."
     if not host:
         return None, "Invalid URL format."
+    if parsed.username is not None or parsed.password is not None:
+        return None, "URLs containing credentials are not allowed."
+    try:
+        parsed.port
+    except ValueError:
+        return None, "Invalid URL port."
 
-    if host in {"localhost", "127.0.0.1", "::1"}:
+    if normalized_host in {"localhost", "127.0.0.1", "::1"}:
         return None, "Local URLs are not allowed."
     if (
-        host.endswith(".local")
-        or host.endswith(".internal")
-        or host.endswith(".localhost")
+        normalized_host.endswith(".local")
+        or normalized_host.endswith(".internal")
+        or normalized_host.endswith(".localhost")
     ):
         return None, "Private network URLs are not allowed."
 
     try:
-        ip = ipaddress.ip_address(host)
+        ip = ipaddress.ip_address(normalized_host)
         if (
             ip.is_private
             or ip.is_loopback
