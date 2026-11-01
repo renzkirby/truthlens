@@ -12,7 +12,12 @@ function cleanDetail(value) {
 }
 
 export function classifyExtensionError({ status = null, payload = null, error = null, failureCode = "" } = {}) {
-   const numericStatus = Number.isInteger(Number(status)) ? Number(status) : null;
+   const numericStatus =
+      status === null || status === undefined || status === ""
+         ? null
+         : Number.isInteger(Number(status))
+           ? Number(status)
+           : null;
    const code = String(failureCode || payload?.failure_code || error?.code || "").trim().toUpperCase();
    const message = String(error?.message || "");
    const safetyStatus = payload?.url_safety?.status;
