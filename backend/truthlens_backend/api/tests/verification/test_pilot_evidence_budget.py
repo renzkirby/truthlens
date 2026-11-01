@@ -240,7 +240,10 @@ class PilotEvidenceBudgetTests(SimpleTestCase):
 
     def test_compact_budget_does_not_drop_any_supports_or_refutes(self):
         chosen = None
-        for content_size in range(1600, 2300, 20):
+        # Search broadly because fixed prompt instructions can grow while the
+        # lossless compact representation remains valid. The test cares about
+        # finding the boundary, not a specific content-size band.
+        for content_size in range(800, 2600, 10):
             groups = _groups(content_length=content_size)
             original = render_reasoning_evidence_dossier(groups, include_evidence_link_ids=True)
             compact = render_compact_reasoning_evidence_dossier(groups, include_evidence_link_ids=True)
