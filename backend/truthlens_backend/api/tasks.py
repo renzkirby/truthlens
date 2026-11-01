@@ -2505,7 +2505,9 @@ def build_evidence_url_preview(evidence_id, expected_url):
             "INVALID_PORT",
             "UNSUPPORTED_PORT",
             "DNS_INVALID_ADDRESS",
+            "DNS_UNAVAILABLE",
             "NON_PUBLIC_ADDRESS",
+            "TOO_MANY_REDIRECTS",
         }
         preview_status = (
             EvidenceSubmission.UrlPreviewStatus.BLOCKED
