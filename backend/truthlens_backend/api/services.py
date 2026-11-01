@@ -1164,7 +1164,12 @@ def build_persisted_evidence_prompt(original_claim, evidence_context, article_st
     - FACT requires explicit support for the claim in the evidence.
     - FAKE requires explicit contradiction or evidence of fabrication.
     - MISLEADING applies to partial truth, omitted material context, or false context.
-    - SATIRE applies when the supplied evidence explicitly supports that classification.
+    - SATIRE describes the submitted content itself, not merely the historical origin
+      of a false claim. SATIRE is eligible only when <stance>SATIRE</stance>.
+    - If <stance> is not SATIRE, evidence that a rumor, fabricated story, image,
+      headline, or claim originated from satire/parody does NOT make the submitted
+      factual claim SATIRE. Evaluate that claim as FACT, FAKE, MISLEADING, or
+      UNVERIFIED from the persisted evidence.
     - Conflicting, irrelevant, or insufficient evidence requires UNVERIFIED.
 
     CONTEXTUAL BASIS METADATA:
@@ -1180,10 +1185,14 @@ def build_persisted_evidence_prompt(original_claim, evidence_context, article_st
       SATIRE_ORIGIN_OF_MISINFORMATION. Cite one or more evidence-link IDs that
       directly establish that contextual relationship. If the basis cannot be tied
       to supplied persisted evidence, use NONE and an empty list.
-    - For SATIRE, use SATIRE_PROVENANCE only when cited persisted evidence
-      establishes that the submitted content itself is satire/parody. Evidence that
-      merely says a false rumor originated from satire is not SATIRE_PROVENANCE.
-      If provenance is not established, use NONE and an empty list.
+    - SATIRE_ORIGIN_OF_MISINFORMATION is contextual provenance only. It may
+      describe where a false or misleading claim came from, but it never makes
+      SATIRE an eligible verdict by itself.
+    - For SATIRE, use SATIRE_PROVENANCE only when <stance>SATIRE</stance> and cited
+      persisted evidence establishes that the submitted content itself is
+      satire/parody. Evidence that merely says a false rumor originated from satire
+      is not SATIRE_PROVENANCE. If provenance is not established, use NONE and an
+      empty list.
 
     confidence_score MUST be a numeric percentage from 0 to 100.
     The confidence_score placeholder in the field template must be replaced with a JSON number. Never output the placeholder or default to a fixed score.
@@ -1245,6 +1254,18 @@ def _normalize_contextual_basis_metadata(result):
     return normalized
 
 
+def _enforce_satire_verdict_eligibility(result, article_stance):
+    """Reject SATIRE when deterministic submitted-content provenance is absent."""
+    if (
+        result.get("verdict") == "SATIRE"
+        and article_stance != "SATIRE"
+    ):
+        raise ValueError(
+            "Persisted evidence evaluator returned ineligible SATIRE verdict"
+        )
+    return result
+
+
 def evaluate_claim_with_persisted_evidence(
     original_claim,
     evidence_context,
@@ -1291,6 +1312,10 @@ def evaluate_claim_with_persisted_evidence(
             raise ValueError("Persisted evidence evaluator returned an invalid verdict")
         parsed_result["confidence_score"] = _normalize_verdict_confidence_score(
             parsed_result["confidence_score"]
+        )
+        parsed_result = _enforce_satire_verdict_eligibility(
+            parsed_result,
+            article_stance,
         )
         return _normalize_contextual_basis_metadata(parsed_result)
     except LLMProviderUnavailableError:
