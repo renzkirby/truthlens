@@ -10,6 +10,7 @@ import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
 import Select from "../ui/Select.jsx";
 import Textarea from "../ui/Textarea.jsx";
+import EvidenceSourcePreview from "../evidence/EvidenceSourcePreview.jsx";
 
 import "./EvidenceReviewPanel.css";
 
@@ -936,7 +937,6 @@ function EvidenceReviewContent({
    const emptyCopy = getQueueEmptyCopy(disposition);
    const queueDispositionLabel =
       DISPOSITION_OPTIONS.find((option) => option.value === disposition)?.label.toLowerCase() || "available";
-   const evidenceUrl = safeExternalUrl(evidence?.evidence_url);
    const originalClaimUrl =
       String(claim?.claim_type || "").toUpperCase() === "URL"
          ? safeExternalUrl(claim?.url_link)
@@ -1244,28 +1244,15 @@ function EvidenceReviewContent({
                         </div>
 
                         <p className="evidence-reading-text">{evidence?.evidence_caption || "No evidence caption was provided."}</p>
-                        <dl className="evidence-source-record">
-                           <div>
-                              <dt>Source</dt>
-                              <dd className="evidence-url-text">
-                                 {evidenceUrl ? (
-                                    <a
-                                       href={evidenceUrl}
-                                       target="_blank"
-                                       rel="noopener noreferrer"
-                                       className="evidence-external-link"
-                                    >
-                                       {evidence?.evidence_url}
-                                       <Icons name="external-link" size={12} aria-hidden="true" />
-                                    </a>
-                                 ) : (
-                                    evidence?.evidence_url || "Source URL unavailable"
-                                 )}
-                              </dd>
-                           </div>
-                        </dl>
-                        {!evidenceUrl && evidence?.evidence_url && (
-                           <p className="evidence-inline-warning">The submitted URL cannot be opened because it is not a supported HTTP(S) address.</p>
+                        {evidence?.evidence_url ? (
+                           <EvidenceSourcePreview
+                              url={evidence.evidence_url}
+                              safety={evidence.url_safety}
+                              preview={evidence.url_preview}
+                              variant="workspace"
+                           />
+                        ) : (
+                           <p className="evidence-inline-warning">Source URL unavailable.</p>
                         )}
                         <dl className="evidence-provenance evidence-submission-meta">
                            <div>

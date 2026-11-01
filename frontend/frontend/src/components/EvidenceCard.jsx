@@ -4,6 +4,7 @@ import Icons from "./Icons";
 import { EVIDENCE_VERDICT_META } from "../utils/constants";
 import "./EvidenceCard.css";
 import PartnerAffiliations from "./partners/PartnerAffiliations.jsx";
+import EvidenceSourcePreview from "./evidence/EvidenceSourcePreview.jsx";
 
 function EvidenceAvatar({ contributor }) {
    const [failed, setFailed] = useState(false);
@@ -33,19 +34,6 @@ function evidenceTypeTone(value) {
    if (normalized.includes("CONTEXT")) return "context";
    if (normalized.includes("VERIFICATION")) return "verification";
    return "neutral";
-}
-
-function parseSource(value) {
-   if (!value) return { host: "", path: "" };
-   try {
-      const parsed = new URL(value);
-      return {
-         host: parsed.hostname.replace(/^www\./, ""),
-         path: parsed.pathname && parsed.pathname !== "/" ? parsed.pathname : "",
-      };
-   } catch {
-      return { host: value.replace(/^https?:\/\//, ""), path: "" };
-   }
 }
 
 function formatSubmittedAt(value) {
@@ -92,8 +80,6 @@ export default function EvidenceCard({
    const isVoting = votingEvidenceId === evidence.id;
    const reviewStatus = String(evidence.evidence_status || "UNVERIFIED").toUpperCase();
    const typeTone = evidenceTypeTone(evidence.evidence_type);
-   const source = parseSource(evidence.evidence_url);
-   const sourcePath = source.path.length > 38 ? `${source.path.slice(0, 38)}…` : source.path;
    const upvotes = Number(evidence.upvotes || 0);
    const downvotes = Number(evidence.downvotes || 0);
    const fallbackWeighted = upvotes * (contributorTrust / 100) - downvotes * 0.5;
@@ -155,16 +141,12 @@ export default function EvidenceCard({
             <p className="evidence-card-explanation">{evidence.evidence_caption?.trim() || "No explanation provided."}</p>
          )}
 
-         {evidence.evidence_url && (
-            <a className="evidence-card-source" href={evidence.evidence_url} target="_blank" rel="noopener noreferrer">
-               <span className="evidence-card-source-copy">
-                  <small><span className="evidence-card-source-mark" aria-hidden="true">{(source.host?.[0] || "?").toUpperCase()}</span> Evidence source</small>
-                  <strong>{source.host || evidence.evidence_url}</strong>
-                  {sourcePath && <span className="evidence-card-source-path">{sourcePath}</span>}
-               </span>
-               <span className="evidence-card-source-cta">Open source <Icons name="external-link" size={14} /></span>
-            </a>
-         )}
+         <EvidenceSourcePreview
+            url={evidence.evidence_url}
+            safety={evidence.url_safety}
+            preview={evidence.url_preview}
+            variant="community"
+         />
 
          <div className="evidence-card-semantics">
             <div className="evidence-card-semantic-item">

@@ -12,6 +12,7 @@ import time
 from numbers import Number
 from urllib.parse import urlparse
 import ipaddress
+import socket
 import imagehash
 import uuid
 import base64
@@ -603,50 +604,66 @@ def _normalize_verdict_confidence_score(value):
     return numeric_value
 
 
-def validate_public_url(raw_url):
-    """Allow only public http(s) URLs to reduce unsafe URL processing risk."""
+def validate_public_url(raw_url, *, strip_tracking=True):
+    """Validate a public HTTP(S) URL; optionally remove known tracking parameters."""
     if not raw_url or not isinstance(raw_url, str):
         return None, "URL is required."
 
     candidate = raw_url.strip()
     if len(candidate) > 500:
         return None, "URL is too long."
+    if any(ord(character) < 32 or ord(character) == 127 for character in candidate):
+        return None, "URL contains unsupported control characters."
+    if "\\" in candidate:
+        return None, "URL contains unsupported backslashes."
 
     parsed = urlparse(candidate)
     scheme = (parsed.scheme or "").lower()
     host = (parsed.hostname or "").lower()
+    normalized_host = host.rstrip(".")
 
     if scheme not in {"http", "https"}:
         return None, "Only http/https URLs are allowed."
     if not host:
         return None, "Invalid URL format."
+    if parsed.username is not None or parsed.password is not None:
+        return None, "URLs containing credentials are not allowed."
+    try:
+        parsed.port
+    except ValueError:
+        return None, "Invalid URL port."
 
-    if host in {"localhost", "127.0.0.1", "::1"}:
+    if normalized_host in {"localhost", "127.0.0.1", "::1"}:
         return None, "Local URLs are not allowed."
     if (
-        host.endswith(".local")
-        or host.endswith(".internal")
-        or host.endswith(".localhost")
+        normalized_host.endswith(".local")
+        or normalized_host.endswith(".internal")
+        or normalized_host.endswith(".localhost")
     ):
         return None, "Private network URLs are not allowed."
 
     try:
-        ip = ipaddress.ip_address(host)
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_multicast
-            or ip.is_reserved
-        ):
+        ip = ipaddress.ip_address(normalized_host)
+        if not ip.is_global:
             return None, "Private network URLs are not allowed."
     except ValueError:
-        # Host is a domain name, which is allowed.
-        pass
+        # Some URL stacks accept legacy IPv4 forms (for example a single
+        # integer or octal-like dotted form). Reject non-public interpretations
+        # before preserving a clickable user-submitted URL.
+        try:
+            legacy_ipv4 = ipaddress.ip_address(socket.inet_aton(normalized_host))
+        except (OSError, ValueError):
+            legacy_ipv4 = None
+        if legacy_ipv4 is not None and not legacy_ipv4.is_global:
+            return None, "Private network URLs are not allowed."
 
-    from urllib.parse import parse_qs, urlencode
+    sanitized = parsed._replace(fragment="").geturl()
+    if not strip_tracking or not parsed.query:
+        return sanitized, None
 
-    TRACKING_PARAMS = {
+    from urllib.parse import unquote_plus
+
+    tracking_params = {
         "utm_source",
         "utm_medium",
         "utm_campaign",
@@ -657,14 +674,18 @@ def validate_public_url(raw_url):
         "ref",
         "mc_eid",
     }
-    cleaned_params = {
-        k: v
-        for k, v in parse_qs(parsed.query).items()
-        if k.lower() not in TRACKING_PARAMS
-    }
-    cleaned_query = urlencode(cleaned_params, doseq=True)
-    sanitized = parsed._replace(fragment="", query=cleaned_query).geturl()
-    return sanitized, None
+    preserved_segments = []
+    for segment in parsed.query.split("&"):
+        raw_key = segment.split("=", 1)[0]
+        try:
+            key = unquote_plus(raw_key).lower()
+        except (UnicodeDecodeError, ValueError):
+            key = raw_key.lower()
+        if key not in tracking_params:
+            preserved_segments.append(segment)
+
+    cleaned_query = "&".join(preserved_segments)
+    return parsed._replace(fragment="", query=cleaned_query).geturl(), None
 
 
 def check_url_threat_reputation(candidate_url):

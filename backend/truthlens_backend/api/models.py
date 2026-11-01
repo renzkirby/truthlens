@@ -1763,6 +1763,19 @@ class EvidenceSubmission(models.Model):
         VERIFIED = "VERIFIED", "Verified"
         REJECTED = "REJECTED", "Rejected"
 
+    class UrlSafetyStatus(models.TextChoices):
+        NOT_CHECKED = "NOT_CHECKED", "Not checked"
+        NO_KNOWN_THREATS = "NO_KNOWN_THREATS", "No known threats detected"
+        KNOWN_THREAT = "KNOWN_THREAT", "Known threat"
+        CHECK_UNAVAILABLE = "CHECK_UNAVAILABLE", "Safety check unavailable"
+
+    class UrlPreviewStatus(models.TextChoices):
+        NOT_REQUESTED = "NOT_REQUESTED", "Not requested"
+        PENDING = "PENDING", "Pending"
+        READY = "READY", "Ready"
+        UNAVAILABLE = "UNAVAILABLE", "Unavailable"
+        BLOCKED = "BLOCKED", "Blocked"
+
     class RejectionReason(models.TextChoices):
         IRRELEVANT = (
             "IRRELEVANT",
@@ -1843,6 +1856,26 @@ class EvidenceSubmission(models.Model):
         null=True,
         blank=True,
     )
+    url_safety_status = models.CharField(
+        max_length=32,
+        choices=UrlSafetyStatus.choices,
+        default=UrlSafetyStatus.NOT_CHECKED,
+    )
+    url_safety_provider = models.CharField(max_length=64, blank=True, default="")
+    url_safety_checked_at = models.DateTimeField(null=True, blank=True)
+    url_safety_threat_types = models.JSONField(default=list, blank=True)
+    url_safety_reason = models.CharField(max_length=100, blank=True, default="")
+    url_preview_status = models.CharField(
+        max_length=20,
+        choices=UrlPreviewStatus.choices,
+        default=UrlPreviewStatus.NOT_REQUESTED,
+    )
+    url_preview_title = models.CharField(max_length=300, blank=True, default="")
+    url_preview_description = models.TextField(blank=True, default="")
+    url_preview_site_name = models.CharField(max_length=120, blank=True, default="")
+    url_preview_final_url = models.URLField(max_length=2000, blank=True, null=True)
+    url_preview_checked_at = models.DateTimeField(null=True, blank=True)
+    url_preview_failure_reason = models.CharField(max_length=100, blank=True, default="")
 
     def __str__(self):
         return f"EvidenceSubmission {self.id} - Thread ID: {self.thread.id} - Contributor: {self.contributor.username}"

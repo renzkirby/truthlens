@@ -6,6 +6,7 @@ from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.core.validators import URLValidator
 from django.db import transaction
 from django.utils.dateparse import parse_datetime
+from django.utils import timezone as django_timezone
 from datetime import timezone as datetime_timezone
 from .models import (
     Notification,
@@ -37,6 +38,7 @@ from .accountability_query_service import (
     SAFETY_ACTIONS,
 )
 from .services import validate_public_url, check_url_threat_reputation
+from .url_safety import normalize_url_safety_result, url_safety_is_known_threat
 from .trust_service import calculate_trust_components
 from django.contrib.auth.password_validation import validate_password
 import json, ast
@@ -2029,6 +2031,8 @@ class EvidenceReviewThreadSummarySerializer(serializers.ModelSerializer):
 
 class EvidenceReviewEvidenceSerializer(serializers.ModelSerializer):
     contributor = EvidenceReviewUserSummarySerializer(read_only=True)
+    url_safety = serializers.SerializerMethodField()
+    url_preview = serializers.SerializerMethodField()
     evidence_type_label = serializers.CharField(
         source="get_evidence_type_display",
         read_only=True,
@@ -2036,6 +2040,12 @@ class EvidenceReviewEvidenceSerializer(serializers.ModelSerializer):
     evidence_status = serializers.SerializerMethodField()
     evidence_status_label = serializers.SerializerMethodField()
     is_self_submission = serializers.SerializerMethodField()
+
+    def get_url_safety(self, obj):
+        return _evidence_url_safety_payload(obj)
+
+    def get_url_preview(self, obj):
+        return _evidence_url_preview_payload(obj)
 
     def get_evidence_status(self, obj):
         case = self.context.get("evidence_case")
@@ -2081,6 +2091,8 @@ class EvidenceReviewEvidenceSerializer(serializers.ModelSerializer):
             "submitted_at",
             "contributor",
             "is_self_submission",
+            "url_safety",
+            "url_preview",
         ]
         read_only_fields = fields
 
@@ -2487,6 +2499,32 @@ class ThreadCommentSerializer(serializers.ModelSerializer):
         return attrs
 
 
+def _evidence_url_safety_payload(obj):
+    if not obj.evidence_url:
+        return None
+    return {
+        "status": obj.url_safety_status,
+        "provider": obj.url_safety_provider or None,
+        "checked_at": obj.url_safety_checked_at,
+        "threat_types": list(obj.url_safety_threat_types or []),
+        "reason": obj.url_safety_reason or None,
+    }
+
+
+def _evidence_url_preview_payload(obj):
+    if not obj.evidence_url:
+        return None
+    return {
+        "status": obj.url_preview_status,
+        "title": obj.url_preview_title or None,
+        "description": obj.url_preview_description or None,
+        "site_name": obj.url_preview_site_name or None,
+        "final_url": obj.url_preview_final_url or None,
+        "checked_at": obj.url_preview_checked_at,
+        "failure_reason": obj.url_preview_failure_reason or None,
+    }
+
+
 class EvidenceSubmissionSerializer(serializers.ModelSerializer):
     contributor = ThreadDetailEvidenceContributorSerializer(read_only=True)
     verified_by = ThreadDetailVerifiedBySerializer(read_only=True)
@@ -2497,6 +2535,14 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
     downvotes = serializers.SerializerMethodField(read_only=True)
     my_vote = serializers.SerializerMethodField(read_only=True)
     weighted_score = serializers.SerializerMethodField(read_only=True)
+    url_safety = serializers.SerializerMethodField(read_only=True)
+    url_preview = serializers.SerializerMethodField(read_only=True)
+
+    def get_url_safety(self, obj):
+        return _evidence_url_safety_payload(obj)
+
+    def get_url_preview(self, obj):
+        return _evidence_url_preview_payload(obj)
 
     def get_thread(self, obj):
         """Return full thread with nested claim for moderation queue display."""
@@ -2572,17 +2618,69 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
         if value in (None, ""):
             return value
 
-        safe_url, url_error = validate_public_url(value)
+        safe_url, url_error = validate_public_url(value, strip_tracking=False)
         if url_error:
             raise serializers.ValidationError(url_error)
 
         url_safety = check_url_threat_reputation(safe_url)
-        if url_safety.get("status") == "UNSAFE":
+        normalized_safety = normalize_url_safety_result(url_safety)
+        self._validated_url_safety = normalized_safety
+        if url_safety_is_known_threat(url_safety):
             raise serializers.ValidationError(
                 "This evidence URL is flagged as unsafe and cannot be submitted."
             )
 
         return safe_url
+
+    def _apply_url_metadata(self, validated_data):
+        if "evidence_url" not in validated_data:
+            return validated_data
+
+        evidence_url = validated_data.get("evidence_url")
+        if not evidence_url:
+            validated_data.update(
+                url_safety_status=EvidenceSubmission.UrlSafetyStatus.NOT_CHECKED,
+                url_safety_provider="",
+                url_safety_checked_at=None,
+                url_safety_threat_types=[],
+                url_safety_reason="",
+                url_preview_status=EvidenceSubmission.UrlPreviewStatus.NOT_REQUESTED,
+                url_preview_title="",
+                url_preview_description="",
+                url_preview_site_name="",
+                url_preview_final_url=None,
+                url_preview_checked_at=None,
+                url_preview_failure_reason="",
+            )
+            return validated_data
+
+        safety = getattr(self, "_validated_url_safety", None) or {
+            "status": EvidenceSubmission.UrlSafetyStatus.CHECK_UNAVAILABLE,
+            "provider": "",
+            "reason": "safety_result_unavailable",
+            "threat_types": [],
+        }
+        validated_data.update(
+            url_safety_status=safety["status"],
+            url_safety_provider=safety["provider"],
+            url_safety_checked_at=django_timezone.now(),
+            url_safety_threat_types=safety["threat_types"],
+            url_safety_reason=safety["reason"],
+            url_preview_status=EvidenceSubmission.UrlPreviewStatus.PENDING,
+            url_preview_title="",
+            url_preview_description="",
+            url_preview_site_name="",
+            url_preview_final_url=None,
+            url_preview_checked_at=None,
+            url_preview_failure_reason="",
+        )
+        return validated_data
+
+    def create(self, validated_data):
+        return super().create(self._apply_url_metadata(validated_data))
+
+    def update(self, instance, validated_data):
+        return super().update(instance, self._apply_url_metadata(validated_data))
 
     class Meta:
         model = EvidenceSubmission
@@ -2606,6 +2704,8 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
             "my_vote",
             "weighted_score",
             "rejection_reason",
+            "url_safety",
+            "url_preview",
         ]
         read_only_fields = [
             "id",
@@ -2618,6 +2718,8 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
             "thread",
             "evidence_status",
             "rejection_reason",
+            "url_safety",
+            "url_preview",
         ]
 
     def validate(self, attrs):
@@ -2635,6 +2737,14 @@ class ThreadDetailEvidenceSubmissionSerializer(serializers.ModelSerializer):
     downvotes = serializers.SerializerMethodField()
     my_vote = serializers.SerializerMethodField()
     weighted_score = serializers.SerializerMethodField()
+    url_safety = serializers.SerializerMethodField()
+    url_preview = serializers.SerializerMethodField()
+
+    def get_url_safety(self, obj):
+        return _evidence_url_safety_payload(obj)
+
+    def get_url_preview(self, obj):
+        return _evidence_url_preview_payload(obj)
 
     def get_upvotes(self, obj):
         prefetched = getattr(obj, "_prefetched_objects_cache", {}).get("votes")
@@ -2693,6 +2803,8 @@ class ThreadDetailEvidenceSubmissionSerializer(serializers.ModelSerializer):
             "downvotes",
             "my_vote",
             "weighted_score",
+            "url_safety",
+            "url_preview",
         ]
         read_only_fields = fields
 
