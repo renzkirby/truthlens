@@ -78,7 +78,11 @@ def validate_user_facing_evaluation(raw_text):
         result = json.loads(raw_text)
     except (TypeError, ValueError):
         return None
-    if set(result) != _BASE_EVALUATION_FIELDS or not _valid_base_evaluation(result):
+    if (
+        not isinstance(result, dict)
+        or set(result) != _BASE_EVALUATION_FIELDS
+        or not _valid_base_evaluation(result)
+    ):
         return None
     return {key: result[key] for key in _BASE_EVALUATION_FIELDS}
 
