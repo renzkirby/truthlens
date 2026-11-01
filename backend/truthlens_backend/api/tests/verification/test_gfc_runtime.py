@@ -298,7 +298,10 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             claim_id,
             stage_prefix="gfc",
         )
-        render_dossier.assert_called_once_with(["persisted fact-check group"])
+        render_dossier.assert_called_once_with(
+            ["persisted fact-check group"],
+            include_evidence_link_ids=True,
+        )
         evaluate_persisted.assert_called_once_with(
             cleaned_claim,
             "Persisted GFC content. Rating: False",
@@ -462,7 +465,10 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             claim_id,
             stage_prefix="tavily",
         )
-        render_dossier.assert_called_once_with(["persisted secondary group"])
+        render_dossier.assert_called_once_with(
+            ["persisted secondary group"],
+            include_evidence_link_ids=True,
+        )
         evaluate_persisted.assert_called_once_with(
             cleaned_claim,
             "Persisted Tavily evidence.",
