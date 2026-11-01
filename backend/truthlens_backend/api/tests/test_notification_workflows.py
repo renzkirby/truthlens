@@ -466,6 +466,14 @@ class VerificationAttributionTests(TestCase):
         self.enterContext(patch("api.tasks.requests.post", return_value=response))
         self.enterContext(patch("api.tasks.clean_extracted_text", return_value="Article text"))
         self.enterContext(patch("api.tasks.extract_search_query", return_value={"cleaned_claim": "OUT_OF_SCOPE"}))
+        self.enterContext(patch(
+            "api.tasks.check_url_threat_reputation",
+            return_value={
+                "status": "SAFE",
+                "provider": "GOOGLE_SAFE_BROWSING",
+                "threat_types": [],
+            },
+        ))
 
     def test_all_worker_paths_preserve_user_guest_and_deleted_attribution(self):
         deleted = User.objects.create_user(username="deleted-requester")
