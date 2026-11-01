@@ -820,7 +820,7 @@ def verify_url(request):
     if url_safety.get("status") == "UNSAFE":
         return Response(
             {
-                "detail": "This URL is flagged as unsafe and cannot be analyzed.",
+                "detail": "This URL was flagged for a known security threat and cannot be analyzed.",
                 "url_safety": url_safety,
             },
             status=400,
