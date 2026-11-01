@@ -739,6 +739,52 @@ export default function ThreadDetailPage() {
       [comments],
    );
 
+   const pendingPreviewKey = useMemo(
+      () => evidenceList
+         .filter((evidence) => evidence?.url_preview?.status === "PENDING")
+         .map((evidence) => evidence.id)
+         .sort()
+         .join(","),
+      [evidenceList],
+   );
+
+   useEffect(() => {
+      if (!pendingPreviewKey) return undefined;
+
+      let cancelled = false;
+      let attempts = 0;
+      const pendingIds = pendingPreviewKey.split(",").filter(Boolean);
+
+      const interval = window.setInterval(async () => {
+         attempts += 1;
+         const updates = await Promise.all(
+            pendingIds.map((evidenceId) =>
+               authFetch(apiUrl(`evidence/${evidenceId}/`), { method: "GET" })
+                  .catch(() => null),
+            ),
+         );
+         if (cancelled) return;
+
+         const byId = new Map(
+            updates.filter(Boolean).map((evidence) => [String(evidence.id), evidence]),
+         );
+         if (byId.size) {
+            setEvidenceList((current) =>
+               current.map((evidence) => byId.get(String(evidence.id)) || evidence),
+            );
+         }
+         if (attempts >= 4) {
+            window.clearInterval(interval);
+         }
+      }, 2500);
+
+      return () => {
+         cancelled = true;
+         window.clearInterval(interval);
+      };
+   }, [authFetch, pendingPreviewKey]);
+
+
    useEffect(() => {
       let active = true;
       setLoading(true);
