@@ -73,6 +73,7 @@ from .tasks import (
     url_fact_check_process,
     text_fact_check_process,
     recompute_user_trust_score_task,
+    dispatch_evidence_url_preview,
 )
 from .models import (
     Notification,
@@ -3557,6 +3558,20 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
                 evidence=evidence,
                 actor=self.request.user,
                 organization=organization,
+            )
+            if evidence.evidence_url:
+                transaction.on_commit(
+                    lambda evidence_id=evidence.pk, evidence_url=evidence.evidence_url:
+                        dispatch_evidence_url_preview(evidence_id, evidence_url)
+                )
+
+    def perform_update(self, serializer):
+        url_was_supplied = "evidence_url" in serializer.validated_data
+        evidence = serializer.save()
+        if url_was_supplied and evidence.evidence_url:
+            transaction.on_commit(
+                lambda evidence_id=evidence.pk, evidence_url=evidence.evidence_url:
+                    dispatch_evidence_url_preview(evidence_id, evidence_url)
             )
 
 
