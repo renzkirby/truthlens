@@ -36,32 +36,92 @@ def safe_completion_metadata(choice, usage):
     }
 
 
-def validate_user_facing_evaluation(raw_text):
-    """Only five final-answer fields, not provider reasoning_content."""
-    try:
-        result = json.loads(raw_text)
-    except (TypeError, ValueError):
-        return None
-    allowed = {"reasoning", "verdict", "summary", "confidence_score", "score_context"}
-    if not isinstance(result, dict) or set(result) != allowed:
-        return None
+_BASE_EVALUATION_FIELDS = frozenset({
+    "reasoning", "verdict", "summary", "confidence_score", "score_context",
+})
+_CONTEXTUAL_EVALUATION_FIELDS = frozenset({
+    "contextual_basis_kind", "contextual_basis_evidence_ids",
+})
+_CONTEXTUAL_BASIS_KINDS = frozenset({
+    "NONE",
+    "MISSING_CONTEXT",
+    "PARTIAL_TRUTH",
+    "FALSE_CONTEXT",
+    "SATIRE_PROVENANCE",
+    "SATIRE_ORIGIN_OF_MISINFORMATION",
+})
+
+
+def _valid_base_evaluation(result):
+    if not isinstance(result, dict):
+        return False
     if not all(
         isinstance(result.get(key), str) and result.get(key).strip()
         for key in ("reasoning", "summary", "score_context")
     ):
-        return None
+        return False
     if result.get("verdict") not in {
         "FACT", "FAKE", "MISLEADING", "UNVERIFIED", "SATIRE"
     }:
-        return None
+        return False
     score = result.get("confidence_score")
-    if (
+    return not (
         isinstance(score, bool)
         or not isinstance(score, (int, float))
         or not 0 <= score <= 100
+    )
+
+
+def validate_user_facing_evaluation(raw_text):
+    """Validate the legacy five-field final-answer contract."""
+    try:
+        result = json.loads(raw_text)
+    except (TypeError, ValueError):
+        return None
+    if set(result) != _BASE_EVALUATION_FIELDS or not _valid_base_evaluation(result):
+        return None
+    return {key: result[key] for key in _BASE_EVALUATION_FIELDS}
+
+
+def validate_persisted_evidence_evaluation(raw_text):
+    """Accept legacy or contextual persisted-evidence evaluation responses.
+
+    Contextual basis metadata is confidence-only. A legacy five-field response
+    remains valid so missing metadata cannot force provider failover and thereby
+    alter verdict authority.
+    """
+    try:
+        result = json.loads(raw_text)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(result, dict):
+        return None
+
+    fields = set(result)
+    allowed_shapes = {
+        frozenset(_BASE_EVALUATION_FIELDS),
+        frozenset(_BASE_EVALUATION_FIELDS | _CONTEXTUAL_EVALUATION_FIELDS),
+    }
+    if frozenset(fields) not in allowed_shapes or not _valid_base_evaluation(result):
+        return None
+
+    if fields == set(_BASE_EVALUATION_FIELDS):
+        return result
+
+    basis_kind = result.get("contextual_basis_kind")
+    basis_ids = result.get("contextual_basis_evidence_ids")
+    if (
+        basis_kind not in _CONTEXTUAL_BASIS_KINDS
+        or not isinstance(basis_ids, list)
+        or len(basis_ids) > 128
+        or any(
+            type(value) is not str
+            or not value
+            or value != value.strip()
+            or len(value) > 128
+            for value in basis_ids
+        )
+        or len(set(basis_ids)) != len(basis_ids)
     ):
         return None
-    # Existing production JSON validation remains the ultimate source of truth.
-    return {key: result[key] for key in (
-        "reasoning", "verdict", "summary", "confidence_score", "score_context"
-    )}
+    return result
