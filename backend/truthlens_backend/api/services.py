@@ -612,6 +612,10 @@ def validate_public_url(raw_url, *, strip_tracking=True):
     candidate = raw_url.strip()
     if len(candidate) > 500:
         return None, "URL is too long."
+    if any(ord(character) < 32 or ord(character) == 127 for character in candidate):
+        return None, "URL contains unsupported control characters."
+    if "\\" in candidate:
+        return None, "URL contains unsupported backslashes."
 
     parsed = urlparse(candidate)
     scheme = (parsed.scheme or "").lower()
@@ -667,6 +671,7 @@ def validate_public_url(raw_url, *, strip_tracking=True):
         "utm_content",
         "fbclid",
         "gclid",
+        "ref",
         "mc_eid",
     }
     preserved_segments = []
