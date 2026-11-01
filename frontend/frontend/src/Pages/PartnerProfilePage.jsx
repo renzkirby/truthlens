@@ -209,7 +209,7 @@ function PartnerPublishedFactChecks({ slug, isCommunity, onCountChange }) {
    }, [authFetch, onCountChange, retryVersion, slug]);
 
    const retryInitialLoad = () => {
-      setInitialError(false);
+      setInitialError("");
       setIsInitialLoading(true);
       setRetryVersion((value) => value + 1);
    };
