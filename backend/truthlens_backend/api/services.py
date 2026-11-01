@@ -639,13 +639,7 @@ def validate_public_url(raw_url):
 
     try:
         ip = ipaddress.ip_address(normalized_host)
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_multicast
-            or ip.is_reserved
-        ):
+        if not ip.is_global:
             return None, "Private network URLs are not allowed."
     except ValueError:
         # Host is a domain name, which is allowed.
