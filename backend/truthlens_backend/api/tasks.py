@@ -9,6 +9,7 @@ import base64
 from numbers import Number
 from django.contrib.auth.models import User
 from django.db import transaction
+from django.utils import timezone
 from .knowledge_reuse_service import (
     find_exact_canonical_published_fact_check,
     record_authoritative_claim_fact_check_reference,
@@ -34,12 +35,14 @@ from .services import (
 )
 from .models import (
     Claim,
+    EvidenceSubmission,
     OfficialFactCheck,
     UserProfile,
     VerificationEvidence,
     VerificationRun,
 )
 from .trust_service import recompute_user_trust_score
+from .url_safety import UrlPreviewFetchError, fetch_url_preview_metadata
 from .verification.evidence_assessment import (
     assess_reasoning_evidence_batch_against_claim,
 )
@@ -2469,6 +2472,97 @@ def validate_related_fact_check(decision_id):
     """Optional one-shot classifier; never changes the primary AI result."""
     from .verification.relatedness import process_decision
     process_decision(decision_id)
+
+
+@shared_task(soft_time_limit=25, time_limit=30, max_retries=0)
+def build_evidence_url_preview(evidence_id, expected_url):
+    """Populate bounded URL metadata without delaying evidence submission."""
+    evidence = EvidenceSubmission.objects.filter(
+        pk=evidence_id,
+        evidence_url=expected_url,
+    ).first()
+    if evidence is None:
+        return False
+
+    now = timezone.now()
+    if evidence.url_safety_status == EvidenceSubmission.UrlSafetyStatus.KNOWN_THREAT:
+        EvidenceSubmission.objects.filter(
+            pk=evidence_id,
+            evidence_url=expected_url,
+        ).update(
+            url_preview_status=EvidenceSubmission.UrlPreviewStatus.BLOCKED,
+            url_preview_checked_at=now,
+            url_preview_failure_reason="KNOWN_THREAT",
+        )
+        return False
+
+    try:
+        metadata = fetch_url_preview_metadata(expected_url)
+    except UrlPreviewFetchError as exc:
+        EvidenceSubmission.objects.filter(
+            pk=evidence_id,
+            evidence_url=expected_url,
+        ).update(
+            url_preview_status=EvidenceSubmission.UrlPreviewStatus.UNAVAILABLE,
+            url_preview_title="",
+            url_preview_description="",
+            url_preview_site_name="",
+            url_preview_final_url=None,
+            url_preview_checked_at=now,
+            url_preview_failure_reason=exc.code,
+        )
+        return False
+    except Exception:
+        logger.exception(
+            "Unexpected evidence URL preview failure for evidence_id=%s",
+            evidence_id,
+        )
+        EvidenceSubmission.objects.filter(
+            pk=evidence_id,
+            evidence_url=expected_url,
+        ).update(
+            url_preview_status=EvidenceSubmission.UrlPreviewStatus.UNAVAILABLE,
+            url_preview_title="",
+            url_preview_description="",
+            url_preview_site_name="",
+            url_preview_final_url=None,
+            url_preview_checked_at=now,
+            url_preview_failure_reason="INTERNAL_ERROR",
+        )
+        return False
+
+    updated = EvidenceSubmission.objects.filter(
+        pk=evidence_id,
+        evidence_url=expected_url,
+    ).update(
+        url_preview_status=EvidenceSubmission.UrlPreviewStatus.READY,
+        url_preview_title=metadata.title,
+        url_preview_description=metadata.description,
+        url_preview_site_name=metadata.site_name,
+        url_preview_final_url=metadata.final_url,
+        url_preview_checked_at=now,
+        url_preview_failure_reason="",
+    )
+    return bool(updated)
+
+
+def dispatch_evidence_url_preview(evidence_id, evidence_url):
+    """Best-effort enqueue after commit; preserve evidence if the broker is down."""
+    try:
+        build_evidence_url_preview.delay(str(evidence_id), evidence_url)
+    except Exception:
+        logger.exception(
+            "Could not queue evidence URL preview for evidence_id=%s",
+            evidence_id,
+        )
+        EvidenceSubmission.objects.filter(
+            pk=evidence_id,
+            evidence_url=evidence_url,
+        ).update(
+            url_preview_status=EvidenceSubmission.UrlPreviewStatus.UNAVAILABLE,
+            url_preview_checked_at=timezone.now(),
+            url_preview_failure_reason="QUEUE_UNAVAILABLE",
+        )
 
 
 @shared_task
