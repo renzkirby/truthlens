@@ -85,8 +85,8 @@ class PilotEvidenceBudgetTests(SimpleTestCase):
             ReasoningEvidenceGroup("CANONICAL_SOURCE", uuid4(), (a, b)),
             ReasoningEvidenceGroup("EVIDENCE_SOURCE", uuid4(), (c,)),
         ]
-        original = render_reasoning_evidence_dossier(groups)
-        compact = render_compact_reasoning_evidence_dossier(groups)
+        original = render_reasoning_evidence_dossier(groups, include_evidence_link_ids=True)
+        compact = render_compact_reasoning_evidence_dossier(groups, include_evidence_link_ids=True)
         self.assertEqual(compact, render_compact_reasoning_evidence_dossier(iter(groups)))
         self.assertLess(len(compact), len(original))
         self.assertEqual(compact.count("=== SOURCE IDENTITY GROUP "), 2)
@@ -136,14 +136,14 @@ class PilotEvidenceBudgetTests(SimpleTestCase):
             ))
             for group in groups
         ]
-        rendered = render_shared_metadata_reasoning_evidence_dossier(groups)
+        rendered = render_shared_metadata_reasoning_evidence_dossier(groups, include_evidence_link_ids=True)
         self.assertEqual(
             rendered, render_shared_metadata_reasoning_evidence_dossier(
                 iter(groups)
             ),
         )
         self.assertLess(
-            len(rendered), len(render_compact_reasoning_evidence_dossier(groups)),
+            len(rendered), len(render_compact_reasoning_evidence_dossier(groups, include_evidence_link_ids=True)),
         )
         self.assertEqual(rendered.count("=== SOURCE IDENTITY GROUP "), 7)
         self.assertEqual(rendered.count("--- EVIDENCE ITEM "), 12)
@@ -184,9 +184,9 @@ class PilotEvidenceBudgetTests(SimpleTestCase):
                 ))
                 for group in groups
             ]
-            legacy = render_reasoning_evidence_dossier(groups)
-            first = render_compact_reasoning_evidence_dossier(groups)
-            second = render_shared_metadata_reasoning_evidence_dossier(groups)
+            legacy = render_reasoning_evidence_dossier(groups, include_evidence_link_ids=True)
+            first = render_compact_reasoning_evidence_dossier(groups, include_evidence_link_ids=True)
+            second = render_shared_metadata_reasoning_evidence_dossier(groups, include_evidence_link_ids=True)
             if (
                 self._length(first) > PILOT_MAX_INPUT_CHARS
                 >= self._length(second)
@@ -208,7 +208,7 @@ class PilotEvidenceBudgetTests(SimpleTestCase):
     def test_empty_unchanged_and_normal_size_uses_exact_legacy_prompt(self):
         self.assertEqual(render_compact_reasoning_evidence_dossier([]), "")
         groups = _groups(content_length=80)
-        expected = render_reasoning_evidence_dossier(groups)
+        expected = render_reasoning_evidence_dossier(groups, include_evidence_link_ids=True)
         with patch("api.tasks.render_compact_reasoning_evidence_dossier") as compact:
             got = _render_bounded_persisted_evidence_context(
                 groups, "The claim is precisely described here.", "NEUTRAL",
@@ -220,7 +220,7 @@ class PilotEvidenceBudgetTests(SimpleTestCase):
     @override_settings(APP_ENV="production", DEBUG=False)
     def test_production_unchanged_even_when_evidence_is_oversize(self):
         groups = _groups(content_length=3000)
-        expected = render_reasoning_evidence_dossier(groups)
+        expected = render_reasoning_evidence_dossier(groups, include_evidence_link_ids=True)
         with patch("api.tasks.render_compact_reasoning_evidence_dossier") as compact:
             got = _render_bounded_persisted_evidence_context(
                 groups, "The claim is precisely described here.", "NEUTRAL",
@@ -232,8 +232,8 @@ class PilotEvidenceBudgetTests(SimpleTestCase):
         chosen = None
         for content_size in range(1600, 2300, 20):
             groups = _groups(content_length=content_size)
-            original = render_reasoning_evidence_dossier(groups)
-            compact = render_compact_reasoning_evidence_dossier(groups)
+            original = render_reasoning_evidence_dossier(groups, include_evidence_link_ids=True)
+            compact = render_compact_reasoning_evidence_dossier(groups, include_evidence_link_ids=True)
             if self._length(original) > PILOT_MAX_INPUT_CHARS >= self._length(compact):
                 chosen = groups
                 break
@@ -250,6 +250,7 @@ class PilotEvidenceBudgetTests(SimpleTestCase):
         self.assertEqual(got.count("--- EVIDENCE ITEM "), 12)
         for item in (x for g in chosen for x in g.evidence):
             self.assertIn(item.content, got)
+            self.assertIn(str(item.evidence_link_id), got)
         self.assertIn("REFUTES", got)
         self.assertIn("SUPPORTS", got)
 
@@ -289,7 +290,7 @@ class PilotEvidenceBudgetTests(SimpleTestCase):
 
     def test_universal_hierarchy_keeps_full_oversize_dossier_for_other_providers(self):
         groups = _groups(content_length=3000)
-        expected = render_reasoning_evidence_dossier(groups)
+        expected = render_reasoning_evidence_dossier(groups, include_evidence_link_ids=True)
         self.assertGreater(self._length(expected), PILOT_MAX_INPUT_CHARS)
 
         with patch.dict(os.environ, {
@@ -303,7 +304,7 @@ class PilotEvidenceBudgetTests(SimpleTestCase):
 
     def test_pilot_flag_off_keeps_existing_renderer(self):
         groups = _groups(content_length=2900)
-        expected = render_reasoning_evidence_dossier(groups)
+        expected = render_reasoning_evidence_dossier(groups, include_evidence_link_ids=True)
         with (
             patch.dict(os.environ, {"ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "0"}),
             patch("api.tasks.render_compact_reasoning_evidence_dossier") as compact,
