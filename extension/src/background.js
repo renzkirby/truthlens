@@ -284,11 +284,12 @@ function startPollingClaim({
    let pollCount = 0;
    let isPollInFlight = false;
 
-   const stopWithError = (message) => {
+   const stopWithError = (message, kind = "service") => {
       clearInterval(pollInterval);
       sendTabMessage(tabId, {
          type: timeoutMessage,
          message,
+         kind,
       });
    };
 
@@ -314,10 +315,17 @@ function startPollingClaim({
          }
 
          if (claim.run_status === "FAILED") {
+            const failureKind =
+               claim.failure_code === "URL_KNOWN_THREAT"
+                  ? "security_threat"
+                  : claim.failure_code === "URL_POLICY_BLOCKED"
+                    ? "input"
+                    : "service";
             stopWithError(
                typeof claim.detail === "string" && claim.detail.trim()
                   ? claim.detail
                   : "TruthLens couldn't complete this analysis. Please try again.",
+               failureKind,
             );
             return;
          }
@@ -730,7 +738,9 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
                error.kind =
                   safetyStatus === "UNSAFE" || safetyStatus === "KNOWN_THREAT"
                      ? "security_threat"
-                     : "service";
+                     : res.status === 400
+                       ? "input"
+                       : "service";
                throw error;
             }
 
