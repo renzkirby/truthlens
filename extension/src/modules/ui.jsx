@@ -780,11 +780,22 @@ export function removeLoadingCard() {
 
 export function displayErrorCard(message, { kind = "service" } = {}) {
    const isSecurityThreat = kind === "security_threat";
-   const badgeLabel = isSecurityThreat ? "SECURITY ALERT" : "SERVICE ISSUE";
-   const heading = isSecurityThreat ? "URL blocked" : "Analysis unavailable";
+   const isInputIssue = kind === "input";
+   const badgeLabel = isSecurityThreat
+      ? "SECURITY ALERT"
+      : isInputIssue
+        ? "URL ISSUE"
+        : "SERVICE ISSUE";
+   const heading = isSecurityThreat
+      ? "URL blocked"
+      : isInputIssue
+        ? "URL not allowed"
+        : "Analysis unavailable";
    const footer = isSecurityThreat
       ? "No analysis was started because this URL was blocked before content extraction."
-      : "No verdict was generated. Start a new scan to try again.";
+      : isInputIssue
+        ? "No analysis was started. Check the URL and try again."
+        : "No verdict was generated. Start a new scan to try again.";
    document.querySelectorAll("#truthlens-error-card").forEach((errorCard) => {
       errorCard.remove();
    });
