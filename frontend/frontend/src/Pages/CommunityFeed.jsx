@@ -8,6 +8,7 @@ import { useNotification } from "../hooks/useNotification";
 import { buildApiUrl, resolveApiEndpoint } from "../utils/api";
 import timeAgo from "../utils/timeAgo";
 import { getEffectiveVerdict } from "../utils/verdict";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 import {
    TOPIC_ALL,
    TOPIC_FILTERS,
@@ -15,44 +16,6 @@ import {
 } from "./communityFeedFilters.js";
 
 import "./CommunityFeed.css";
-
-const MAX_SAFE_ERROR_LENGTH = 200;
-const UNSAFE_ERROR_PATTERN =
-   /<[^>]+>|traceback|stack trace|django|internal server error|exception at|request failed with status code|\b(?:valueerror|typeerror|runtimeerror|databaseerror|integrityerror|operationalerror)\b|\bat\s+\S+\s*\([^)]*:\d+:\d+\)/i;
-
-const ASSESSMENT_SOURCES = { ALL: "ALL", HUMAN: "human", AI: "ai" };
-const CATEGORIES = { ALL: "ALL", TEXT: "TEXT", IMAGE: "IMAGE", VIDEO: "VIDEO", FILE: "FILE", URL: "URL" };
-
-const CATEGORY_FILTERS = [
-   { value: CATEGORIES.ALL, label: "All formats", icon: null },
-   { value: CATEGORIES.TEXT, label: "Text", icon: "file-text" },
-   { value: CATEGORIES.IMAGE, label: "Images", icon: "image" },
-   { value: CATEGORIES.FILE, label: "Files", icon: "paperclip" },
-   { value: CATEGORIES.URL, label: "Links", icon: "link" },
-];
-
-const ASSESSMENT_FILTERS = [
-   { value: ASSESSMENT_SOURCES.ALL, label: "All Reviews" },
-   { value: ASSESSMENT_SOURCES.HUMAN, label: "Human Review" },
-   { value: ASSESSMENT_SOURCES.AI, label: "AI Analysis" },
-];
-
-const SORT_OPTIONS = [
-   { value: "newest", label: "Latest" },
-   { value: "oldest", label: "Oldest" },
-];
-
-function getSafeActionMessage(error, fallback) {
-   const status = Number(error?.status);
-   if (!Number.isInteger(status) || status < 400 || status >= 500) return fallback;
-
-   const candidate = [error?.detail, error?.message]
-      .filter((value) => typeof value === "string")
-      .map((value) => value.trim())
-      .find((value) => value && value.length <= MAX_SAFE_ERROR_LENGTH && !UNSAFE_ERROR_PATTERN.test(value));
-
-   return candidate ? candidate.replace(/\s+/g, " ") : fallback;
-}
 
 function normalizeComparableText(value) {
    return typeof value === "string" ? value.trim().replace(/\s+/g, " ").toLocaleLowerCase() : "";
@@ -481,7 +444,11 @@ function CommunityFeed() {
          cancelEditThread();
          addToast({ type: "success", message: "Community context updated." });
       } catch (error) {
-         addToast({ type: "error", message: getSafeActionMessage(error, "Unable to update this discussion. Please try again.") });
+         addToast({ type: "error", message: userFacingErrorMessage(error, {
+               fallback: "We couldn't update this discussion. Please try again.",
+               notFoundMessage: "This discussion is no longer available.",
+               conflictMessage: "This discussion changed. Refresh it before editing again.",
+            }) });
       } finally {
          setSavingThreadId(null);
       }
@@ -505,7 +472,11 @@ function CommunityFeed() {
          restoreDialogFocus(true);
          addToast({ type: "success", message: "Discussion deleted." });
       } catch (error) {
-         addToast({ type: "error", message: getSafeActionMessage(error, "Unable to delete this discussion. Please try again.") });
+         addToast({ type: "error", message: userFacingErrorMessage(error, {
+               fallback: "We couldn't delete this discussion. Please try again.",
+               notFoundMessage: "This discussion has already been removed.",
+               conflictMessage: "This discussion changed before it could be deleted. Refresh Community and try again.",
+            }) });
       } finally {
          setDeletingThreadId(null);
       }
@@ -539,7 +510,10 @@ function CommunityFeed() {
          setReportDialog({ open: false, threadId: null, reason: "OTHER", notes: "" });
          restoreDialogFocus();
       } catch (error) {
-         addToast({ type: "error", message: getSafeActionMessage(error, "Unable to submit this report. Please try again.") });
+         addToast({ type: "error", message: userFacingErrorMessage(error, {
+               fallback: "We couldn't submit this report. Please try again.",
+               notFoundMessage: "This discussion is no longer available to report.",
+            }) });
       } finally {
          setReportingThreadId(null);
       }
@@ -562,7 +536,10 @@ function CommunityFeed() {
          } else addToast({ type: "warning", message: "Sharing is not supported in this browser." });
       } catch (error) {
          if (error?.name !== "AbortError") {
-            addToast({ type: "error", message: getSafeActionMessage(error, "Unable to share this discussion.") });
+            addToast({ type: "error", message: userFacingErrorMessage(error, {
+                  fallback: "We couldn't share this discussion.",
+                  notFoundMessage: "This discussion is no longer available to share.",
+               }) });
          }
       } finally {
          setSharingThreadId(null);
@@ -606,7 +583,11 @@ function CommunityFeed() {
             if (generation !== requestGenerationRef.current) return;
             requestedPagesRef.current.delete(pageKey);
             console.error("Failed to fetch threads:", error);
-            const message = "Unable to load the community feed. Please try again.";
+            const message = userFacingErrorMessage(error, {
+               fallback: "We couldn't load the community feed. Please try again.",
+               permissionMessage: "Your account can't access the Community feed.",
+               serviceMessage: "The Community feed is temporarily unavailable. Try again shortly.",
+            });
             setLoadError(message);
             addToast({ type: "error", message });
          } finally {
