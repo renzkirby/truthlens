@@ -161,6 +161,28 @@ class ClaimPollingThrottleTests(APITestCase):
         self.assertNotIn("failure_message", payload)
         self.assertNotIn("SECRET", str(payload))
 
+    def test_url_known_threat_failure_returns_specific_safe_terminal_detail(self):
+        VerificationRun.objects.create(
+            claim=self.claim,
+            status=VerificationRun.Status.FAILED,
+            failure_stage="url_safety",
+            failure_code="URL_KNOWN_THREAT",
+            failure_message="SECRET provider diagnostic",
+        )
+
+        response = APIClient().get(self.polling_url)
+        payload = response.json()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(payload["run_status"], "FAILED")
+        self.assertEqual(payload["failure_code"], "URL_KNOWN_THREAT")
+        self.assertEqual(
+            payload["detail"],
+            "This URL was flagged for a known security threat and cannot be analyzed.",
+        )
+        self.assertNotIn("failure_message", payload)
+        self.assertNotIn("SECRET", str(payload))
+
     def test_url_extraction_failure_returns_specific_safe_terminal_detail(self):
         VerificationRun.objects.create(
             claim=self.claim,
