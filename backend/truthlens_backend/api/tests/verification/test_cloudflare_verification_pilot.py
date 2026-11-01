@@ -29,6 +29,18 @@ VALID_EVALUATION = json.dumps({
     "score_context": "Direct textual corroboration.",
 })
 
+CONTEXTUAL_EVALUATION = json.dumps({
+    "reasoning": "The evidence shows a real event presented without key context.",
+    "verdict": "MISLEADING",
+    "summary": "The claim omits material context established by the source.",
+    "confidence_score": 90,
+    "score_context": "The missing context is explicit in persisted evidence.",
+    "contextual_basis_kind": "MISSING_CONTEXT",
+    "contextual_basis_evidence_ids": [
+        "11111111-1111-1111-1111-111111111111",
+    ],
+})
+
 
 @override_settings(APP_ENV="development", DEBUG=True)
 class CloudflarePilotRoutingTests(SimpleTestCase):
@@ -280,6 +292,31 @@ class CloudflarePilotRoutingTests(SimpleTestCase):
 
 
 class CloudflarePilotValidationTests(SimpleTestCase):
+    def test_persisted_evaluation_accepts_contextual_basis_metadata(self):
+        from api.verification.cloudflare_pilot import call_validated_cloudflare_pilot
+        with patch(
+            "api.verification.cloudflare_pilot.generate_evaluation_json",
+            return_value=CONTEXTUAL_EVALUATION,
+        ):
+            self.assertEqual(
+                call_validated_cloudflare_pilot("System", "Dossier"),
+                CONTEXTUAL_EVALUATION,
+            )
+
+    def test_persisted_evaluation_rejects_duplicate_contextual_basis_ids(self):
+        from api.verification.cloudflare_pilot import call_validated_cloudflare_pilot
+        payload = json.loads(CONTEXTUAL_EVALUATION)
+        payload["contextual_basis_evidence_ids"] *= 2
+        with patch(
+            "api.verification.cloudflare_pilot.generate_evaluation_json",
+            return_value=json.dumps(payload),
+        ):
+            with self.assertRaisesRegex(
+                CloudflareEvaluationError,
+                "INVALID_EVALUATION_JSON",
+            ):
+                call_validated_cloudflare_pilot("System", "Dossier")
+
     def test_adapter_output_must_be_complete_json_before_routing(self):
         from api.verification.cloudflare_pilot import call_validated_cloudflare_pilot
         with patch(
