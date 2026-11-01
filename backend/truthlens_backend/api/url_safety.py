@@ -19,9 +19,9 @@ KNOWN_THREAT = "KNOWN_THREAT"
 CHECK_UNAVAILABLE = "CHECK_UNAVAILABLE"
 
 PREVIEW_MAX_BYTES = 256 * 1024
-PREVIEW_MAX_REDIRECTS = 3
-PREVIEW_CONNECT_TIMEOUT_SEC = 3
-PREVIEW_READ_TIMEOUT_SEC = 5
+PREVIEW_MAX_REDIRECTS = 2
+PREVIEW_CONNECT_TIMEOUT_SEC = 2
+PREVIEW_READ_TIMEOUT_SEC = 3
 _ALLOWED_PREVIEW_PORTS = {80, 443}
 _REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 _HTML_CONTENT_TYPES = {"text/html", "application/xhtml+xml"}
@@ -119,7 +119,9 @@ def _public_address_records(hostname: str, port: int):
 
     if not unique:
         raise UrlPreviewFetchError("DNS_UNAVAILABLE")
-    return ascii_hostname, unique
+    # Preview availability is best-effort. Pin one already-validated address so
+    # a host with many A/AAAA records cannot multiply the task's timeout budget.
+    return ascii_hostname, unique[:1]
 
 
 def _request_target(parts) -> str:
