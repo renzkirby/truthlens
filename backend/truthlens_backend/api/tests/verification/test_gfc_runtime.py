@@ -22,6 +22,16 @@ from api.verification.providers.google_fact_check import (
 
 
 class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
+    def setUp(self):
+        self.enterContext(patch(
+            "api.tasks.check_url_threat_reputation",
+            return_value={
+                "status": "SAFE",
+                "provider": "GOOGLE_SAFE_BROWSING",
+                "threat_types": [],
+            },
+        ))
+
     def test_retrieval_uses_one_provider_call_and_ingests_evidence(
         self,
     ):
