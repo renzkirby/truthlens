@@ -5,6 +5,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useNotification } from "../hooks/useNotification";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { resolveApiEndpoint } from "../utils/api";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 import { formatVerificationDomain } from "../utils/management";
 import { createPublicReachEventId, recordPublicReach } from "../utils/publicReach";
 import PartnerLogo from "../components/partners/PartnerLogo";
@@ -362,7 +363,17 @@ function PartnerProfileContent({ slug, isCommunity }) {
          })
          .catch((requestError) => {
             if (requestId === requestIdRef.current) {
-               setError(requestError?.status === 404 ? "unavailable" : "request");
+               setError(
+                  requestError?.status === 404
+                     ? { type: "unavailable", message: "This public partner profile could not be found or is not currently available." }
+                     : {
+                          type: "request",
+                          message: userFacingErrorMessage(requestError, {
+                             fallback: "We couldn't load this partner profile. Please try again.",
+                             serviceMessage: "This partner profile is temporarily unavailable. Try again shortly.",
+                          }),
+                       },
+               );
             }
          })
          .finally(() => {
@@ -409,10 +420,14 @@ function PartnerProfileContent({ slug, isCommunity }) {
                  }
                : current,
          );
-      } catch {
+      } catch (error) {
          addToast({
             type: "error",
-            message: `We couldn't ${partner.is_following ? "unfollow" : "follow"} this organization. Please try again.`,
+            message: userFacingErrorMessage(error, {
+               fallback: `We couldn't ${partner.is_following ? "unfollow" : "follow"} this organization. Please try again.`,
+               notFoundMessage: "This partner profile is no longer available.",
+               conflictMessage: "This follow status changed before your update was recorded. Refresh the profile and try again.",
+            }),
          });
       } finally {
          setIsFollowPending(false);
@@ -461,8 +476,8 @@ function PartnerProfileContent({ slug, isCommunity }) {
                   <Icons name="alert-circle" size={24} />
                </span>
                <h1>Partner profile unavailable</h1>
-               <p>This public partner profile could not be found or is not currently available.</p>
-               {error === "request" && (
+               <p>{error?.message || "This public partner profile is unavailable."}</p>
+               {error?.type === "request" && (
                   <button type="button" className="user-profile__primary-button" onClick={retry}>
                      Try again
                   </button>
