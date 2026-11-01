@@ -13,7 +13,10 @@ from django.conf import settings
 from .cloudflare_evaluation import (
     CloudflareEvaluationError, MAX_INPUT_CHARS, generate_evaluation_json,
 )
-from .provider_audit_metrics import validate_user_facing_evaluation
+from .provider_audit_metrics import (
+    validate_persisted_evidence_evaluation,
+    validate_user_facing_evaluation,
+)
 from .classification_contract import (
     CLASSIFICATION_OPERATION, validate_classification_response,
 )
@@ -470,7 +473,9 @@ def validate_pilot_response(operation, raw, user_prompt):
         return _valid_claim_gate(raw)
     if operation in {EQUIVALENCE_OPERATION, RELEVANCE_OPERATION}:
         return _valid_small_decision(operation, raw)
-    if operation in {PILOT_OPERATION, GFC_EVALUATION_OPERATION, TAVILY_EVALUATION_OPERATION}:
+    if operation == PILOT_OPERATION:
+        return validate_persisted_evidence_evaluation(raw) is not None
+    if operation in {GFC_EVALUATION_OPERATION, TAVILY_EVALUATION_OPERATION}:
         return validate_user_facing_evaluation(raw) is not None
     if operation == ASSESSMENT_OPERATION:
         return _valid_assessment_batch(raw, user_prompt)
