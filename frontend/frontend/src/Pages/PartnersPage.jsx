@@ -5,6 +5,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { resolveApiEndpoint } from "../utils/api";
 import { formatVerificationDomain } from "../utils/management";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 import PartnerLogo from "../components/partners/PartnerLogo";
 import "./PartnersPage.css";
 
@@ -89,7 +90,7 @@ function PartnersPage() {
    const queryType = searchParams.get("type") || "";
    const [searchInput, setSearchInput] = useState(querySearch);
    const [directory, setDirectory] = useState(null);
-   const [error, setError] = useState(false);
+   const [error, setError] = useState("");
    const [isLoading, setIsLoading] = useState(true);
    const [retryVersion, setRetryVersion] = useState(0);
    const requestIdRef = useRef(0);
@@ -122,7 +123,7 @@ function PartnersPage() {
       const requestUrl = queryString ? `${endpoint}?${queryString}` : endpoint;
 
       setIsLoading(true);
-      setError(false);
+      setError("");
 
       authFetch(requestUrl)
          .then((response) => {
@@ -132,8 +133,12 @@ function PartnersPage() {
                results: Array.isArray(response?.results) ? response.results : [],
             });
          })
-         .catch(() => {
-            if (requestId === requestIdRef.current) setError(true);
+         .catch((requestError) => {
+            if (requestId !== requestIdRef.current) return;
+            setError(userFacingErrorMessage(requestError, {
+               fallback: "We couldn't load public partner profiles. Please try again.",
+               serviceMessage: "The public partner directory is temporarily unavailable. Try again shortly.",
+            }));
          })
          .finally(() => {
             if (requestId === requestIdRef.current) setIsLoading(false);
@@ -230,7 +235,7 @@ function PartnersPage() {
                      {error && (
                         <div className="partners-state" role="alert">
                            <h3>Partner directory unavailable</h3>
-                           <p>We could not load public partner profiles. Please try again.</p>
+                           <p>{error}</p>
                            <button type="button" onClick={() => setRetryVersion((value) => value + 1)}>
                               Retry
                            </button>
