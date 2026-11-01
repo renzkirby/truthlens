@@ -312,7 +312,7 @@ class CorrectionEvidenceReviewNotificationTests(
         self.assertTrue(rejected_reaffirmation["event"].metadata["is_reaffirmation"])
         self.assertEqual(
             ModerationEvent.objects.filter(
-                case=rejected["evidence_case"],
+                case__in=[result["case"], rejected_reaffirmation["case"]],
                 event_type=ModerationEvent.EventType.EVIDENCE_REJECTED,
                 metadata__correction_request_id=str(rejected["correction_request"].pk),
             ).count(),
@@ -336,7 +336,10 @@ class CorrectionEvidenceReviewNotificationTests(
         )
         self.assertEqual(
             ModerationEvent.objects.filter(
-                case=verified["evidence_case"],
+                case__in=[
+                    first_verified_reaffirmation["case"],
+                    second_verified_reaffirmation["case"],
+                ],
                 event_type=ModerationEvent.EventType.EVIDENCE_VERIFIED,
                 metadata__correction_request_id=str(verified["correction_request"].pk),
             ).count(),
