@@ -604,8 +604,8 @@ def _normalize_verdict_confidence_score(value):
     return numeric_value
 
 
-def validate_public_url(raw_url):
-    """Allow only public http(s) URLs to reduce unsafe URL processing risk."""
+def validate_public_url(raw_url, *, strip_tracking=True):
+    """Validate a public HTTP(S) URL; optionally remove known tracking parameters."""
     if not raw_url or not isinstance(raw_url, str):
         return None, "URL is required."
 
@@ -653,9 +653,13 @@ def validate_public_url(raw_url):
         if legacy_ipv4 is not None and not legacy_ipv4.is_global:
             return None, "Private network URLs are not allowed."
 
-    from urllib.parse import parse_qs, urlencode
+    sanitized = parsed._replace(fragment="").geturl()
+    if not strip_tracking or not parsed.query:
+        return sanitized, None
 
-    TRACKING_PARAMS = {
+    from urllib.parse import unquote_plus
+
+    tracking_params = {
         "utm_source",
         "utm_medium",
         "utm_campaign",
@@ -663,17 +667,20 @@ def validate_public_url(raw_url):
         "utm_content",
         "fbclid",
         "gclid",
-        "ref",
         "mc_eid",
     }
-    cleaned_params = {
-        k: v
-        for k, v in parse_qs(parsed.query).items()
-        if k.lower() not in TRACKING_PARAMS
-    }
-    cleaned_query = urlencode(cleaned_params, doseq=True)
-    sanitized = parsed._replace(fragment="", query=cleaned_query).geturl()
-    return sanitized, None
+    preserved_segments = []
+    for segment in parsed.query.split("&"):
+        raw_key = segment.split("=", 1)[0]
+        try:
+            key = unquote_plus(raw_key).lower()
+        except (UnicodeDecodeError, ValueError):
+            key = raw_key.lower()
+        if key not in tracking_params:
+            preserved_segments.append(segment)
+
+    cleaned_query = "&".join(preserved_segments)
+    return parsed._replace(fragment="", query=cleaned_query).geturl(), None
 
 
 def check_url_threat_reputation(candidate_url):
