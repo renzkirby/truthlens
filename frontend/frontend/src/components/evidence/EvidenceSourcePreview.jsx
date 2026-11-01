@@ -65,11 +65,20 @@ export default function EvidenceSourcePreview({
    const safeUrl = safeHttpUrl(url);
    const identity = sourceIdentity(url);
    const safetyStatus = String(safety?.status || "NOT_CHECKED").toUpperCase();
-   const safetyMeta = SAFETY_META[safetyStatus] || SAFETY_META.NOT_CHECKED;
    const previewStatus = String(preview?.status || "NOT_REQUESTED").toUpperCase();
+   const networkPolicyBlocked =
+      previewStatus === "BLOCKED" && safetyStatus !== "KNOWN_THREAT";
+   const safetyMeta = networkPolicyBlocked
+      ? {
+           label: "URL blocked by network safety policy",
+           tone: "threat",
+           icon: "alert-triangle",
+           title: "TruthLens blocked this destination because it did not meet public-network URL requirements.",
+        }
+      : SAFETY_META[safetyStatus] || SAFETY_META.NOT_CHECKED;
    const ready = previewStatus === "READY";
    const pending = previewStatus === "PENDING";
-   const blocked = previewStatus === "BLOCKED" || safetyStatus === "KNOWN_THREAT";
+   const blocked = networkPolicyBlocked || previewStatus === "BLOCKED" || safetyStatus === "KNOWN_THREAT";
    const previewTitle = ready && preview?.title ? preview.title : identity.host || String(url);
    const previewDescription = ready && preview?.description ? preview.description : "";
    const siteName = ready && preview?.site_name ? preview.site_name : identity.host;
