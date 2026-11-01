@@ -17,6 +17,28 @@ import {
 
 import "./CommunityFeed.css";
 
+const ASSESSMENT_SOURCES = { ALL: "ALL", HUMAN: "human", AI: "ai" };
+const CATEGORIES = { ALL: "ALL", TEXT: "TEXT", IMAGE: "IMAGE", VIDEO: "VIDEO", FILE: "FILE", URL: "URL" };
+
+const CATEGORY_FILTERS = [
+   { value: CATEGORIES.ALL, label: "All formats", icon: null },
+   { value: CATEGORIES.TEXT, label: "Text", icon: "file-text" },
+   { value: CATEGORIES.IMAGE, label: "Images", icon: "image" },
+   { value: CATEGORIES.FILE, label: "Files", icon: "paperclip" },
+   { value: CATEGORIES.URL, label: "Links", icon: "link" },
+];
+
+const ASSESSMENT_FILTERS = [
+   { value: ASSESSMENT_SOURCES.ALL, label: "All Reviews" },
+   { value: ASSESSMENT_SOURCES.HUMAN, label: "Human Review" },
+   { value: ASSESSMENT_SOURCES.AI, label: "AI Analysis" },
+];
+
+const SORT_OPTIONS = [
+   { value: "newest", label: "Latest" },
+   { value: "oldest", label: "Oldest" },
+];
+
 function normalizeComparableText(value) {
    return typeof value === "string" ? value.trim().replace(/\s+/g, " ").toLocaleLowerCase() : "";
 }
