@@ -53,8 +53,18 @@ class UrlSafetyFoundationTests(SimpleTestCase):
         )
         self.assertEqual(
             cleaned,
-            "https://example.com/source?signature=a%2Fb%2Bc&ref=required",
+            "https://example.com/source?signature=a%2Fb%2Bc",
         )
+
+    def test_basic_validator_rejects_parser_differential_inputs(self):
+        for value in (
+            "https://example.com\\@127.0.0.1/",
+            "https://example.com/line\nfeed",
+        ):
+            with self.subTest(value=value):
+                safe_url, error = validate_public_url(value, strip_tracking=False)
+                self.assertIsNone(safe_url)
+                self.assertIsNotNone(error)
 
     def test_basic_validator_rejects_legacy_private_ipv4_forms(self):
         for value in (
