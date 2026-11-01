@@ -12,6 +12,16 @@ import "./SettingsPage.css";
 
 const MAX_AVATAR_SIZE = 2 * 1024 * 1024;
 const ACCEPTED_AVATAR_TYPES = new Set(["image/jpeg", "image/png", "image/gif"]);
+
+const profileFromUser = (user) => ({
+   username: user?.username || "",
+   bio: user?.bio || "",
+});
+
+const firstError = (value) => {
+   if (Array.isArray(value)) return value[0] || "";
+   return typeof value === "string" ? value : "";
+};
 const authMethodLabel = (method) => {
    if (method === "password") return "Password";
    if (method === "google") return "Google";
