@@ -204,6 +204,10 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             "api.tasks.evaluate_claim_with_persisted_evidence",
             return_value=ai_verdict,
         ))
+        stack.enter_context(patch(
+            "api.tasks.calibrate_verdict_confidence",
+            side_effect=lambda verdict, _groups: verdict,
+        ))
         assess_evidence = stack.enter_context(patch(
             "api.tasks._assess_and_persist_reasoning_evidence"
         ))
@@ -364,6 +368,10 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         evaluate_persisted = stack.enter_context(patch(
             "api.tasks.evaluate_claim_with_persisted_evidence",
             return_value=ai_verdict,
+        ))
+        stack.enter_context(patch(
+            "api.tasks.calibrate_verdict_confidence",
+            side_effect=lambda verdict, _groups: verdict,
         ))
         assess_evidence = stack.enter_context(patch(
             "api.tasks._assess_and_persist_reasoning_evidence"
@@ -539,6 +547,10 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         evaluate_persisted = stack.enter_context(patch(
             "api.tasks.evaluate_claim_with_persisted_evidence",
             return_value=ai_verdict,
+        ))
+        stack.enter_context(patch(
+            "api.tasks.calibrate_verdict_confidence",
+            side_effect=lambda verdict, _groups: verdict,
         ))
         assess_evidence = stack.enter_context(patch(
             "api.tasks._assess_and_persist_reasoning_evidence"
@@ -721,6 +733,10 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         evaluate_persisted = stack.enter_context(patch(
             "api.tasks.evaluate_claim_with_persisted_evidence",
             return_value=ai_verdict,
+        ))
+        stack.enter_context(patch(
+            "api.tasks.calibrate_verdict_confidence",
+            side_effect=lambda verdict, _groups: verdict,
         ))
         assess_evidence = stack.enter_context(patch(
             "api.tasks._assess_and_persist_reasoning_evidence"
