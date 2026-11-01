@@ -16,7 +16,9 @@ function cleanDetail(value) {
 }
 
 function errorStatus(error) {
-   const value = Number(error?.status);
+   const rawStatus = error?.status;
+   if (rawStatus === null || rawStatus === undefined || rawStatus === "") return null;
+   const value = Number(rawStatus);
    return Number.isInteger(value) ? value : null;
 }
 
