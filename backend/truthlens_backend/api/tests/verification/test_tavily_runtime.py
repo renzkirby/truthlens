@@ -544,6 +544,14 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         self.client = Mock()
         self.client.search.return_value = self.payload
         self.enterContext(patch.dict(os.environ, {"TAVILY_API_KEY": "test-api-key"}))
+        self._patch(
+            "api.tasks.check_url_threat_reputation",
+            return_value={
+                "status": "SAFE",
+                "provider": "GOOGLE_SAFE_BROWSING",
+                "threat_types": [],
+            },
+        )
         self._patch("api.verification.providers.tavily.TavilyClient", return_value=self.client)
         self.provider_class = self._patch("api.tasks.TavilyProvider", wraps=TavilyProvider)
         self._patch("api.claim_matching.compute_fingerprint", return_value="txt:tavily-runtime")
