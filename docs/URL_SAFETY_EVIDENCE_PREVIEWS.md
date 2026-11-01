@@ -54,10 +54,10 @@ The UI uses **“No known threats detected”**, not “Safe”. This is deliber
 ## Preview states
 
 - `NOT_REQUESTED`: no preview attempt exists;
-- `PENDING`: the evidence committed and preview work is queued;
+- `PENDING`: the evidence committed and preview work is queued; direct opening stays disabled until the network destination has been validated;
 - `READY`: bounded title/description/site metadata was extracted;
 - `UNAVAILABLE`: preview generation failed for a non-policy reason; the original source remains preserved;
-- `BLOCKED`: the target violated the network safety policy or is associated with a known threat; the UI does not offer direct opening.
+- `BLOCKED`: the target violated the network safety policy, could not be safely resolved through the complete redirect boundary, or is associated with a known threat; the UI does not offer direct opening.
 
 Historical evidence is not network-backfilled by the migration.
 
