@@ -110,9 +110,12 @@ function FileUpload() {
                   if (chrome.runtime.lastError || !response?.accepted) {
                      chrome.tabs.sendMessage(tab.id, {
                         type: isImage ? "DISPLAY_IMAGE_ERROR" : "DISPLAY_SNIPPET_ERROR",
-                        message: isImage
-                           ? "Failed to analyze the image. Please try again."
-                           : "Failed to analyze the document. Please try again.",
+                        message:
+                           response?.error ||
+                           (isImage
+                              ? "TruthLens could not start the image verification. Reload the extension and try again."
+                              : "TruthLens could not start the document verification. Reload the extension and try again."),
+                        kind: response?.error ? "input" : "service",
                      });
                   }
                   window.close();
@@ -123,7 +126,7 @@ function FileUpload() {
          reader.readAsDataURL(file);
       } catch (submissionError) {
          console.error("Upload verification failed:", submissionError);
-         setError("TruthLens could not start this analysis. Please try again.");
+         setError("TruthLens could not start this verification. Reload the extension and try again.");
          setIsAnalyzing(false);
       }
    };
