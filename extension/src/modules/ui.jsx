@@ -811,7 +811,7 @@ export function displayErrorCard(message, { kind = "service" } = {}) {
                   white-space: nowrap;
                "
             >
-               ${badgeLabel}
+               ${escapeHtml(badgeLabel)}
             </span>
          </div>
 
@@ -872,7 +872,7 @@ export function displayErrorCard(message, { kind = "service" } = {}) {
                   line-height: 1.35;
                "
             >
-               ${heading}
+               ${escapeHtml(heading)}
             </div>
 
             <div
@@ -884,7 +884,7 @@ export function displayErrorCard(message, { kind = "service" } = {}) {
                   overflow-wrap: anywhere;
                "
             >
-               ${message}
+               ${escapeHtml(message)}
             </div>
 
             <div
@@ -912,7 +912,7 @@ export function displayErrorCard(message, { kind = "service" } = {}) {
                >
                   ${iconShield}
                </span>
-               <span>${footer}</span>
+               <span>${escapeHtml(footer)}</span>
             </div>
          </div>
       </div>
