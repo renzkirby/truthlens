@@ -762,7 +762,20 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
    }
 
    if (request.type === "VERIFY_URL") {
-      const { url, tabId } = request;
+      const tabId = request.tabId ?? sender?.tab?.id;
+      const url = typeof request.url === "string" ? request.url.trim() : "";
+
+      if (!Number.isInteger(tabId)) {
+         sendResponse({ accepted: false, error: "No active tab found for URL verification." });
+         return false;
+      }
+
+      if (!url) {
+         sendResponse({ accepted: false, error: "Enter a URL to verify." });
+         return false;
+      }
+
+      sendResponse({ accepted: true });
 
       (async () => {
          try {
