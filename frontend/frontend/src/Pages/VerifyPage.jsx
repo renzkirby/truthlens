@@ -581,7 +581,11 @@ function VerifyPage() {
             if (operationRef.current !== operationId) return;
 
             if (data.run_status === "FAILED") {
-               failOperation(operationId, "TruthLens couldn't complete this analysis. Please try again.");
+               const failureDetail =
+                  typeof data.detail === "string" && data.detail.trim()
+                     ? data.detail.trim()
+                     : "TruthLens couldn't complete this analysis. Please try again.";
+               failOperation(operationId, failureDetail);
                return;
             }
 
