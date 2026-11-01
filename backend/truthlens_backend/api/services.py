@@ -1164,9 +1164,7 @@ def build_persisted_evidence_prompt(original_claim, evidence_context, article_st
     - FACT requires explicit support for the claim in the evidence.
     - FAKE requires explicit contradiction or evidence of fabrication.
     - MISLEADING applies to partial truth, omitted material context, or false context.
-    - SATIRE applies only when the supplied evidence establishes that the submitted
-      content itself is satire/parody. A false claim that originated from satire is
-      not automatically SATIRE.
+    - SATIRE applies when the supplied evidence explicitly supports that classification.
     - Conflicting, irrelevant, or insufficient evidence requires UNVERIFIED.
 
     CONTEXTUAL BASIS METADATA:
