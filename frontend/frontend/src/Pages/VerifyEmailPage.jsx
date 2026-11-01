@@ -6,6 +6,7 @@ import Icons from "../components/Icons";
 import AuthShell from "../components/auth/AuthShell";
 import Button from "../components/ui/Button.jsx";
 import { resolveApiEndpoint } from "../utils/api";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 
 const verificationRequests = new Map();
 
@@ -27,6 +28,7 @@ function requestEmailVerification(token) {
 
       return {
          ok: response.ok,
+         status: response.status,
          data,
       };
    })();
@@ -56,7 +58,7 @@ function VerifyEmailPage() {
          }
 
          try {
-            const { ok, data } = await requestEmailVerification(token);
+            const { ok, status: responseStatus, data } = await requestEmailVerification(token);
 
             if (!isActive) return;
 
@@ -84,14 +86,28 @@ function VerifyEmailPage() {
             }
 
             setStatus("invalid");
-            setMessage(data?.detail || "This verification link is invalid or has already been used.");
+            setMessage(
+               data?.detail ||
+                  userFacingErrorMessage(
+                     { status: responseStatus },
+                     {
+                        fallback: "This verification link is invalid or has already been used.",
+                        rateLimitMessage: "Too many verification attempts were made in a short period. Wait a moment before trying again.",
+                        serviceMessage: "Email verification is temporarily unavailable. Try again shortly.",
+                     },
+                  ),
+            );
          } catch (error) {
             console.error("Email verification failed:", error);
 
             if (!isActive) return;
 
             setStatus("error");
-            setMessage("We couldn't verify your email right now. Please try again.");
+            setMessage(userFacingErrorMessage(error, {
+               fallback: "We couldn't verify your email. Please try again.",
+               networkMessage: "TruthLens couldn't be reached. Check your internet connection and try verifying your email again.",
+               serviceMessage: "Email verification is temporarily unavailable. Try again shortly.",
+            }));
          }
       };
 
