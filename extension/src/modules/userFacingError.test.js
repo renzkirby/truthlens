@@ -12,6 +12,13 @@ test("classifies verification transport failures", () => {
    assert.equal(classifyExtensionError({ status: 503 }), "service");
 });
 
+test("null status still allows network classification", () => {
+   assert.equal(
+      classifyExtensionError({ status: null, error: { message: "Failed to fetch" } }),
+      "network",
+   );
+});
+
 test("known URL threat maps to security alert", () => {
    const result = extensionErrorPresentation({
       status: 400,
