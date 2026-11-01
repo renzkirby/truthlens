@@ -140,6 +140,56 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         self.assertEqual(result["verdict"], "UNVERIFIED")
         self.assertEqual(result["confidence_score"], 0)
 
+    def test_neutral_factual_submission_rejects_satire_verdict_even_with_provenance_metadata(self):
+        result_payload = {
+            **self.result,
+            "verdict": "SATIRE",
+            "contextual_basis_kind": "SATIRE_PROVENANCE",
+            "contextual_basis_evidence_ids": [
+                "11111111-1111-1111-1111-111111111111",
+            ],
+        }
+        with patch(
+            "api.services.call_llm_with_fallback",
+            return_value=json.dumps(result_payload),
+        ):
+            result = evaluate_claim_with_persisted_evidence(
+                "A factual claim presented as true.",
+                "Persisted evidence.",
+                article_stance="NEUTRAL",
+            )
+
+        self.assertEqual(result["verdict"], "UNVERIFIED")
+        self.assertEqual(result["confidence_score"], 0)
+        self.assertEqual(result["contextual_basis_kind"], "NONE")
+        self.assertEqual(result["contextual_basis_evidence_ids"], [])
+
+    def test_deterministic_satire_stance_allows_satire_verdict(self):
+        result_payload = {
+            **self.result,
+            "verdict": "SATIRE",
+            "contextual_basis_kind": "SATIRE_PROVENANCE",
+            "contextual_basis_evidence_ids": [
+                "11111111-1111-1111-1111-111111111111",
+            ],
+        }
+        with patch(
+            "api.services.call_llm_with_fallback",
+            return_value=json.dumps(result_payload),
+        ):
+            result = evaluate_claim_with_persisted_evidence(
+                "A satirical claim.",
+                "Persisted evidence.",
+                article_stance="SATIRE",
+            )
+
+        self.assertEqual(result["verdict"], "SATIRE")
+        self.assertEqual(result["contextual_basis_kind"], "SATIRE_PROVENANCE")
+        self.assertEqual(
+            result["contextual_basis_evidence_ids"],
+            ["11111111-1111-1111-1111-111111111111"],
+        )
+
     def test_contextual_basis_metadata_is_preserved_for_contextual_verdicts(self):
         contextual = {
             **self.result,
@@ -223,4 +273,8 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         self.assertIn("CONTEXTUAL BASIS METADATA", system_prompt)
         self.assertIn("SATIRE_ORIGIN_OF_MISINFORMATION", system_prompt)
         self.assertIn("submitted content itself is satire/parody", system_prompt)
+        self.assertIn("SATIRE describes the submitted content itself", system_prompt)
+        self.assertIn("SATIRE is eligible only when <stance>SATIRE</stance>", system_prompt)
+        self.assertIn("originated from satire/parody does NOT make", system_prompt)
+        self.assertIn("SATIRE_ORIGIN_OF_MISINFORMATION", system_prompt)
         self.assertIn("Evidence link ID", system_prompt)
