@@ -83,6 +83,10 @@ class VerificationRunTextRuntimeTests(TestCase):
             "api.tasks.evaluate_claim_with_persisted_evidence",
             return_value=self.verdict,
         )
+        self.calibrate_confidence = self._patch(
+            "api.tasks.calibrate_verdict_confidence",
+            side_effect=lambda verdict, _groups: verdict,
+        )
         self.load_dossier = self._patch(
             "api.tasks.load_reasoning_evidence_dossier_for_run",
             return_value=["persisted dossier"],
@@ -565,6 +569,10 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.evaluate_persisted.assert_called_once_with(
             self.cleaned["cleaned_claim"], "Persisted evidence context.", "NEUTRAL"
         )
+        self.calibrate_confidence.assert_called_once_with(
+            self.verdict,
+            ["selected evidence"],
+        )
         self.evaluate_gfc.assert_not_called()
         self.save_claim.assert_called_once_with(
             self.claim.id, self.verdict, "Official Fact Check",
@@ -583,6 +591,37 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.assertEqual(self.save_claim.call_args.args[2], "Live Web Search")
         self.assertEqual(
             self.save_claim.call_args.args[4], self.tavily_report_sources
+        )
+
+    def test_persistence_caps_automated_absolute_certainty(self):
+        self.verdict.update({
+            "confidence_score": 100,
+            "score_context": "Provider supplied absolute certainty.",
+        })
+
+        self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
+
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.consensus_score, 99)
+        self.assertIn(
+            "never represent absolute certainty",
+            self.claim.score_context,
+        )
+
+    def test_persistence_caps_unverified_confidence_below_decisive_range(self):
+        self.verdict.update({
+            "verdict": "UNVERIFIED",
+            "confidence_score": 98,
+            "score_context": "Provider supplied high uncertainty confidence.",
+        })
+
+        self._assert_terminal(self._execute(), VerificationRun.Status.ABSTAINED)
+
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.consensus_score, 49)
+        self.assertIn(
+            "insufficient for a decisive verdict",
+            self.claim.score_context,
         )
 
     def test_provider_selected_abstaining_verdicts_abstain(self):
@@ -627,7 +666,11 @@ class VerificationRunTextRuntimeTests(TestCase):
         self._assert_terminal(self._execute(), VerificationRun.Status.ABSTAINED)
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
-        self.assertEqual(self.claim.consensus_score, 40)
+        self.assertEqual(self.claim.consensus_score, 0)
+        self.assertIn(
+            "insufficient for a decisive verdict",
+            self.claim.score_context,
+        )
         self.fail_run.assert_not_called()
 
     def test_fatal_core_exception_fails_with_original_metadata(self):
