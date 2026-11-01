@@ -148,7 +148,10 @@ def _render_bounded_persisted_evidence_context(groups, claim_text, stance):
     If even the compact presentation does not fit, fail closed and never
     send a selectively truncated dossier to Gemini, Groq or Cloudflare.
     """
-    evidence_context = render_reasoning_evidence_dossier(groups)
+    evidence_context = render_reasoning_evidence_dossier(
+        groups,
+        include_evidence_link_ids=True,
+    )
     if not evidence_context or not cloudflare_pilot_enabled(
         "persisted_evidence_evaluation"
     ):
@@ -173,7 +176,10 @@ def _render_bounded_persisted_evidence_context(groups, claim_text, stance):
     if original_chars <= PILOT_MAX_INPUT_CHARS:
         return evidence_context
     try:
-        compact_context = render_compact_reasoning_evidence_dossier(groups)
+        compact_context = render_compact_reasoning_evidence_dossier(
+            groups,
+            include_evidence_link_ids=True,
+        )
     except (TypeError, ValueError):
         logger.warning("PERSISTED_EVIDENCE_COMPACT_UNAVAILABLE")
         raise LLMProviderUnavailableError(
@@ -192,7 +198,10 @@ def _render_bounded_persisted_evidence_context(groups, claim_text, stance):
         return compact_context
 
     try:
-        shared_context = render_shared_metadata_reasoning_evidence_dossier(groups)
+        shared_context = render_shared_metadata_reasoning_evidence_dossier(
+            groups,
+            include_evidence_link_ids=True,
+        )
     except (TypeError, ValueError):
         logger.warning("PERSISTED_EVIDENCE_SHARED_METADATA_UNAVAILABLE")
         raise LLMProviderUnavailableError(
