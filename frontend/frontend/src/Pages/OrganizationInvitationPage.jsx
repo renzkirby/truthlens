@@ -7,6 +7,7 @@ import Icons from "../components/Icons.jsx";
 import Button from "../components/ui/Button.jsx";
 
 import { resolveApiEndpoint } from "../utils/api";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 import { createAuthReturnState } from "../utils/authNavigation";
 import { canAccessWorkspace } from "../utils/workspace";
 
@@ -72,6 +73,7 @@ function OrganizationInvitationPage() {
    const [invitation, setInvitation] = useState(null);
 
    const [loadState, setLoadState] = useState("loading");
+   const [loadError, setLoadError] = useState("");
 
    const [isAccepting, setIsAccepting] = useState(false);
 
@@ -97,6 +99,7 @@ function OrganizationInvitationPage() {
       }
 
       setLoadState("loading");
+      setLoadError("");
 
       try {
          if (authToken && !authLoading) {
@@ -122,7 +125,10 @@ function OrganizationInvitationPage() {
          }
 
          if (!response.ok) {
-            throw new Error(data?.detail || "Unable to load invitation.");
+            const requestError = new Error(data?.detail || "Unable to load invitation.");
+            requestError.status = response.status;
+            requestError.detail = data?.detail;
+            throw requestError;
          }
 
          setInvitation(data);
@@ -137,6 +143,12 @@ function OrganizationInvitationPage() {
          }
 
          setInvitation(null);
+         setLoadError(userFacingErrorMessage(error, {
+            fallback: "TruthLens couldn't load this invitation. Please try again.",
+            rateLimitMessage: "Too many invitation requests were made in a short period. Wait a moment before trying again.",
+            serviceMessage: "This invitation is temporarily unavailable. Try again shortly.",
+            networkMessage: "TruthLens couldn't be reached. Check your internet connection and try loading the invitation again.",
+         }));
          setLoadState("error");
       }
    }, [authFetch, authLoading, authToken, invitationDetailEndpoint]);
@@ -177,7 +189,12 @@ function OrganizationInvitationPage() {
       } catch (error) {
          console.error("Failed to send verification email:", error);
 
-         setActionMessage(error?.message || "Unable to send a verification email right now.");
+         setActionMessage(userFacingErrorMessage(error, {
+            fallback: "We couldn't send a verification email. Please try again.",
+            rateLimitMessage: "Several verification emails were requested recently. Wait before requesting another one.",
+            authMessage: "Your session expired. Sign in again before requesting another verification email.",
+            serviceMessage: "Verification email delivery is temporarily unavailable. Try again shortly.",
+         }));
       } finally {
          setIsSendingVerification(false);
       }
@@ -204,7 +221,11 @@ function OrganizationInvitationPage() {
       } catch (error) {
          console.error("Failed to refresh account:", error);
 
-         setActionMessage("Unable to refresh your account right now.");
+         setActionMessage(userFacingErrorMessage(error, {
+            fallback: "We couldn't refresh your account. Please try again.",
+            authMessage: "Your session expired. Sign in again to continue with this invitation.",
+            serviceMessage: "Account status is temporarily unavailable. Try again shortly.",
+         }));
       } finally {
          setIsCheckingVerification(false);
       }
@@ -266,7 +287,12 @@ function OrganizationInvitationPage() {
          }
 
          setAcceptanceState("error");
-         setActionMessage(message);
+         setActionMessage(userFacingErrorMessage(error, {
+            fallback: "We couldn't accept this invitation. Please try again.",
+            rateLimitMessage: "Too many invitation attempts were made in a short period. Wait before trying again.",
+            serviceMessage: "Invitation acceptance is temporarily unavailable. Try again shortly.",
+            networkMessage: "TruthLens couldn't be reached. Check your connection and try accepting the invitation again.",
+         }));
       } finally {
          setIsAccepting(false);
       }
@@ -319,7 +345,7 @@ function OrganizationInvitationPage() {
                tone="critical"
                icon={<Icons name="alert-triangle" size={28} aria-hidden="true" />}
                title="Invitation temporarily unavailable"
-               description="TruthLens couldn't load this invitation right now."
+               description={loadError || "TruthLens couldn't load this invitation right now."}
                actions={
                   <Button
                      type="button"
