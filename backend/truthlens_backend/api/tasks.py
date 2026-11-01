@@ -2005,7 +2005,11 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                 {
                     "verdict": "SATIRE",
                     "summary": "This content originates from a known satire or parody publication and is not intended to be factual.",
-                    "confidence_score": 99,
+                    "confidence_score": 95,
+                    "score_context": (
+                        "Submitted URL matches configured satire-source provenance; "
+                        "final confidence is 95%."
+                    ),
                 },
                 "Satire Detection",
                 cleaned_claim,
