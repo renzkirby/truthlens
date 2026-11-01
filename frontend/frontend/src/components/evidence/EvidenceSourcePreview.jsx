@@ -79,6 +79,8 @@ export default function EvidenceSourcePreview({
    const ready = previewStatus === "READY";
    const pending = previewStatus === "PENDING";
    const blocked = networkPolicyBlocked || previewStatus === "BLOCKED" || safetyStatus === "KNOWN_THREAT";
+   const networkCheckPending = previewStatus === "PENDING";
+   const openAllowed = Boolean(safeUrl) && !blocked && !networkCheckPending;
    const previewTitle = ready && preview?.title ? preview.title : identity.host || String(url);
    const previewDescription = ready && preview?.description ? preview.description : "";
    const siteName = ready && preview?.site_name ? preview.site_name : identity.host;
@@ -114,7 +116,9 @@ export default function EvidenceSourcePreview({
                <span className="evidence-source-preview__path">{path}</span>
             )}
             {pending && (
-               <span className="evidence-source-preview__state">Checking source details…</span>
+               <span className="evidence-source-preview__state">
+                  Checking source details and network safety…
+               </span>
             )}
             {previewStatus === "UNAVAILABLE" && (
                <span className="evidence-source-preview__state">Preview unavailable. The source link is still preserved.</span>
@@ -126,7 +130,7 @@ export default function EvidenceSourcePreview({
             )}
          </div>
 
-         {!blocked && safeUrl ? (
+         {openAllowed ? (
             <a
                className="evidence-source-preview__open"
                href={safeUrl}
@@ -139,6 +143,10 @@ export default function EvidenceSourcePreview({
          ) : !safeUrl ? (
             <span className="evidence-source-preview__state evidence-source-preview__state--invalid">
                This URL cannot be opened because it is not a supported HTTP(S) address.
+            </span>
+         ) : networkCheckPending ? (
+            <span className="evidence-source-preview__state">
+               Opening is available after the network safety check completes.
             </span>
          ) : null}
       </div>
