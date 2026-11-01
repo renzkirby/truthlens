@@ -778,7 +778,24 @@ export function removeLoadingCard() {
    }
 }
 
-export function displayErrorCard(message) {
+export function displayErrorCard(message, { kind = "service" } = {}) {
+   const isSecurityThreat = kind === "security_threat";
+   const isInputIssue = kind === "input";
+   const badgeLabel = isSecurityThreat
+      ? "SECURITY ALERT"
+      : isInputIssue
+        ? "URL ISSUE"
+        : "SERVICE ISSUE";
+   const heading = isSecurityThreat
+      ? "URL blocked"
+      : isInputIssue
+        ? "URL not allowed"
+        : "Analysis unavailable";
+   const footer = isSecurityThreat
+      ? "No analysis was started because this URL was blocked before content extraction."
+      : isInputIssue
+        ? "No analysis was started. Check the URL and try again."
+        : "No verdict was generated. Start a new scan to try again.";
    document.querySelectorAll("#truthlens-error-card").forEach((errorCard) => {
       errorCard.remove();
    });
@@ -805,7 +822,7 @@ export function displayErrorCard(message) {
                   white-space: nowrap;
                "
             >
-               SERVICE ISSUE
+               ${escapeHtml(badgeLabel)}
             </span>
          </div>
 
@@ -866,7 +883,7 @@ export function displayErrorCard(message) {
                   line-height: 1.35;
                "
             >
-               Analysis unavailable
+               ${escapeHtml(heading)}
             </div>
 
             <div
@@ -878,7 +895,7 @@ export function displayErrorCard(message) {
                   overflow-wrap: anywhere;
                "
             >
-               ${message}
+               ${escapeHtml(message)}
             </div>
 
             <div
@@ -906,7 +923,7 @@ export function displayErrorCard(message) {
                >
                   ${iconShield}
                </span>
-               <span>No verdict was generated. Start a new scan to try again.</span>
+               <span>${escapeHtml(footer)}</span>
             </div>
          </div>
       </div>

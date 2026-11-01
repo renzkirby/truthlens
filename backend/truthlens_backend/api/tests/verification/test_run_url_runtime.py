@@ -29,6 +29,14 @@ class VerificationRunURLRuntimeTests(TestCase):
             },
             clear=False,
         ))
+        self.url_reputation = self._patch(
+            "api.tasks.check_url_threat_reputation",
+            return_value={
+                "status": "SAFE",
+                "provider": "GOOGLE_SAFE_BROWSING",
+                "threat_types": [],
+            },
+        )
         self.url = "https://example.com/article"
         self.claim = Claim.objects.create(
             claim_type=Claim.ClaimType.URL,
@@ -279,6 +287,55 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.render_dossier.assert_not_called()
         self.assess_evidence.assert_not_called()
         self.save_claim.assert_not_called()
+
+    def test_worker_rejects_private_url_before_tavily_extraction(self):
+        self.url = "http://localhost/admin"
+
+        self._invoke()
+
+        run = self.claim.verification_runs.get()
+        self._assert_terminal(run, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "url_safety")
+        self.assertEqual(run.failure_code, "URL_POLICY_BLOCKED")
+        self.url_reputation.assert_not_called()
+        self.extract.assert_not_called()
+        self.bridge.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
+        self.save_claim.assert_not_called()
+
+    def test_worker_rejects_known_threat_before_tavily_extraction(self):
+        self.url_reputation.return_value = {
+            "status": "UNSAFE",
+            "provider": "GOOGLE_SAFE_BROWSING",
+            "threat_types": ["MALWARE"],
+        }
+
+        self._invoke()
+
+        run = self.claim.verification_runs.get()
+        self._assert_terminal(run, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "url_safety")
+        self.assertEqual(run.failure_code, "URL_KNOWN_THREAT")
+        self.url_reputation.assert_called_once_with(self.url)
+        self.extract.assert_not_called()
+        self.bridge.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
+        self.save_claim.assert_not_called()
+
+    def test_worker_reputation_outage_fails_open_and_continues_verification(self):
+        self.url_reputation.return_value = {
+            "status": "UNKNOWN",
+            "provider": "GOOGLE_SAFE_BROWSING",
+            "reason": "provider_unreachable",
+        }
+
+        run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        self.url_reputation.assert_called_once_with(self.url)
+        self.extract.assert_called_once()
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("url_safety_check", stages)
 
     def test_extraction_no_results_preserves_claim_and_marks_run_failed(self):
         self.response.json.return_value = {"results": []}

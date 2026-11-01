@@ -34,6 +34,9 @@ const isResolvedMatch = (match) => Boolean(match?.verdict && match.verdict !== "
 const hasNumericValue = (value) =>
    value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
 
+const KNOWN_URL_THREAT_MESSAGE =
+   "This URL was flagged for a known security threat and cannot be analyzed.";
+
 const getErrorMessage = (error, fallback) => {
    if (error?.status === 429) {
       return "Too many verification requests. Please wait a moment and try again.";
@@ -44,6 +47,19 @@ const getErrorMessage = (error, fallback) => {
    }
 
    return fallback;
+};
+
+const getUrlErrorMessage = (error, fallback) => {
+   const safetyStatus = error?.url_safety?.status;
+   if (safetyStatus === "UNSAFE" || safetyStatus === "KNOWN_THREAT") {
+      return KNOWN_URL_THREAT_MESSAGE;
+   }
+
+   if (error?.status === 400 && typeof error?.detail === "string" && error.detail.trim()) {
+      return error.detail.trim();
+   }
+
+   return getErrorMessage(error, fallback);
 };
 
 const getSafeSourceUrl = (value) => {
@@ -565,7 +581,11 @@ function VerifyPage() {
             if (operationRef.current !== operationId) return;
 
             if (data.run_status === "FAILED") {
-               failOperation(operationId, "TruthLens couldn't complete this analysis. Please try again.");
+               const failureDetail =
+                  typeof data.detail === "string" && data.detail.trim()
+                     ? data.detail.trim()
+                     : "TruthLens couldn't complete this analysis. Please try again.";
+               failOperation(operationId, failureDetail);
                return;
             }
 
@@ -635,7 +655,7 @@ function VerifyPage() {
       } catch (submissionError) {
          failOperation(
             operationId,
-            getErrorMessage(submissionError, "We could not submit that URL. Check it and try again."),
+            getUrlErrorMessage(submissionError, "We could not submit that URL. Check it and try again."),
          );
       }
    };

@@ -1689,6 +1689,14 @@ class RelatedPublicationSurfacingTests(PublicationResolutionFixture):
 class PublishedClaimPipelineTests(PublicationResolutionFixture):
     def setUp(self):
         super().setUp()
+        self._patch(
+            "api.tasks.check_url_threat_reputation",
+            return_value={
+                "status": "SAFE",
+                "provider": "GOOGLE_SAFE_BROWSING",
+                "threat_types": [],
+            },
+        )
         self.cleaned = {
             "cleaned_claim": self.canonical,
             "search_query": "vaccines microchips",

@@ -284,11 +284,12 @@ function startPollingClaim({
    let pollCount = 0;
    let isPollInFlight = false;
 
-   const stopWithError = (message) => {
+   const stopWithError = (message, kind = "service") => {
       clearInterval(pollInterval);
       sendTabMessage(tabId, {
          type: timeoutMessage,
          message,
+         kind,
       });
    };
 
@@ -314,10 +315,17 @@ function startPollingClaim({
          }
 
          if (claim.run_status === "FAILED") {
+            const failureKind =
+               claim.failure_code === "URL_KNOWN_THREAT"
+                  ? "security_threat"
+                  : claim.failure_code === "URL_POLICY_BLOCKED"
+                    ? "input"
+                    : "service";
             stopWithError(
                typeof claim.detail === "string" && claim.detail.trim()
                   ? claim.detail
                   : "TruthLens couldn't complete this analysis. Please try again.",
+               failureKind,
             );
             return;
          }
@@ -725,7 +733,15 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-               throw new Error(data?.detail || "URL verification failed.");
+               const error = new Error(data?.detail || "URL verification failed.");
+               const safetyStatus = data?.url_safety?.status;
+               error.kind =
+                  safetyStatus === "UNSAFE" || safetyStatus === "KNOWN_THREAT"
+                     ? "security_threat"
+                     : res.status === 400
+                       ? "input"
+                       : "service";
+               throw error;
             }
 
             // Add this inside VERIFY_URL and VERIFY_FILE in background.js
@@ -756,7 +772,8 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 
             sendTabMessage(tabId, {
                type: "DISPLAY_URL_ERROR",
-               message: "Unable to verify this URL. Please try again.",
+               message: err?.message || "Unable to verify this URL. Please try again.",
+               kind: err?.kind || "service",
             });
          }
       })();

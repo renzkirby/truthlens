@@ -169,6 +169,33 @@ class UnresolvedCachedSubmissionRetryTests(APITestCase):
         self.assertEqual(result.call_count, 2)
         enqueue.assert_not_called()
 
+    def test_known_threat_url_returns_specific_security_message_without_queueing(self):
+        url = "http://testsafebrowsing.appspot.com/apiv4/ANY_PLATFORM/MALWARE/URL/"
+        safety = {
+            "status": "UNSAFE",
+            "provider": "GOOGLE_SAFE_BROWSING",
+            "threat_types": ["MALWARE"],
+        }
+        claim_count = Claim.objects.count()
+
+        with (
+            patch("api.views.validate_public_url", return_value=(url, None)),
+            patch("api.views.check_url_threat_reputation", return_value=safety),
+            patch("api.views.url_fact_check_process.delay") as enqueue,
+        ):
+            response = self.client.post(
+                reverse("verify_url"), {"url": url}, format="json"
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json()["detail"],
+            "This URL was flagged for a known security threat and cannot be analyzed.",
+        )
+        self.assertEqual(response.json()["url_safety"], safety)
+        self.assertEqual(Claim.objects.count(), claim_count)
+        enqueue.assert_not_called()
+
     def test_failed_url_cache_requeues_while_preserving_existing_claim(self):
         url = "https://example.com/previously-failed-claim"
         old, previous = self._old_claim(

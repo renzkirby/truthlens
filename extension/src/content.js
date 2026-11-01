@@ -221,6 +221,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
                (request.type === "DISPLAY_TEXT_ERROR"
                   ? "Unable to verify this text. Please try again."
                   : "Unable to verify this URL. Please try again."),
+            { kind: request.kind || "service" },
          );
       });
       sendResponse({ success: true });

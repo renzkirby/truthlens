@@ -733,15 +733,28 @@ def claim_polling_endpoint(request, claim_id):
                 "run_status": latest_run.status,
             }
             if latest_run.status == VerificationRun.Status.FAILED:
-                failure_detail = (
-                    "TruthLens couldn't extract enough article content from this "
-                    "URL to verify it."
-                    if latest_run.failure_code in {
-                        "URL_EXTRACTION_EMPTY",
-                        "URL_EXTRACTION_FAILED",
-                    }
-                    else "TruthLens couldn't complete this analysis. Please try again."
-                )
+                if latest_run.failure_code == "URL_KNOWN_THREAT":
+                    failure_detail = (
+                        "This URL was flagged for a known security threat and "
+                        "cannot be analyzed."
+                    )
+                elif latest_run.failure_code == "URL_POLICY_BLOCKED":
+                    failure_detail = (
+                        "This URL does not meet TruthLens URL safety requirements "
+                        "and cannot be analyzed."
+                    )
+                elif latest_run.failure_code in {
+                    "URL_EXTRACTION_EMPTY",
+                    "URL_EXTRACTION_FAILED",
+                }:
+                    failure_detail = (
+                        "TruthLens couldn't extract enough article content from this "
+                        "URL to verify it."
+                    )
+                else:
+                    failure_detail = (
+                        "TruthLens couldn't complete this analysis. Please try again."
+                    )
                 terminal_payload.update({
                     "failure_code": latest_run.failure_code,
                     "detail": failure_detail,
@@ -820,7 +833,7 @@ def verify_url(request):
     if url_safety.get("status") == "UNSAFE":
         return Response(
             {
-                "detail": "This URL is flagged as unsafe and cannot be analyzed.",
+                "detail": "This URL was flagged for a known security threat and cannot be analyzed.",
                 "url_safety": url_safety,
             },
             status=400,
