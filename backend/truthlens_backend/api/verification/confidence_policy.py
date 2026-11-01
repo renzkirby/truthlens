@@ -196,6 +196,7 @@ def _contextual_basis_qualities(verdict_result, verdict, evidence_groups):
     if (
         not isinstance(basis_ids, list)
         or not basis_ids
+        or len(basis_ids) > 128
         or any(type(value) is not str or not value for value in basis_ids)
         or len(set(basis_ids)) != len(basis_ids)
     ):
@@ -206,7 +207,7 @@ def _contextual_basis_qualities(verdict_result, verdict, evidence_groups):
         if verdict == "MISLEADING"
         else _SATIRE_BASIS_KINDS
     )
-    if basis_kind not in allowed_kinds:
+    if type(basis_kind) is not str or basis_kind not in allowed_kinds:
         return None
 
     requested_ids = set(basis_ids)
