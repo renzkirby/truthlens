@@ -779,23 +779,75 @@ export function removeLoadingCard() {
 }
 
 export function displayErrorCard(message, { kind = "service" } = {}) {
-   const isSecurityThreat = kind === "security_threat";
-   const isInputIssue = kind === "input";
-   const badgeLabel = isSecurityThreat
-      ? "SECURITY ALERT"
-      : isInputIssue
-        ? "URL ISSUE"
-        : "SERVICE ISSUE";
-   const heading = isSecurityThreat
-      ? "URL blocked"
-      : isInputIssue
-        ? "URL not allowed"
-        : "Analysis unavailable";
-   const footer = isSecurityThreat
-      ? "No analysis was started because this URL was blocked before content extraction."
-      : isInputIssue
-        ? "No analysis was started. Check the URL and try again."
-        : "No verdict was generated. Start a new scan to try again.";
+   const presentation = {
+      security_threat: {
+         badge: "SECURITY ALERT",
+         heading: "URL blocked",
+         footer: "No analysis was started because this URL was blocked before content extraction.",
+      },
+      input: {
+         badge: "INPUT ISSUE",
+         heading: "Check submitted content",
+         footer: "No analysis was started. Correct the input before trying again.",
+      },
+      auth: {
+         badge: "SESSION ISSUE",
+         heading: "Sign in required",
+         footer: "Restore your TruthLens session before starting another verification.",
+      },
+      permission: {
+         badge: "ACCESS ISSUE",
+         heading: "Verification unavailable",
+         footer: "Your current account cannot perform this verification.",
+      },
+      not_found: {
+         badge: "RESULT UNAVAILABLE",
+         heading: "Verification unavailable",
+         footer: "Start a new scan if you still want to verify this content.",
+      },
+      conflict: {
+         badge: "RESULT UPDATED",
+         heading: "Verification changed",
+         footer: "Start a new scan to work from the latest state.",
+      },
+      rate_limit: {
+         badge: "RATE LIMIT",
+         heading: "Too many requests",
+         footer: "Wait briefly before starting another verification.",
+      },
+      timeout: {
+         badge: "TIMEOUT",
+         heading: "Verification timed out",
+         footer: "No verdict was generated. You can start a new scan when ready.",
+      },
+      network: {
+         badge: "CONNECTION ISSUE",
+         heading: "TruthLens unreachable",
+         footer: "Check your connection before trying another verification.",
+      },
+      cancelled: {
+         badge: "CANCELLED",
+         heading: "Verification cancelled",
+         footer: "No verdict was generated. Start a new scan if you still want to verify this content.",
+      },
+      unsupported: {
+         badge: "NO CONCLUSION",
+         heading: "No supported conclusion",
+         footer: "TruthLens completed the check but could not support an automated verdict.",
+      },
+      service: {
+         badge: "SERVICE ISSUE",
+         heading: "Analysis unavailable",
+         footer: "No verdict was generated. Try again when the service is available.",
+      },
+   }[kind] || {
+      badge: "SERVICE ISSUE",
+      heading: "Analysis unavailable",
+      footer: "No verdict was generated. Start a new scan to try again.",
+   };
+   const badgeLabel = presentation.badge;
+   const heading = presentation.heading;
+   const footer = presentation.footer;
    document.querySelectorAll("#truthlens-error-card").forEach((errorCard) => {
       errorCard.remove();
    });

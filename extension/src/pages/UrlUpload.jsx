@@ -5,9 +5,12 @@ import { Link as LinkIcon, ScanLine, Lightbulb } from "lucide-react";
 
 function UrlUpload() {
    const [url, setUrl] = useState("");
+   const [error, setError] = useState("");
 
    const handleVerify = async () => {
       if (!url) return;
+
+      setError("");
 
       try {
          const [tab] = await chrome.tabs.query({
@@ -15,21 +18,41 @@ function UrlUpload() {
             currentWindow: true,
          });
 
-         // Tell background.js to handle the verification
-         chrome.runtime.sendMessage({
-            type: "VERIFY_URL",
-            url: url,
-            tabId: tab.id,
-         });
+         if (
+            !tab ||
+            !Number.isInteger(tab.id) ||
+            tab.url?.startsWith("chrome://") ||
+            tab.url?.startsWith("edge://") ||
+            tab.url?.startsWith("about:")
+         ) {
+            setError("Open a normal webpage first so TruthLens has somewhere to display the result.");
+            return;
+         }
 
-         // Show loading card and close popup
-         chrome.tabs.sendMessage(tab.id, {
-            type: "DISPLAY_URL_LOADING",
-         });
+         chrome.runtime.sendMessage(
+            {
+               type: "VERIFY_URL",
+               url: url.trim(),
+               tabId: tab.id,
+            },
+            (response) => {
+               if (chrome.runtime.lastError || !response?.accepted) {
+                  setError(
+                     response?.error ||
+                        "TruthLens could not start the URL verification. Reload the extension and try again.",
+                  );
+                  return;
+               }
 
-         window.close();
-      } catch (error) {
-         console.error("Error:", error);
+               chrome.tabs.sendMessage(tab.id, {
+                  type: "DISPLAY_URL_LOADING",
+               });
+               window.close();
+            },
+         );
+      } catch (submissionError) {
+         console.error("URL verification startup failed:", submissionError);
+         setError("TruthLens could not start the URL verification. Reload the extension and try again.");
       }
    };
 
@@ -56,7 +79,10 @@ function UrlUpload() {
                   type="text"
                   placeholder="https://example.com/article…"
                   value={url}
-                  onChange={(e) => setUrl(e.target.value)}
+                  onChange={(e) => {
+                     setUrl(e.target.value);
+                     if (error) setError("");
+                  }}
                   onKeyDown={(e) => e.key === "Enter" && handleVerify()}
                />
             </div>
@@ -72,6 +98,12 @@ function UrlUpload() {
                Analyze URL
             </button>
          </div>
+
+         {error && (
+            <p className="url-page-error" role="alert">
+               {error}
+            </p>
+         )}
 
          {/* Tip box */}
          <div className="url-tip-box">

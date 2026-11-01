@@ -5,6 +5,7 @@ import Button from "../components/ui/Button";
 import { useAuth } from "../hooks/useAuth";
 import { useNotificationInbox } from "../hooks/useNotificationInbox";
 import { getNotifications, resolveApiEndpoint } from "../utils/api";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 import "./NotificationPage.css";
 
 const timestampFormatter = new Intl.DateTimeFormat(undefined, {
@@ -208,6 +209,21 @@ function NotificationPage() {
          ? "You have no unread notifications."
          : "Your notification inbox is empty.";
 
+   const loadErrorMessage = error
+      ? userFacingErrorMessage(error, {
+           fallback: "We couldn't load notifications. Please try again.",
+           authMessage: "Your session expired. Sign in again to load notifications.",
+           serviceMessage: "Notifications are temporarily unavailable. Try again shortly.",
+        })
+      : "";
+   const actionErrorMessage = actionError
+      ? userFacingErrorMessage(actionError, {
+           fallback: "We couldn't update that notification. Please try again.",
+           notFoundMessage: "That notification is no longer available.",
+           conflictMessage: "That notification changed before the update was recorded. Refresh your inbox and try again.",
+        })
+      : "";
+
    return (
       <main className="tl-notifications-page">
          <div className="tl-notifications-page__content">
@@ -250,7 +266,7 @@ function NotificationPage() {
 
             {actionError && (
                <div className="tl-notifications-page__notice" role="alert">
-                  <span>We couldn’t update that notification. Please try again.</span>
+                  <span>{actionErrorMessage}</span>
                   <button type="button" onClick={() => setActionError(null)} aria-label="Dismiss error">
                      <Icons name="x" size={16} />
                   </button>
@@ -266,7 +282,7 @@ function NotificationPage() {
                <section className="tl-notifications-page__state" role="alert">
                   <Icons name="alert-circle" size={28} />
                   <h2>Notifications couldn’t be loaded</h2>
-                  <p>Please check your connection and try again.</p>
+                  <p>{loadErrorMessage}</p>
                   <Button variant="secondary" density="compact" onClick={() => loadNotifications()}>
                      Retry
                   </Button>
@@ -316,7 +332,7 @@ function NotificationPage() {
 
                   {error && (
                      <div className="tl-notifications-page__load-error" role="alert">
-                        <span>More notifications couldn’t be loaded.</span>
+                        <span>{loadErrorMessage}</span>
                         <button
                            type="button"
                            onClick={() => loadNotifications({ cursor: nextCursor, append: true })}

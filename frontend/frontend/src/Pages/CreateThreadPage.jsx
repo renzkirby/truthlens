@@ -14,6 +14,7 @@ import { useAuth } from "../hooks/useAuth";
 import { ESCALATION_OPTIONS } from "../utils/constants";
 import { resolveApiEndpoint } from "../utils/api";
 import { getAiVerdict } from "../utils/verdict";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 import "./CreateThreadPage.css";
 
 function formatEnumLabel(value, fallback = "Not available") {
@@ -207,7 +208,12 @@ function CreateThreadPage() {
             setError("");
             return;
          }
-         setError("We couldn't start the community discussion. Please try again.");
+         setError(userFacingErrorMessage(requestError, {
+            fallback: "We couldn't start the community discussion. Please try again.",
+            notFoundMessage: "This claim is no longer available for a community discussion.",
+            conflictMessage: "A discussion for this claim changed while you were submitting. Refresh the page before trying again.",
+            permissionMessage: "Your account can't start a community discussion for this claim.",
+         }));
       } finally {
          setSubmitting(false);
       }
@@ -255,7 +261,11 @@ function CreateThreadPage() {
          } catch (requestError) {
             console.error("Failed to fetch claim data:", requestError);
             if (active) {
-               setError("We couldn't load this claim. Return to Community and try again.");
+               setError(userFacingErrorMessage(requestError, {
+                  fallback: "We couldn't load this claim. Return to Community and try again.",
+                  notFoundMessage: "This claim is no longer available. Return to Community to choose another claim.",
+                  permissionMessage: "Your account can't access this claim.",
+               }));
             }
          } finally {
             if (active) setLoading(false);

@@ -5,6 +5,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useNotification } from "../hooks/useNotification";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { resolveApiEndpoint } from "../utils/api";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 import { formatVerificationDomain } from "../utils/management";
 import { createPublicReachEventId, recordPublicReach } from "../utils/publicReach";
 import PartnerLogo from "../components/partners/PartnerLogo";
@@ -166,8 +167,8 @@ function PartnerPublishedFactChecks({ slug, isCommunity, onCountChange }) {
    const [nextOffset, setNextOffset] = useState(0);
    const [isInitialLoading, setIsInitialLoading] = useState(true);
    const [isLoadingMore, setIsLoadingMore] = useState(false);
-   const [initialError, setInitialError] = useState(false);
-   const [loadMoreError, setLoadMoreError] = useState(false);
+   const [initialError, setInitialError] = useState("");
+   const [loadMoreError, setLoadMoreError] = useState("");
    const [retryVersion, setRetryVersion] = useState(0);
    const initialRequestIdRef = useRef(0);
    const loadMoreRequestIdRef = useRef(0);
@@ -183,12 +184,16 @@ function PartnerPublishedFactChecks({ slug, isCommunity, onCountChange }) {
             setFactChecks(dedupePublications(page.results));
             setCount(page.count);
             setNextOffset(page.offset + page.results.length);
-            setInitialError(false);
+            setInitialError("");
             onCountChange?.(page.count);
          })
-         .catch(() => {
+         .catch((error) => {
             if (requestId === initialRequestIdRef.current) {
-               setInitialError(true);
+               setInitialError(userFacingErrorMessage(error, {
+                  fallback: "We couldn't load this organization's published fact-checks.",
+                  notFoundMessage: "This organization's published fact-checks are no longer available.",
+                  serviceMessage: "Published fact-checks are temporarily unavailable. Try again shortly.",
+               }));
             }
          })
          .finally(() => {
@@ -204,7 +209,7 @@ function PartnerPublishedFactChecks({ slug, isCommunity, onCountChange }) {
    }, [authFetch, onCountChange, retryVersion, slug]);
 
    const retryInitialLoad = () => {
-      setInitialError(false);
+      setInitialError("");
       setIsInitialLoading(true);
       setRetryVersion((value) => value + 1);
    };
@@ -216,7 +221,7 @@ function PartnerPublishedFactChecks({ slug, isCommunity, onCountChange }) {
       const requestedOffset = nextOffset;
 
       setIsLoadingMore(true);
-      setLoadMoreError(false);
+      setLoadMoreError("");
 
       authFetch(factChecksEndpoint(slug, requestedOffset))
          .then((response) => {
@@ -228,9 +233,12 @@ function PartnerPublishedFactChecks({ slug, isCommunity, onCountChange }) {
             setNextOffset(page.offset + page.results.length);
             onCountChange?.(page.count);
          })
-         .catch(() => {
+         .catch((error) => {
             if (requestId === loadMoreRequestIdRef.current) {
-               setLoadMoreError(true);
+               setLoadMoreError(userFacingErrorMessage(error, {
+                  fallback: "We couldn't load more published fact-checks.",
+                  serviceMessage: "More published fact-checks are temporarily unavailable. Try again shortly.",
+               }));
             }
          })
          .finally(() => {
@@ -263,7 +271,7 @@ function PartnerPublishedFactChecks({ slug, isCommunity, onCountChange }) {
             <Icons name="alert-circle" size={20} aria-hidden="true" />
             <div>
                <h3>Published fact-checks could not load</h3>
-               <p>The organization profile is still available. You can retry this section.</p>
+               <p>{initialError}</p>
             </div>
             <button type="button" onClick={retryInitialLoad}>
                Try again
@@ -306,7 +314,7 @@ function PartnerPublishedFactChecks({ slug, isCommunity, onCountChange }) {
                   </span>
                   {loadMoreError && (
                      <span className="partner-publications-pagination__error" role="status">
-                        More publications could not be loaded.
+                        {loadMoreError}
                      </span>
                   )}
                </div>
@@ -362,7 +370,17 @@ function PartnerProfileContent({ slug, isCommunity }) {
          })
          .catch((requestError) => {
             if (requestId === requestIdRef.current) {
-               setError(requestError?.status === 404 ? "unavailable" : "request");
+               setError(
+                  requestError?.status === 404
+                     ? { type: "unavailable", message: "This public partner profile could not be found or is not currently available." }
+                     : {
+                          type: "request",
+                          message: userFacingErrorMessage(requestError, {
+                             fallback: "We couldn't load this partner profile. Please try again.",
+                             serviceMessage: "This partner profile is temporarily unavailable. Try again shortly.",
+                          }),
+                       },
+               );
             }
          })
          .finally(() => {
@@ -409,10 +427,14 @@ function PartnerProfileContent({ slug, isCommunity }) {
                  }
                : current,
          );
-      } catch {
+      } catch (error) {
          addToast({
             type: "error",
-            message: `We couldn't ${partner.is_following ? "unfollow" : "follow"} this organization. Please try again.`,
+            message: userFacingErrorMessage(error, {
+               fallback: `We couldn't ${partner.is_following ? "unfollow" : "follow"} this organization. Please try again.`,
+               notFoundMessage: "This partner profile is no longer available.",
+               conflictMessage: "This follow status changed before your update was recorded. Refresh the profile and try again.",
+            }),
          });
       } finally {
          setIsFollowPending(false);
@@ -461,8 +483,8 @@ function PartnerProfileContent({ slug, isCommunity }) {
                   <Icons name="alert-circle" size={24} />
                </span>
                <h1>Partner profile unavailable</h1>
-               <p>This public partner profile could not be found or is not currently available.</p>
-               {error === "request" && (
+               <p>{error?.message || "This public partner profile is unavailable."}</p>
+               {error?.type === "request" && (
                   <button type="button" className="user-profile__primary-button" onClick={retry}>
                      Try again
                   </button>

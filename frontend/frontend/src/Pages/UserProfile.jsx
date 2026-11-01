@@ -7,6 +7,7 @@ import PartnerAffiliations from "../components/partners/PartnerAffiliations.jsx"
 import { useAuth } from "../hooks/useAuth";
 import { useNotification } from "../hooks/useNotification";
 import { resolveApiEndpoint } from "../utils/api";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 import "./UserProfile.css";
 
 const TAB_PAGE_SIZE = 6;
@@ -227,7 +228,11 @@ function UserProfile() {
                return;
             }
             setProfileStatus("error");
-            setProfileError("We couldn't load this profile. Check your connection and try again.");
+            setProfileError(userFacingErrorMessage(error, {
+               fallback: "We couldn't load this profile. Please try again.",
+               permissionMessage: "Your account can't access this profile.",
+               serviceMessage: "This profile is temporarily unavailable. Try again shortly.",
+            }));
          });
 
       return () => {
@@ -266,10 +271,14 @@ function UserProfile() {
          });
          setIsFollowing(Boolean(response.is_following));
          setFollowersCount(Number(response.followers_count) || 0);
-      } catch {
+      } catch (error) {
          addToast({
             type: "error",
-            message: `We couldn't ${isFollowing ? "unfollow" : "follow"} this member. Please try again.`,
+            message: userFacingErrorMessage(error, {
+               fallback: `We couldn't ${isFollowing ? "unfollow" : "follow"} this member. Please try again.`,
+               notFoundMessage: "This member profile is no longer available.",
+               conflictMessage: "This follow status changed before your update was recorded. Refresh the profile and try again.",
+            }),
          });
       } finally {
          setIsFollowPending(false);
@@ -338,14 +347,18 @@ function UserProfile() {
                [requestedTab]: { status: "success", items, error: "" },
             }));
          })
-         .catch(() => {
+         .catch((error) => {
             if (!isCurrentRequest()) return;
             setActivityState((current) => ({
                ...current,
                [requestedTab]: {
                   ...current[requestedTab],
                   status: "error",
-                  error: "We couldn't load this activity. Please try again.",
+                  error: userFacingErrorMessage(error, {
+                     fallback: "We couldn't load this activity. Please try again.",
+                     notFoundMessage: "This member's activity is no longer available.",
+                     serviceMessage: "Community activity is temporarily unavailable. Try again shortly.",
+                  }),
                },
             }));
          });
@@ -400,12 +413,16 @@ function UserProfile() {
          if (connectionRequestGenerationRef.current !== requestGeneration) return;
          const items = Array.isArray(data) ? data : Array.isArray(data?.results) ? data.results : [];
          setConnectionState({ status: "success", items, error: "" });
-      } catch {
+      } catch (error) {
          if (connectionRequestGenerationRef.current !== requestGeneration) return;
          setConnectionState({
             status: "error",
             items: [],
-            error: `We couldn't load ${type}. Please try again.`,
+            error: userFacingErrorMessage(error, {
+               fallback: `We couldn't load ${type}. Please try again.`,
+               notFoundMessage: "This member profile is no longer available.",
+               serviceMessage: "Community connections are temporarily unavailable. Try again shortly.",
+            }),
          });
       }
    };
@@ -481,7 +498,11 @@ function UserProfile() {
          addToast({ type: "success", message: "Profile updated." });
       } catch (error) {
          const usernameMessage = Array.isArray(error?.username) ? error.username[0] : error?.username;
-         setEditError(usernameMessage || "We couldn't save your profile. Review your changes and try again.");
+         setEditError(usernameMessage || userFacingErrorMessage(error, {
+            fallback: "We couldn't save your profile. Review your changes and try again.",
+            validationMessage: "Review your profile changes and try again.",
+            conflictMessage: "Your profile changed before these edits were saved. Refresh it and try again.",
+         }));
       } finally {
          setIsSavingProfile(false);
       }

@@ -23,6 +23,7 @@ import AuthRouteLoader from "../components/AuthRouteLoader.jsx";
 import { useNotification } from "../hooks/useNotification";
 // ── Utilities & Constants ──
 import { resolveApiEndpoint } from "../utils/api";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 import {
    getDefaultAuthenticatedDestination,
    resolveAuthDestination,
@@ -136,11 +137,26 @@ function LoginPage() {
             return;
          }
 
-         setError(data?.detail || "Invalid credentials. Please try again.");
+         setError(userFacingErrorMessage(
+            { status: response.status, detail: data?.detail },
+            {
+               fallback: "We couldn't sign you in. Please try again.",
+               authMessage: "The username, email, or password was not accepted.",
+               validationMessage: "Check your sign-in details and try again.",
+               rateLimitMessage: "Too many sign-in attempts were made in a short period. Wait a moment before trying again.",
+               serviceMessage: "Sign-in is temporarily unavailable. Try again shortly.",
+            },
+         ));
       } catch (err) {
-         setError(err?.code === "SESSION_INITIALIZATION_FAILED"
-            ? err.message
-            : "Unable to sign in right now. Please try again.");
+         setError(
+            err?.code === "SESSION_INITIALIZATION_FAILED"
+               ? err.message
+               : userFacingErrorMessage(err, {
+                    fallback: "We couldn't sign you in. Please try again.",
+                    networkMessage: "TruthLens couldn't be reached. Check your internet connection and try signing in again.",
+                    serviceMessage: "Sign-in is temporarily unavailable. Try again shortly.",
+                 }),
+         );
          console.error("Login error:", err);
       } finally {
          setIsSigningIn(false);
@@ -173,12 +189,27 @@ function LoginPage() {
                return;
             }
 
-            setError(data?.detail || "Unable to sign in with Google right now. Please try again.");
+            setError(userFacingErrorMessage(
+               { status: response.status, detail: data?.detail },
+               {
+                  fallback: "We couldn't sign you in with Google. Please try again.",
+                  authMessage: "Google sign-in could not be verified. Start the Google sign-in again.",
+                  validationMessage: "Google sign-in could not be completed with that account response.",
+                  rateLimitMessage: "Too many sign-in attempts were made in a short period. Wait a moment before trying again.",
+                  serviceMessage: "Google sign-in is temporarily unavailable. Try again shortly.",
+               },
+            ));
          } catch (err) {
             console.error("Google Login error:", err);
-            setError(err?.code === "SESSION_INITIALIZATION_FAILED"
-               ? err.message
-               : "Unable to sign in with Google right now. Please try again.");
+            setError(
+               err?.code === "SESSION_INITIALIZATION_FAILED"
+                  ? err.message
+                  : userFacingErrorMessage(err, {
+                       fallback: "We couldn't sign you in with Google. Please try again.",
+                       networkMessage: "TruthLens couldn't be reached after Google sign-in. Check your connection and try again.",
+                       serviceMessage: "Google sign-in is temporarily unavailable. Try again shortly.",
+                    }),
+            );
          } finally {
             setIsSigningIn(false);
          }

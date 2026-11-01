@@ -1,7 +1,7 @@
 {
    "manifest_version": 3,
    "name": "TruthLens",
-   "version": "0.1.6",
+   "version": "0.1.7",
    "description": "AI-driven misinformation detection",
    "icons": {
       "16": "truthlens_logo.png",
@@ -33,8 +33,7 @@
    "web_accessible_resources": [
       {
          "resources": [
-            "auth-bridge.js",
-            "truthlens_logo.png"
+            "auth-bridge.js"
          ],
          "matches": [
             "http://localhost:5174/*",
@@ -42,6 +41,14 @@
             "https://truthlens-dev.vercel.app/*",
             "https://truthlens.social/*",
             "https://www.truthlens.social/*"
+         ]
+      },
+      {
+         "resources": [
+            "truthlens_logo.png"
+         ],
+         "matches": [
+            "<all_urls>"
          ]
       }
    ],

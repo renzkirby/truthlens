@@ -7,6 +7,7 @@ import {
    clearAuthSession,
 } from "./modules/auth.js";
 import { state } from "./modules/state.js";
+import { extensionErrorPresentation } from "./modules/userFacingError.js";
 
 const GUEST_SCANS_STORAGE_KEY = "guest_scans";
 const GUEST_SCANS_CAP = 3;
@@ -272,6 +273,24 @@ async function postJsonWithAuth(path, payload) {
    );
 }
 
+function responseVerificationError(response, payload, options = {}) {
+   const presentation = extensionErrorPresentation({
+      status: response?.status ?? null,
+      payload,
+      ...options,
+   });
+   const error = new Error(presentation.message);
+   error.kind = presentation.kind;
+   return error;
+}
+
+function caughtVerificationError(error, options = {}) {
+   if (error?.kind && error?.message) {
+      return { kind: error.kind, message: error.message };
+   }
+   return extensionErrorPresentation({ error, ...options });
+}
+
 function startPollingClaim({
    claimId,
    tabId,
@@ -300,7 +319,10 @@ function startPollingClaim({
 
       if (pollCount >= maxPolls) {
          console.error("Polling timed out");
-         stopWithError("Verification timed out. Please try again.");
+         stopWithError(
+            "Verification took longer than expected. Start a new scan when you're ready to try again.",
+            "timeout",
+         );
          return;
       }
 
@@ -315,23 +337,17 @@ function startPollingClaim({
          }
 
          if (claim.run_status === "FAILED") {
-            const failureKind =
-               claim.failure_code === "URL_KNOWN_THREAT"
-                  ? "security_threat"
-                  : claim.failure_code === "URL_POLICY_BLOCKED"
-                    ? "input"
-                    : "service";
-            stopWithError(
-               typeof claim.detail === "string" && claim.detail.trim()
-                  ? claim.detail
-                  : "TruthLens couldn't complete this analysis. Please try again.",
-               failureKind,
-            );
+            const presentation = extensionErrorPresentation({
+               payload: claim,
+               failureCode: claim.failure_code,
+               fallback: "TruthLens couldn't complete this analysis.",
+            });
+            stopWithError(presentation.message, presentation.kind);
             return;
          }
 
          if (claim.run_status === "CANCELLED") {
-            stopWithError("This analysis was cancelled. Please start the verification again.");
+            stopWithError("This verification was cancelled.", "cancelled");
             return;
          }
 
@@ -339,13 +355,19 @@ function startPollingClaim({
             claim.run_status === "ABSTAINED" &&
             !(claim.abstention_reason === "OUT_OF_SCOPE" && claim.verdict === "OUT_OF_SCOPE")
          ) {
-            stopWithError("Analysis finished without a supported automated conclusion.");
+            stopWithError(
+               "TruthLens finished the analysis but could not support an automated conclusion.",
+               "unsupported",
+            );
             return;
          }
 
          if (claim.verdict === "PENDING") {
             if (claim.run_status && claim.run_status !== "PENDING" && claim.run_status !== "RUNNING") {
-               stopWithError("Analysis finished without a supported automated conclusion.");
+               stopWithError(
+                  "TruthLens finished the analysis but could not support an automated conclusion.",
+                  "unsupported",
+               );
                return;
             }
             return;
@@ -370,17 +392,19 @@ function startPollingClaim({
          const isTerminalFailure = errorStatus !== null && errorStatus < 500;
 
          if (isTerminalFailure) {
-            const message =
-               errorStatus === 404
-                  ? "The claim result was not found. Please start the verification again."
-                  : "Unable to retrieve the verification result. Please try again.";
-            stopWithError(message);
+            const presentation = extensionErrorPresentation({
+               status: errorStatus,
+               error,
+               notFoundMessage: "This verification result is no longer available. Start a new scan.",
+            });
+            stopWithError(presentation.message, presentation.kind);
             return;
          }
 
          console.warn("Transient claim polling failure:", error?.message || error);
          if (pollCount >= maxPolls) {
-            stopWithError("Unable to retrieve the verification result. Please try again.");
+            const presentation = caughtVerificationError(error);
+            stopWithError(presentation.message, presentation.kind);
          }
       } finally {
          isPollInFlight = false;
@@ -597,7 +621,9 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             const res = await postJsonWithAuth("analyze/", payload);
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-               throw new Error(data?.detail || data?.error || "Snippet verification failed.");
+               throw responseVerificationError(res, data, {
+                  inputMessage: "Check the captured image and try again.",
+               });
             }
 
             if (data.cached && data.match) {
@@ -623,9 +649,11 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             });
          } catch (err) {
             console.error("Snippet verification failed:", err);
+            const presentation = caughtVerificationError(err);
             sendTabMessage(tabId, {
                type: "DISPLAY_SNIPPET_ERROR",
-               message: "Failed to analyze image. Please try again later.",
+               message: presentation.message,
+               kind: presentation.kind,
             });
          }
       })();
@@ -660,7 +688,9 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             const res = await postJsonWithAuth("analyze/", payload);
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-               throw new Error(data?.detail || data?.error || "Image verification failed.");
+               throw responseVerificationError(res, data, {
+                  inputMessage: "Check the image file and try again.",
+               });
             }
 
             if (data.cached && data.match) {
@@ -686,9 +716,11 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             });
          } catch (err) {
             console.error("Image verification failed:", err);
+            const presentation = caughtVerificationError(err);
             sendTabMessage(tabId, {
                type: "DISPLAY_IMAGE_ERROR",
-               message: err?.message || "Failed to analyze image. Please try again.",
+               message: presentation.message,
+               kind: presentation.kind,
             });
          }
       })();
@@ -701,22 +733,34 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       const payload = request.payload;
 
       if (!Number.isInteger(tabId)) {
-         sendResponse({ accepted: false, error: "No active tab" });
+         sendResponse({ accepted: false, error: "No active tab found for AI image analysis." });
          return false;
       }
+
+      if (!payload?.image_data) {
+         sendResponse({ accepted: false, error: "Choose an image before starting the AI image check." });
+         return false;
+      }
+
       sendResponse({ accepted: true });
 
       (async () => {
          try {
             const res = await postJsonWithAuth("test-deepfake/", payload);
             const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data?.error || "Deepfake check failed");
+            if (!res.ok) {
+               throw responseVerificationError(res, data, {
+                  inputMessage: "Check the image and try the AI image check again.",
+               });
+            }
 
             sendTabMessage(tabId, { type: "DISPLAY_DEEPFAKE_RESULT", data });
          } catch (err) {
+            const presentation = caughtVerificationError(err);
             sendTabMessage(tabId, {
                type: "DISPLAY_SNIPPET_ERROR",
-               message: err.message,
+               message: presentation.message,
+               kind: presentation.kind,
             });
          }
       })();
@@ -724,7 +768,20 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
    }
 
    if (request.type === "VERIFY_URL") {
-      const { url, tabId } = request;
+      const tabId = request.tabId ?? sender?.tab?.id;
+      const url = typeof request.url === "string" ? request.url.trim() : "";
+
+      if (!Number.isInteger(tabId)) {
+         sendResponse({ accepted: false, error: "No active tab found for URL verification." });
+         return false;
+      }
+
+      if (!url) {
+         sendResponse({ accepted: false, error: "Enter a URL to verify." });
+         return false;
+      }
+
+      sendResponse({ accepted: true });
 
       (async () => {
          try {
@@ -733,15 +790,9 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-               const error = new Error(data?.detail || "URL verification failed.");
-               const safetyStatus = data?.url_safety?.status;
-               error.kind =
-                  safetyStatus === "UNSAFE" || safetyStatus === "KNOWN_THREAT"
-                     ? "security_threat"
-                     : res.status === 400
-                       ? "input"
-                       : "service";
-               throw error;
+               throw responseVerificationError(res, data, {
+                  inputMessage: "Check the URL and try again.",
+               });
             }
 
             // Add this inside VERIFY_URL and VERIFY_FILE in background.js
@@ -769,11 +820,11 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             });
          } catch (err) {
             console.error("URL verification failed:", err);
-
+            const presentation = caughtVerificationError(err);
             sendTabMessage(tabId, {
                type: "DISPLAY_URL_ERROR",
-               message: err?.message || "Unable to verify this URL. Please try again.",
-               kind: err?.kind || "service",
+               message: presentation.message,
+               kind: presentation.kind,
             });
          }
       })();
@@ -809,7 +860,9 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             const data = await res.json().catch(() => ({}));
 
             if (!res.ok) {
-               throw new Error(data?.detail || data?.error || "Text verification failed.");
+               throw responseVerificationError(res, data, {
+                  inputMessage: "Check the claim text and try again.",
+               });
             }
 
             if (data.cached && data.match) {
@@ -837,9 +890,11 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             });
          } catch (err) {
             console.error("Text verification failed:", err);
+            const presentation = caughtVerificationError(err);
             sendTabMessage(tabId, {
                type: "DISPLAY_TEXT_ERROR",
-               message: err?.message || "Unable to verify this text. Please try again.",
+               message: presentation.message,
+               kind: presentation.kind,
             });
          }
       })();
@@ -848,9 +903,19 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
    }
 
    if (request.type === "VERIFY_FILE") {
-      const tabId = request.tabId ?? sender?.tab?.id; // <--- Grabs the tabId we passed from the popup
+      const tabId = request.tabId ?? sender?.tab?.id;
       const payload = request.payload;
       const endpoint = "verify-file/";
+
+      if (!Number.isInteger(tabId)) {
+         sendResponse({ accepted: false, error: "No active tab found for document verification." });
+         return false;
+      }
+
+      if (!payload?.file_data) {
+         sendResponse({ accepted: false, error: "Choose a document before starting verification." });
+         return false;
+      }
 
       sendResponse({ accepted: true, success: true });
       (async () => {
@@ -860,7 +925,9 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             const data = await res.json().catch(() => ({}));
 
             if (!res.ok) {
-               throw new Error(data?.error || data?.detail || "File verification failed.");
+               throw responseVerificationError(res, data, {
+                  inputMessage: "Check the document and try again.",
+               });
             }
 
             // Add this inside VERIFY_URL and VERIFY_FILE in background.js
@@ -887,9 +954,11 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             });
          } catch (err) {
             console.error("File verification failed:", err);
+            const presentation = caughtVerificationError(err);
             sendTabMessage(tabId, {
                type: "DISPLAY_SNIPPET_ERROR",
-               message: err.message || "Failed to process document.",
+               message: presentation.message,
+               kind: presentation.kind,
             });
          }
       })();

@@ -6,6 +6,7 @@ import Icons from "../components/Icons.jsx";
 import { getEffectiveVerdict } from "../utils/verdict";
 import { VERDICT_META } from "../utils/constants";
 import { buildApiUrl } from "../utils/api";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 
 const AnalysisModal = ({ claimId, onClose }) => {
    const { authFetch } = useAuth();
@@ -54,7 +55,11 @@ const AnalysisModal = ({ claimId, onClose }) => {
             setClaimData(data);
          } catch (err) {
             console.error("Failed to fetch analysis:", err);
-            setError("Could not load the analysis report.");
+            setError(userFacingErrorMessage(err, {
+               fallback: "We couldn't load the analysis report.",
+               notFoundMessage: "This analysis report is no longer available.",
+               permissionMessage: "Your account can't access this analysis report.",
+            }));
          } finally {
             setLoading(false);
          }
@@ -1064,7 +1069,11 @@ export default function UserHub() {
          } catch (err) {
             console.error("Failed to load user hub data:", err);
 
-            setError("We couldn't refresh your dashboard right now. Please try again.");
+            setError(userFacingErrorMessage(err, {
+               fallback: "We couldn't refresh your dashboard right now. Please try again.",
+               authMessage: "Your session expired. Sign in again to load your dashboard.",
+               serviceMessage: "Your dashboard is temporarily unavailable. Try again shortly.",
+            }));
          } finally {
             if (isRefresh) {
                setRefreshing(false);
@@ -1140,7 +1149,11 @@ export default function UserHub() {
 
             console.error("Failed to load fact-check library:", err);
 
-            setLibraryError("Could not load your fact-check activity.");
+            setLibraryError(userFacingErrorMessage(err, {
+               fallback: "We couldn't load your fact-check activity.",
+               authMessage: "Your session expired. Sign in again to load your fact-check activity.",
+               serviceMessage: "Your fact-check activity is temporarily unavailable. Try again shortly.",
+            }));
          } finally {
             if (!ignore) {
                setLibraryLoading(false);
@@ -1370,7 +1383,11 @@ export default function UserHub() {
          setLibraryData(previousLibraryData);
          setLibraryCounts(previousLibraryCounts);
 
-         setSaveError("Could not update this saved claim. Please try again.");
+         setSaveError(userFacingErrorMessage(err, {
+            fallback: "We couldn't update this saved claim. Please try again.",
+            notFoundMessage: "This fact-check is no longer available.",
+            conflictMessage: "This saved fact-check changed before your update was recorded. Refresh the list and try again.",
+         }));
       } finally {
          setSavingClaimIds((current) => {
             const next = new Set(current);

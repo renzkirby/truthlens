@@ -16,6 +16,7 @@ import Icons from "../components/Icons.jsx";
 import Button from "../components/ui/Button.jsx";
 import "./OnboardingPage.css";
 import { resolveApiEndpoint } from "../utils/api";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 import {
    getDefaultAuthenticatedDestination,
    resolveAuthDestination,
@@ -373,7 +374,12 @@ export default function OnboardingPage() {
       } catch (error) {
          console.error("Failed to complete onboarding:", error);
 
-         setCompletionError("We couldn't finish onboarding right now. Please try again.");
+         setCompletionError(userFacingErrorMessage(error, {
+            fallback: "We couldn't finish onboarding. Please try again.",
+            authMessage: "Your session expired before onboarding could be completed. Sign in again to continue.",
+            conflictMessage: "Your account state changed while onboarding was finishing. Reload the page before continuing.",
+            serviceMessage: "Onboarding completion is temporarily unavailable. Try again shortly.",
+         }));
       } finally {
          setIsCompleting(false);
       }

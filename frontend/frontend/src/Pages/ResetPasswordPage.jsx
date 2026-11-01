@@ -6,6 +6,7 @@ import Icons from "../components/Icons.jsx";
 import Button from "../components/ui/Button.jsx";
 import Input from "../components/ui/Input.jsx";
 import { resolveApiEndpoint } from "../utils/api";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 import "../components/account/AccountForm.css";
 
 function ResetPasswordPage() {
@@ -52,15 +53,28 @@ function ResetPasswordPage() {
 
          if (!response.ok) {
             const detail = Array.isArray(data?.detail) ? data.detail.join(" ") : data?.detail;
-
-            throw new Error(detail || "Unable to reset your password. Please request a new link.");
+            setError(userFacingErrorMessage(
+               { status: response.status, detail },
+               {
+                  fallback: "We couldn't reset your password. Request a new reset link if this one is no longer valid.",
+                  validationMessage: "Review the new password requirements and try again.",
+                  notFoundMessage: "This password reset link is no longer available. Request a new one.",
+                  rateLimitMessage: "Too many password reset attempts were made in a short period. Wait before trying again.",
+                  serviceMessage: "Password reset is temporarily unavailable. Try again shortly.",
+               },
+            ));
+            return;
          }
 
          setSuccess(true);
       } catch (err) {
          console.error("Password reset failed:", err);
 
-         setError(err.message || "Unable to reset your password. Please request a new link.");
+         setError(userFacingErrorMessage(err, {
+            fallback: "We couldn't reset your password. Please try again.",
+            networkMessage: "TruthLens couldn't be reached. Check your connection and try the password reset again.",
+            serviceMessage: "Password reset is temporarily unavailable. Try again shortly.",
+         }));
       } finally {
          setIsSubmitting(false);
       }

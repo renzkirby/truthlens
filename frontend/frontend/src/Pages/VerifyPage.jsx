@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import Icons from "../components/Icons.jsx";
 import { VERDICT_CONFIG } from "../utils/constants";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 import "./VerifyPage.css";
 
 const POLL_INTERVAL_MS = 3000;
@@ -37,17 +38,13 @@ const hasNumericValue = (value) =>
 const KNOWN_URL_THREAT_MESSAGE =
    "This URL was flagged for a known security threat and cannot be analyzed.";
 
-const getErrorMessage = (error, fallback) => {
-   if (error?.status === 429) {
-      return "Too many verification requests. Please wait a moment and try again.";
-   }
-
-   if (error?.status === 400 || error?.status === 415) {
-      return "We could not process that input. Check the format and try again.";
-   }
-
-   return fallback;
-};
+const getErrorMessage = (error, fallback) =>
+   userFacingErrorMessage(error, {
+      fallback,
+      validationMessage: "Check the submitted content and try again.",
+      rateLimitMessage: "Too many verification requests were made in a short period. Wait a moment before trying again.",
+      serviceMessage: "TruthLens analysis is temporarily unavailable. Try again shortly.",
+   });
 
 const getUrlErrorMessage = (error, fallback) => {
    const safetyStatus = error?.url_safety?.status;

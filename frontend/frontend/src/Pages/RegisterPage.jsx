@@ -28,6 +28,7 @@ import AuthShell from "../components/auth/AuthShell.jsx";
 
 // ── Utilities & Constants ──
 import { resolveApiEndpoint } from "../utils/api";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 import { resolveAuthDestination } from "../utils/authNavigation";
 
 // ── Styles ──
@@ -73,7 +74,16 @@ function RegisterPage() {
             const data = await response.json().catch(() => ({}));
 
             if (!response.ok || !data?.access) {
-               setError(data?.detail || "Unable to continue with Google right now. Please try again.");
+               setError(userFacingErrorMessage(
+                  { status: response.status, detail: data?.detail },
+                  {
+                     fallback: "We couldn't continue with Google. Please try again.",
+                     authMessage: "Google sign-in could not be verified. Start the Google sign-in again.",
+                     validationMessage: "Google sign-in could not be completed with that account response.",
+                     rateLimitMessage: "Too many account requests were made in a short period. Wait a moment before trying again.",
+                     serviceMessage: "Google account registration is temporarily unavailable. Try again shortly.",
+                  },
+               ));
                return;
             }
 
@@ -100,7 +110,11 @@ function RegisterPage() {
          } catch (err) {
             console.error("Google registration error:", err);
 
-            setError("Unable to continue with Google right now. Please try again.");
+            setError(userFacingErrorMessage(err, {
+               fallback: "We couldn't continue with Google. Please try again.",
+               networkMessage: "TruthLens couldn't be reached after Google sign-in. Check your connection and try again.",
+               serviceMessage: "Google account registration is temporarily unavailable. Try again shortly.",
+            }));
          } finally {
             setIsSigningIn(false);
          }
@@ -208,16 +222,32 @@ function RegisterPage() {
          const data = await response.json().catch(() => ({}));
 
          if (!response.ok) {
-            const normalized = normalizeRegistrationErrors(data);
+            if ([400, 422].includes(response.status)) {
+               const normalized = normalizeRegistrationErrors(data);
+               setFieldErrors(normalized.fields);
 
-            setFieldErrors(normalized.fields);
-
-            if (normalized.form || Object.keys(normalized.fields).length === 0) {
-               setError(
-                  normalized.form || "Unable to create your account. Please check your information and try again.",
-               );
+               if (normalized.form || Object.keys(normalized.fields).length === 0) {
+                  setError(
+                     normalized.form ||
+                        userFacingErrorMessage(
+                           { status: response.status, detail: data?.detail },
+                           {
+                              fallback: "We couldn't create your account. Check your information and try again.",
+                              validationMessage: "Check your account information and try again.",
+                           },
+                        ),
+                  );
+               }
+            } else {
+               setError(userFacingErrorMessage(
+                  { status: response.status, detail: data?.detail },
+                  {
+                     fallback: "We couldn't create your account. Please try again.",
+                     rateLimitMessage: "Too many account requests were made in a short period. Wait a moment before trying again.",
+                     serviceMessage: "Account registration is temporarily unavailable. Try again shortly.",
+                  },
+               ));
             }
-
             return;
          }
 
@@ -234,7 +264,11 @@ function RegisterPage() {
       } catch (err) {
          console.error("Registration error:", err);
 
-         setError("Unable to register right now. Please try again.");
+         setError(userFacingErrorMessage(err, {
+            fallback: "We couldn't create your account. Please try again.",
+            networkMessage: "TruthLens couldn't be reached. Check your internet connection and try registering again.",
+            serviceMessage: "Account registration is temporarily unavailable. Try again shortly.",
+         }));
       } finally {
          setIsSigningIn(false);
       }

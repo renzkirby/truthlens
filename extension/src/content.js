@@ -257,7 +257,10 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
    if (request.type === "DISPLAY_SNIPPET_ERROR" || request.type === "DISPLAY_IMAGE_ERROR") {
       import("./modules/ui.jsx").then(({ removeLoadingCard, displayErrorCard }) => {
          removeLoadingCard();
-         displayErrorCard(request.message || "Failed to analyze image. Please try again.");
+         displayErrorCard(
+            request.message || "TruthLens couldn't complete this verification.",
+            { kind: request.kind || "service" },
+         );
       });
       sendResponse({ success: true });
    }

@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
 import { resolveApiEndpoint } from "../utils/api";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 import Icons from "./Icons.jsx";
 import PartnerAffiliations from "./partners/PartnerAffiliations.jsx";
 import PartnerLogo from "./partners/PartnerLogo.jsx";
@@ -266,13 +267,17 @@ function GlobalSearch() {
             setSearchOrganizations(normalizeResults(partnerData).slice(0, 6));
             setSearchError("");
          })
-         .catch(() => {
+         .catch((error) => {
             if (!effectIsCurrent || requestId !== searchRequestIdRef.current) return;
 
             setSearchThreads([]);
             setSearchUsers([]);
             setSearchOrganizations([]);
-            setSearchError("We couldn’t load search results. Try again.");
+            setSearchError(userFacingErrorMessage(error, {
+               fallback: "We couldn't load search results. Try again.",
+               authMessage: "Your session expired. Sign in again to search TruthLens.",
+               serviceMessage: "TruthLens search is temporarily unavailable. Try again shortly.",
+            }));
          })
          .finally(() => {
             if (effectIsCurrent && requestId === searchRequestIdRef.current) {

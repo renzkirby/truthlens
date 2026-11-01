@@ -14,6 +14,7 @@ import PartnerLogo from "../components/partners/PartnerLogo";
 import { useAuth } from "../hooks/useAuth";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { resolveApiEndpoint } from "../utils/api";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 import { createPublicReachEventId, recordPublicReach } from "../utils/publicReach";
 import "./PublicFactCheckPage.css";
 
@@ -205,7 +206,7 @@ function PublicFactCheckPage() {
    const headingRef = useRef(null);
    const routeKey = `${slug}/${publicationId}`;
    const detail = detailState?.routeKey === routeKey ? detailState.data : null;
-   const error = errorState?.routeKey === routeKey ? errorState.type : null;
+   const error = errorState?.routeKey === routeKey ? errorState : null;
    const showLoading = isLoading || (!detail && !error);
 
    let documentTitle = "Published Fact-Check | TruthLens";
@@ -243,6 +244,13 @@ function PublicFactCheckPage() {
             setErrorState({
                routeKey,
                type: requestError?.status === 404 ? "unavailable" : "request",
+               message:
+                  requestError?.status === 404
+                     ? "This publication could not be found or is not currently available publicly."
+                     : userFacingErrorMessage(requestError, {
+                          fallback: "We couldn't load this published fact-check. Please try again.",
+                          serviceMessage: "This published fact-check is temporarily unavailable. Try again shortly.",
+                       }),
             });
          })
          .finally(() => {
@@ -299,7 +307,7 @@ function PublicFactCheckPage() {
    }
 
    if (error) {
-      const unavailable = error === "unavailable";
+      const unavailable = error?.type === "unavailable";
       return (
          <div className="public-fact-check-page">
             <section className="public-fact-check-state" role="alert">
@@ -308,9 +316,7 @@ function PublicFactCheckPage() {
                </div>
                <h1>Published fact-check unavailable</h1>
                <p>
-                  {unavailable
-                     ? "This publication could not be found or is not currently available publicly."
-                     : "We could not load this published fact-check. Please try again."}
+                  {error?.message || "This published fact-check is unavailable."}
                </p>
                <div className="public-fact-check-state__actions">
                   {!unavailable && (

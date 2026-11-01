@@ -62,3 +62,14 @@
 }
 
 .url-tip-icon { flex-shrink: 0; margin-top: 3px; }
+
+.url-page-error {
+  margin: -3px 0 0;
+  padding: 9px 10px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 11px;
+  line-height: 1.45;
+}

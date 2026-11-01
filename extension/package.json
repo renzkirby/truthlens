@@ -1,12 +1,13 @@
 {
   "name": "truthlens-react",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.7",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "test:errors": "node --test src/modules/userFacingError.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

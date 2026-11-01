@@ -6,18 +6,12 @@ import Input from "../components/ui/Input";
 import Textarea from "../components/ui/Textarea";
 import { useAuth } from "../hooks/useAuth";
 import { resolveApiEndpoint } from "../utils/api";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 
 import "./SettingsPage.css";
 
 const MAX_AVATAR_SIZE = 2 * 1024 * 1024;
 const ACCEPTED_AVATAR_TYPES = new Set(["image/jpeg", "image/png", "image/gif"]);
-const MAX_SETTINGS_ERROR_LENGTH = 200;
-const UNSAFE_SETTINGS_ERROR_PATTERNS = [
-   /<!doctype|<\/?[a-z][^>]*>/i,
-   /traceback|stack trace|django|internal server error|technical 500 response|request failed|failed to fetch/i,
-   /\b(?:syntax|type|reference|value|key|operational|programming)error\b|unexpected token|status code \d{3}/i,
-   /\bat\s+\S+\s+\([^)]*:\d+:\d+\)/i,
-];
 
 const profileFromUser = (user) => ({
    username: user?.username || "",
@@ -28,31 +22,6 @@ const firstError = (value) => {
    if (Array.isArray(value)) return value[0] || "";
    return typeof value === "string" ? value : "";
 };
-
-const settingsErrorMessage = (error, fallback) => {
-   const status = Number(error?.status);
-
-   // Never expose server, network, parser, or unknown runtime failures.
-   // Product-safe fallbacks are the authoritative copy for those cases.
-   if (!Number.isInteger(status) || status < 400 || status >= 500) {
-      return fallback;
-   }
-
-   const candidates = [error?.detail, error?.message];
-
-   for (const candidate of candidates) {
-      if (typeof candidate !== "string") continue;
-
-      const message = candidate.replace(/\s+/g, " ").trim();
-      if (!message || message.length > MAX_SETTINGS_ERROR_LENGTH) continue;
-      if (UNSAFE_SETTINGS_ERROR_PATTERNS.some((pattern) => pattern.test(message))) continue;
-
-      return message;
-   }
-
-   return fallback;
-};
-
 const authMethodLabel = (method) => {
    if (method === "password") return "Password";
    if (method === "google") return "Google";
@@ -204,7 +173,12 @@ function SettingsPage() {
             : "We could not save your profile. Try again.";
 
          setProfileMessage({
-            text: settingsErrorMessage(error, fallbackMessage),
+            text: userFacingErrorMessage(error, {
+               fallback: fallbackMessage,
+               validationMessage: fallbackMessage,
+               conflictMessage: "Your profile changed before these updates were saved. Refresh the page and try again.",
+               serviceMessage: "Profile settings are temporarily unavailable. Try again shortly.",
+            }),
             type: "error",
          });
       } finally {
@@ -229,9 +203,12 @@ function SettingsPage() {
       } catch (error) {
          setVerificationMessage({
             text:
-               error?.status === 429
-                  ? "You have requested several verification emails. Try again later."
-                  : settingsErrorMessage(error, "We could not send the verification email. Try again."),
+               userFacingErrorMessage(error, {
+                  fallback: "We could not send the verification email. Try again.",
+                  rateLimitMessage: "You have requested several verification emails. Try again later.",
+                  authMessage: "Your session expired. Sign in again before requesting another verification email.",
+                  serviceMessage: "Verification email delivery is temporarily unavailable. Try again shortly.",
+               }),
             type: "error",
          });
       } finally {
@@ -280,7 +257,12 @@ function SettingsPage() {
          });
       } catch (error) {
          setPasswordMessage({
-            text: error?.status === 429 ? passwordAction.rateError : settingsErrorMessage(error, passwordAction.error),
+            text: userFacingErrorMessage(error, {
+               fallback: passwordAction.error,
+               rateLimitMessage: passwordAction.rateError,
+               authMessage: "Your session expired. Sign in again before requesting password instructions.",
+               serviceMessage: "Password email delivery is temporarily unavailable. Try again shortly.",
+            }),
             type: "error",
          });
       } finally {

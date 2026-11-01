@@ -6,6 +6,7 @@ import Icons from "../components/Icons.jsx";
 import Button from "../components/ui/Button.jsx";
 import Input from "../components/ui/Input.jsx";
 import { resolveApiEndpoint } from "../utils/api";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 import "../components/account/AccountForm.css";
 
 function ForgotPasswordPage() {
@@ -32,13 +33,26 @@ function ForgotPasswordPage() {
          const data = await response.json().catch(() => ({}));
 
          if (!response.ok) {
-            throw new Error(data?.detail || "Unable to process the request.");
+            setError(userFacingErrorMessage(
+               { status: response.status, detail: data?.detail },
+               {
+                  fallback: "We couldn't send password reset instructions. Please try again.",
+                  validationMessage: "Check the email address and try again.",
+                  rateLimitMessage: "Too many password reset requests were made in a short period. Wait before requesting another email.",
+                  serviceMessage: "Password recovery is temporarily unavailable. Try again shortly.",
+               },
+            ));
+            return;
          }
 
          setSuccess(true);
       } catch (err) {
          console.error("Password reset request failed:", err);
-         setError(err.message || "Unable to process the request. Please try again.");
+         setError(userFacingErrorMessage(err, {
+            fallback: "We couldn't send password reset instructions. Please try again.",
+            networkMessage: "TruthLens couldn't be reached. Check your internet connection and try requesting the reset email again.",
+            serviceMessage: "Password recovery is temporarily unavailable. Try again shortly.",
+         }));
       } finally {
          setIsSubmitting(false);
       }

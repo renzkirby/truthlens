@@ -8,6 +8,7 @@ import EvidenceCard from "../components/EvidenceCard";
 import PartnerAffiliations from "../components/partners/PartnerAffiliations.jsx";
 import { VERDICT_CONFIG, EVIDENCE_VERDICT_META, ESCALATION_OPTIONS } from "../utils/constants";
 import { evidenceSubmissionErrorMessage } from "../utils/evidenceSubmissionError";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 import "./ThreadDetailPage.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
@@ -25,17 +26,6 @@ function isHttpUrl(value) {
    } catch {
       return false;
    }
-}
-
-function safeActionMessage(error, fallback) {
-   const status = Number(error?.status);
-   if (!Number.isInteger(status) || status < 400 || status >= 500) return fallback;
-   const candidate = [error?.detail, error?.message]
-      .find((value) => typeof value === "string" && value.trim())
-      ?.trim();
-   if (!candidate || candidate.length > 200) return fallback;
-   if (/<[a-z][\s\S]*>|traceback|stack trace|internal server|exception|sql|django|request failed|network error|unexpected token|parse error/i.test(candidate)) return fallback;
-   return candidate;
 }
 
 function formatDate(value, options = {}) {
@@ -793,7 +783,12 @@ export default function ThreadDetailPage() {
       refreshThreadData()
          .catch((error) => {
             console.error("Failed to load thread", error);
-            if (active) setLoadError(safeActionMessage(error, "We couldn't load this thread. Please try again."));
+            if (active) setLoadError(userFacingErrorMessage(error, {
+               fallback: "We couldn't load this discussion. Please try again.",
+               notFoundMessage: "This discussion is no longer available.",
+               permissionMessage: "You don't have permission to view this discussion.",
+               serviceMessage: "This discussion is temporarily unavailable. Try again shortly.",
+            }));
          })
          .finally(() => { if (active) setLoading(false); });
       return () => { active = false; };
@@ -933,7 +928,11 @@ export default function ThreadDetailPage() {
          return true;
       } catch (error) {
          console.error("Failed to post comment", error);
-         const message = safeActionMessage(error, "We couldn't post this comment. You can retry it below.");
+         const message = userFacingErrorMessage(error, {
+               fallback: "We couldn't post this comment. You can retry it below.",
+               notFoundMessage: "This discussion is no longer available for comments.",
+               conflictMessage: "This discussion changed while your comment was being posted. Refresh it before retrying.",
+            });
          setComments((current) => current.map((comment) => comment.id === optimistic.id
             ? { ...comment, _sendState: "failed", _sendError: message }
             : comment));
@@ -1019,7 +1018,10 @@ export default function ThreadDetailPage() {
          setComments((current) => current.map((item) => item.id === comment.id
             ? { ...item, is_liked: previousLiked, like_count: previousCount }
             : item));
-         addToast({ type: "error", message: safeActionMessage(error, "We couldn't update this like. Please try again.") });
+         addToast({ type: "error", message: userFacingErrorMessage(error, {
+               fallback: "We couldn't update this like. Please try again.",
+               notFoundMessage: "This comment is no longer available.",
+            }) });
       } finally {
          setLikingIds((current) => {
             const next = new Set(current);
@@ -1067,7 +1069,11 @@ export default function ThreadDetailPage() {
          addToast({ type: "success", message: "Comment updated.", duration: 1800 });
       } catch (error) {
          console.error("Failed to edit comment", error);
-         addToast({ type: "error", message: safeActionMessage(error, "We couldn't update this comment. Please try again.") });
+         addToast({ type: "error", message: userFacingErrorMessage(error, {
+               fallback: "We couldn't update this comment. Please try again.",
+               notFoundMessage: "This comment is no longer available.",
+               conflictMessage: "This comment changed before your edit was saved. Refresh the discussion and try again.",
+            }) });
       }
    }
 
@@ -1088,7 +1094,11 @@ export default function ThreadDetailPage() {
          addToast({ type: "success", message: type === "comment" ? "Comment deleted." : "Evidence deleted.", duration: 1800 });
       } catch (error) {
          console.error("Failed to delete item", error);
-         addToast({ type: "error", message: safeActionMessage(error, `We couldn't delete this ${type}. Please try again.`) });
+         addToast({ type: "error", message: userFacingErrorMessage(error, {
+               fallback: `We couldn't delete this ${type}. Please try again.`,
+               notFoundMessage: `This ${type} has already been removed.`,
+               conflictMessage: `This ${type} changed before it could be deleted. Refresh the discussion and try again.`,
+            }) });
       } finally {
          setDialogBusy(false);
       }
@@ -1135,7 +1145,11 @@ export default function ThreadDetailPage() {
          addToast({ type: "success", message: "Evidence updated.", duration: 1800 });
       } catch (error) {
          console.error("Failed to edit evidence", error);
-         addToast({ type: "error", message: safeActionMessage(error, "We couldn't update this evidence. Please try again.") });
+         addToast({ type: "error", message: userFacingErrorMessage(error, {
+               fallback: "We couldn't update this evidence. Please try again.",
+               notFoundMessage: "This evidence is no longer available.",
+               conflictMessage: "This evidence changed before your update was saved. Refresh the discussion and try again.",
+            }) });
       }
    }
 
@@ -1180,7 +1194,11 @@ export default function ThreadDetailPage() {
       } catch (error) {
          console.error("Failed to vote", error);
          setEvidenceList((current) => current.map((item) => item.id === evidence.id ? previousEvidence : item));
-         addToast({ type: "error", message: safeActionMessage(error, "We couldn't record this vote. Please try again.") });
+         addToast({ type: "error", message: userFacingErrorMessage(error, {
+               fallback: "We couldn't record this vote. Please try again.",
+               notFoundMessage: "This evidence is no longer available for voting.",
+               conflictMessage: "This evidence changed before your vote was recorded. Refresh the discussion and try again.",
+            }) });
       } finally {
          setVotingEvidenceId(null);
       }
@@ -1197,7 +1215,10 @@ export default function ThreadDetailPage() {
          addToast({ type: "success", message: "Report submitted for platform safety review.", duration: 2200 });
       } catch (error) {
          console.error("Failed to report thread", error);
-         addToast({ type: "error", message: safeActionMessage(error, "We couldn't submit this report. Please try again.") });
+         addToast({ type: "error", message: userFacingErrorMessage(error, {
+               fallback: "We couldn't submit this report. Please try again.",
+               notFoundMessage: "The item you tried to report is no longer available.",
+            }) });
       } finally {
          setReporting(false);
       }
