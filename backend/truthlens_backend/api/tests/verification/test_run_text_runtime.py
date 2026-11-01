@@ -588,6 +588,10 @@ class VerificationRunTextRuntimeTests(TestCase):
         self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
         self.retrieve_tavily.assert_called_once()
         self.evaluate_gfc.assert_not_called()
+        self.calibrate_confidence.assert_called_once_with(
+            self.verdict,
+            ["selected evidence"],
+        )
         self.assertEqual(self.save_claim.call_args.args[2], "Live Web Search")
         self.assertEqual(
             self.save_claim.call_args.args[4], self.tavily_report_sources
