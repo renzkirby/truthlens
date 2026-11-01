@@ -18,6 +18,8 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
             "summary": "Persisted evidence contradicts the claim.",
             "confidence_score": 92,
             "score_context": "Direct persisted evidence explicitly contradicts the submitted claim.",
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
         }
 
     def test_supplied_persisted_context_is_sent_without_provider_structure(self):
@@ -67,6 +69,8 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
                 "summary",
                 "confidence_score",
                 "score_context",
+                "contextual_basis_kind",
+                "contextual_basis_evidence_ids",
             },
         )
 
@@ -136,6 +140,70 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         self.assertEqual(result["verdict"], "UNVERIFIED")
         self.assertEqual(result["confidence_score"], 0)
 
+    def test_contextual_basis_metadata_is_preserved_for_contextual_verdicts(self):
+        contextual = {
+            **self.result,
+            "verdict": "MISLEADING",
+            "contextual_basis_kind": "MISSING_CONTEXT",
+            "contextual_basis_evidence_ids": ["11111111-1111-1111-1111-111111111111"],
+        }
+        with patch(
+            "api.services.call_llm_with_fallback",
+            return_value=json.dumps(contextual),
+        ):
+            result = evaluate_claim_with_persisted_evidence(
+                "Example claim.",
+                "Persisted evidence.",
+            )
+
+        self.assertEqual(result["verdict"], "MISLEADING")
+        self.assertEqual(result["contextual_basis_kind"], "MISSING_CONTEXT")
+        self.assertEqual(
+            result["contextual_basis_evidence_ids"],
+            ["11111111-1111-1111-1111-111111111111"],
+        )
+
+    def test_duplicate_contextual_basis_ids_fail_closed_without_changing_verdict(self):
+        duplicate_id = "11111111-1111-1111-1111-111111111111"
+        contextual = {
+            **self.result,
+            "verdict": "MISLEADING",
+            "contextual_basis_kind": "MISSING_CONTEXT",
+            "contextual_basis_evidence_ids": [duplicate_id, duplicate_id],
+        }
+        with patch(
+            "api.services.call_llm_with_fallback",
+            return_value=json.dumps(contextual),
+        ):
+            result = evaluate_claim_with_persisted_evidence(
+                "Example claim.",
+                "Persisted evidence.",
+            )
+
+        self.assertEqual(result["verdict"], "MISLEADING")
+        self.assertEqual(result["confidence_score"], 92)
+        self.assertEqual(result["contextual_basis_kind"], "NONE")
+        self.assertEqual(result["contextual_basis_evidence_ids"], [])
+
+    def test_non_contextual_verdict_discards_contextual_basis_metadata(self):
+        non_contextual = {
+            **self.result,
+            "contextual_basis_kind": "SATIRE_PROVENANCE",
+            "contextual_basis_evidence_ids": ["11111111-1111-1111-1111-111111111111"],
+        }
+        with patch(
+            "api.services.call_llm_with_fallback",
+            return_value=json.dumps(non_contextual),
+        ):
+            result = evaluate_claim_with_persisted_evidence(
+                "Example claim.",
+                "Persisted evidence.",
+            )
+
+        self.assertEqual(result["verdict"], "FAKE")
+        self.assertEqual(result["contextual_basis_kind"], "NONE")
+        self.assertEqual(result["contextual_basis_evidence_ids"], [])
+
     def test_prompt_contains_source_identity_and_anti_double_counting_guidance(self):
         with patch(
             "api.services.call_llm_with_fallback",
@@ -152,3 +220,7 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         self.assertIn("not guaranteed to be editorially", system_prompt)
         self.assertIn("Source count is not proof", system_prompt)
         self.assertIn("Conflicting, irrelevant, or insufficient", system_prompt)
+        self.assertIn("CONTEXTUAL BASIS METADATA", system_prompt)
+        self.assertIn("SATIRE_ORIGIN_OF_MISINFORMATION", system_prompt)
+        self.assertIn("submitted content itself is satire/parody", system_prompt)
+        self.assertIn("Evidence link ID", system_prompt)
