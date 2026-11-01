@@ -80,6 +80,15 @@ DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
 CLAIM_EQUIVALENCE_GEMINI_TIMEOUT_MS = 20_000
 PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS = 30_000
 
+_CONTEXTUAL_BASIS_KINDS = frozenset({
+    "NONE",
+    "MISSING_CONTEXT",
+    "PARTIAL_TRUTH",
+    "FALSE_CONTEXT",
+    "SATIRE_PROVENANCE",
+    "SATIRE_ORIGIN_OF_MISINFORMATION",
+})
+
 # Keep routine and reasoning model seams separate even though the defense-period
 # defaults currently use the same low-latency free-tier model. Operators can
 # still override GEMINI_REASONING_MODEL independently after validation.
@@ -1155,8 +1164,28 @@ def build_persisted_evidence_prompt(original_claim, evidence_context, article_st
     - FACT requires explicit support for the claim in the evidence.
     - FAKE requires explicit contradiction or evidence of fabrication.
     - MISLEADING applies to partial truth, omitted material context, or false context.
-    - SATIRE applies when the supplied evidence explicitly supports that classification.
+    - SATIRE applies only when the supplied evidence establishes that the submitted
+      content itself is satire/parody. A false claim that originated from satire is
+      not automatically SATIRE.
     - Conflicting, irrelevant, or insufficient evidence requires UNVERIFIED.
+
+    CONTEXTUAL BASIS METADATA:
+    - These fields are confidence-calibration metadata only. Determine the verdict
+      first from the evidence; never change a verdict merely to fit a basis kind.
+    - Evidence items may include an opaque "Evidence link ID". Copy only IDs that
+      actually appear in the supplied persisted-evidence dossier. Never invent,
+      transform, shorten, or infer an ID.
+    - FACT, FAKE, and UNVERIFIED must return contextual_basis_kind="NONE" and an
+      empty contextual_basis_evidence_ids list.
+    - For MISLEADING, use exactly one applicable basis kind:
+      MISSING_CONTEXT, PARTIAL_TRUTH, FALSE_CONTEXT, or
+      SATIRE_ORIGIN_OF_MISINFORMATION. Cite one or more evidence-link IDs that
+      directly establish that contextual relationship. If the basis cannot be tied
+      to supplied persisted evidence, use NONE and an empty list.
+    - For SATIRE, use SATIRE_PROVENANCE only when cited persisted evidence
+      establishes that the submitted content itself is satire/parody. Evidence that
+      merely says a false rumor originated from satire is not SATIRE_PROVENANCE.
+      If provenance is not established, use NONE and an empty list.
 
     confidence_score MUST be a numeric percentage from 0 to 100.
     The confidence_score placeholder in the field template must be replaced with a JSON number. Never output the placeholder or default to a fixed score.
@@ -1170,7 +1199,9 @@ def build_persisted_evidence_prompt(original_claim, evidence_context, article_st
         "verdict": "FACT, FAKE, MISLEADING, UNVERIFIED, or SATIRE",
         "summary": "Concise user-facing summary",
         "confidence_score": <evidence_based_numeric_percentage_0_to_100>,
-        "score_context": "Concise explanation of the confidence score"
+        "score_context": "Concise explanation of the confidence score",
+        "contextual_basis_kind": "NONE, MISSING_CONTEXT, PARTIAL_TRUTH, FALSE_CONTEXT, SATIRE_PROVENANCE, or SATIRE_ORIGIN_OF_MISINFORMATION",
+        "contextual_basis_evidence_ids": ["Exact Evidence link ID copied from the dossier"]
     }
     """
     user_data = (
@@ -1180,6 +1211,40 @@ def build_persisted_evidence_prompt(original_claim, evidence_context, article_st
     )
 
     return system_instructions, user_data
+
+
+def _normalize_contextual_basis_metadata(result):
+    """Validate confidence-only contextual metadata without changing the verdict."""
+    normalized = result.copy()
+    basis_kind = normalized.get("contextual_basis_kind", "NONE")
+    basis_ids = normalized.get("contextual_basis_evidence_ids", [])
+
+    valid_ids = (
+        isinstance(basis_ids, list)
+        and len(basis_ids) <= 128
+        and all(
+            type(value) is str
+            and 0 < len(value) <= 128
+            and value == value.strip()
+            for value in basis_ids
+        )
+        and len(set(basis_ids)) == len(basis_ids)
+    )
+    if (
+        type(basis_kind) is not str
+        or basis_kind not in _CONTEXTUAL_BASIS_KINDS
+        or not valid_ids
+    ):
+        basis_kind = "NONE"
+        basis_ids = []
+
+    if normalized.get("verdict") not in {"MISLEADING", "SATIRE"}:
+        basis_kind = "NONE"
+        basis_ids = []
+
+    normalized["contextual_basis_kind"] = basis_kind
+    normalized["contextual_basis_evidence_ids"] = list(basis_ids)
+    return normalized
 
 
 def evaluate_claim_with_persisted_evidence(
@@ -1194,6 +1259,8 @@ def evaluate_claim_with_persisted_evidence(
         "summary": "TruthLens could not verify this claim from persisted evidence.",
         "confidence_score": 0,
         "score_context": "No persisted evidence was available to support a verdict.",
+        "contextual_basis_kind": "NONE",
+        "contextual_basis_evidence_ids": [],
     }
     if not isinstance(evidence_context, str) or not evidence_context.strip():
         return unavailable_result
@@ -1227,7 +1294,7 @@ def evaluate_claim_with_persisted_evidence(
         parsed_result["confidence_score"] = _normalize_verdict_confidence_score(
             parsed_result["confidence_score"]
         )
-        return parsed_result
+        return _normalize_contextual_basis_metadata(parsed_result)
     except LLMProviderUnavailableError:
         raise
     except Exception as exc:
