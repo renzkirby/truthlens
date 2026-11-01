@@ -63,10 +63,22 @@ def normalize_url_safety_result(result: dict | None) -> dict:
         if isinstance(item, (str, int, float)) and str(item).strip()
     ][:20]
 
+    raw_reason = str(payload.get("reason") or "")
+    if raw_reason == "SAFE_BROWSING_API_KEY not configured":
+        reason = "PROVIDER_NOT_CONFIGURED"
+    elif raw_reason == "provider_unreachable":
+        reason = "PROVIDER_UNREACHABLE"
+    elif raw_reason.startswith("provider_error_"):
+        reason = "PROVIDER_ERROR"
+    elif raw_reason:
+        reason = "CHECK_UNAVAILABLE"
+    else:
+        reason = ""
+
     return {
         "status": status,
         "provider": str(payload.get("provider") or "")[:64],
-        "reason": str(payload.get("reason") or "")[:100],
+        "reason": reason,
         "threat_types": threat_types,
     }
 
@@ -166,7 +178,8 @@ def _fetch_once(url: str):
         port = parts.port or (443 if scheme == "https" else 80)
     except ValueError as exc:
         raise UrlPreviewFetchError("INVALID_PORT") from exc
-    if port not in _ALLOWED_PREVIEW_PORTS:
+    expected_port = 443 if scheme == "https" else 80
+    if port not in _ALLOWED_PREVIEW_PORTS or port != expected_port:
         raise UrlPreviewFetchError("UNSUPPORTED_PORT")
 
     ascii_hostname, records = _public_address_records(hostname, port)
