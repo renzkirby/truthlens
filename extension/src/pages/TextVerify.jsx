@@ -44,7 +44,10 @@ function TextVerify() {
                if (chrome.runtime.lastError || !response?.accepted) {
                   chrome.tabs.sendMessage(tab.id, {
                      type: "DISPLAY_TEXT_ERROR",
-                     message: response?.error || "Failed to analyze the text. Please try again.",
+                     message:
+                        response?.error ||
+                        "TruthLens could not start the text verification. Reload the extension and try again.",
+                     kind: response?.error ? "input" : "service",
                   });
                }
                window.close();
@@ -52,7 +55,7 @@ function TextVerify() {
          );
       } catch (submissionError) {
          console.error("Text verification failed:", submissionError);
-         setError("TruthLens could not start this analysis. Please try again.");
+         setError("TruthLens could not start this verification. Reload the extension and try again.");
          setIsAnalyzing(false);
       }
    };
