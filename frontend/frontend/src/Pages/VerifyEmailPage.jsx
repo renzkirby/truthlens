@@ -6,7 +6,7 @@ import Icons from "../components/Icons";
 import AuthShell from "../components/auth/AuthShell";
 import Button from "../components/ui/Button.jsx";
 import { resolveApiEndpoint } from "../utils/api";
-import { userFacingErrorMessage } from "../utils/userFacingError";
+import { classifyUserFacingError, userFacingErrorMessage } from "../utils/userFacingError";
 
 const verificationRequests = new Map();
 
@@ -85,17 +85,20 @@ function VerifyEmailPage() {
                return;
             }
 
-            setStatus("invalid");
+            const responseKind = classifyUserFacingError({ status: responseStatus });
+            const isRetryableFailure = ["rate_limit", "service"].includes(responseKind);
+            setStatus(isRetryableFailure ? "error" : "invalid");
             setMessage(
-               data?.detail ||
-                  userFacingErrorMessage(
-                     { status: responseStatus },
-                     {
-                        fallback: "This verification link is invalid or has already been used.",
-                        rateLimitMessage: "Too many verification attempts were made in a short period. Wait a moment before trying again.",
-                        serviceMessage: "Email verification is temporarily unavailable. Try again shortly.",
-                     },
-                  ),
+               isRetryableFailure
+                  ? userFacingErrorMessage(
+                       { status: responseStatus },
+                       {
+                          fallback: "We couldn't verify your email. Please try again.",
+                          rateLimitMessage: "Too many verification attempts were made in a short period. Wait a moment before trying again.",
+                          serviceMessage: "Email verification is temporarily unavailable. Try again shortly.",
+                       },
+                    )
+                  : data?.detail || "This verification link is invalid or has already been used.",
             );
          } catch (error) {
             console.error("Email verification failed:", error);
