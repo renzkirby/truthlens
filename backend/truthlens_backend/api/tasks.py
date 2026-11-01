@@ -2411,8 +2411,10 @@ def _save_claim(claim_id, verdict, source_type, context_text, source_urls=None, 
             elif context_text:
                 claim.claim_fingerprint = compute_fingerprint("TEXT", context_text)
 
-        # Compute semantic embedding if context_text exists and not already set
-        if context_text and not claim.claim_embedding:
+        # Compute semantic embedding only when the field is truly unset.
+        # pgvector may deserialize an existing vector as an array, whose
+        # boolean truth value is intentionally ambiguous.
+        if context_text and claim.claim_embedding is None:
             from .embedding_service import generate_embedding
 
             try:
