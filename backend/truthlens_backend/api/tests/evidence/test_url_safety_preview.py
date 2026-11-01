@@ -32,6 +32,30 @@ class UrlSafetyFoundationTests(SimpleTestCase):
                 self.assertIsNone(safe_url)
                 self.assertIsNotNone(error)
 
+    def test_evidence_validation_can_preserve_exact_query_string(self):
+        value = (
+            "https://example.com/source?"
+            "signature=a%2Fb%2Bc&ref=required&utm_source=newsletter#section"
+        )
+
+        preserved, preserved_error = validate_public_url(
+            value,
+            strip_tracking=False,
+        )
+        cleaned, cleaned_error = validate_public_url(value)
+
+        self.assertIsNone(preserved_error)
+        self.assertIsNone(cleaned_error)
+        self.assertEqual(
+            preserved,
+            "https://example.com/source?"
+            "signature=a%2Fb%2Bc&ref=required&utm_source=newsletter",
+        )
+        self.assertEqual(
+            cleaned,
+            "https://example.com/source?signature=a%2Fb%2Bc&ref=required",
+        )
+
     def test_reputation_states_do_not_call_clear_result_safe(self):
         self.assertEqual(
             normalize_url_safety_result({"status": "SAFE"})["status"],
@@ -176,6 +200,45 @@ class EvidenceUrlPreviewTests(TestCase):
             EvidenceSubmission.objects.filter(
                 evidence_url="https://malicious.example/source",
             ).exists()
+        )
+
+    @patch("api.serializers.check_url_threat_reputation")
+    def test_unavailable_reputation_is_persisted_without_blocking_submission(
+        self,
+        check_reputation,
+    ):
+        check_reputation.return_value = {
+            "status": "UNKNOWN",
+            "provider": "GOOGLE_SAFE_BROWSING",
+            "reason": "provider_unreachable",
+        }
+
+        with patch("api.views.dispatch_evidence_url_preview") as dispatch_preview:
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.client.post(
+                    reverse("evidence-list"),
+                    {
+                        "thread_id": str(self.thread.pk),
+                        "evidence_caption": "Source while provider is unavailable",
+                        "evidence_url": "https://example.com/unavailable",
+                        "evidence_type": EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
+                    },
+                    format="json",
+                )
+
+        self.assertEqual(response.status_code, 201)
+        evidence = EvidenceSubmission.objects.get(pk=response.data["id"])
+        self.assertEqual(
+            evidence.url_safety_status,
+            EvidenceSubmission.UrlSafetyStatus.CHECK_UNAVAILABLE,
+        )
+        self.assertEqual(
+            evidence.url_safety_reason,
+            "PROVIDER_UNREACHABLE",
+        )
+        dispatch_preview.assert_called_once_with(
+            evidence.pk,
+            "https://example.com/unavailable",
         )
 
     @patch("api.tasks.fetch_url_preview_metadata")
