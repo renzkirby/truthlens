@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useNotificationInbox } from "../hooks/useNotificationInbox";
 import Icons from "./Icons.jsx";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 import "./NotificationPopover.css";
 
 const PANEL_ID = "tl-notification-popover";
@@ -129,6 +130,20 @@ export default function NotificationPopover({ open, onOpenChange, unreadCount, a
 
    const label = unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications";
 
+   const actionErrorMessage = actionError
+      ? userFacingErrorMessage(actionError, {
+           fallback: "We couldn't update notifications. Please try again.",
+           notFoundMessage: "That notification is no longer available.",
+        })
+      : "";
+   const loadErrorMessage = recentNotificationsError
+      ? userFacingErrorMessage(recentNotificationsError, {
+           fallback: "We couldn't load notifications. Please try again.",
+           authMessage: "Your session expired. Sign in again to load notifications.",
+           serviceMessage: "Notifications are temporarily unavailable. Try again shortly.",
+        })
+      : "";
+
    return (
       <div className="tl-notification-popover" ref={wrapperRef}>
          <button
@@ -164,7 +179,7 @@ export default function NotificationPopover({ open, onOpenChange, unreadCount, a
                   )}
                </header>
 
-               {actionError && <p className="tl-notification-popover__notice" role="alert">We couldn’t update notifications. Please try again.</p>}
+               {actionError && <p className="tl-notification-popover__notice" role="alert">{actionErrorMessage}</p>}
 
                <div className="tl-notification-popover__body">
                   {recentNotificationsLoading && recentNotifications.length === 0 ? (
@@ -175,7 +190,7 @@ export default function NotificationPopover({ open, onOpenChange, unreadCount, a
                   ) : recentNotificationsError && recentNotifications.length === 0 ? (
                      <div className="tl-notification-popover__state" role="alert">
                         <Icons name="alert-circle" />
-                        <span>Notifications couldn’t be loaded.</span>
+                        <span>{loadErrorMessage}</span>
                         <button type="button" onClick={refresh}>Retry</button>
                      </div>
                   ) : recentNotifications.length === 0 ? (
