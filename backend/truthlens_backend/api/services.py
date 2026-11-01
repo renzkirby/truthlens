@@ -12,6 +12,7 @@ import time
 from numbers import Number
 from urllib.parse import urlparse
 import ipaddress
+import socket
 import imagehash
 import uuid
 import base64
@@ -642,8 +643,15 @@ def validate_public_url(raw_url):
         if not ip.is_global:
             return None, "Private network URLs are not allowed."
     except ValueError:
-        # Host is a domain name, which is allowed.
-        pass
+        # Some URL stacks accept legacy IPv4 forms (for example a single
+        # integer or octal-like dotted form). Reject non-public interpretations
+        # before preserving a clickable user-submitted URL.
+        try:
+            legacy_ipv4 = ipaddress.ip_address(socket.inet_aton(normalized_host))
+        except (OSError, ValueError):
+            legacy_ipv4 = None
+        if legacy_ipv4 is not None and not legacy_ipv4.is_global:
+            return None, "Private network URLs are not allowed."
 
     from urllib.parse import parse_qs, urlencode
 
