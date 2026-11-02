@@ -11,6 +11,7 @@ from api.services import (
     OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
     OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
     classify_official_fact_check_rating,
+    extract_persisted_fact_check_claim_rating,
 )
 
 
@@ -23,8 +24,9 @@ def _groups(*records):
             evidence_role=VerificationEvidence.EvidenceRole.FACT_CHECK,
             evidence_link_id=f"evidence-{index}",
             content=(
-                f"Claim reviewed: {claim_text}\n"
-                f"Rating: {rating}\n"
+                f"Claim reviewed: {claim_text} "
+                f"Rating: {rating} "
+                "Review title: Example review "
                 "Publisher: Example Fact Checker"
             ),
         ))
@@ -33,7 +35,19 @@ def _groups(*records):
 
 class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
     def test_rating_normalization_is_high_precision(self):
-        for rating in ("Satire", "SATIRICAL", "Parody", "Satire / Parody"):
+        for rating in (
+            "Satire",
+            "SATIRICAL",
+            "Satirical Post",
+            "Parody",
+            "Satire / Parody",
+            "Originated as Satire",
+            "Labeled Satire",
+            "Satirist",
+            "Parody News",
+            "This is a satirical post. It was first shared by a satirist.",
+            "This is a satiricalpost. It was first shared by a satirist.",
+        ):
             with self.subTest(rating=rating):
                 self.assertEqual(
                     classify_official_fact_check_rating(rating),
@@ -51,6 +65,8 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
             "False - originated as satire",
             "Mostly false",
             "Possibly satirical",
+            "Not Satire",
+            "Misleading use of satire",
             "Missing context",
             "Unproven",
         ):
@@ -58,6 +74,52 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
                 self.assertIsNone(
                     classify_official_fact_check_rating(rating)
                 )
+
+    def test_flattened_persisted_gfc_content_extracts_claim_and_rating(self):
+        content = (
+            'Claim reviewed: In October 2026, the town of Mexico, New York, '
+            'announced it would change its name to "Epstein List". '
+            'Rating: Labeled Satire '
+            "Review title: Did Mexico, NY, change its name? "
+            "Publisher: Snopes.com"
+        )
+
+        parsed = extract_persisted_fact_check_claim_rating(content)
+
+        self.assertEqual(
+            parsed["claim_text"],
+            (
+                'In October 2026, the town of Mexico, New York, '
+                'announced it would change its name to "Epstein List".'
+            ),
+        )
+        self.assertEqual(parsed["rating"], "Labeled Satire")
+        self.assertEqual(parsed["rating_kind"], "SATIRE")
+
+    def test_multiline_persisted_gfc_content_remains_supported(self):
+        parsed = extract_persisted_fact_check_claim_rating(
+            "Claim reviewed: Same claim.\n"
+            "Rating: Originated as Satire\n"
+            "Review title: Example review\n"
+            "Publisher: Snopes"
+        )
+
+        self.assertEqual(parsed["claim_text"], "Same claim.")
+        self.assertEqual(parsed["rating"], "Originated as Satire")
+        self.assertEqual(parsed["rating_kind"], "SATIRE")
+
+    def test_live_observed_full_fact_descriptive_rating_is_high_precision_satire(self):
+        parsed = extract_persisted_fact_check_claim_rating(
+            "Claim reviewed: A post about Donald Trump's Nobel efforts was "
+            "written by a committee member. "
+            "Rating: This is a satirical post. It was first shared on X by "
+            "an account that describes themselves as a satirist and regularly "
+            "creates similar content from fictional insiders. "
+            "Review title: Post from Nobel Committee member is satire "
+            "Publisher: Full Fact"
+        )
+
+        self.assertEqual(parsed["rating_kind"], "SATIRE")
 
     def test_false_only_does_not_activate_special_resolution(self):
         with patch("api.tasks.assess_claim_equivalence") as equivalence:
@@ -85,6 +147,47 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
             OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
         )
         self.assertEqual(result["satire_evidence_ids"], ("evidence-1",))
+        equivalence.assert_not_called()
+
+    def test_observed_satire_labels_authorize_satire_consensus(self):
+        for rating in (
+            "Originated as Satire",
+            "Labeled Satire",
+            "Satirist",
+            "Parody News",
+        ):
+            with self.subTest(rating=rating):
+                with patch("api.tasks.assess_claim_equivalence") as equivalence:
+                    result = tasks._resolve_official_fact_check_rating_policy(
+                        "Same claim.",
+                        _groups(("Same claim.", rating)),
+                    )
+
+                self.assertEqual(
+                    result["resolution"],
+                    OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
+                )
+                equivalence.assert_not_called()
+
+    def test_multiple_observed_satire_labels_still_resolve_to_satire(self):
+        with patch("api.tasks.assess_claim_equivalence") as equivalence:
+            result = tasks._resolve_official_fact_check_rating_policy(
+                "Same claim.",
+                _groups(
+                    ("Same claim.", "Originated as Satire"),
+                    ("Same claim.", "Parody News"),
+                    ("Same claim.", "Satirist"),
+                ),
+            )
+
+        self.assertEqual(
+            result["resolution"],
+            OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
+        )
+        self.assertEqual(
+            result["satire_evidence_ids"],
+            ("evidence-1", "evidence-2", "evidence-3"),
+        )
         equivalence.assert_not_called()
 
     def test_equivalent_satire_and_false_ratings_resolve_to_fake_conflict(self):
