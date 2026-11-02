@@ -284,4 +284,4 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         self.assertIn("USER-FACING SUMMARY RULES", system_prompt)
         self.assertIn("Start with the best-supported factual reality", system_prompt)
         self.assertIn("Never mention TruthLens", system_prompt)
-        self.assertIn("Do not merely restating", system_prompt)
+        self.assertIn("Add information beyond merely restating", system_prompt)
