@@ -1558,6 +1558,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     has_persisted_evidence = bool(evidence_context)
                     if has_persisted_evidence:
                         try:
+                            official_rating_started_at = time.perf_counter()
                             official_rating_policy = (
                                 _resolve_official_fact_check_rating_policy(
                                     cleaned_claim,
@@ -1567,7 +1568,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             _log_stage(
                                 claim_id,
                                 "gfc_official_rating_resolution",
-                                time.perf_counter(),
+                                official_rating_started_at,
                                 resolution=official_rating_policy["resolution"],
                             )
                             ai_verdict = _evaluate_persisted_with_official_rating_policy(
@@ -2281,6 +2282,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                 )
                 if evidence_context:
                     try:
+                        official_rating_started_at = time.perf_counter()
                         official_rating_policy = (
                             _resolve_official_fact_check_rating_policy(
                                 cleaned_claim,
@@ -2290,7 +2292,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         _log_stage(
                             claim_id,
                             "url_gfc_official_rating_resolution",
-                            time.perf_counter(),
+                            official_rating_started_at,
                             resolution=official_rating_policy["resolution"],
                         )
                         ai_verdict = _evaluate_persisted_with_official_rating_policy(
