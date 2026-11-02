@@ -104,6 +104,23 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
         self.assertEqual(result["satire_evidence_ids"], ("evidence-1",))
         equivalence.assert_not_called()
 
+    def test_equivalent_unknown_rating_blocks_satire_consensus(self):
+        with patch("api.tasks.assess_claim_equivalence") as equivalence:
+            result = tasks._resolve_official_fact_check_rating_policy(
+                "Same claim.",
+                _groups(
+                    ("Same claim.", "Satire"),
+                    ("Same claim.", "Mostly False"),
+                ),
+            )
+
+        self.assertEqual(
+            result["resolution"],
+            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+        )
+        self.assertEqual(result["satire_evidence_ids"], ())
+        equivalence.assert_not_called()
+
     def test_related_non_equivalent_satire_does_not_authorize_satire(self):
         with patch(
             "api.tasks.assess_claim_equivalence",
