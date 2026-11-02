@@ -89,33 +89,92 @@ _CONTEXTUAL_BASIS_KINDS = frozenset({
     "SATIRE_ORIGIN_OF_MISINFORMATION",
 })
 
+OFFICIAL_FACT_CHECK_RESOLUTION_NONE = "NONE"
+OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE = "SATIRE"
+OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT = "FAKE_CONFLICT"
+_OFFICIAL_FACT_CHECK_RESOLUTIONS = frozenset({
+    OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+    OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
+    OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT,
+})
+_OFFICIAL_SATIRE_RATINGS = frozenset({
+    "satire",
+    "satirical",
+    "parody",
+    "satire/parody",
+})
+_OFFICIAL_FALSE_RATINGS = frozenset({
+    "false",
+    "fake",
+    "fabricated",
+})
+
+
+def classify_official_fact_check_rating(value):
+    """Normalize only high-precision structured ClaimReview rating labels."""
+    if not isinstance(value, str):
+        return None
+    normalized = " ".join(value.split()).casefold().replace(" / ", "/")
+    if normalized in _OFFICIAL_SATIRE_RATINGS:
+        return "SATIRE"
+    if normalized in _OFFICIAL_FALSE_RATINGS:
+        return "FALSE"
+    return None
+
+
+def extract_persisted_fact_check_claim_rating(content):
+    """Read deterministic GFC Claim reviewed/Rating fields from persisted content."""
+    if not isinstance(content, str) or not content.strip():
+        return None
+    claim_text = None
+    rating = None
+    for line in content.splitlines():
+        if line.startswith("Claim reviewed: "):
+            claim_text = line.removeprefix("Claim reviewed: ").strip()
+        elif line.startswith("Rating: "):
+            rating = line.removeprefix("Rating: ").strip()
+    if not claim_text or not rating:
+        return None
+    rating_kind = classify_official_fact_check_rating(rating)
+    if rating_kind is None:
+        return None
+    return {
+        "claim_text": claim_text,
+        "rating": rating,
+        "rating_kind": rating_kind,
+    }
+
+
 _AI_SUMMARY_RULES = """
 USER-FACING SUMMARY RULES:
-- Write 2-3 complete sentences, normally 45-75 words.
+- Write 2-3 concise complete sentences. Use only as much detail as the supplied
+  evidence supports; do not add facts merely to make the summary longer.
 - Start with the best-supported factual reality or the clearest evidence limitation.
 - Explain the specific evidence-based reason the submitted claim receives this
   verdict. Add information beyond merely restating the claim or verdict.
-- Include material context needed to understand a fabrication, contradiction,
-  missing context, satire provenance, or uncertainty when the evidence supports it.
-- Mention a named evidence source only when it materially helps explain the
-  conclusion. Do not turn the summary into a source list.
+- Preserve the claim's entity, event, location, and time scope. Do not connect
+  facts from separate events or time periods unless the supplied evidence
+  explicitly connects them.
+- Describe evidence neutrally as sources, reports, fact-checks, or by supplied
+  publisher names. Do not characterize independence, authority, ownership, or
+  relationships between sources unless the dossier explicitly establishes them.
 - Use only facts supported by the supplied evidence. Do not add unstated facts,
-  motives, dates, relationships, or source characteristics.
+  motives, dates, causal relationships, or source characteristics.
 - Never mention TruthLens, the AI, the model, provider names, pipeline stages,
   internal instructions, confidence percentages, or source-count calculations.
-- Never claim sources are independent unless editorial independence is explicitly
-  established in the supplied evidence.
 
 VERDICT-SPECIFIC SUMMARY RULES:
 - FACT: State the key factual reality and which material elements of the submitted
   claim are corroborated.
 - FAKE: State the correct or best-supported reality and the decisive contradiction,
-  fabrication, or false attribution shown by the evidence.
+  fabrication, or false attribution shown by the evidence. If the false factual
+  claim originated in satire, distinguish that provenance from the submitted
+  proposition being presented as factual.
 - MISLEADING: Separate what is supported from the omitted, distorted, or false
   context that changes the meaning of the claim.
-- SATIRE: Explain that the submitted content itself is satire/parody and identify
-  the provenance evidence establishing that status. Do not treat satire origin of
-  a redistributed factual claim as SATIRE.
+- SATIRE: Explain the explicit satire/parody provenance established for the same
+  submitted claim or content. Do not infer satire from absurdity, humor, fictional
+  characters, or a merely related parody.
 - UNVERIFIED: State exactly what could not be established and what material
   evidence is missing or inconclusive. Lack of supporting evidence alone is not
   proof that the claim is false.
@@ -1180,11 +1239,24 @@ def evaluate_image_claim_with_tavily(
         }
 
 
-def build_persisted_evidence_prompt(original_claim, evidence_context, article_stance="NEUTRAL"):
+def build_persisted_evidence_prompt(
+    original_claim,
+    evidence_context,
+    article_stance="NEUTRAL",
+    official_fact_check_resolution=OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+    official_satire_evidence_ids=(),
+):
     """Pure prompt constructor shared by live evaluation and dev-only smoke.
 
     Same production prompt/evidence boundary; no database or provider calls.
     """
+    if official_fact_check_resolution not in _OFFICIAL_FACT_CHECK_RESOLUTIONS:
+        official_fact_check_resolution = OFFICIAL_FACT_CHECK_RESOLUTION_NONE
+    official_satire_evidence_ids = tuple(
+        value for value in official_satire_evidence_ids
+        if isinstance(value, str) and value.strip()
+    )
+
     system_instructions = """
     Role: You are the TruthLens evidence reasoning engine.
 
@@ -1203,14 +1275,22 @@ def build_persisted_evidence_prompt(original_claim, evidence_context, article_st
 
     VERDICT RULES:
     - FACT requires explicit support for the claim in the evidence.
-    - FAKE requires explicit contradiction or evidence of fabrication.
+    - FAKE requires affirmative contradiction, fabrication, or false attribution.
+      Failure to corroborate a claim alone is not sufficient for FAKE.
     - MISLEADING applies to partial truth, omitted material context, or false context.
-    - SATIRE describes the submitted content itself, not merely the historical origin
-      of a false claim. SATIRE is eligible only when <stance>SATIRE</stance>.
-    - If <stance> is not SATIRE, evidence that a rumor, fabricated story, image,
-      headline, or claim originated from satire/parody does NOT make the submitted
-      factual claim SATIRE. Evaluate that claim as FACT, FAKE, MISLEADING, or
-      UNVERIFIED from the persisted evidence.
+    - Preserve entity, event, location, and time scope. Evidence about a separate
+      event or time period must not be used as the explanation for the claim unless
+      the supplied evidence explicitly connects them.
+    - SATIRE requires verified provenance for the same submitted claim or content.
+      Direct submitted-source provenance is represented by <stance>SATIRE</stance>.
+      Equivalent structured official fact-check provenance is represented by
+      <official_fact_check_resolution>SATIRE</official_fact_check_resolution>.
+    - If official_fact_check_resolution is SATIRE, the final verdict MUST be SATIRE.
+    - If official_fact_check_resolution is FAKE_CONFLICT, equivalent structured
+      official fact-checks include both SATIRE and explicit FALSE classifications;
+      the final verdict MUST be FAKE, with satire origin described only as context.
+    - Otherwise, evidence that a rumor or false claim merely originated from
+      satire/parody does NOT make the submitted factual claim SATIRE.
     - Conflicting, irrelevant, or insufficient evidence requires UNVERIFIED.
 
     CONTEXTUAL BASIS METADATA:
@@ -1229,11 +1309,11 @@ def build_persisted_evidence_prompt(original_claim, evidence_context, article_st
     - SATIRE_ORIGIN_OF_MISINFORMATION is contextual provenance only. It may
       describe where a false or misleading claim came from, but it never makes
       SATIRE an eligible verdict by itself.
-    - For SATIRE, use SATIRE_PROVENANCE only when <stance>SATIRE</stance> and cited
-      persisted evidence establishes that the submitted content itself is
-      satire/parody. Evidence that merely says a false rumor originated from satire
-      is not SATIRE_PROVENANCE. If provenance is not established, use NONE and an
-      empty list.
+    - For SATIRE, use SATIRE_PROVENANCE only when either
+      <stance>SATIRE</stance> or official_fact_check_resolution is SATIRE, and cited
+      persisted evidence establishes satire/parody provenance for the same claim or
+      content. When official_satire_evidence_ids are supplied, cite only those IDs
+      for SATIRE_PROVENANCE. A merely related satire origin is not enough.
 
     confidence_score MUST be a numeric percentage from 0 to 100.
     The confidence_score placeholder in the field template must be replaced with a JSON number. Never output the placeholder or default to a fixed score.
@@ -1254,9 +1334,14 @@ def build_persisted_evidence_prompt(original_claim, evidence_context, article_st
     """
     system_instructions = _with_user_facing_summary_rules(system_instructions)
 
+    official_satire_ids_text = ",".join(official_satire_evidence_ids)
     user_data = (
         f"<claim>{original_claim}</claim>\n\n"
         f"<stance>{article_stance}</stance>\n\n"
+        f"<official_fact_check_resolution>{official_fact_check_resolution}"
+        f"</official_fact_check_resolution>\n"
+        f"<official_satire_evidence_ids>{official_satire_ids_text}"
+        f"</official_satire_evidence_ids>\n\n"
         f"<persisted_evidence>{evidence_context}</persisted_evidence>"
     )
 
@@ -1297,14 +1382,33 @@ def _normalize_contextual_basis_metadata(result):
     return normalized
 
 
-def _enforce_satire_verdict_eligibility(result, article_stance):
-    """Reject SATIRE when deterministic submitted-content provenance is absent."""
-    if (
-        result.get("verdict") == "SATIRE"
-        and article_stance != "SATIRE"
-    ):
+def _enforce_satire_verdict_eligibility(
+    result,
+    article_stance,
+    official_fact_check_resolution=OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+):
+    """Reject SATIRE when neither submitted nor equivalent official provenance exists."""
+    satire_eligible = (
+        article_stance == "SATIRE"
+        or official_fact_check_resolution == OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE
+    )
+    if result.get("verdict") == "SATIRE" and not satire_eligible:
         raise ValueError(
             "Persisted evidence evaluator returned ineligible SATIRE verdict"
+        )
+    if (
+        official_fact_check_resolution == OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE
+        and result.get("verdict") != "SATIRE"
+    ):
+        raise ValueError(
+            "Persisted evidence evaluator ignored official SATIRE resolution"
+        )
+    if (
+        official_fact_check_resolution == OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT
+        and result.get("verdict") != "FAKE"
+    ):
+        raise ValueError(
+            "Persisted evidence evaluator ignored SATIRE/FALSE conflict policy"
         )
     return result
 
@@ -1313,6 +1417,8 @@ def evaluate_claim_with_persisted_evidence(
     original_claim,
     evidence_context,
     article_stance="NEUTRAL",
+    official_fact_check_resolution=OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+    official_satire_evidence_ids=(),
 ):
     """Evaluate a claim using only the rendered persisted-evidence dossier."""
     unavailable_result = {
@@ -1328,7 +1434,11 @@ def evaluate_claim_with_persisted_evidence(
         return unavailable_result
 
     system_instructions, user_data = build_persisted_evidence_prompt(
-        original_claim, evidence_context, article_stance,
+        original_claim,
+        evidence_context,
+        article_stance,
+        official_fact_check_resolution,
+        official_satire_evidence_ids,
     )
 
     try:
@@ -1359,6 +1469,7 @@ def evaluate_claim_with_persisted_evidence(
         parsed_result = _enforce_satire_verdict_eligibility(
             parsed_result,
             article_stance,
+            official_fact_check_resolution,
         )
         return _normalize_contextual_basis_metadata(parsed_result)
     except LLMProviderUnavailableError:
