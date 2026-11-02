@@ -1298,7 +1298,12 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     claim_id,
                     {
                         "verdict": "SATIRE",
-                        "summary": "This content originates from a known satire or parody publication and is not intended to be factual.",
+                        "summary": (
+                            "The submitted content comes from a configured satire or parody publication, "
+                            "so its claims are presented as parody rather than factual reporting. "
+                            "The SATIRE classification is based on the submitted source's known provenance, "
+                            "not on whether individual exaggerated details resemble real events."
+                        ),
                         "confidence_score": 99,
                     },
                     "Satire Detection",
@@ -2004,7 +2009,12 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                 claim_id,
                 {
                     "verdict": "SATIRE",
-                    "summary": "This content originates from a known satire or parody publication and is not intended to be factual.",
+                    "summary": (
+                            "The submitted content comes from a configured satire or parody publication, "
+                            "so its claims are presented as parody rather than factual reporting. "
+                            "The SATIRE classification is based on the submitted source's known provenance, "
+                            "not on whether individual exaggerated details resemble real events."
+                        ),
                     "confidence_score": 95,
                     "score_context": (
                         "Submitted URL matches configured satire-source provenance; "
