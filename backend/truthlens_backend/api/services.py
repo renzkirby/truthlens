@@ -1059,7 +1059,9 @@ def evaluate_image_claim_with_gfc(
             "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
         }
         """
-    system_instructions = _with_user_facing_summary_rules(system_instructions)\n\n    user_data = (
+    system_instructions = _with_user_facing_summary_rules(system_instructions)
+
+    user_data = (
         f"<claim>{original_claim}</claim>\n\n"
         f"<stance>{article_stance}</stance>\n\n"
         f"<evidence>The claim '{fact_check_text}' was reviewed by {publisher} and received an Official Rating of: {gfc_rating.upper()}</evidence>\n\n"
@@ -1149,7 +1151,9 @@ def evaluate_image_claim_with_tavily(
         "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
     }
     """
-    system_instructions = _with_user_facing_summary_rules(system_instructions)\n\n    user_data = (
+    system_instructions = _with_user_facing_summary_rules(system_instructions)
+
+    user_data = (
         f"<claim>{original_claim}</claim>\n\n"
         f"<stance>{article_stance}</stance>\n\n"
         f"<evidence>{combined_context}</evidence>\n\n"  # <--- FIXED
@@ -1248,7 +1252,9 @@ def build_persisted_evidence_prompt(original_claim, evidence_context, article_st
         "contextual_basis_evidence_ids": ["Exact Evidence link ID copied from the dossier"]
     }
     """
-    system_instructions = _with_user_facing_summary_rules(system_instructions)\n\n    user_data = (
+    system_instructions = _with_user_facing_summary_rules(system_instructions)
+
+    user_data = (
         f"<claim>{original_claim}</claim>\n\n"
         f"<stance>{article_stance}</stance>\n\n"
         f"<persisted_evidence>{evidence_context}</persisted_evidence>"
@@ -1511,7 +1517,9 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRA
         "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
     }
     """
-    system_instructions = _with_user_facing_summary_rules(system_instructions)\n\n    user_data = (
+    system_instructions = _with_user_facing_summary_rules(system_instructions)
+
+    user_data = (
         f"<claim>{extracted_text}</claim>\n\n"
         f"<stance>{article_stance}</stance>\n\n"
         f"<evidence>{gfc_claim_text} (Official Rating: {gfc_rating})</evidence>\n\n"
@@ -1594,7 +1602,9 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
         "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
     }
     """
-    system_instructions = _with_user_facing_summary_rules(system_instructions)\n\n    user_data = (
+    system_instructions = _with_user_facing_summary_rules(system_instructions)
+
+    user_data = (
         f"<claim>{extracted_text}</claim>\n\n"
         f"<stance>{article_stance}</stance>\n\n"
         f"<evidence>{context}</evidence>\n\n"
