@@ -61,6 +61,8 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         call_llm.assert_not_called()
         self.assertEqual(result["verdict"], "UNVERIFIED")
         self.assertEqual(result["confidence_score"], 0)
+        self.assertNotIn("TruthLens", result["summary"])
+        self.assertIn("no usable persisted evidence", result["summary"])
         self.assertEqual(
             set(result),
             {
@@ -279,3 +281,7 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         self.assertIn("originated from satire/parody does NOT make", system_prompt)
         self.assertIn("SATIRE_ORIGIN_OF_MISINFORMATION", system_prompt)
         self.assertIn("Evidence link ID", system_prompt)
+        self.assertIn("USER-FACING SUMMARY RULES", system_prompt)
+        self.assertIn("Start with the best-supported factual reality", system_prompt)
+        self.assertIn("Never mention TruthLens", system_prompt)
+        self.assertIn("Do not merely restating", system_prompt)
