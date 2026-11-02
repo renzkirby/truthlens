@@ -135,13 +135,10 @@ def extract_persisted_fact_check_claim_rating(content):
             rating = line.removeprefix("Rating: ").strip()
     if not claim_text or not rating:
         return None
-    rating_kind = classify_official_fact_check_rating(rating)
-    if rating_kind is None:
-        return None
     return {
         "claim_text": claim_text,
         "rating": rating,
-        "rating_kind": rating_kind,
+        "rating_kind": classify_official_fact_check_rating(rating),
     }
 
 
