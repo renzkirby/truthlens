@@ -1171,7 +1171,7 @@ def evaluate_image_claim_with_tavily(
         logger.error("Tavily Evaluator AI Error: %s", e)
         return {
             "verdict": "UNVERIFIED",
-            "summary": "TruthLens is experiencing a temporary AI service outage. Could not verify the claim.",
+            "summary": "The claim could not be conclusively evaluated because the available evidence analysis did not complete.",
             "confidence_score": 0,
         }
 
@@ -1532,7 +1532,7 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRA
         logger.error("URL GFC AI Error: %s", e)
         return {
             "verdict": "UNVERIFIED",
-            "summary": "Could not analyze the official fact check data due to an AI service error.",
+            "summary": "The claim could not be conclusively evaluated from the available official fact-check evidence.",
             "confidence_score": 0,
         }
 
