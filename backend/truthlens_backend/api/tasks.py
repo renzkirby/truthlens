@@ -256,6 +256,30 @@ def _resolve_official_fact_check_rating_policy(claim_text, evidence_groups):
     }
 
 
+def _evaluate_persisted_with_official_rating_policy(
+    claim_text,
+    evidence_context,
+    article_stance,
+    official_rating_policy,
+):
+    if (
+        official_rating_policy["resolution"]
+        == OFFICIAL_FACT_CHECK_RESOLUTION_NONE
+    ):
+        return evaluate_claim_with_persisted_evidence(
+            claim_text,
+            evidence_context,
+            article_stance,
+        )
+    return evaluate_claim_with_persisted_evidence(
+        claim_text,
+        evidence_context,
+        article_stance,
+        official_rating_policy["resolution"],
+        official_rating_policy["satire_evidence_ids"],
+    )
+
+
 def _render_bounded_persisted_evidence_context(groups, claim_text, stance):
     """Use original dossier unchanged unless dev pilot exceeds its input cap.
 
@@ -1531,12 +1555,11 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                                 time.perf_counter(),
                                 resolution=official_rating_policy["resolution"],
                             )
-                            ai_verdict = evaluate_claim_with_persisted_evidence(
+                            ai_verdict = _evaluate_persisted_with_official_rating_policy(
                                 cleaned_claim,
                                 evidence_context,
                                 article_stance,
-                                official_rating_policy["resolution"],
-                                official_rating_policy["satire_evidence_ids"],
+                                official_rating_policy,
                             )
                             ai_verdict = calibrate_verdict_confidence(
                                 ai_verdict,
@@ -2255,12 +2278,11 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                             time.perf_counter(),
                             resolution=official_rating_policy["resolution"],
                         )
-                        ai_verdict = evaluate_claim_with_persisted_evidence(
+                        ai_verdict = _evaluate_persisted_with_official_rating_policy(
                             cleaned_claim,
                             evidence_context,
                             article_stance,
-                            official_rating_policy["resolution"],
-                            official_rating_policy["satire_evidence_ids"],
+                            official_rating_policy,
                         )
                         ai_verdict = calibrate_verdict_confidence(
                             ai_verdict,
