@@ -255,10 +255,14 @@ def _resolve_official_fact_check_rating_policy(claim_text, evidence_groups):
                     item["evidence_link_id"] for item in equivalent_satire
                 ),
             }
-        # Unknown publisher-specific ratings are neutral here. Only an
-        # explicit normalized FALSE rating conflicts with an equivalent SATIRE
-        # rating; otherwise do not invent disagreement semantics.
-        continue
+        # An equivalent publisher-specific rating with unknown semantics
+        # prevents deterministic SATIRE consensus. Defer verdict selection to
+        # the normal persisted-evidence evaluator rather than guessing how to
+        # normalize the publisher's rating.
+        return {
+            "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+        }
 
     return {
         "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
