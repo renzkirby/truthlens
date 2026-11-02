@@ -6,6 +6,8 @@ from django.test import SimpleTestCase
 from api import services
 from api.services import (
     LLMProviderUnavailableError,
+    OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT,
+    OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
     evaluate_claim_with_persisted_evidence,
 )
 
@@ -61,6 +63,8 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         call_llm.assert_not_called()
         self.assertEqual(result["verdict"], "UNVERIFIED")
         self.assertEqual(result["confidence_score"], 0)
+        self.assertNotIn("TruthLens", result["summary"])
+        self.assertIn("no usable persisted evidence", result["summary"])
         self.assertEqual(
             set(result),
             {
@@ -190,6 +194,80 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
             ["11111111-1111-1111-1111-111111111111"],
         )
 
+    def test_equivalent_official_satire_resolution_allows_neutral_submission_satire(self):
+        evidence_id = "11111111-1111-1111-1111-111111111111"
+        result_payload = {
+            **self.result,
+            "verdict": "SATIRE",
+            "contextual_basis_kind": "SATIRE_PROVENANCE",
+            "contextual_basis_evidence_ids": [evidence_id],
+        }
+        with patch(
+            "api.services.call_llm_with_fallback",
+            return_value=json.dumps(result_payload),
+        ) as call_llm:
+            result = evaluate_claim_with_persisted_evidence(
+                "A factual-looking claim.",
+                "Persisted evidence.",
+                article_stance="NEUTRAL",
+                official_fact_check_resolution=OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
+                official_satire_evidence_ids=[evidence_id],
+            )
+
+        self.assertEqual(result["verdict"], "SATIRE")
+        self.assertEqual(result["contextual_basis_kind"], "SATIRE_PROVENANCE")
+        user_prompt = call_llm.call_args.args[1]
+        self.assertIn(
+            "<official_fact_check_resolution>SATIRE</official_fact_check_resolution>",
+            user_prompt,
+        )
+        self.assertIn(evidence_id, user_prompt)
+
+    def test_official_satire_resolution_fails_closed_when_evaluator_ignores_policy(self):
+        with patch(
+            "api.services.call_llm_with_fallback",
+            return_value=json.dumps(self.result),
+        ):
+            result = evaluate_claim_with_persisted_evidence(
+                "A claim with equivalent official satire provenance.",
+                "Persisted evidence.",
+                official_fact_check_resolution=OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
+            )
+
+        self.assertEqual(result["verdict"], "UNVERIFIED")
+        self.assertEqual(result["confidence_score"], 0)
+
+    def test_satire_false_conflict_requires_fake_verdict(self):
+        with patch(
+            "api.services.call_llm_with_fallback",
+            return_value=json.dumps(self.result),
+        ):
+            result = evaluate_claim_with_persisted_evidence(
+                "A claim with conflicting official ratings.",
+                "Persisted evidence.",
+                official_fact_check_resolution=(
+                    OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT
+                ),
+            )
+
+        self.assertEqual(result["verdict"], "FAKE")
+
+        invalid = {**self.result, "verdict": "SATIRE"}
+        with patch(
+            "api.services.call_llm_with_fallback",
+            return_value=json.dumps(invalid),
+        ):
+            result = evaluate_claim_with_persisted_evidence(
+                "A claim with conflicting official ratings.",
+                "Persisted evidence.",
+                official_fact_check_resolution=(
+                    OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT
+                ),
+            )
+
+        self.assertEqual(result["verdict"], "UNVERIFIED")
+        self.assertEqual(result["confidence_score"], 0)
+
     def test_contextual_basis_metadata_is_preserved_for_contextual_verdicts(self):
         contextual = {
             **self.result,
@@ -272,10 +350,15 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         self.assertIn("Conflicting, irrelevant, or insufficient", system_prompt)
         self.assertIn("CONTEXTUAL BASIS METADATA", system_prompt)
         self.assertIn("SATIRE_ORIGIN_OF_MISINFORMATION", system_prompt)
-        self.assertIn("submitted content itself is", system_prompt)
-        self.assertIn("satire/parody", system_prompt)
-        self.assertIn("SATIRE describes the submitted content itself", system_prompt)
-        self.assertIn("SATIRE is eligible only when <stance>SATIRE</stance>", system_prompt)
-        self.assertIn("originated from satire/parody does NOT make", system_prompt)
-        self.assertIn("SATIRE_ORIGIN_OF_MISINFORMATION", system_prompt)
+        self.assertIn("SATIRE requires verified provenance", system_prompt)
+        self.assertIn("official_fact_check_resolution is SATIRE", system_prompt)
+        self.assertIn("FAKE_CONFLICT", system_prompt)
+        self.assertIn("Failure to corroborate a claim alone is not sufficient", system_prompt)
+        self.assertIn("Preserve entity, event, location, and time scope", system_prompt)
         self.assertIn("Evidence link ID", system_prompt)
+        self.assertIn("USER-FACING SUMMARY RULES", system_prompt)
+        self.assertIn("Start with the best-supported factual reality", system_prompt)
+        self.assertIn("Never mention TruthLens", system_prompt)
+        self.assertIn("Add information beyond merely restating", system_prompt)
+        self.assertIn("Do not characterize independence", system_prompt)
+        self.assertNotIn("45-75 words", system_prompt)

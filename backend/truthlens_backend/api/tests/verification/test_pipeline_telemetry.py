@@ -283,3 +283,13 @@ class ProductionOperationLabelTests(TestCase):
                 "persisted_evidence_evaluation",
             ],
         )
+
+        for evaluator_call in provider_call.call_args_list[4:]:
+            system_prompt = evaluator_call.args[0]
+            self.assertIn("USER-FACING SUMMARY RULES", system_prompt)
+            self.assertIn("2-3 concise complete sentences", system_prompt)
+            self.assertNotIn("45-75 words", system_prompt)
+            self.assertIn("Never mention TruthLens", system_prompt)
+            self.assertIn("source-count calculations", system_prompt)
+            self.assertIn("Lack of supporting evidence alone is not", system_prompt)
+            self.assertNotIn("Exactly two SHORT paragraphs", system_prompt)

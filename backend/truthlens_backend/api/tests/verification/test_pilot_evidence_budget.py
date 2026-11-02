@@ -182,7 +182,10 @@ class PilotEvidenceBudgetTests(SimpleTestCase):
 
     def test_shared_metadata_fallback_runs_only_when_first_compact_still_oversize(self):
         chosen = None
-        for content_size in range(1500, 2600, 10):
+        # Search broadly because fixed evaluator instructions can grow while the
+        # lossless renderer crossover remains valid. The test cares about finding
+        # a compact-over/shared-fit boundary, not a historical content-size band.
+        for content_size in range(600, 2600, 10):
             groups = _groups(content_length=content_size)
             groups = [
                 replace(group, evidence=tuple(

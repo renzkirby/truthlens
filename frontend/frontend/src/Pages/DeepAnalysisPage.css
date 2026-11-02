@@ -891,6 +891,59 @@
    background: var(--tl-color-status-info-bg);
 }
 
+.deep-analysis-community-section {
+   background: var(--tl-color-bg-surface);
+}
+
+.deep-analysis-community-review {
+   display: grid;
+   grid-template-columns: auto minmax(0, 1fr);
+   gap: var(--tl-space-5);
+   padding: var(--tl-space-6);
+   border: 1px solid var(--tl-color-status-info-border);
+   border-radius: var(--tl-radius-lg);
+   background: color-mix(in srgb, var(--tl-color-status-info-bg) 72%, var(--tl-color-bg-surface));
+}
+
+.deep-analysis-community-icon {
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   width: 44px;
+   height: 44px;
+   border-radius: var(--tl-radius-md);
+   color: var(--tl-color-brand-primary);
+   background: var(--tl-color-bg-surface);
+   box-shadow: var(--tl-shadow-sm);
+}
+
+.deep-analysis-community-content {
+   min-width: 0;
+}
+
+.deep-analysis-community-content h2 {
+   margin: 0;
+   color: var(--tl-color-text-main);
+   font-size: var(--tl-text-lg);
+   font-weight: 780;
+   letter-spacing: -0.012em;
+   line-height: 1.3;
+   text-wrap: balance;
+}
+
+.deep-analysis-community-content > p:not(.deep-analysis-provenance-label) {
+   max-width: 72ch;
+   margin: var(--tl-space-3) 0 0;
+   color: var(--tl-color-text-body);
+   font-size: var(--tl-text-ui);
+   line-height: 1.65;
+   overflow-wrap: anywhere;
+}
+
+.deep-analysis-community-content .deep-analysis-primary-action {
+   margin-top: var(--tl-space-5);
+}
+
 .deep-analysis-related-list {
    display: grid;
    gap: var(--tl-space-4);
@@ -1225,6 +1278,11 @@
       padding: var(--tl-space-5);
    }
 
+   .deep-analysis-community-review {
+      grid-template-columns: 1fr;
+      padding: var(--tl-space-5);
+   }
+
    .deep-analysis-confidence-context-grid {
       grid-template-columns: 1fr;
    }
@@ -1283,6 +1341,14 @@
    .deep-analysis-assessment-details,
    .deep-analysis-assessment-verdict {
       padding: var(--tl-space-4);
+   }
+
+   .deep-analysis-community-review {
+      padding: var(--tl-space-4);
+   }
+
+   .deep-analysis-community-content .deep-analysis-primary-action {
+      width: 100%;
    }
 
    .deep-analysis-source {

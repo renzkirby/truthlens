@@ -583,6 +583,135 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.assertIsNone(self.claim.final_verdict)
         self.retrieve_tavily.assert_not_called()
 
+    def test_equivalent_official_satire_rating_reaches_persisted_evaluator_policy(self):
+        evidence_id = "11111111-1111-1111-1111-111111111111"
+        evidence = SimpleNamespace(
+            provider=tasks.GFC_PROVIDER_NAME,
+            source_type="FACT_CHECK",
+            evidence_role=VerificationEvidence.EvidenceRole.FACT_CHECK,
+            evidence_link_id=evidence_id,
+            content=(
+                f"Claim reviewed: {self.cleaned['cleaned_claim']}\n"
+                "Rating: Satire\n"
+                "Publisher: Example Checker"
+            ),
+        )
+        self.filter_dossier.return_value = [
+            SimpleNamespace(evidence=(evidence,))
+        ]
+        satire_verdict = {
+            **self.verdict,
+            "verdict": "SATIRE",
+            "contextual_basis_kind": "SATIRE_PROVENANCE",
+            "contextual_basis_evidence_ids": [evidence_id],
+        }
+        self.evaluate_persisted.return_value = satire_verdict
+
+        self._assert_terminal(
+            self._execute(),
+            VerificationRun.Status.COMPLETED,
+        )
+
+        self.evaluate_persisted.assert_called_once_with(
+            self.cleaned["cleaned_claim"],
+            "Persisted evidence context.",
+            "NEUTRAL",
+            services.OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
+            (evidence_id,),
+        )
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "SATIRE")
+
+    def test_official_satire_precheck_bypasses_false_coarse_relevance(self):
+        evidence_id = "33333333-3333-3333-3333-333333333333"
+        evidence = SimpleNamespace(
+            provider=tasks.GFC_PROVIDER_NAME,
+            source_type="FACT_CHECK",
+            evidence_role=VerificationEvidence.EvidenceRole.FACT_CHECK,
+            evidence_link_id=evidence_id,
+            content=(
+                f"Claim reviewed: {self.cleaned['cleaned_claim']} "
+                "Rating: Satire "
+                "Review title: Exact matching satire review "
+                "Publisher: VERA Files"
+            ),
+        )
+        self.filter_dossier.return_value = [
+            SimpleNamespace(evidence=(evidence,))
+        ]
+        self.relevance.return_value = False
+        satire_verdict = {
+            **self.verdict,
+            "verdict": "SATIRE",
+            "contextual_basis_kind": "SATIRE_PROVENANCE",
+            "contextual_basis_evidence_ids": [evidence_id],
+        }
+        self.evaluate_persisted.return_value = satire_verdict
+
+        self._assert_terminal(
+            self._execute(),
+            VerificationRun.Status.COMPLETED,
+        )
+
+        self.relevance.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
+        self.evaluate_persisted.assert_called_once_with(
+            self.cleaned["cleaned_claim"],
+            "Persisted evidence context.",
+            "NEUTRAL",
+            services.OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
+            (evidence_id,),
+        )
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "SATIRE")
+
+    def test_equivalent_satire_and_false_ratings_apply_fake_conflict_policy(self):
+        satire_id = "11111111-1111-1111-1111-111111111111"
+        false_id = "22222222-2222-2222-2222-222222222222"
+        evidence = (
+            SimpleNamespace(
+                provider=tasks.GFC_PROVIDER_NAME,
+                source_type="FACT_CHECK",
+                evidence_role=VerificationEvidence.EvidenceRole.FACT_CHECK,
+                evidence_link_id=satire_id,
+                content=(
+                    f"Claim reviewed: {self.cleaned['cleaned_claim']}\n"
+                    "Rating: Satire\n"
+                    "Publisher: Satire Checker"
+                ),
+            ),
+            SimpleNamespace(
+                provider=tasks.GFC_PROVIDER_NAME,
+                source_type="FACT_CHECK",
+                evidence_role=VerificationEvidence.EvidenceRole.FACT_CHECK,
+                evidence_link_id=false_id,
+                content=(
+                    f"Claim reviewed: {self.cleaned['cleaned_claim']}\n"
+                    "Rating: False\n"
+                    "Publisher: False Checker"
+                ),
+            ),
+        )
+        self.filter_dossier.return_value = [
+            SimpleNamespace(evidence=evidence)
+        ]
+        self.evaluate_persisted.return_value = self.verdict
+
+        self._assert_terminal(
+            self._execute(),
+            VerificationRun.Status.COMPLETED,
+        )
+
+        self.evaluate_persisted.assert_called_once_with(
+            self.cleaned["cleaned_claim"],
+            "Persisted evidence context.",
+            "NEUTRAL",
+            services.OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT,
+            (satire_id,),
+        )
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "FAKE")
+
     def test_tavily_substantive_verdict_completes(self):
         self.retrieve_gfc.return_value = {"claims": []}
         self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
