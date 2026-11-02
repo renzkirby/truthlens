@@ -536,12 +536,24 @@ class VerificationRunURLRuntimeTests(TestCase):
         self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, "SATIRE")
+        self.assertEqual(self.claim.consensus_score, 95)
+        self.assertEqual(
+            self.claim.score_context,
+            (
+                "Submitted URL matches configured satire-source provenance; "
+                "final confidence is 95%."
+            ),
+        )
+        self.assertEqual(self.claim.source_type, "Satire Detection")
         self.assertEqual(self.save_claim.call_args.args[4], self.url)
         self.vault.assert_called_once_with(
             "Example public claim.",
             target_claim=self.claim,
         )
         self.bridge.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
+        self.evaluate_persisted.assert_not_called()
+        self.calibrate_confidence.assert_not_called()
         self.assess_evidence.assert_not_called()
 
     def test_rejected_vault_candidate_continues_to_gfc(self):

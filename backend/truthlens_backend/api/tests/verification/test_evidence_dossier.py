@@ -382,6 +382,31 @@ class ReasoningEvidenceDossierTests(TestCase):
         with self.assertNumQueries(0):
             self.assertEqual(render_reasoning_evidence_dossier(iter(())), "")
 
+    def test_renderer_exposes_evidence_link_ids_only_when_requested(self):
+        item = self._reasoning_item(
+            evidence_role=VerificationEvidence.EvidenceRole.FACT_CHECK,
+            content="Persisted evidence.",
+        )
+        groups = (
+            ReasoningEvidenceGroup(
+                identity_kind=EVIDENCE_SOURCE,
+                identity_id=uuid.uuid4(),
+                evidence=(item,),
+            ),
+        )
+
+        default_render = render_reasoning_evidence_dossier(groups)
+        evaluator_render = render_reasoning_evidence_dossier(
+            groups,
+            include_evidence_link_ids=True,
+        )
+
+        self.assertNotIn(str(item.evidence_link_id), default_render)
+        self.assertIn(
+            f"Evidence link ID: {item.evidence_link_id}",
+            evaluator_render,
+        )
+
     def test_renderer_is_deterministic_and_preserves_boundaries_and_content(self):
         first_content = "Exact first content.\nDo not rewrite this line."
         second_content = "Exact second content."

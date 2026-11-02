@@ -104,6 +104,8 @@ def filter_reasoning_evidence_dossier_by_role(
 
 def render_reasoning_evidence_dossier(
     evidence_groups: Iterable[ReasoningEvidenceGroup],
+    *,
+    include_evidence_link_ids: bool = False,
 ) -> str:
     """Render persisted evidence with explicit source-identity boundaries."""
     evidence_groups = tuple(evidence_groups)
@@ -133,8 +135,10 @@ def render_reasoning_evidence_dossier(
             lines.extend([
                 "",
                 f"--- EVIDENCE ITEM {item_index} ---",
-                f"Provider: {evidence_item.provider}",
             ])
+            if include_evidence_link_ids:
+                lines.append(f"Evidence link ID: {evidence_item.evidence_link_id}")
+            lines.append(f"Provider: {evidence_item.provider}")
             optional_fields = (
                 ("Evidence role", evidence_item.evidence_role),
                 ("Stance", evidence_item.stance),
@@ -162,6 +166,8 @@ def render_reasoning_evidence_dossier(
 
 def render_compact_reasoning_evidence_dossier(
     evidence_groups: Iterable[ReasoningEvidenceGroup],
+    *,
+    include_evidence_link_ids: bool = False,
 ) -> str:
     """Lossless, shorter presentation of the *same* persisted evidence.
 
@@ -205,10 +211,10 @@ def render_compact_reasoning_evidence_dossier(
                 item.retrieved_at.isoformat() if item.retrieved_at is not None else None,
                 item.relevance_score, item.directness_score, item.recency_score,
             )
-            lines.extend([
-                f"--- EVIDENCE ITEM {item_index} ---",
-                json.dumps(values, ensure_ascii=False, allow_nan=False),
-            ])
+            lines.append(f"--- EVIDENCE ITEM {item_index} ---")
+            if include_evidence_link_ids:
+                lines.append(f"Evidence link ID: {item.evidence_link_id}")
+            lines.append(json.dumps(values, ensure_ascii=False, allow_nan=False))
             if item.content is not None:
                 lines.extend(["Content:", item.content])
     return "\n".join(lines)
@@ -216,6 +222,8 @@ def render_compact_reasoning_evidence_dossier(
 
 def render_shared_metadata_reasoning_evidence_dossier(
     evidence_groups: Iterable[ReasoningEvidenceGroup],
+    *,
+    include_evidence_link_ids: bool = False,
 ) -> str:
     """Second-stage lossless pilot rendering for repeated metadata.
 
@@ -306,13 +314,13 @@ def render_shared_metadata_reasoning_evidence_dossier(
                     and encoded[column] == defaults.get(str(column))
                 ):
                     encoded[column] = 1
-            lines.extend([
-                f"--- EVIDENCE ITEM {item_index} ---",
-                json.dumps(
-                    encoded, ensure_ascii=False, separators=(",", ":"),
-                    allow_nan=False,
-                ),
-            ])
+            lines.append(f"--- EVIDENCE ITEM {item_index} ---")
+            if include_evidence_link_ids:
+                lines.append(f"Evidence link ID: {item.evidence_link_id}")
+            lines.append(json.dumps(
+                encoded, ensure_ascii=False, separators=(",", ":"),
+                allow_nan=False,
+            ))
             if item.content is not None:
                 lines.extend(["Content:", item.content])
     return "\n".join(lines)

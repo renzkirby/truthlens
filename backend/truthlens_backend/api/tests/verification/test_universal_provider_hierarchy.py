@@ -151,6 +151,31 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
                     operation, pilot_active=True, hierarchy_active=True,
                 ))
 
+    def test_persisted_verdict_contract_accepts_contextual_basis_without_widening_legacy_stages(self):
+        contextual = {
+            "reasoning": "The evidence establishes missing context.",
+            "verdict": "MISLEADING",
+            "summary": "The claim omits material context.",
+            "confidence_score": 90,
+            "score_context": "Missing context is explicit in persisted evidence.",
+            "contextual_basis_kind": "MISSING_CONTEXT",
+            "contextual_basis_evidence_ids": [
+                "11111111-1111-1111-1111-111111111111",
+            ],
+        }
+        self.assertTrue(validate_pilot_response(
+            "persisted_evidence_evaluation",
+            json.dumps(contextual),
+            "Evidence",
+        ))
+        for operation in ("gfc_evaluation", "tavily_evaluation"):
+            with self.subTest(operation=operation):
+                self.assertFalse(validate_pilot_response(
+                    operation,
+                    json.dumps(contextual),
+                    "Evidence",
+                ))
+
     def test_claim_gate_contract_preserves_out_of_scope_and_query_structure(self):
         example = {
             "cleaned_claim": "A named official announced a new policy.",
