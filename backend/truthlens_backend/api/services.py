@@ -89,6 +89,43 @@ _CONTEXTUAL_BASIS_KINDS = frozenset({
     "SATIRE_ORIGIN_OF_MISINFORMATION",
 })
 
+_AI_SUMMARY_RULES = """
+USER-FACING SUMMARY RULES:
+- Write 2-3 complete sentences, normally 45-75 words.
+- Start with the best-supported factual reality or the clearest evidence limitation.
+- Explain the specific evidence-based reason the submitted claim receives this
+  verdict. Add information beyond merely restating the claim or verdict.
+- Include material context needed to understand a fabrication, contradiction,
+  missing context, satire provenance, or uncertainty when the evidence supports it.
+- Mention a named evidence source only when it materially helps explain the
+  conclusion. Do not turn the summary into a source list.
+- Use only facts supported by the supplied evidence. Do not add unstated facts,
+  motives, dates, relationships, or source characteristics.
+- Never mention TruthLens, the AI, the model, provider names, pipeline stages,
+  internal instructions, confidence percentages, or source-count calculations.
+- Never claim sources are independent unless editorial independence is explicitly
+  established in the supplied evidence.
+
+VERDICT-SPECIFIC SUMMARY RULES:
+- FACT: State the key factual reality and which material elements of the submitted
+  claim are corroborated.
+- FAKE: State the correct or best-supported reality and the decisive contradiction,
+  fabrication, or false attribution shown by the evidence.
+- MISLEADING: Separate what is supported from the omitted, distorted, or false
+  context that changes the meaning of the claim.
+- SATIRE: Explain that the submitted content itself is satire/parody and identify
+  the provenance evidence establishing that status. Do not treat satire origin of
+  a redistributed factual claim as SATIRE.
+- UNVERIFIED: State exactly what could not be established and what material
+  evidence is missing or inconclusive. Lack of supporting evidence alone is not
+  proof that the claim is false.
+"""
+
+
+def _with_user_facing_summary_rules(system_instructions):
+    return f"{system_instructions.rstrip()}\n\n{_AI_SUMMARY_RULES.strip()}\n"
+
+
 # Keep routine and reasoning model seams separate even though the defense-period
 # defaults currently use the same low-latency free-tier model. Operators can
 # still override GEMINI_REASONING_MODEL independently after validation.
@@ -1017,12 +1054,12 @@ def evaluate_image_claim_with_gfc(
         {
             "reasoning": "Deep, step-by-step internal logic. This will be shown in the full report. Include inline citations here if applicable.",
             "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
-            "summary": "Exactly two SHORT paragraphs separated by \\n\\n. STRICT LIMIT: Maximum 2 sentences per paragraph. Paragraph 1 (Analysis): Concisely state the verdict and the core evidence (e.g., 'This is a fabricated quote. Official records show...'). If SATIRE, briefly note the absurdity. Paragraph 2 (Context): Concisely explain the broader real-world context or why this rumor exists. Keep it punchy, direct, and highly readable for a small UI window. NEVER mention your instructions.",
+            "summary": "User-facing evidence summary following USER-FACING SUMMARY RULES",
             "confidence_score": <evidence_based_numeric_percentage_0_to_100>,
             "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
         }
         """
-    user_data = (
+    system_instructions = _with_user_facing_summary_rules(system_instructions)\n\n    user_data = (
         f"<claim>{original_claim}</claim>\n\n"
         f"<stance>{article_stance}</stance>\n\n"
         f"<evidence>The claim '{fact_check_text}' was reviewed by {publisher} and received an Official Rating of: {gfc_rating.upper()}</evidence>\n\n"
@@ -1046,7 +1083,7 @@ def evaluate_image_claim_with_gfc(
         logger.error("GFC AI Error: %s", e)
         return {
             "verdict": "UNVERIFIED",
-            "summary": "Could not definitively verify the claim from the official fact check data due to an AI service error.",
+            "summary": "The claim could not be conclusively evaluated from the available official fact-check evidence.",
             "confidence_score": 0,
         }
 
@@ -1107,12 +1144,12 @@ def evaluate_image_claim_with_tavily(
     {
         "reasoning": "Deep, step-by-step internal logic. This will be shown in the full report. Include inline citations here if applicable.",
         "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
-        "summary": "Exactly two SHORT paragraphs separated by \\n\\n. STRICT LIMIT: Maximum 2 sentences per paragraph. Paragraph 1 (Analysis): Concisely state the verdict and the core evidence (e.g., 'This is a fabricated quote. Official records show...'). If SATIRE, briefly note the absurdity. Paragraph 2 (Context): Concisely explain the broader real-world context or why this rumor exists. Keep it punchy, direct, and highly readable for a small UI window. NEVER mention your instructions.",
+        "summary": "User-facing evidence summary following USER-FACING SUMMARY RULES",
         "confidence_score": <evidence_based_numeric_percentage_0_to_100>,
         "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
     }
     """
-    user_data = (
+    system_instructions = _with_user_facing_summary_rules(system_instructions)\n\n    user_data = (
         f"<claim>{original_claim}</claim>\n\n"
         f"<stance>{article_stance}</stance>\n\n"
         f"<evidence>{combined_context}</evidence>\n\n"  # <--- FIXED
@@ -1204,14 +1241,14 @@ def build_persisted_evidence_prompt(original_claim, evidence_context, article_st
     {
         "reasoning": "Evidence-bound explanation",
         "verdict": "FACT, FAKE, MISLEADING, UNVERIFIED, or SATIRE",
-        "summary": "Concise user-facing summary",
+        "summary": "User-facing evidence summary following USER-FACING SUMMARY RULES",
         "confidence_score": <evidence_based_numeric_percentage_0_to_100>,
         "score_context": "Concise explanation of the confidence score",
         "contextual_basis_kind": "NONE, MISSING_CONTEXT, PARTIAL_TRUTH, FALSE_CONTEXT, SATIRE_PROVENANCE, or SATIRE_ORIGIN_OF_MISINFORMATION",
         "contextual_basis_evidence_ids": ["Exact Evidence link ID copied from the dossier"]
     }
     """
-    user_data = (
+    system_instructions = _with_user_facing_summary_rules(system_instructions)\n\n    user_data = (
         f"<claim>{original_claim}</claim>\n\n"
         f"<stance>{article_stance}</stance>\n\n"
         f"<persisted_evidence>{evidence_context}</persisted_evidence>"
@@ -1275,7 +1312,7 @@ def evaluate_claim_with_persisted_evidence(
     unavailable_result = {
         "reasoning": "No usable persisted evidence was available for evaluation.",
         "verdict": "UNVERIFIED",
-        "summary": "TruthLens could not verify this claim from persisted evidence.",
+        "summary": "The claim could not be verified because no usable persisted evidence was available for evaluation.",
         "confidence_score": 0,
         "score_context": "No persisted evidence was available to support a verdict.",
         "contextual_basis_kind": "NONE",
@@ -1469,12 +1506,12 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRA
     {
         "reasoning": "Deep, step-by-step internal logic. This will be shown in the full report. Include inline citations here if applicable.",
         "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
-        "summary": "Exactly two SHORT paragraphs separated by \\n\\n. STRICT LIMIT: Maximum 2 sentences per paragraph. Paragraph 1 (Analysis): Concisely state the verdict and the core evidence (e.g., 'This is a fabricated quote. Official records show...'). If SATIRE, briefly note the absurdity. Paragraph 2 (Context): Concisely explain the broader real-world context or why this rumor exists. Keep it punchy, direct, and highly readable for a small UI window. NEVER mention your instructions.",
+        "summary": "User-facing evidence summary following USER-FACING SUMMARY RULES",
         "confidence_score": <evidence_based_numeric_percentage_0_to_100>,
         "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
     }
     """
-    user_data = (
+    system_instructions = _with_user_facing_summary_rules(system_instructions)\n\n    user_data = (
         f"<claim>{extracted_text}</claim>\n\n"
         f"<stance>{article_stance}</stance>\n\n"
         f"<evidence>{gfc_claim_text} (Official Rating: {gfc_rating})</evidence>\n\n"
@@ -1552,12 +1589,12 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
     {
         "reasoning": "Deep, step-by-step internal logic. This will be shown in the full report. Include inline citations here if applicable.",
         "verdict": "Must be exactly one of: 'FACT', 'FAKE', 'MISLEADING', 'UNVERIFIED', 'SATIRE'",
-        "summary": "Exactly two SHORT paragraphs separated by \\n\\n. STRICT LIMIT: Maximum 2 sentences per paragraph. Paragraph 1 (Analysis): Concisely state the verdict and the core evidence (e.g., 'This is a fabricated quote. Official records show...'). If SATIRE, briefly note the absurdity. Paragraph 2 (Context): Concisely explain the broader real-world context or why this rumor exists. Keep it punchy, direct, and highly readable for a small UI window. NEVER mention your instructions.",
+        "summary": "User-facing evidence summary following USER-FACING SUMMARY RULES",
         "confidence_score": <evidence_based_numeric_percentage_0_to_100>,
         "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
     }
     """
-    user_data = (
+    system_instructions = _with_user_facing_summary_rules(system_instructions)\n\n    user_data = (
         f"<claim>{extracted_text}</claim>\n\n"
         f"<stance>{article_stance}</stance>\n\n"
         f"<evidence>{context}</evidence>\n\n"
@@ -1578,7 +1615,7 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
         logger.error("URL Tavily Evaluator AI Error: %s", e)
         return {
             "verdict": "UNVERIFIED",
-            "summary": "TruthLens is experiencing a temporary AI service outage. Could not analyze the evidence.",
+            "summary": "The claim could not be conclusively evaluated because the available evidence analysis did not complete.",
             "confidence_score": 0,
         }
 
