@@ -255,13 +255,10 @@ def _resolve_official_fact_check_rating_policy(claim_text, evidence_groups):
                     item["evidence_link_id"] for item in equivalent_satire
                 ),
             }
-        # An equivalent publisher-specific rating with unknown semantics is
-        # disagreement, not satire consensus. Leave verdict selection to the
-        # normal persisted evaluator rather than guessing how to normalize it.
-        return {
-            "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
-            "satire_evidence_ids": (),
-        }
+        # Unknown publisher-specific ratings are neutral here. Only an
+        # explicit normalized FALSE rating conflicts with an equivalent SATIRE
+        # rating; otherwise do not invent disagreement semantics.
+        continue
 
     return {
         "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
@@ -1488,6 +1485,10 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
             gfc_started_at = time.perf_counter()
             gfc_claims = []
             is_relevant = False
+            official_rating_policy = {
+                "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+                "satire_evidence_ids": (),
+            }
 
             try:
                 gfc_data = _retrieve_and_ingest_gfc_queries(
@@ -1507,18 +1508,53 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     claims=len(gfc_claims),
                 )
 
+                if gfc_claims and run is not None:
+                    evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
+                    precheck_fact_check_groups = (
+                        filter_reasoning_evidence_dossier_by_role(
+                            evidence_dossier,
+                            VerificationEvidence.EvidenceRole.FACT_CHECK,
+                        )
+                    )
+                    if precheck_fact_check_groups:
+                        official_rating_started_at = time.perf_counter()
+                        official_rating_policy = (
+                            _resolve_official_fact_check_rating_policy(
+                                cleaned_claim,
+                                precheck_fact_check_groups,
+                            )
+                        )
+                        _log_stage(
+                            claim_id,
+                            "gfc_official_rating_resolution",
+                            official_rating_started_at,
+                            resolution=official_rating_policy["resolution"],
+                        )
+
                 if gfc_claims:
-                    first_claim_text = gfc_claims[0].get("text", "")
-                    relevance_started_at = time.perf_counter()
-                    is_relevant = is_fact_check_relevant(
-                        cleaned_claim, first_claim_text
-                    )
-                    _log_stage(
-                        claim_id,
-                        "gfc_relevance_check",
-                        relevance_started_at,
-                        relevant=is_relevant,
-                    )
+                    if (
+                        official_rating_policy["resolution"]
+                        != OFFICIAL_FACT_CHECK_RESOLUTION_NONE
+                    ):
+                        is_relevant = True
+                        _log_stage(
+                            claim_id,
+                            "gfc_relevance_bypassed",
+                            time.perf_counter(),
+                            resolution=official_rating_policy["resolution"],
+                        )
+                    else:
+                        first_claim_text = gfc_claims[0].get("text", "")
+                        relevance_started_at = time.perf_counter()
+                        is_relevant = is_fact_check_relevant(
+                            cleaned_claim, first_claim_text
+                        )
+                        _log_stage(
+                            claim_id,
+                            "gfc_relevance_check",
+                            relevance_started_at,
+                            relevant=is_relevant,
+                        )
             except Exception as e:
                 _log_stage(
                     claim_id, "gfc_search_failed", gfc_started_at, error=str(e)[:120]
@@ -1558,19 +1594,6 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     has_persisted_evidence = bool(evidence_context)
                     if has_persisted_evidence:
                         try:
-                            official_rating_started_at = time.perf_counter()
-                            official_rating_policy = (
-                                _resolve_official_fact_check_rating_policy(
-                                    cleaned_claim,
-                                    fact_check_groups,
-                                )
-                            )
-                            _log_stage(
-                                claim_id,
-                                "gfc_official_rating_resolution",
-                                official_rating_started_at,
-                                resolution=official_rating_policy["resolution"],
-                            )
                             ai_verdict = _evaluate_persisted_with_official_rating_policy(
                                 cleaned_claim,
                                 evidence_context,
@@ -2205,6 +2228,10 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
         gfc_started_at = time.perf_counter()
         gfc_claims = []
         is_relevant = False
+        official_rating_policy = {
+            "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+        }
 
         try:
             gfc_data = _retrieve_and_ingest_gfc_queries(
@@ -2225,16 +2252,53 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                 claims=len(gfc_claims),
             )
 
-            if gfc_claims:
-                first_claim_text = gfc_claims[0].get("text", "")
-                relevance_started_at = time.perf_counter()
-                is_relevant = is_fact_check_relevant(cleaned_claim, first_claim_text)
-                _log_stage(
-                    claim_id,
-                    "url_gfc_relevance_check",
-                    relevance_started_at,
-                    relevant=is_relevant,
+            if gfc_claims and run is not None:
+                evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
+                precheck_fact_check_groups = (
+                    filter_reasoning_evidence_dossier_by_role(
+                        evidence_dossier,
+                        VerificationEvidence.EvidenceRole.FACT_CHECK,
+                    )
                 )
+                if precheck_fact_check_groups:
+                    official_rating_started_at = time.perf_counter()
+                    official_rating_policy = (
+                        _resolve_official_fact_check_rating_policy(
+                            cleaned_claim,
+                            precheck_fact_check_groups,
+                        )
+                    )
+                    _log_stage(
+                        claim_id,
+                        "url_gfc_official_rating_resolution",
+                        official_rating_started_at,
+                        resolution=official_rating_policy["resolution"],
+                    )
+
+            if gfc_claims:
+                if (
+                    official_rating_policy["resolution"]
+                    != OFFICIAL_FACT_CHECK_RESOLUTION_NONE
+                ):
+                    is_relevant = True
+                    _log_stage(
+                        claim_id,
+                        "url_gfc_relevance_bypassed",
+                        time.perf_counter(),
+                        resolution=official_rating_policy["resolution"],
+                    )
+                else:
+                    first_claim_text = gfc_claims[0].get("text", "")
+                    relevance_started_at = time.perf_counter()
+                    is_relevant = is_fact_check_relevant(
+                        cleaned_claim, first_claim_text
+                    )
+                    _log_stage(
+                        claim_id,
+                        "url_gfc_relevance_check",
+                        relevance_started_at,
+                        relevant=is_relevant,
+                    )
         except Exception as e:
             _log_stage(claim_id, "url_gfc_failed", gfc_started_at, error=str(e)[:120])
             logger.error("GFC error for claim %s: %s", claim_id, e)
@@ -2282,19 +2346,6 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                 )
                 if evidence_context:
                     try:
-                        official_rating_started_at = time.perf_counter()
-                        official_rating_policy = (
-                            _resolve_official_fact_check_rating_policy(
-                                cleaned_claim,
-                                fact_check_groups,
-                            )
-                        )
-                        _log_stage(
-                            claim_id,
-                            "url_gfc_official_rating_resolution",
-                            official_rating_started_at,
-                            resolution=official_rating_policy["resolution"],
-                        )
                         ai_verdict = _evaluate_persisted_with_official_rating_policy(
                             cleaned_claim,
                             evidence_context,
