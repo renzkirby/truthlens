@@ -100,14 +100,27 @@ _OFFICIAL_FACT_CHECK_RESOLUTIONS = frozenset({
 _OFFICIAL_SATIRE_RATINGS = frozenset({
     "satire",
     "satirical",
+    "satirical post",
     "parody",
     "satire/parody",
+    "originated as satire",
+    "labeled satire",
+    "satirist",
+    "parody news",
 })
 _OFFICIAL_FALSE_RATINGS = frozenset({
     "false",
     "fake",
     "fabricated",
 })
+_OFFICIAL_SATIRE_RATING_PREFIXES = (
+    "this is a satirical post",
+    # Observed once in persisted Google Fact Check data without the space.
+    "this is a satiricalpost",
+)
+_PERSISTED_GFC_FIELD_PATTERN = re.compile(
+    r"(?:^|\\s)(Claim reviewed|Claimant|Rating|Review title|Publisher):\\s*"
+)
 
 
 def classify_official_fact_check_rating(value):
@@ -117,24 +130,47 @@ def classify_official_fact_check_rating(value):
     normalized = " ".join(value.split()).casefold().replace(" / ", "/")
     if normalized in _OFFICIAL_SATIRE_RATINGS:
         return "SATIRE"
+    if any(
+        normalized.startswith(prefix)
+        for prefix in _OFFICIAL_SATIRE_RATING_PREFIXES
+    ):
+        return "SATIRE"
     if normalized in _OFFICIAL_FALSE_RATINGS:
         return "FALSE"
     return None
 
 
 def extract_persisted_fact_check_claim_rating(content):
-    """Read deterministic GFC Claim reviewed/Rating fields from persisted content."""
+    """Read deterministic GFC Claim reviewed/Rating fields after normalization.
+
+    Generic evidence normalization intentionally collapses whitespace, so a
+    Google Fact Check item that was originally newline-delimited may be stored
+    as one line. Parse the adapter's known field markers rather than relying on
+    line boundaries.
+    """
     if not isinstance(content, str) or not content.strip():
         return None
-    claim_text = None
-    rating = None
-    for line in content.splitlines():
-        if line.startswith("Claim reviewed: "):
-            claim_text = line.removeprefix("Claim reviewed: ").strip()
-        elif line.startswith("Rating: "):
-            rating = line.removeprefix("Rating: ").strip()
+
+    normalized_content = " ".join(content.split())
+    matches = list(_PERSISTED_GFC_FIELD_PATTERN.finditer(normalized_content))
+    if not matches:
+        return None
+
+    fields = {}
+    for index, match in enumerate(matches):
+        value_start = match.end()
+        value_end = (
+            matches[index + 1].start()
+            if index + 1 < len(matches)
+            else len(normalized_content)
+        )
+        fields[match.group(1)] = normalized_content[value_start:value_end].strip()
+
+    claim_text = fields.get("Claim reviewed")
+    rating = fields.get("Rating")
     if not claim_text or not rating:
         return None
+
     return {
         "claim_text": claim_text,
         "rating": rating,
