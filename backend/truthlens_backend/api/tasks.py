@@ -19,6 +19,11 @@ from .ocr_service import OCRProviderUnavailableError, extract_text_from_image
 from .services import (
     ClaimGateError,
     LLMProviderUnavailableError,
+    OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT,
+    OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+    OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
+    assess_claim_equivalence,
+    extract_persisted_fact_check_claim_rating,
     llm_provider_scope,
     process_image,
     clean_ocr_text,
@@ -138,6 +143,117 @@ def _persist_subject_classification_input(claim_id, context_text):
             claim_id,
         )
         return False
+
+
+def _normalized_claim_identity(value):
+    if not isinstance(value, str):
+        return ""
+    return " ".join(value.split()).casefold()
+
+
+def _claims_are_equivalent_for_official_rating(incoming_claim, reviewed_claim):
+    if _normalized_claim_identity(incoming_claim) == _normalized_claim_identity(
+        reviewed_claim
+    ):
+        return True
+    try:
+        return assess_claim_equivalence(
+            incoming_claim,
+            reviewed_claim,
+        ).get("equivalent") is True
+    except LLMProviderUnavailableError:
+        return None
+    except Exception as exc:
+        logger.warning(
+            "Official fact-check rating equivalence could not be established: %s",
+            type(exc).__name__,
+        )
+        return None
+
+
+def _resolve_official_fact_check_rating_policy(claim_text, evidence_groups):
+    """Resolve high-precision SATIRE/FALSE ClaimReview ratings from persisted GFC evidence.
+
+    The helper is intentionally dormant unless an explicit SATIRE rating exists.
+    Related but non-equivalent fact-checks cannot authorize SATIRE. If equivalence
+    cannot be established safely, SATIRE authorization fails closed to NONE.
+    """
+    records = []
+    for group in evidence_groups:
+        for item in group.evidence:
+            if (
+                item.provider != GFC_PROVIDER_NAME
+                or item.source_type != "FACT_CHECK"
+                or item.evidence_role != VerificationEvidence.EvidenceRole.FACT_CHECK
+            ):
+                continue
+            parsed = extract_persisted_fact_check_claim_rating(item.content)
+            if parsed is None:
+                continue
+            records.append({
+                **parsed,
+                "evidence_link_id": str(item.evidence_link_id),
+            })
+
+    if not any(record["rating_kind"] == "SATIRE" for record in records):
+        return {
+            "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+        }
+
+    equivalence_cache = {}
+
+    def equivalent(reviewed_claim):
+        identity = _normalized_claim_identity(reviewed_claim)
+        if identity not in equivalence_cache:
+            equivalence_cache[identity] = _claims_are_equivalent_for_official_rating(
+                claim_text,
+                reviewed_claim,
+            )
+        return equivalence_cache[identity]
+
+    equivalent_satire = []
+    for record in records:
+        if record["rating_kind"] != "SATIRE":
+            continue
+        match = equivalent(record["claim_text"])
+        if match is None:
+            return {
+                "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+                "satire_evidence_ids": (),
+            }
+        if match:
+            equivalent_satire.append(record)
+
+    if not equivalent_satire:
+        return {
+            "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+        }
+
+    for record in records:
+        if record["rating_kind"] != "FALSE":
+            continue
+        match = equivalent(record["claim_text"])
+        if match is None:
+            return {
+                "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+                "satire_evidence_ids": (),
+            }
+        if match:
+            return {
+                "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT,
+                "satire_evidence_ids": tuple(
+                    item["evidence_link_id"] for item in equivalent_satire
+                ),
+            }
+
+    return {
+        "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
+        "satire_evidence_ids": tuple(
+            item["evidence_link_id"] for item in equivalent_satire
+        ),
+    }
 
 
 def _render_bounded_persisted_evidence_context(groups, claim_text, stance):
@@ -1403,10 +1519,24 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     has_persisted_evidence = bool(evidence_context)
                     if has_persisted_evidence:
                         try:
+                            official_rating_policy = (
+                                _resolve_official_fact_check_rating_policy(
+                                    cleaned_claim,
+                                    fact_check_groups,
+                                )
+                            )
+                            _log_stage(
+                                claim_id,
+                                "gfc_official_rating_resolution",
+                                time.perf_counter(),
+                                resolution=official_rating_policy["resolution"],
+                            )
                             ai_verdict = evaluate_claim_with_persisted_evidence(
                                 cleaned_claim,
                                 evidence_context,
                                 article_stance,
+                                official_rating_policy["resolution"],
+                                official_rating_policy["satire_evidence_ids"],
                             )
                             ai_verdict = calibrate_verdict_confidence(
                                 ai_verdict,
@@ -2113,10 +2243,24 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                 )
                 if evidence_context:
                     try:
+                        official_rating_policy = (
+                            _resolve_official_fact_check_rating_policy(
+                                cleaned_claim,
+                                fact_check_groups,
+                            )
+                        )
+                        _log_stage(
+                            claim_id,
+                            "url_gfc_official_rating_resolution",
+                            time.perf_counter(),
+                            resolution=official_rating_policy["resolution"],
+                        )
                         ai_verdict = evaluate_claim_with_persisted_evidence(
                             cleaned_claim,
                             evidence_context,
                             article_stance,
+                            official_rating_policy["resolution"],
+                            official_rating_policy["satire_evidence_ids"],
                         )
                         ai_verdict = calibrate_verdict_confidence(
                             ai_verdict,
