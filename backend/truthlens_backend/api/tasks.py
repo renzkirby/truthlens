@@ -238,7 +238,7 @@ def _resolve_official_fact_check_rating_policy(claim_text, evidence_groups):
         }
 
     for record in records:
-        if record["rating_kind"] != "FALSE":
+        if record["rating_kind"] == "SATIRE":
             continue
         match = equivalent(record["claim_text"])
         if match is None:
@@ -246,13 +246,22 @@ def _resolve_official_fact_check_rating_policy(claim_text, evidence_groups):
                 "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
                 "satire_evidence_ids": (),
             }
-        if match:
+        if not match:
+            continue
+        if record["rating_kind"] == "FALSE":
             return {
                 "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT,
                 "satire_evidence_ids": tuple(
                     item["evidence_link_id"] for item in equivalent_satire
                 ),
             }
+        # An equivalent publisher-specific rating with unknown semantics is
+        # disagreement, not satire consensus. Leave verdict selection to the
+        # normal persisted evaluator rather than guessing how to normalize it.
+        return {
+            "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+        }
 
     return {
         "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
