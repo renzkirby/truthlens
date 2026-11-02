@@ -633,6 +633,44 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.retrieve_tavily.assert_not_called()
         self.assertEqual(VerificationEvidence.objects.count(), 0)
 
+    def test_equivalent_official_satire_rating_reaches_url_persisted_policy(self):
+        evidence_id = "11111111-1111-1111-1111-111111111111"
+        evidence = SimpleNamespace(
+            provider=tasks.GFC_PROVIDER_NAME,
+            source_type="FACT_CHECK",
+            evidence_role=VerificationEvidence.EvidenceRole.FACT_CHECK,
+            evidence_link_id=evidence_id,
+            content=(
+                f"Claim reviewed: {self.cleaned['cleaned_claim']}\n"
+                "Rating: Satire\n"
+                "Publisher: Example Checker"
+            ),
+        )
+        self.filter_dossier.return_value = [
+            SimpleNamespace(evidence=(evidence,))
+        ]
+        satire_verdict = {
+            **self.verdict,
+            "verdict": "SATIRE",
+            "contextual_basis_kind": "SATIRE_PROVENANCE",
+            "contextual_basis_evidence_ids": [evidence_id],
+        }
+        self.evaluate_persisted.return_value = satire_verdict
+
+        run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        self.evaluate_persisted.assert_called_once_with(
+            self.cleaned["cleaned_claim"],
+            "Persisted evidence context.",
+            "NEUTRAL",
+            services.OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
+            (evidence_id,),
+        )
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "SATIRE")
+        self.retrieve_tavily.assert_not_called()
+
     def test_gfc_report_shows_evaluated_claim_not_extracted_page_navigation(self):
         self.cleaned_text = (
             "Apple Media Helpline Shop Learn Wallet Education "
