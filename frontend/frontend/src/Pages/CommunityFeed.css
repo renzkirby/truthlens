@@ -745,9 +745,13 @@
 }
 
 .feed-assessment-summary {
+  display: -webkit-box;
   max-width: 70ch;
+  overflow: hidden;
   color: var(--tl-color-text-body);
   text-wrap: pretty;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .feed-card-actions {
