@@ -537,6 +537,9 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, "SATIRE")
         self.assertEqual(self.claim.consensus_score, 95)
+        self.assertNotIn("TruthLens", self.claim.ai_summary)
+        self.assertIn("configured satire or parody publication", self.claim.ai_summary)
+        self.assertIn("known provenance", self.claim.ai_summary)
         self.assertEqual(
             self.claim.score_context,
             (
