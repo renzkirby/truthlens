@@ -379,7 +379,7 @@ function DeepAnalysisTerminalState({ tone = "critical", icon, title, detail, onB
 function DeepAnalysisPage() {
    const { claimId } = useParams();
    const navigate = useNavigate();
-   const { authFetch } = useAuth();
+   const { authFetch, user } = useAuth();
    const [claimData, setClaimData] = useState(null);
    const [statusData, setStatusData] = useState(null);
    const [statusSettled, setStatusSettled] = useState(false);
@@ -559,6 +559,8 @@ function DeepAnalysisPage() {
    const originalMediaUrl = rawClaimType === "IMAGE" ? getSafeHttpUrl(claimData.media_url) : null;
    const hasOriginalMaterial = Boolean(originalUrl || originalMediaUrl);
    const relatedFactChecks = Array.isArray(statusData?.related_fact_checks) ? statusData.related_fact_checks : [];
+   const communityThreadId = statusData?.thread_id || null;
+   const canParticipateInCommunity = user?.community_identity?.can_participate !== false;
 
    return (
       <main className="deep-analysis-page" id="main-content">
@@ -848,6 +850,49 @@ function DeepAnalysisPage() {
                               </article>
                            );
                         })}
+                     </div>
+                  </section>
+               )}
+
+               {canParticipateInCommunity && (
+                  <section
+                     className="deep-analysis-section deep-analysis-community-section"
+                     aria-labelledby="community-review-heading"
+                  >
+                     <div className="deep-analysis-community-review">
+                        <span className="deep-analysis-community-icon" aria-hidden="true">
+                           <Icons name={communityThreadId ? "message-square" : "users"} size={22} />
+                        </span>
+                        <div className="deep-analysis-community-content">
+                           <p className="deep-analysis-provenance-label">Community review</p>
+                           <h2 id="community-review-heading">
+                              {communityThreadId ? "Community review in progress" : "Want another perspective?"}
+                           </h2>
+                           <p>
+                              {communityThreadId
+                                 ? "This claim already has a community discussion where contributors can add evidence and context. The discussion remains separate from the automated assessment above."
+                                 : "Send this claim and its AI analysis to the TruthLens Community for discussion and additional evidence. Community escalation does not change the current AI assessment."}
+                           </p>
+                           {communityThreadId ? (
+                              <Link
+                                 className="deep-analysis-primary-action"
+                                 to={`/thread/detail/${encodeURIComponent(communityThreadId)}`}
+                              >
+                                 <Icons name="message-square" size={16} aria-hidden="true" />
+                                 View Community Discussion
+                                 <Icons name="arrow-right" size={16} aria-hidden="true" />
+                              </Link>
+                           ) : (
+                              <Link
+                                 className="deep-analysis-primary-action"
+                                 to={`/thread/create?claim_id=${encodeURIComponent(claimId)}`}
+                              >
+                                 <Icons name="users" size={16} aria-hidden="true" />
+                                 Escalate to Community
+                                 <Icons name="arrow-right" size={16} aria-hidden="true" />
+                              </Link>
+                           )}
+                        </div>
                      </div>
                   </section>
                )}
