@@ -119,7 +119,7 @@ _OFFICIAL_SATIRE_RATING_PREFIXES = (
     "this is a satiricalpost",
 )
 _PERSISTED_GFC_FIELD_PATTERN = re.compile(
-    r"(?:^|\\s)(Claim reviewed|Claimant|Rating|Review title|Publisher):\\s*"
+    r"(?:^|\s)(Claim reviewed|Claimant|Rating|Review title|Publisher):\s*"
 )
 
 
