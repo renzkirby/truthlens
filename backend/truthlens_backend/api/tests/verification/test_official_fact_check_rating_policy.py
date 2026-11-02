@@ -207,7 +207,7 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
         self.assertEqual(result["satire_evidence_ids"], ("evidence-1",))
         equivalence.assert_not_called()
 
-    def test_equivalent_unknown_rating_does_not_invent_a_conflict(self):
+    def test_equivalent_unknown_rating_defers_to_normal_evaluator(self):
         with patch("api.tasks.assess_claim_equivalence") as equivalence:
             result = tasks._resolve_official_fact_check_rating_policy(
                 "Same claim.",
@@ -219,12 +219,12 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
 
         self.assertEqual(
             result["resolution"],
-            OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
+            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
         )
-        self.assertEqual(result["satire_evidence_ids"], ("evidence-1",))
+        self.assertEqual(result["satire_evidence_ids"], ())
         equivalence.assert_not_called()
 
-    def test_trump_shape_satire_plus_descriptive_unknown_stays_satire(self):
+    def test_trump_shape_satire_plus_descriptive_unknown_defers_to_normal_evaluator(self):
         descriptive_rating = (
             "There is no evidence Donald Trump made any such post on his "
             "Truth Social account. It was initially posted by a satire account."
@@ -240,9 +240,9 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
 
         self.assertEqual(
             result["resolution"],
-            OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
+            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
         )
-        self.assertEqual(result["satire_evidence_ids"], ("evidence-1",))
+        self.assertEqual(result["satire_evidence_ids"], ())
         equivalence.assert_not_called()
 
     def test_related_non_equivalent_satire_does_not_authorize_satire(self):
@@ -265,6 +265,38 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
         )
         self.assertEqual(result["satire_evidence_ids"], ())
         equivalence.assert_called_once()
+
+    def test_non_equivalent_unknown_rating_does_not_block_equivalent_satire(self):
+        def equivalence(incoming_claim, reviewed_claim):
+            if reviewed_claim == "Equivalent satire wording.":
+                return {
+                    "equivalent": True,
+                    "reasoning": "Same proposition.",
+                    "material_differences": [],
+                }
+            return {
+                "equivalent": False,
+                "reasoning": "Different proposition.",
+                "material_differences": ["Different event."],
+            }
+
+        with patch(
+            "api.tasks.assess_claim_equivalence",
+            side_effect=equivalence,
+        ):
+            result = tasks._resolve_official_fact_check_rating_policy(
+                "Submitted factual claim.",
+                _groups(
+                    ("Equivalent satire wording.", "Satire"),
+                    ("Different contextual claim.", "Mostly False"),
+                ),
+            )
+
+        self.assertEqual(
+            result["resolution"],
+            OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
+        )
+        self.assertEqual(result["satire_evidence_ids"], ("evidence-1",))
 
     def test_semantically_equivalent_satire_rating_authorizes_satire(self):
         with patch(
