@@ -180,19 +180,25 @@ def _resolve_official_fact_check_rating_policy(claim_text, evidence_groups):
     """
     records = []
     for group in evidence_groups:
-        for item in group.evidence:
+        for item in getattr(group, "evidence", ()):
             if (
-                item.provider != GFC_PROVIDER_NAME
-                or item.source_type != "FACT_CHECK"
-                or item.evidence_role != VerificationEvidence.EvidenceRole.FACT_CHECK
+                getattr(item, "provider", None) != GFC_PROVIDER_NAME
+                or getattr(item, "source_type", None) != "FACT_CHECK"
+                or getattr(item, "evidence_role", None)
+                != VerificationEvidence.EvidenceRole.FACT_CHECK
             ):
                 continue
-            parsed = extract_persisted_fact_check_claim_rating(item.content)
+            parsed = extract_persisted_fact_check_claim_rating(
+                getattr(item, "content", None)
+            )
             if parsed is None:
+                continue
+            evidence_link_id = getattr(item, "evidence_link_id", None)
+            if evidence_link_id is None:
                 continue
             records.append({
                 **parsed,
-                "evidence_link_id": str(item.evidence_link_id),
+                "evidence_link_id": str(evidence_link_id),
             })
 
     if not any(record["rating_kind"] == "SATIRE" for record in records):
