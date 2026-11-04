@@ -260,7 +260,6 @@ class AdjudicationCaseDetailApiTests(APITestCase):
         denied_partner_users = [self.owner]
         for index, role in enumerate(
             (
-                OrganizationMembership.Role.ADMIN,
                 OrganizationMembership.Role.RESEARCHER,
                 OrganizationMembership.Role.CONTRIBUTOR,
             )
@@ -289,7 +288,13 @@ class AdjudicationCaseDetailApiTests(APITestCase):
             status.HTTP_403_FORBIDDEN,
         )
 
-        for allowed_user in (self.lead, self.partner_moderator):
+        admin = self._create_user("detail-admin")
+        self._add_member(
+            admin,
+            self.organization,
+            OrganizationMembership.Role.ADMIN,
+        )
+        for allowed_user in (self.lead, self.partner_moderator, admin):
             self._authenticate(allowed_user)
             with self.subTest(user=allowed_user.username):
                 self.assertEqual(

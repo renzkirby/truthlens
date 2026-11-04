@@ -193,7 +193,16 @@ class AdjudicationCaseQueueApiTests(APITestCase):
             status.HTTP_403_FORBIDDEN,
         )
 
-        for allowed_user in (self.lead, self.partner_moderator):
+        admin = User.objects.create_user(
+            username="adjudication-queue-admin",
+            password="test-password",
+        )
+        self._add_member(
+            admin,
+            self.organization,
+            OrganizationMembership.Role.ADMIN,
+        )
+        for allowed_user in (self.lead, self.partner_moderator, admin):
             with self.subTest(user=allowed_user.username):
                 self._authenticate(allowed_user)
                 self.assertEqual(
@@ -201,11 +210,10 @@ class AdjudicationCaseQueueApiTests(APITestCase):
                     status.HTTP_200_OK,
                 )
 
-    def test_management_and_non_adjudication_partner_roles_are_denied(self):
+    def test_non_adjudication_partner_roles_are_denied(self):
         for index, role in enumerate(
             (
                 OrganizationMembership.Role.OWNER,
-                OrganizationMembership.Role.ADMIN,
                 OrganizationMembership.Role.RESEARCHER,
                 OrganizationMembership.Role.CONTRIBUTOR,
             )

@@ -219,23 +219,22 @@ class PublicationWorkflowApiTests(PublicationWorkflowFixtures, APITestCase):
         anonymous = APIClient().get(self.queue_url())
         self.assertEqual(anonymous.status_code, status.HTTP_401_UNAUTHORIZED)
 
-        for actor in (self.lead, self.moderator, self.researcher):
+        for actor in (self.lead, self.moderator, self.researcher, self.admin):
             with self.subTest(actor=actor.username, queue="DRAFTING"):
                 response = self.client_for(actor).get(self.queue_url())
                 self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        for actor in (self.owner, self.admin):
-            with self.subTest(actor=actor.username, queue="DRAFTING"):
-                response = self.client_for(actor).get(self.queue_url())
-                self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        response = self.client_for(self.owner).get(self.queue_url())
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-        self.assertEqual(
-            self.client_for(self.lead).get(
-                self.queue_url(queue="REVIEW")
-            ).status_code,
-            status.HTTP_200_OK,
-        )
-        for actor in (self.moderator, self.researcher, self.owner, self.admin):
+        for actor in (self.lead, self.admin):
+            with self.subTest(actor=actor.username, queue="REVIEW"):
+                response = self.client_for(actor).get(
+                    self.queue_url(queue="REVIEW")
+                )
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        for actor in (self.moderator, self.researcher, self.owner):
             with self.subTest(actor=actor.username, queue="REVIEW"):
                 response = self.client_for(actor).get(
                     self.queue_url(queue="REVIEW")

@@ -67,7 +67,13 @@ VERIFIED_PARTNER_ROLE_CAPABILITIES = {
     OrganizationMembership.Role.RESEARCHER: {
         PartnerCapability.CREATE_FACT_CHECK_DRAFT,
     },
-    OrganizationMembership.Role.ADMIN: set(),
+    OrganizationMembership.Role.ADMIN: {
+        PartnerCapability.CLAIM_VERIFICATION_WORK,
+        PartnerCapability.REVIEW_EVIDENCE,
+        PartnerCapability.ADJUDICATE,
+        PartnerCapability.CREATE_FACT_CHECK_DRAFT,
+        PartnerCapability.PUBLISH_FACT_CHECK,
+    },
     # Removed roles intentionally have no partner verification authority.
     "CONTRIBUTOR": set(),
     "OWNER": set(),

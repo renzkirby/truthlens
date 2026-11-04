@@ -919,7 +919,7 @@ class DeveloperConsoleTests(TestCase):
             OrganizationInvitation.Status.PENDING,
         )
 
-    def test_admin_storage_and_management_permission_semantics_are_preserved(self):
+    def test_admin_storage_management_and_verification_semantics_are_preserved(self):
         self.owner_membership.refresh_from_db()
 
         self.assertEqual(self.owner_membership.role, "ADMIN")
@@ -930,10 +930,17 @@ class DeveloperConsoleTests(TestCase):
                 organization=self.organization,
             )
         )
-        self.assertFalse(
+        self.assertTrue(
             has_capability(
                 self.owner,
                 PartnerCapability.REVIEW_EVIDENCE,
+                organization=self.organization,
+            )
+        )
+        self.assertFalse(
+            has_capability(
+                self.owner,
+                PartnerCapability.REVIEW_SAFETY,
                 organization=self.organization,
             )
         )

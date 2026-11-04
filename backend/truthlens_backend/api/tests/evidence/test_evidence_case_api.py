@@ -177,7 +177,16 @@ class EvidenceCaseApiTests(APITestCase):
         self.organization.partner_status = Organization.PartnerStatus.ACTIVE
         self.organization.save(update_fields=["partner_status"])
 
-        for allowed_user in (self.lead, self.partner_moderator):
+        admin = User.objects.create_user(
+            username="evidence-queue-admin",
+            password="test-password",
+        )
+        self._add_member(
+            admin,
+            self.organization,
+            OrganizationMembership.Role.ADMIN,
+        )
+        for allowed_user in (self.lead, self.partner_moderator, admin):
             with self.subTest(user=allowed_user.username):
                 self._authenticate(allowed_user)
                 response = self.client.get(self._queue_url())
@@ -186,7 +195,6 @@ class EvidenceCaseApiTests(APITestCase):
     def test_non_review_partner_roles_and_inactive_memberships_are_denied(self):
         denied_roles = [
             OrganizationMembership.Role.OWNER,
-            OrganizationMembership.Role.ADMIN,
             OrganizationMembership.Role.RESEARCHER,
             OrganizationMembership.Role.CONTRIBUTOR,
         ]

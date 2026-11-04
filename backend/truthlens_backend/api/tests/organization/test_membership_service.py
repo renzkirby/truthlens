@@ -232,11 +232,28 @@ class OrganizationMembershipServiceTests(TestCase):
         )
         self.assertEqual(membership.status, OrganizationMembership.Status.ACTIVE)
 
-    def test_admin_has_management_capability_only(self):
-        self.assertTrue(
+    def test_admin_has_management_and_full_verification_capabilities(self):
+        for capability in (
+            PartnerCapability.MANAGE_ORGANIZATION,
+            PartnerCapability.CLAIM_VERIFICATION_WORK,
+            PartnerCapability.REVIEW_EVIDENCE,
+            PartnerCapability.ADJUDICATE,
+            PartnerCapability.CREATE_FACT_CHECK_DRAFT,
+            PartnerCapability.PUBLISH_FACT_CHECK,
+        ):
+            with self.subTest(capability=capability):
+                self.assertTrue(
+                    has_capability(
+                        self.admin_a,
+                        capability,
+                        organization=self.organization,
+                    )
+                )
+
+        self.assertFalse(
             has_capability(
                 self.admin_a,
-                PartnerCapability.MANAGE_ORGANIZATION,
+                PartnerCapability.REVIEW_SAFETY,
                 organization=self.organization,
             )
         )
@@ -244,14 +261,7 @@ class OrganizationMembershipServiceTests(TestCase):
             has_capability(
                 self.admin_a,
                 PartnerCapability.CLAIM_VERIFICATION_WORK,
-                organization=self.organization,
-            )
-        )
-        self.assertFalse(
-            has_capability(
-                self.admin_a,
-                PartnerCapability.ADJUDICATE,
-                organization=self.organization,
+                organization=self.other_organization,
             )
         )
 
