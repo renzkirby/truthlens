@@ -1632,6 +1632,22 @@ class ThreadSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"escalation_reason": "Cannot be changed after thread creation."}
             )
+        if "other_concern" in attrs:
+            value = attrs["other_concern"]
+            if value is None:
+                attrs["other_concern"] = None
+            elif not isinstance(value, str):
+                raise serializers.ValidationError(
+                    {"other_concern": "Other concern must be plain text."}
+                )
+            else:
+                value = value.strip()
+                if len(value) > 2000:
+                    raise serializers.ValidationError(
+                        {"other_concern": "Other concern must be 2000 characters or fewer."}
+                    )
+                attrs["other_concern"] = value or None
+
         return _apply_rich_text_projection(
             self,
             attrs,
@@ -1653,6 +1669,7 @@ class ThreadSerializer(serializers.ModelSerializer):
             "status",
             "recent_flag_reason",
             "escalation_reason",
+            "other_concern",
             "moderator_verdict",
             "moderator_notes",
             "moderated_at",
@@ -2919,6 +2936,7 @@ class ThreadDetailSerializer(serializers.ModelSerializer):
             "caption",
             "caption_rich",
             "escalation_reason",
+            "other_concern",
             "status",
             "created_at",
             "evidence_submissions",
