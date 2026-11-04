@@ -253,7 +253,7 @@ class WorkspaceAccessContextTests(TestCase):
             partner_capabilities,
         )
 
-    def test_active_partner_admin_keeps_organization_management_workspace_context(
+    def test_active_partner_admin_gets_management_and_verification_workspace_context(
         self,
     ):
         user = User.objects.create_user(
@@ -272,10 +272,50 @@ class WorkspaceAccessContextTests(TestCase):
 
         self.assertTrue(context["can_access"])
         self.assertEqual(len(context["memberships"]), 1)
+        capabilities = set(context["memberships"][0]["capabilities"])
         self.assertEqual(
-            context["memberships"][0]["capabilities"],
-            [PartnerCapability.MANAGE_ORGANIZATION],
+            capabilities,
+            {
+                PartnerCapability.ADJUDICATE,
+                PartnerCapability.CLAIM_VERIFICATION_WORK,
+                PartnerCapability.CREATE_FACT_CHECK_DRAFT,
+                PartnerCapability.MANAGE_ORGANIZATION,
+                PartnerCapability.PUBLISH_FACT_CHECK,
+                PartnerCapability.REVIEW_EVIDENCE,
+            },
         )
+        self.assertNotIn(PartnerCapability.REVIEW_SAFETY, capabilities)
+
+    def test_partner_admin_keeps_management_but_loses_verification_when_partner_ineligible(
+        self,
+    ):
+        user = User.objects.create_user(
+            username="workspace-ineligible-admin",
+            password="test-password",
+        )
+        OrganizationMembership.objects.create(
+            organization=self.organization,
+            user=user,
+            role=OrganizationMembership.Role.ADMIN,
+            status=OrganizationMembership.Status.ACTIVE,
+        )
+
+        for field, disabled_value in (
+            ("verification_status", Organization.VerificationStatus.UNVERIFIED),
+            ("partner_status", Organization.PartnerStatus.SUSPENDED),
+        ):
+            original = getattr(self.organization, field)
+            setattr(self.organization, field, disabled_value)
+            self.organization.save(update_fields=[field])
+            with self.subTest(field=field):
+                context = get_workspace_access_context(user)
+                self.assertTrue(context["can_access"])
+                self.assertEqual(
+                    context["memberships"][0]["capabilities"],
+                    [PartnerCapability.MANAGE_ORGANIZATION],
+                )
+            setattr(self.organization, field, original)
+            self.organization.save(update_fields=[field])
 
     def test_factual_role_loses_workspace_access_when_partner_is_suspended(
         self,
