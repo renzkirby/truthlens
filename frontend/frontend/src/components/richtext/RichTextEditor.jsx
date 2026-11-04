@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import RichTextToolbar from "./RichTextToolbar";
@@ -23,7 +23,6 @@ export default function RichTextEditor({
    className = "",
 }) {
    const rules = getRichTextProfile(profile);
-   const [empty, setEmpty] = useState(() => !richTextToPlain(value, fallbackText));
 
    const extensions = useMemo(
       () => [
@@ -66,10 +65,8 @@ export default function RichTextEditor({
       },
       onUpdate: ({ editor: instance }) => {
          const envelope = richTextEnvelopeFromDoc(instance.getJSON());
-         setEmpty(instance.isEmpty);
          onChange?.(envelope, richTextToPlain(envelope));
       },
-      onCreate: ({ editor: instance }) => setEmpty(instance.isEmpty),
    });
 
    useEffect(() => {
@@ -82,8 +79,11 @@ export default function RichTextEditor({
       const nextContent = richTextEditorContent(value, fallbackText);
       if (JSON.stringify(editor.getJSON()) === JSON.stringify(nextContent)) return;
       editor.commands.setContent(nextContent, { emitUpdate: false });
-      setEmpty(editor.isEmpty);
    }, [editor, fallbackText, value]);
+
+   const empty = editor
+      ? editor.isEmpty
+      : !richTextToPlain(value, fallbackText);
 
    const classes = [
       "tl-richtext-editor",
