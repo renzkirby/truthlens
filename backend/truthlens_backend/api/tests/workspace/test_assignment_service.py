@@ -418,6 +418,29 @@ class VerificationAssignmentServiceTests(TestCase):
             self.organization_a.id,
         )
 
+    def test_partner_admin_can_claim_available_work(self):
+        admin = User.objects.create_user(
+            username="assignment-admin",
+            password="test-password",
+        )
+        OrganizationMembership.objects.create(
+            organization=self.organization_a,
+            user=admin,
+            role=OrganizationMembership.Role.ADMIN,
+            status=OrganizationMembership.Status.ACTIVE,
+        )
+        assignment = self._create_assignment()
+
+        claimed = claim_verification_assignment(
+            assignment=assignment,
+            organization=self.organization_a,
+            actor=admin,
+        )
+
+        self.assertEqual(claimed.status, VerificationAssignment.Status.ACTIVE)
+        self.assertEqual(claimed.organization_id, self.organization_a.id)
+        self.assertEqual(claimed.claimed_by_id, admin.id)
+
     def test_idempotent_claim_repairs_missing_legacy_evidence_case(self):
         assignment = self._claim_for_organization_a()
         evidence = self._create_evidence()
