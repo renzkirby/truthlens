@@ -3258,7 +3258,7 @@ class AdjudicationCaseDetailUserSerializer(serializers.ModelSerializer):
 class AdjudicationCaseDetailThreadSerializer(serializers.ModelSerializer):
     class Meta:
         model = Thread
-        fields = ["id", "caption", "caption_rich", "created_at"]
+        fields = ["id", "caption", "created_at"]
         read_only_fields = fields
 
 
@@ -3342,7 +3342,6 @@ class AdjudicationCaseDetailEvidenceSerializer(serializers.ModelSerializer):
             "review_basis",
             "thread_id",
             "evidence_caption",
-            "evidence_caption_rich",
             "evidence_type",
             "evidence_type_label",
             "evidence_status",
@@ -3727,7 +3726,6 @@ class FactCheckDraftCreateSerializer(
         required=False,
         allow_blank=True,
         trim_whitespace=True,
-        default="",
     )
     article_body_rich = serializers.JSONField(required=False)
 
