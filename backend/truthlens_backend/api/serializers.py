@@ -1649,6 +1649,33 @@ class ThreadSerializer(serializers.ModelSerializer):
                     )
                 attrs["other_concern"] = value or None
 
+        escalation_reason = (
+            self.instance.escalation_reason
+            if self.instance is not None
+            else attrs.get("escalation_reason")
+        )
+        other_concern = (
+            attrs.get("other_concern")
+            if "other_concern" in attrs
+            else (
+                self.instance.other_concern
+                if self.instance is not None
+                else None
+            )
+        )
+        if escalation_reason == Thread.EscalationReason.OTHER and not other_concern:
+            raise serializers.ValidationError(
+                {"other_concern": "Other concern is required for this escalation reason."}
+            )
+        if escalation_reason != Thread.EscalationReason.OTHER and other_concern:
+            raise serializers.ValidationError(
+                {
+                    "other_concern": (
+                        "Other concern is only allowed when the escalation reason is OTHER."
+                    )
+                }
+            )
+
         return _apply_rich_text_projection(
             self,
             attrs,
