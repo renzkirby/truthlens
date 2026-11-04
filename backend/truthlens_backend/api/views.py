@@ -1703,7 +1703,7 @@ def fact_check_draft_create(
             expected_decision_revision=data["expected_decision_revision"],
             headline=data["headline"],
             summary=data["summary"],
-            article_body=data.get("article_body", ""),
+            article_body=data.get("article_body"),
             article_body_rich=data.get("article_body_rich"),
             source_urls=data.get("source_urls", []),
         )
