@@ -79,6 +79,7 @@ from .rich_text_schema import (
     PROFILE_COMMENT,
     PROFILE_DISCUSSION,
     PROFILE_EVIDENCE,
+    PROFILE_PUBLICATION,
     RichTextSchemaError,
     normalize_rich_text_with_plain,
 )
@@ -3728,6 +3729,7 @@ class FactCheckDraftCreateSerializer(
         trim_whitespace=True,
         default="",
     )
+    article_body_rich = serializers.JSONField(required=False)
 
     source_urls = serializers.ListField(
         child=serializers.URLField(
@@ -3737,6 +3739,17 @@ class FactCheckDraftCreateSerializer(
         allow_empty=True,
         default=list,
     )
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        return _apply_rich_text_projection(
+            self,
+            attrs,
+            rich_field="article_body_rich",
+            plain_field="article_body",
+            profile=PROFILE_PUBLICATION,
+        )
+
 
 class FactCheckDraftUpdateSerializer(
     FactCheckInputProtectionMixin,
@@ -3770,6 +3783,7 @@ class FactCheckDraftUpdateSerializer(
         allow_blank=True,
         trim_whitespace=True,
     )
+    article_body_rich = serializers.JSONField(required=False)
 
     source_urls = serializers.ListField(
         child=serializers.URLField(
@@ -3781,11 +3795,19 @@ class FactCheckDraftUpdateSerializer(
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
+        attrs = _apply_rich_text_projection(
+            self,
+            attrs,
+            rich_field="article_body_rich",
+            plain_field="article_body",
+            profile=PROFILE_PUBLICATION,
+        )
 
         editable_fields = {
             "headline",
             "summary",
             "article_body",
+            "article_body_rich",
             "source_urls",
         }
         if not editable_fields.intersection(attrs):
@@ -3824,11 +3846,22 @@ class EditorialRevisionDraftCreateSerializer(
         allow_blank=True,
         trim_whitespace=True,
     )
+    article_body_rich = serializers.JSONField(required=False)
     source_urls = serializers.ListField(
         child=serializers.URLField(max_length=2000),
         required=False,
         allow_empty=True,
     )
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        return _apply_rich_text_projection(
+            self,
+            attrs,
+            rich_field="article_body_rich",
+            plain_field="article_body",
+            profile=PROFILE_PUBLICATION,
+        )
 
 
 class EditorialRevisionPublishSerializer(serializers.Serializer):
@@ -4007,6 +4040,7 @@ class PublicationWorkflowDetailArticleSerializer(
     PublicationWorkflowListArticleSerializer
 ):
     article_body = serializers.CharField(allow_blank=True)
+    article_body_rich = serializers.JSONField(allow_null=True)
 
 
 class PublicationWorkflowLifecycleSerializer(serializers.Serializer):
@@ -4054,6 +4088,7 @@ class PublicationWorkflowDetailSerializer(PublicationWorkflowListItemSerializer)
     headline = serializers.CharField(allow_blank=True, allow_null=True)
     summary = serializers.CharField(allow_blank=True, allow_null=True)
     article_body = serializers.CharField(allow_blank=True, allow_null=True)
+    article_body_rich = serializers.JSONField(allow_null=True)
     publication_status = serializers.CharField(allow_null=True)
     version = serializers.IntegerField(allow_null=True)
     edit_generation = serializers.IntegerField(allow_null=True)
@@ -4259,6 +4294,7 @@ class OrganizationPublicationArticleSerializer(serializers.Serializer):
     headline = serializers.CharField(allow_blank=True)
     summary = serializers.CharField(allow_blank=True)
     article_body = serializers.CharField(allow_blank=True)
+    article_body_rich = serializers.JSONField(allow_null=True)
     version = serializers.IntegerField(min_value=1)
     revision_kind = serializers.ChoiceField(
         choices=["INITIAL", "EDITORIAL_REVISION", "FACTUAL_CORRECTION"]
