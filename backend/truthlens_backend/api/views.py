@@ -2337,7 +2337,8 @@ def factual_correction_proposal_save(request, request_id):
             rationale=data["proposed_rationale"],
             headline=data["headline"],
             summary=data["summary"],
-            article_body=data["article_body"],
+            article_body=data.get("article_body"),
+            article_body_rich=data.get("article_body_rich"),
             source_urls=data["source_urls"],
             verification_run_id=data.get("verification_run_id"),
         )
