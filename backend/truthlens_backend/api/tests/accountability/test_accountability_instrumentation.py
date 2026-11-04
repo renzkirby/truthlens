@@ -319,9 +319,14 @@ class AccountabilityInstrumentationTests(TestCase):
         self.assertEqual(
             reopened.context,
             {
-                "moderation_case_id": str(result["case"].pk),
                 "claim_id": str(claim.pk),
+                "previous_case_id": reopened.previous_state["case_id"],
+                "new_case_id": str(result["case"].pk),
             },
+        )
+        self.assertEqual(
+            reopened.new_state["case_id"],
+            str(result["case"].pk),
         )
 
     def test_release_conflict_unauthorized_action_and_rollback_leave_no_extra_event(self):
@@ -799,9 +804,16 @@ class FactualCorrectionAccountabilityInstrumentationTests(
                 self.assertEqual(
                     reopened.context,
                     {
-                        "moderation_case_id": str(result["case"].pk),
+                        "correction_request_id": str(context["correction_request"].pk),
+                        "correction_case_id": str(context["correction_case"].pk),
                         "claim_id": str(context["claim"].pk),
+                        "previous_case_id": reopened.previous_state["case_id"],
+                        "new_case_id": str(result["case"].pk),
                     },
+                )
+                self.assertEqual(
+                    reopened.new_state["case_id"],
+                    str(result["case"].pk),
                 )
 
     def test_preparation_and_handoff_keep_decision_and_publication_authority_distinct(self):
