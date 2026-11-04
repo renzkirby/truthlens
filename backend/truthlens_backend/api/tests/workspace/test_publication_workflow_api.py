@@ -1095,6 +1095,47 @@ class PublicationWorkflowApiTests(PublicationWorkflowFixtures, APITestCase):
                 self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
                 self.assertNotIn("current", response.data)
 
+    def test_rich_only_initial_draft_request_derives_plain_article_body(self):
+        context = self.decided_context(suffix="rich-http")
+        rich_body = {
+            "schema_version": 1,
+            "doc": {
+                "type": "doc",
+                "content": [
+                    {
+                        "type": "heading",
+                        "attrs": {"level": 2},
+                        "content": [{"type": "text", "text": "HTTP rich analysis"}],
+                    },
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {"type": "text", "text": "The API derives this plain body."}
+                        ],
+                    },
+                ],
+            },
+        }
+        payload = self.draft_payload(context)
+        payload.pop("article_body")
+        payload["article_body_rich"] = rich_body
+
+        response = self.client_for(self.lead).post(
+            self.create_url(context["claim"]),
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["article_body_rich"], rich_body)
+        self.assertEqual(
+            response.data["article_body"],
+            "HTTP rich analysis\n\nThe API derives this plain body.",
+        )
+        fact_check = OfficialFactCheck.objects.get(pk=response.data["id"])
+        self.assertEqual(fact_check.article_body_rich, rich_body)
+        self.assertEqual(fact_check.article_body, response.data["article_body"])
+
     def test_all_initial_mutations_return_the_common_detail_shape(self):
         context = self.decided_context(suffix="mutations")
         client = self.client_for(self.lead)
