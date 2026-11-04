@@ -4572,12 +4572,26 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
                     "headline": fact_check.headline,
                     "summary": fact_check.summary,
                     "article_body": fact_check.article_body,
+                    **(
+                        {"article_body_rich": fact_check.article_body_rich}
+                        if fact_check.article_body_rich is not None
+                        else {}
+                    ),
                 }
                 or proposal_payload["article"]
                 != {
                     "headline": prepared_proposal.headline,
                     "summary": prepared_proposal.summary,
                     "article_body": prepared_proposal.article_body,
+                    **(
+                        {
+                            "article_body_rich": (
+                                prepared_proposal.article_body_rich
+                            )
+                        }
+                        if prepared_proposal.article_body_rich is not None
+                        else {}
+                    ),
                 }
                 or [source["url"] for source in proposal_payload["sources"]]
                 != prepared_proposal.source_urls
