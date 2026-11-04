@@ -33,6 +33,11 @@ from .factual_correction_proposal_schema import (
     FactualCorrectionProposalSchemaError,
     validate_factual_correction_proposal,
 )
+from .rich_text_schema import (
+    PROFILE_PUBLICATION,
+    RichTextSchemaError,
+    normalize_rich_text_with_plain,
+)
 
 
 def _claim_vector_indexes():
@@ -5285,6 +5290,23 @@ class FactualCorrectionProposal(models.Model):
                 errors[field] = f"{field} must be a trimmed nonblank string."
         if isinstance(self.headline, str) and len(self.headline) > 300:
             errors["headline"] = "Headline must be 300 characters or fewer."
+        if self.article_body_rich is not None:
+            try:
+                normalized_rich, plain_projection = normalize_rich_text_with_plain(
+                    self.article_body_rich,
+                    profile=PROFILE_PUBLICATION,
+                )
+            except RichTextSchemaError as error:
+                errors["article_body_rich"] = str(error)
+            else:
+                if normalized_rich != self.article_body_rich:
+                    errors["article_body_rich"] = (
+                        "Rich article body must use canonical serialization."
+                    )
+                elif plain_projection != self.article_body:
+                    errors["article_body"] = (
+                        "Article body must match the rich-text plain projection."
+                    )
         if not isinstance(self.source_urls, list) or not self.source_urls:
             errors["source_urls"] = "At least one source URL is required."
 
