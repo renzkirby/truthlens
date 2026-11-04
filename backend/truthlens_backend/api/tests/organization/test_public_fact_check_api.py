@@ -156,9 +156,75 @@ class PublicFactCheckApiTests(
             detail.data["article"]["article_body"],
             context["seal"].payload["article_body"],
         )
+        self.assertIsNone(detail.data["article"]["article_body_rich"])
         self.assertEqual(
             detail.data["organization"]["logo_url"],
             self.organization.logo_url,
+        )
+
+    def test_public_detail_returns_sealed_rich_article_document(self):
+        context = self.make_context(
+            evidence_statuses=[EvidenceSubmission.EvidenceStatus.VERIFIED]
+        )
+        context["decision"] = self.issue(context)["decision"]
+        rich_body = {
+            "schema_version": 1,
+            "doc": {
+                "type": "doc",
+                "content": [
+                    {
+                        "type": "heading",
+                        "attrs": {"level": 2},
+                        "content": [{"type": "text", "text": "Public finding"}],
+                    },
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {"type": "text", "text": "Verified public analysis."}
+                        ],
+                    },
+                ],
+            },
+        }
+        draft = create_fact_check_draft(
+            decision=context["decision"],
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_decision_revision=context["decision"].revision_number,
+            headline="Public rich publication",
+            summary="A public rich summary.",
+            article_body_rich=rich_body,
+            source_urls=["https://example.com/public-rich-source"],
+        )
+        submitted = submit_fact_check_for_review(
+            fact_check=draft,
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
+        )
+        published = publish_fact_check(
+            fact_check=submitted,
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=submitted.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
+        )["fact_check"]
+
+        response = APIClient().get(self.detail_url(published))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["article"]["article_body_rich"],
+            rich_body,
+        )
+        self.assertEqual(
+            response.data["article"]["article_body"],
+            "Public finding\n\nVerified public analysis.",
+        )
+        self.assertEqual(
+            response.data["article"]["article_body_rich"],
+            published.publication_snapshot.payload["article_body_rich"],
         )
 
     def test_existing_public_partner_profile_contract_is_unchanged(self):

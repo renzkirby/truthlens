@@ -75,6 +75,7 @@ class PublicFactCheckDetailArticleSerializer(serializers.Serializer):
     headline = serializers.CharField(allow_blank=True)
     summary = serializers.CharField(allow_blank=True)
     article_body = serializers.CharField(allow_blank=True)
+    article_body_rich = serializers.JSONField(allow_null=True)
     version = serializers.IntegerField(min_value=1)
     revision_kind = serializers.ChoiceField(
         choices=["INITIAL", "EDITORIAL_REVISION", "FACTUAL_CORRECTION"]

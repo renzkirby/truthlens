@@ -372,6 +372,38 @@ class FactualCorrectionWorkflowApiTests(
         )
         self.assertEqual(proposal.status, FactualCorrectionProposal.Status.DRAFT)
 
+    def test_rich_only_proposal_request_derives_plain_article_body(self):
+        context = self.make_correction_review_context(suffix="api-rich-proposal")
+        correction = context["correction_request"]
+        rich_body = self.rich_article_body()
+        payload = self.proposal_payload(context)
+        payload.pop("article_body")
+        payload["article_body_rich"] = rich_body
+
+        response = self.client_for(self.researcher).put(
+            self.mutation_url("factual_correction_proposal_save", correction),
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["proposal"]["article_body"],
+            "Corrected analysis\n\nFresh reviewed evidence supports this correction.",
+        )
+        self.assertEqual(
+            response.data["proposal"]["article_body_rich"],
+            rich_body,
+        )
+        proposal = FactualCorrectionProposal.objects.get(
+            correction_request=correction
+        )
+        self.assertEqual(proposal.article_body_rich, rich_body)
+        self.assertEqual(
+            proposal.article_body,
+            response.data["proposal"]["article_body"],
+        )
+
     def test_detail_projects_only_eligible_supporting_verification_runs(self):
         context = self.make_correction_review_context(
             suffix="api-supporting-verification-runs"

@@ -10,6 +10,7 @@ from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 
 from api.factual_correction_proposal_schema import (
+    RICH_SCHEMA_VERSION,
     FactualCorrectionProposalSchemaError,
     validate_factual_correction_proposal,
 )
@@ -52,6 +53,34 @@ class FactualCorrectionProposalFixtures(FactualCorrectionRequestFixtures):
             role=OrganizationMembership.Role.RESEARCHER,
             status=OrganizationMembership.Status.ACTIVE,
         )
+
+    @staticmethod
+    def rich_article_body():
+        return {
+            "schema_version": 1,
+            "doc": {
+                "type": "doc",
+                "content": [
+                    {
+                        "type": "heading",
+                        "attrs": {"level": 2},
+                        "content": [{"type": "text", "text": "Corrected analysis"}],
+                    },
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": (
+                                    "Fresh reviewed evidence supports this correction."
+                                ),
+                                "marks": [{"type": "bold"}],
+                            }
+                        ],
+                    },
+                ],
+            },
+        }
 
     def make_proposal_context(self, *, suffix="proposal", review=True):
         context = self.make_correction_review_context(suffix=suffix)
@@ -118,6 +147,51 @@ class FactualCorrectionProposalTests(FactualCorrectionProposalFixtures, TestCase
             self.save_proposal(context, expected_proposal_version=1)
         with self.assertRaises(FactualCorrectionProposalConflict):
             self.save_proposal(context, expected_proposal_version=0)
+
+    def test_rich_article_body_is_derived_and_prepared_as_v2(self):
+        context = self.make_proposal_context(suffix="rich-proposal")
+        rich_body = self.rich_article_body()
+
+        proposal = self.save_proposal(
+            context,
+            article_body=None,
+            article_body_rich=rich_body,
+        )
+
+        self.assertEqual(
+            proposal.article_body,
+            "Corrected analysis\n\nFresh reviewed evidence supports this correction.",
+        )
+        self.assertEqual(proposal.article_body_rich, rich_body)
+
+        prepared = self.prepare_proposal(context, proposal)["proposal"]
+        self.assertEqual(
+            prepared.prepared_payload_schema_version,
+            RICH_SCHEMA_VERSION,
+        )
+        self.assertEqual(
+            prepared.prepared_payload["article"]["article_body_rich"],
+            rich_body,
+        )
+        self.assertEqual(
+            prepared.prepared_payload["article"]["article_body"],
+            proposal.article_body,
+        )
+        validate_factual_correction_proposal(
+            schema_version=prepared.prepared_payload_schema_version,
+            payload=prepared.prepared_payload,
+        )
+        prepared.full_clean()
+
+    def test_rich_article_body_rejects_mismatched_plain_projection(self):
+        context = self.make_proposal_context(suffix="rich-mismatch")
+
+        with self.assertRaises(InvalidFactualCorrectionProposal):
+            self.save_proposal(
+                context,
+                article_body="Different plain article body.",
+                article_body_rich=self.rich_article_body(),
+            )
 
     def test_identifiers_versions_and_content_are_validated_strictly(self):
         context = self.make_proposal_context(suffix="invalid-input")

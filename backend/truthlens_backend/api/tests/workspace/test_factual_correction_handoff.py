@@ -33,7 +33,10 @@ from api.publishing_service import (
     publish_factual_correction,
     submit_fact_check_for_review,
 )
-from api.publication_snapshot_schema import FACTUAL_CORRECTION_SCHEMA_VERSION
+from api.publication_snapshot_schema import (
+    FACTUAL_CORRECTION_SCHEMA_VERSION,
+    RICH_FACTUAL_CORRECTION_SCHEMA_VERSION,
+)
 from api.tests.workspace.test_factual_correction_publication_history import (
     FactualCorrectionPublicationHistoryFixtures,
 )
@@ -293,6 +296,40 @@ class FactualCorrectionHandoffTests(FactualCorrectionHandoffFixtures, TestCase):
                 event.metadata["trust_dispatch_status"],
                 "NOT_SCHEDULED_POLICY_UNDEFINED",
             )
+
+    def test_rich_factual_correction_publishes_v6_without_flattening_body(self):
+        context = self.make_proposal_context(suffix="rich-handoff")
+        rich_body = self.rich_article_body()
+        proposal = self.save_proposal(
+            context,
+            article_body=None,
+            article_body_rich=rich_body,
+        )
+        context["prepared_proposal"] = self.prepare_proposal(
+            context,
+            proposal,
+        )["proposal"]
+
+        result = self.handoff(context)
+
+        successor = result["fact_check"]
+        seal = result["publication_snapshot"]
+        self.assertEqual(successor.article_body_rich, rich_body)
+        self.assertEqual(
+            successor.article_body,
+            "Corrected analysis\n\nFresh reviewed evidence supports this correction.",
+        )
+        self.assertEqual(
+            seal.schema_version,
+            RICH_FACTUAL_CORRECTION_SCHEMA_VERSION,
+        )
+        self.assertEqual(seal.payload["article_body_rich"], rich_body)
+        self.assertEqual(seal.payload["article_body"], successor.article_body)
+        self.assertEqual(
+            self.validate_history({**context, "published": successor}),
+            seal,
+        )
+        seal.full_clean()
 
     def test_strict_inputs_capability_scope_versions_and_terminal_states_fail_closed(
         self,

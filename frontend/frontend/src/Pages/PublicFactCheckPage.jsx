@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import PartnerLogo from "../components/partners/PartnerLogo";
+import RichTextRenderer from "../components/richtext/RichTextRenderer.jsx";
 import { useAuth } from "../hooks/useAuth";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { resolveApiEndpoint } from "../utils/api";
@@ -143,18 +144,18 @@ function FactualState({ label, item }) {
    );
 }
 
-function ArticleBody({ value }) {
-   const paragraphs = typeof value === "string" ? value.split(/\n\s*\n/).filter((paragraph) => paragraph.trim()) : [];
-
-   if (paragraphs.length === 0) {
+function ArticleBody({ value, richValue }) {
+   if (!String(value || "").trim()) {
       return <p className="public-fact-check-body-empty">No article body was published.</p>;
    }
 
    return (
       <div className="public-fact-check-body">
-         {paragraphs.map((paragraph, index) => (
-            <p key={index}>{paragraph}</p>
-         ))}
+         <RichTextRenderer
+            value={richValue}
+            fallbackText={value}
+            profile="publication"
+         />
       </div>
    );
 }
@@ -552,7 +553,7 @@ function PublicFactCheckPage() {
 
                <section className="public-fact-check-section" aria-labelledby="article-body-heading">
                   <h2 id="article-body-heading">Full analysis</h2>
-                  <ArticleBody value={article.article_body} />
+                  <ArticleBody value={article.article_body} richValue={article.article_body_rich} />
                </section>
 
                <section className="public-fact-check-section" aria-labelledby="sources-heading">

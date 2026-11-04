@@ -22,6 +22,8 @@ from api.models import (
 from api.publication_snapshot_schema import (
     EDITORIAL_REVISION_SCHEMA_VERSION,
     FIRST_PUBLICATION_SCHEMA_VERSION,
+    RICH_EDITORIAL_REVISION_SCHEMA_VERSION,
+    RICH_FIRST_PUBLICATION_SCHEMA_VERSION,
     PublicationSnapshotSchemaError,
     validate_publication_snapshot,
 )
@@ -260,6 +262,142 @@ class EditorialRevisionPublicationTests(EditorialReplacementFixtures, TestCase):
                     )
         with self.assertRaises(PublicationSnapshotSchemaError):
             validate_publication_snapshot(schema_version=99, payload=payload)
+
+    def test_legacy_editorial_revision_can_follow_rich_initial_root(self):
+        context = self.make_context(
+            evidence_statuses=[EvidenceSubmission.EvidenceStatus.VERIFIED]
+        )
+        context["decision"] = self.issue(context)["decision"]
+        rich_body = {
+            "schema_version": 1,
+            "doc": {
+                "type": "doc",
+                "content": [
+                    {
+                        "type": "heading",
+                        "attrs": {"level": 2},
+                        "content": [{"type": "text", "text": "Rich initial root"}],
+                    },
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {"type": "text", "text": "Initial formatted analysis."}
+                        ],
+                    },
+                ],
+            },
+        }
+        draft = create_fact_check_draft(
+            decision=context["decision"],
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_decision_revision=context["decision"].revision_number,
+            headline="Rich initial publication",
+            summary="Initial rich summary.",
+            article_body_rich=rich_body,
+            source_urls=["https://example.com/rich-initial-root"],
+        )
+        submitted = submit_fact_check_for_review(
+            fact_check=draft,
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
+        )
+        context["published"] = publish_fact_check(
+            fact_check=submitted,
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=submitted.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
+        )["fact_check"]
+        context["seal"] = context["published"].publication_snapshot
+        self.assertEqual(
+            context["seal"].schema_version,
+            RICH_FIRST_PUBLICATION_SCHEMA_VERSION,
+        )
+
+        revision = self.make_submitted_revision(
+            context,
+            reason="Clarify a rich-root article with a plain editorial revision.",
+        )
+        result = self.replace(context, revision)
+
+        successor = result["fact_check"]
+        self.assertEqual(
+            successor.publication_snapshot.schema_version,
+            EDITORIAL_REVISION_SCHEMA_VERSION,
+        )
+        self.assertIsNone(successor.article_body_rich)
+        successor.publication_snapshot.full_clean()
+
+    def test_rich_editorial_revision_uses_v5_and_preserves_lineage_validation(self):
+        context = self.make_published_context(suffix="rich-revision")
+        rich_body = {
+            "schema_version": 1,
+            "doc": {
+                "type": "doc",
+                "content": [
+                    {
+                        "type": "heading",
+                        "attrs": {"level": 2},
+                        "content": [{"type": "text", "text": "Clarified analysis"}],
+                    },
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "The editorial wording is clearer.",
+                                "marks": [{"type": "italic"}],
+                            }
+                        ],
+                    },
+                ],
+            },
+        }
+        revision = create_editorial_revision_draft(
+            predecessor_id=context["published"].id,
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_predecessor_version=context["published"].version,
+            expected_decision_revision=context["decision"].revision_number,
+            revision_reason="Clarify the formatted article.",
+            headline="Formatted editorial revision",
+            summary="A clearer editorial summary.",
+            article_body_rich=rich_body,
+        )
+        submitted = submit_fact_check_for_review(
+            fact_check=revision,
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=revision.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
+        )
+
+        result = self.replace(context, submitted)
+        published = result["fact_check"]
+        seal = published.publication_snapshot
+
+        self.assertEqual(
+            seal.schema_version,
+            RICH_EDITORIAL_REVISION_SCHEMA_VERSION,
+        )
+        self.assertEqual(
+            published.article_body,
+            "Clarified analysis\n\nThe editorial wording is clearer.",
+        )
+        self.assertEqual(published.article_body_rich, rich_body)
+        self.assertEqual(seal.payload["article_body_rich"], rich_body)
+        self.assertEqual(
+            seal.payload["revision"]["supersedes_publication_snapshot_id"],
+            str(context["seal"].id),
+        )
+        validate_publication_snapshot(
+            schema_version=seal.schema_version,
+            payload=seal.payload,
+        )
+        seal.full_clean()
 
     def test_historical_null_initial_metadata_remains_publishable_without_history(self):
         context = self.make_context(

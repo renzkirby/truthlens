@@ -75,6 +75,57 @@ from .adjudication_provenance import (
     get_adjudication_decision_provenance,
     get_claim_adjudication_provenance,
 )
+from .rich_text_schema import (
+    PROFILE_COMMENT,
+    PROFILE_DISCUSSION,
+    PROFILE_EVIDENCE,
+    PROFILE_PUBLICATION,
+    RichTextSchemaError,
+    normalize_rich_text_with_plain,
+)
+
+
+def _apply_rich_text_projection(
+    serializer,
+    attrs,
+    *,
+    rich_field,
+    plain_field,
+    profile,
+):
+    if rich_field in attrs:
+        rich_value = attrs[rich_field]
+        if rich_value is None:
+            attrs[rich_field] = None
+            if plain_field not in attrs and serializer.instance is None:
+                attrs[plain_field] = ""
+            return attrs
+        try:
+            normalized, plain = normalize_rich_text_with_plain(
+                rich_value,
+                profile=profile,
+            )
+        except RichTextSchemaError as error:
+            raise serializers.ValidationError(
+                {rich_field: str(error)}
+            ) from error
+
+        if plain_field in attrs and (attrs[plain_field] or "").strip() != plain:
+            raise serializers.ValidationError(
+                {
+                    plain_field: (
+                        "Plain text must match the server projection of the "
+                        "rich-text document."
+                    )
+                }
+            )
+        attrs[rich_field] = normalized
+        attrs[plain_field] = plain
+        return attrs
+
+    if serializer.instance is not None and plain_field in attrs:
+        attrs[rich_field] = None
+    return attrs
 
 
 class NotificationSerializer(serializers.ModelSerializer):
@@ -1582,7 +1633,61 @@ class ThreadSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"escalation_reason": "Cannot be changed after thread creation."}
             )
-        return attrs
+        if "other_concern" in attrs:
+            value = attrs["other_concern"]
+            if value is None:
+                attrs["other_concern"] = None
+            elif not isinstance(value, str):
+                raise serializers.ValidationError(
+                    {"other_concern": "Other concern must be plain text."}
+                )
+            else:
+                value = value.strip()
+                if len(value) > 2000:
+                    raise serializers.ValidationError(
+                        {"other_concern": "Other concern must be 2000 characters or fewer."}
+                    )
+                attrs["other_concern"] = value or None
+
+        escalation_reason = (
+            self.instance.escalation_reason
+            if self.instance is not None
+            else attrs.get("escalation_reason")
+        )
+        concern_was_provided = "other_concern" in attrs
+        other_concern = (
+            attrs.get("other_concern")
+            if concern_was_provided
+            else (
+                self.instance.other_concern
+                if self.instance is not None
+                else None
+            )
+        )
+        if (
+            escalation_reason == Thread.EscalationReason.OTHER
+            and not other_concern
+            and (self.instance is None or concern_was_provided)
+        ):
+            raise serializers.ValidationError(
+                {"other_concern": "Other concern is required for this escalation reason."}
+            )
+        if escalation_reason != Thread.EscalationReason.OTHER and other_concern:
+            raise serializers.ValidationError(
+                {
+                    "other_concern": (
+                        "Other concern is only allowed when the escalation reason is OTHER."
+                    )
+                }
+            )
+
+        return _apply_rich_text_projection(
+            self,
+            attrs,
+            rich_field="caption_rich",
+            plain_field="caption",
+            profile=PROFILE_DISCUSSION,
+        )
 
     class Meta:
         model = Thread
@@ -1593,9 +1698,11 @@ class ThreadSerializer(serializers.ModelSerializer):
             "claim_id",
             "author",
             "caption",
+            "caption_rich",
             "status",
             "recent_flag_reason",
             "escalation_reason",
+            "other_concern",
             "moderator_verdict",
             "moderator_notes",
             "moderated_at",
@@ -2467,6 +2574,7 @@ class ThreadCommentSerializer(serializers.ModelSerializer):
             "parent_id",
             "reply_to_username",
             "comment_text",
+            "comment_rich",
             "commented_at",
             "like_count",
             "is_liked",
@@ -2496,7 +2604,13 @@ class ThreadCommentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"parent_id": "Parent comment must belong to the same thread."}
             )
-        return attrs
+        return _apply_rich_text_projection(
+            self,
+            attrs,
+            rich_field="comment_rich",
+            plain_field="comment_text",
+            profile=PROFILE_COMMENT,
+        )
 
 
 def _evidence_url_safety_payload(obj):
@@ -2676,6 +2790,20 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
         )
         return validated_data
 
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if self.instance and "thread_id" in attrs:
+            raise serializers.ValidationError(
+                {"thread_id": "Cannot be changed after evidence creation."}
+            )
+        return _apply_rich_text_projection(
+            self,
+            attrs,
+            rich_field="evidence_caption_rich",
+            plain_field="evidence_caption",
+            profile=PROFILE_EVIDENCE,
+        )
+
     def create(self, validated_data):
         return super().create(self._apply_url_metadata(validated_data))
 
@@ -2690,6 +2818,7 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
             "thread",
             "contributor",
             "evidence_caption",
+            "evidence_caption_rich",
             "evidence_url",
             "evidence_type",
             "evidence_verdict",
@@ -2721,14 +2850,6 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
             "url_safety",
             "url_preview",
         ]
-
-    def validate(self, attrs):
-        if self.instance and "thread_id" in attrs:
-            raise serializers.ValidationError(
-                {"thread_id": "Cannot be changed after evidence creation."}
-            )
-        return attrs
-
 
 class ThreadDetailEvidenceSubmissionSerializer(serializers.ModelSerializer):
     contributor = ThreadDetailEvidenceContributorSerializer(read_only=True)
@@ -2792,6 +2913,7 @@ class ThreadDetailEvidenceSubmissionSerializer(serializers.ModelSerializer):
             "id",
             "contributor",
             "evidence_caption",
+            "evidence_caption_rich",
             "evidence_url",
             "evidence_type",
             "evidence_verdict",
@@ -2841,7 +2963,9 @@ class ThreadDetailSerializer(serializers.ModelSerializer):
             "claim",
             "author",
             "caption",
+            "caption_rich",
             "escalation_reason",
+            "other_concern",
             "status",
             "created_at",
             "evidence_submissions",
@@ -3630,8 +3754,8 @@ class FactCheckDraftCreateSerializer(
         required=False,
         allow_blank=True,
         trim_whitespace=True,
-        default="",
     )
+    article_body_rich = serializers.JSONField(required=False)
 
     source_urls = serializers.ListField(
         child=serializers.URLField(
@@ -3641,6 +3765,17 @@ class FactCheckDraftCreateSerializer(
         allow_empty=True,
         default=list,
     )
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        return _apply_rich_text_projection(
+            self,
+            attrs,
+            rich_field="article_body_rich",
+            plain_field="article_body",
+            profile=PROFILE_PUBLICATION,
+        )
+
 
 class FactCheckDraftUpdateSerializer(
     FactCheckInputProtectionMixin,
@@ -3674,6 +3809,7 @@ class FactCheckDraftUpdateSerializer(
         allow_blank=True,
         trim_whitespace=True,
     )
+    article_body_rich = serializers.JSONField(required=False)
 
     source_urls = serializers.ListField(
         child=serializers.URLField(
@@ -3685,11 +3821,19 @@ class FactCheckDraftUpdateSerializer(
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
+        attrs = _apply_rich_text_projection(
+            self,
+            attrs,
+            rich_field="article_body_rich",
+            plain_field="article_body",
+            profile=PROFILE_PUBLICATION,
+        )
 
         editable_fields = {
             "headline",
             "summary",
             "article_body",
+            "article_body_rich",
             "source_urls",
         }
         if not editable_fields.intersection(attrs):
@@ -3728,11 +3872,22 @@ class EditorialRevisionDraftCreateSerializer(
         allow_blank=True,
         trim_whitespace=True,
     )
+    article_body_rich = serializers.JSONField(required=False)
     source_urls = serializers.ListField(
         child=serializers.URLField(max_length=2000),
         required=False,
         allow_empty=True,
     )
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        return _apply_rich_text_projection(
+            self,
+            attrs,
+            rich_field="article_body_rich",
+            plain_field="article_body",
+            profile=PROFILE_PUBLICATION,
+        )
 
 
 class EditorialRevisionPublishSerializer(serializers.Serializer):
@@ -3911,6 +4066,7 @@ class PublicationWorkflowDetailArticleSerializer(
     PublicationWorkflowListArticleSerializer
 ):
     article_body = serializers.CharField(allow_blank=True)
+    article_body_rich = serializers.JSONField(allow_null=True)
 
 
 class PublicationWorkflowLifecycleSerializer(serializers.Serializer):
@@ -3958,6 +4114,7 @@ class PublicationWorkflowDetailSerializer(PublicationWorkflowListItemSerializer)
     headline = serializers.CharField(allow_blank=True, allow_null=True)
     summary = serializers.CharField(allow_blank=True, allow_null=True)
     article_body = serializers.CharField(allow_blank=True, allow_null=True)
+    article_body_rich = serializers.JSONField(allow_null=True)
     publication_status = serializers.CharField(allow_null=True)
     version = serializers.IntegerField(allow_null=True)
     edit_generation = serializers.IntegerField(allow_null=True)
@@ -4075,12 +4232,32 @@ class FactualCorrectionProposalSaveSerializer(serializers.Serializer):
         trim_whitespace=True,
     )
     summary = serializers.CharField(allow_blank=False, trim_whitespace=True)
-    article_body = serializers.CharField(allow_blank=False, trim_whitespace=True)
+    article_body = serializers.CharField(
+        required=False,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    article_body_rich = serializers.JSONField(required=False)
     source_urls = serializers.ListField(
         child=serializers.URLField(max_length=2000),
         allow_empty=False,
     )
     verification_run_id = serializers.UUIDField(required=False, allow_null=True)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        attrs = _apply_rich_text_projection(
+            self,
+            attrs,
+            rich_field="article_body_rich",
+            plain_field="article_body",
+            profile=PROFILE_PUBLICATION,
+        )
+        if not attrs.get("article_body"):
+            raise serializers.ValidationError(
+                {"article_body": "Article body is required."}
+            )
+        return attrs
 
 
 class FactualCorrectionConcurrencyMutationSerializer(serializers.Serializer):
@@ -4163,6 +4340,7 @@ class OrganizationPublicationArticleSerializer(serializers.Serializer):
     headline = serializers.CharField(allow_blank=True)
     summary = serializers.CharField(allow_blank=True)
     article_body = serializers.CharField(allow_blank=True)
+    article_body_rich = serializers.JSONField(allow_null=True)
     version = serializers.IntegerField(min_value=1)
     revision_kind = serializers.ChoiceField(
         choices=["INITIAL", "EDITORIAL_REVISION", "FACTUAL_CORRECTION"]
@@ -4332,6 +4510,7 @@ class FactualCorrectionProposalReadSerializer(serializers.Serializer):
     headline = serializers.CharField()
     summary = serializers.CharField()
     article_body = serializers.CharField()
+    article_body_rich = serializers.JSONField(allow_null=True)
     source_urls = serializers.ListField(child=serializers.URLField())
     verification_run_id = serializers.UUIDField(allow_null=True)
     prepared_by = PublicationWorkflowActorSerializer(allow_null=True)

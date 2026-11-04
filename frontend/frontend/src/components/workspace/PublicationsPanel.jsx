@@ -7,6 +7,7 @@ import { getAuthSessionIdentity } from "../../utils/authIdentity";
 import { showWorkspaceSuccess } from "../../utils/workspaceToast";
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
+import RichTextRenderer from "../richtext/RichTextRenderer.jsx";
 import Input from "../ui/Input.jsx";
 import Textarea from "../ui/Textarea.jsx";
 
@@ -1440,7 +1441,17 @@ function PublicationsContent({
                                     <h5>Summary</h5>
                                     <p>{detail.article?.summary || "No summary recorded."}</p>
                                     <h5>Article body</h5>
-                                    <div>{detail.article?.article_body || "No article body recorded."}</div>
+                                    <div>
+                                       {detail.article?.article_body ? (
+                                          <RichTextRenderer
+                                             value={detail.article?.article_body_rich}
+                                             fallbackText={detail.article.article_body}
+                                             profile="publication"
+                                          />
+                                       ) : (
+                                          "No article body recorded."
+                                       )}
+                                    </div>
                                  </div>
                               </section>
 

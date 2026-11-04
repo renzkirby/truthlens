@@ -6,6 +6,8 @@ import ImageLightbox from "../components/ImageLightbox";
 import Icons from "../components/Icons";
 import EvidenceCard from "../components/EvidenceCard";
 import PartnerAffiliations from "../components/partners/PartnerAffiliations.jsx";
+import RichTextEditor from "../components/richtext/RichTextEditor.jsx";
+import RichTextRenderer from "../components/richtext/RichTextRenderer.jsx";
 import { VERDICT_CONFIG, EVIDENCE_VERDICT_META, ESCALATION_OPTIONS } from "../utils/constants";
 import { evidenceSubmissionErrorMessage } from "../utils/evidenceSubmissionError";
 import { userFacingErrorMessage } from "../utils/userFacingError";
@@ -259,24 +261,32 @@ function findCommentThread(roots, targetId) {
    return null;
 }
 
-function InlineReplyComposer({ target, currentUser, value, onChange, onSubmit, onCancel, inputRef }) {
+function InlineReplyComposer({
+   target,
+   currentUser,
+   value,
+   richValue,
+   onChange,
+   onSubmit,
+   onCancel,
+   inputRef,
+}) {
    const targetUsername = target?.commenter?.username || "Unknown";
    return (
       <form className="thread-detail-inline-reply" onSubmit={(event) => onSubmit(event, target)}>
          <Avatar user={currentUser} />
-         <div className="thread-detail-inline-reply-body">
+         <div className="thread-detail-inline-reply-body" ref={inputRef}>
             <div className="thread-detail-inline-reply-heading">
                <span>Replying to</span>
                <Link to={`/user/${encodeURIComponent(targetUsername)}`}>@{targetUsername}</Link>
             </div>
-            <label className="sr-only" htmlFor={`reply-comment-${target.id}`}>Reply to @{targetUsername}</label>
-            <textarea
-               ref={inputRef}
-               id={`reply-comment-${target.id}`}
-               value={value}
-               onChange={(event) => onChange(event.target.value)}
+            <RichTextEditor
+               value={richValue}
+               fallbackText={value}
+               profile="comment"
+               onChange={onChange}
+               ariaLabel={`Reply to @${targetUsername}`}
                placeholder={`Write a reply to @${targetUsername}`}
-               rows={3}
             />
             <div className="thread-detail-inline-reply-actions">
                <button type="button" className="thread-detail-text-button" onClick={onCancel}>Cancel</button>
@@ -294,9 +304,11 @@ function CommentItem({
    currentUserId,
    editingId,
    editingText,
+   editingRich,
    highlightedId,
    likingIds,
    onEditingTextChange,
+   onEditingRichChange,
    onStartEdit,
    onCancelEdit,
    onSaveEdit,
@@ -352,15 +364,30 @@ function CommentItem({
 
                {isEditing ? (
                   <div className="thread-detail-inline-edit">
-                     <label className="sr-only" htmlFor={`edit-comment-${comment.id}`}>Edit comment</label>
-                     <textarea id={`edit-comment-${comment.id}`} value={editingText} onChange={(event) => onEditingTextChange(event.target.value)} rows={3} />
+                     <RichTextEditor
+                        value={editingRich}
+                        fallbackText={editingText}
+                        profile="comment"
+                        onChange={(richValue, plainText) => {
+                           onEditingRichChange(richValue);
+                           onEditingTextChange(plainText);
+                        }}
+                        ariaLabel="Edit comment"
+                        placeholder="Update your comment..."
+                     />
                      <div className="thread-detail-inline-actions">
-                        <button type="button" className="thread-detail-primary-button" onClick={() => onSaveEdit(comment.id)}>Save</button>
+                        <button type="button" className="thread-detail-primary-button" onClick={() => onSaveEdit(comment.id)} disabled={!editingText.trim()}>Save</button>
                         <button type="button" className="thread-detail-text-button" onClick={onCancelEdit}>Cancel</button>
                      </div>
                   </div>
                ) : (
-                  <p className="thread-detail-comment-text">{comment.comment_text}</p>
+                  <div className="thread-detail-comment-text">
+                     <RichTextRenderer
+                        value={comment.comment_rich}
+                        fallbackText={comment.comment_text}
+                        profile="comment"
+                     />
+                  </div>
                )}
             </div>
 
@@ -414,11 +441,13 @@ function CommentThread({
    currentUser,
    editingId,
    editingText,
+   editingRich,
    highlightedId,
    likingIds,
    replyComposer,
    replyInputRef,
    onEditingTextChange,
+   onEditingRichChange,
    onStartEdit,
    onCancelEdit,
    onSaveEdit,
@@ -449,9 +478,11 @@ function CommentThread({
             currentUserId={currentUser?.id}
             editingId={editingId}
             editingText={editingText}
+            editingRich={editingRich}
             highlightedId={highlightedId}
             likingIds={likingIds}
             onEditingTextChange={onEditingTextChange}
+            onEditingRichChange={onEditingRichChange}
             onStartEdit={onStartEdit}
             onCancelEdit={onCancelEdit}
             onSaveEdit={onSaveEdit}
@@ -469,6 +500,7 @@ function CommentThread({
                target={root}
                currentUser={currentUser}
                value={replyComposer.text}
+               richValue={replyComposer.rich}
                onChange={onReplyTextChange}
                onSubmit={onSubmitReply}
                onCancel={onCancelReply}
@@ -487,9 +519,11 @@ function CommentThread({
                         currentUserId={currentUser?.id}
                         editingId={editingId}
                         editingText={editingText}
+                        editingRich={editingRich}
                         highlightedId={highlightedId}
                         likingIds={likingIds}
                         onEditingTextChange={onEditingTextChange}
+                        onEditingRichChange={onEditingRichChange}
                         onStartEdit={onStartEdit}
                         onCancelEdit={onCancelEdit}
                         onSaveEdit={onSaveEdit}
@@ -505,6 +539,7 @@ function CommentThread({
                            target={comment}
                            currentUser={currentUser}
                            value={replyComposer.text}
+                           richValue={replyComposer.rich}
                            onChange={onReplyTextChange}
                            onSubmit={onSubmitReply}
                            onCancel={onCancelReply}
@@ -688,17 +723,21 @@ export default function ThreadDetailPage() {
    const [evidenceType, setEvidenceType] = useState("CONTRADICTS CLAIM");
    const [evidenceAssessment, setEvidenceAssessment] = useState("UNVERIFIED");
    const [evidenceExplanation, setEvidenceExplanation] = useState("");
+   const [evidenceExplanationRich, setEvidenceExplanationRich] = useState(null);
    const [submittingEvidence, setSubmittingEvidence] = useState(false);
    const [newComment, setNewComment] = useState("");
+   const [newCommentRich, setNewCommentRich] = useState(null);
    const [replyComposer, setReplyComposer] = useState(null);
    const [replyVisibility, setReplyVisibility] = useState({});
    const [submittingComment, setSubmittingComment] = useState(false);
    const [editingCommentId, setEditingCommentId] = useState(null);
    const [editingCommentText, setEditingCommentText] = useState("");
+   const [editingCommentRich, setEditingCommentRich] = useState(null);
    const [likingIds, setLikingIds] = useState(new Set());
    const [highlightedCommentId, setHighlightedCommentId] = useState(null);
    const [editingEvidenceId, setEditingEvidenceId] = useState(null);
    const [editingEvidenceText, setEditingEvidenceText] = useState("");
+   const [editingEvidenceRich, setEditingEvidenceRich] = useState(null);
    const [editingEvidenceVerdict, setEditingEvidenceVerdict] = useState("UNVERIFIED");
    const [votingEvidenceId, setVotingEvidenceId] = useState(null);
    const [confirmDialog, setConfirmDialog] = useState({ open: false, type: null, targetId: null });
@@ -891,7 +930,7 @@ export default function ThreadDetailPage() {
       "Comment link copied.",
    );
 
-   function optimisticCommentFrom({ text, parent = null }) {
+   function optimisticCommentFrom({ text, rich, parent = null }) {
       const commenterRole = user?.role || user?.profile?.role || "USER";
       return {
          id: makeLocalCommentId(),
@@ -905,6 +944,7 @@ export default function ThreadDetailPage() {
          parent_id: parent?.id || null,
          reply_to_username: parent?.commenter?.username || null,
          comment_text: text,
+         comment_rich: rich,
          commented_at: new Date().toISOString(),
          like_count: 0,
          is_liked: false,
@@ -921,6 +961,7 @@ export default function ThreadDetailPage() {
                thread_id: threadId,
                parent_id: optimistic.parent_id,
                comment_text: optimistic.comment_text,
+               comment_rich: optimistic.comment_rich,
             },
          });
          setComments((current) => current.map((comment) => comment.id === optimistic.id ? created : comment));
@@ -946,9 +987,10 @@ export default function ThreadDetailPage() {
       const text = newComment.trim();
       if (!text || submittingComment) return;
 
-      const optimistic = optimisticCommentFrom({ text });
+      const optimistic = optimisticCommentFrom({ text, rich: newCommentRich });
       setComments((current) => [optimistic, ...current]);
       setNewComment("");
+      setNewCommentRich(null);
       setSubmittingComment(true);
       try {
          await persistOptimisticComment(optimistic, "Comment posted.");
@@ -964,8 +1006,11 @@ export default function ThreadDetailPage() {
          rootId,
          username: comment.commenter?.username || "Unknown",
          text: "",
+         rich: null,
       });
-      window.requestAnimationFrame(() => replyInputRef.current?.focus());
+      window.requestAnimationFrame(() => {
+         replyInputRef.current?.querySelector?.('[contenteditable="true"]')?.focus();
+      });
    }
 
    async function handleReplySubmit(event, targetComment) {
@@ -973,7 +1018,11 @@ export default function ThreadDetailPage() {
       const text = replyComposer?.text?.trim();
       if (!text || !targetComment || replyComposer?.targetId !== targetComment.id) return;
 
-      const optimistic = optimisticCommentFrom({ text, parent: targetComment });
+      const optimistic = optimisticCommentFrom({
+         text,
+         rich: replyComposer?.rich,
+         parent: targetComment,
+      });
       const rootId = replyComposer.rootId;
       setComments((current) => [optimistic, ...current]);
       setReplyVisibility((current) => ({ ...current, [rootId]: Number.MAX_SAFE_INTEGER }));
@@ -1062,10 +1111,17 @@ export default function ThreadDetailPage() {
       const text = editingCommentText.trim();
       if (!text) return;
       try {
-         const updated = await authFetch(apiUrl(`comments/${commentId}/`), { method: "PATCH", body: { comment_text: text } });
+         const updated = await authFetch(apiUrl(`comments/${commentId}/`), {
+            method: "PATCH",
+            body: {
+               comment_text: text,
+               comment_rich: editingCommentRich,
+            },
+         });
          setComments((current) => current.map((comment) => comment.id === commentId ? { ...comment, ...updated } : comment));
          setEditingCommentId(null);
          setEditingCommentText("");
+         setEditingCommentRich(null);
          addToast({ type: "success", message: "Comment updated.", duration: 1800 });
       } catch (error) {
          console.error("Failed to edit comment", error);
@@ -1117,11 +1173,13 @@ export default function ThreadDetailPage() {
                evidence_type: evidenceType,
                evidence_verdict: evidenceAssessment,
                evidence_caption: evidenceExplanation.trim(),
+               evidence_caption_rich: evidenceExplanationRich,
             },
          });
          await refreshThreadData();
          setEvidenceUrl("");
          setEvidenceExplanation("");
+         setEvidenceExplanationRich(null);
          setEvidenceAssessment("UNVERIFIED");
          setShowEvidenceForm(false);
          changeTab("evidence");
@@ -1134,13 +1192,21 @@ export default function ThreadDetailPage() {
       }
    }
 
-   async function handleSaveEvidenceEdit(evidenceId, caption, verdict) {
+   async function handleSaveEvidenceEdit(evidenceId, richCaption, caption, verdict) {
       if (!caption.trim()) return;
       try {
-         await authFetch(apiUrl(`evidence/${evidenceId}/`), { method: "PATCH", body: { evidence_caption: caption.trim(), evidence_verdict: verdict } });
+         await authFetch(apiUrl(`evidence/${evidenceId}/`), {
+            method: "PATCH",
+            body: {
+               evidence_caption: caption.trim(),
+               evidence_caption_rich: richCaption,
+               evidence_verdict: verdict,
+            },
+         });
          await refreshThreadData();
          setEditingEvidenceId(null);
          setEditingEvidenceText("");
+         setEditingEvidenceRich(null);
          setEditingEvidenceVerdict("UNVERIFIED");
          addToast({ type: "success", message: "Evidence updated.", duration: 1800 });
       } catch (error) {
@@ -1409,7 +1475,18 @@ export default function ThreadDetailPage() {
                   {communityContext && (
                      <div className="thread-detail-community-context-strip">
                         <span>Community context</span>
-                        <p>{communityContext}</p>
+                        <RichTextRenderer
+                           value={thread.caption_rich}
+                           fallbackText={communityContext}
+                           profile="discussion"
+                        />
+                     </div>
+                  )}
+
+                  {thread.other_concern?.trim() && (
+                     <div className="thread-detail-community-context-strip thread-detail-community-context-strip--structured">
+                        <span>Other concern</span>
+                        <p>{thread.other_concern}</p>
                      </div>
                   )}
 
@@ -1455,8 +1532,17 @@ export default function ThreadDetailPage() {
                            <form className="thread-detail-composer thread-detail-composer--classic" onSubmit={handleCommentSubmit}>
                               <Avatar user={user} />
                               <div className="thread-detail-composer-body">
-                                 <label className="sr-only" htmlFor="thread-comment-composer">Write a comment</label>
-                                 <textarea id="thread-comment-composer" value={newComment} onChange={(event) => setNewComment(event.target.value)} placeholder="Write a comment…" rows={2} />
+                                 <RichTextEditor
+                                    value={newCommentRich}
+                                    fallbackText={newComment}
+                                    profile="comment"
+                                    onChange={(richValue, plainText) => {
+                                       setNewCommentRich(richValue);
+                                       setNewComment(plainText);
+                                    }}
+                                    ariaLabel="Write a comment"
+                                    placeholder="Write a comment…"
+                                 />
                               </div>
                               <button type="submit" className="thread-detail-comment-submit" disabled={!newComment.trim() || submittingComment} aria-label="Post comment">
                                  {submittingComment ? <span className="thread-detail-mini-spinner" aria-hidden="true" /> : <Icons name="send" size={16} />}
@@ -1482,17 +1568,31 @@ export default function ThreadDetailPage() {
                                  currentUser={user}
                                  editingId={editingCommentId}
                                  editingText={editingCommentText}
+                                 editingRich={editingCommentRich}
                                  highlightedId={highlightedCommentId}
                                  likingIds={likingIds}
                                  replyComposer={replyComposer}
                                  replyInputRef={replyInputRef}
                                  onEditingTextChange={setEditingCommentText}
-                                 onStartEdit={(item) => { setEditingCommentId(item.id); setEditingCommentText(item.comment_text || ""); }}
-                                 onCancelEdit={() => { setEditingCommentId(null); setEditingCommentText(""); }}
+                                 onEditingRichChange={setEditingCommentRich}
+                                 onStartEdit={(item) => {
+                                    setEditingCommentId(item.id);
+                                    setEditingCommentText(item.comment_text || "");
+                                    setEditingCommentRich(item.comment_rich || null);
+                                 }}
+                                 onCancelEdit={() => {
+                                    setEditingCommentId(null);
+                                    setEditingCommentText("");
+                                    setEditingCommentRich(null);
+                                 }}
                                  onSaveEdit={handleSaveCommentEdit}
                                  onDelete={(id) => setConfirmDialog({ open: true, type: "comment", targetId: id })}
                                  onStartReply={startReply}
-                                 onReplyTextChange={(text) => setReplyComposer((current) => current ? { ...current, text } : current)}
+                                 onReplyTextChange={(richValue, plainText) => setReplyComposer((current) => current ? {
+                                    ...current,
+                                    rich: richValue,
+                                    text: plainText,
+                                 } : current)}
                                  onSubmitReply={handleReplySubmit}
                                  onCancelReply={() => setReplyComposer(null)}
                                  onLike={handleLike}
@@ -1562,8 +1662,18 @@ export default function ThreadDetailPage() {
                                  </div>
                               </div>
                               <div className="thread-detail-evidence-form-group">
-                                 <label htmlFor="evidence-explanation">Explanation <span aria-hidden="true">*</span></label>
-                                 <textarea id="evidence-explanation" value={evidenceExplanation} onChange={(event) => setEvidenceExplanation(event.target.value)} rows={5} placeholder="Explain why this source supports, contradicts, or adds context to the claim..." required />
+                                 <div className="thread-detail-evidence-rich-label">Explanation <span aria-hidden="true">*</span></div>
+                                 <RichTextEditor
+                                    value={evidenceExplanationRich}
+                                    fallbackText={evidenceExplanation}
+                                    profile="evidence"
+                                    onChange={(richValue, plainText) => {
+                                       setEvidenceExplanationRich(richValue);
+                                       setEvidenceExplanation(plainText);
+                                    }}
+                                    ariaLabel="Evidence explanation"
+                                    placeholder="Explain why this source supports, contradicts, or adds context to the claim..."
+                                 />
                               </div>
                               <div className="thread-detail-evidence-form-footer">
                                  <span className="thread-detail-evidence-weight">
@@ -1599,9 +1709,11 @@ export default function ThreadDetailPage() {
                                  votingEvidenceId={votingEvidenceId}
                                  editingId={editingEvidenceId}
                                  editingText={editingEvidenceText}
+                                 editingRich={editingEvidenceRich}
                                  editingVerdict={editingEvidenceVerdict}
                                  setEditingId={setEditingEvidenceId}
                                  setEditingText={setEditingEvidenceText}
+                                 setEditingRich={setEditingEvidenceRich}
                                  setEditingVerdict={setEditingEvidenceVerdict}
                                  readOnly={!canParticipateInCommunity}
                               />

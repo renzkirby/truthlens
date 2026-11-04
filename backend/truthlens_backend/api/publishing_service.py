@@ -25,8 +25,16 @@ from .publication_snapshot_schema import (
     EDITORIAL_REVISION_SCHEMA_VERSION,
     FACTUAL_CORRECTION_SCHEMA_VERSION,
     FIRST_PUBLICATION_SCHEMA_VERSION,
+    RICH_EDITORIAL_REVISION_SCHEMA_VERSION,
+    RICH_FACTUAL_CORRECTION_SCHEMA_VERSION,
+    RICH_FIRST_PUBLICATION_SCHEMA_VERSION,
     PublicationSnapshotSchemaError,
     validate_publication_snapshot,
+)
+from .rich_text_schema import (
+    PROFILE_PUBLICATION,
+    RichTextSchemaError,
+    normalize_rich_text_with_plain,
 )
 from .factual_correction_proposal_schema import (
     FactualCorrectionProposalSchemaError,
@@ -104,6 +112,25 @@ class PublishingError(Exception):
         self.code = code or self.code
         self.current = current
         self.blockers = list(blockers or [])
+
+
+def _normalize_publication_rich_body(article_body_rich, *, article_body=None):
+    if article_body_rich is None:
+        return None, None
+
+    try:
+        normalized, plain = normalize_rich_text_with_plain(
+            article_body_rich,
+            profile=PROFILE_PUBLICATION,
+        )
+    except RichTextSchemaError as error:
+        raise InvalidFactCheckContent(str(error)) from error
+
+    if article_body is not None and (article_body or "").strip() != plain:
+        raise InvalidFactCheckContent(
+            "article_body must match the server projection of article_body_rich."
+        )
+    return normalized, plain
 
 
 class PublishingAuthorizationError(PublishingError):
@@ -712,6 +739,10 @@ def _validate_predecessor_publication_snapshot(
         or payload["headline"] != predecessor.headline
         or payload["summary"] != predecessor.summary
         or payload["article_body"] != predecessor.article_body
+        or (
+            "article_body_rich" in payload
+            and payload["article_body_rich"] != predecessor.article_body_rich
+        )
         or predecessor.published_at is None
         or predecessor.published_at != publication_snapshot.captured_at
         or payload["published_at"] != publication_snapshot.captured_at.isoformat()
@@ -754,7 +785,10 @@ def _validate_editorial_history_edge(*, predecessor, successor, nodes):
         or successor.organization_id != predecessor.organization_id
         or successor.adjudication_decision_id != predecessor.adjudication_decision_id
         or successor.version <= predecessor.version
-        or successor_snapshot.schema_version != EDITORIAL_REVISION_SCHEMA_VERSION
+        or successor_snapshot.schema_version not in {
+            EDITORIAL_REVISION_SCHEMA_VERSION,
+            RICH_EDITORIAL_REVISION_SCHEMA_VERSION,
+        }
         or not isinstance(revision, dict)
         or revision.get("supersedes_fact_check_id") != str(predecessor.id)
         or revision.get("supersedes_publication_snapshot_id")
@@ -791,7 +825,10 @@ def _validate_factual_correction_history_edge(
     correction = successor_node["payload"].get("correction")
     if (
         successor.revision_kind != OfficialFactCheck.RevisionKind.FACTUAL_CORRECTION
-        or successor_snapshot.schema_version != FACTUAL_CORRECTION_SCHEMA_VERSION
+        or successor_snapshot.schema_version not in {
+            FACTUAL_CORRECTION_SCHEMA_VERSION,
+            RICH_FACTUAL_CORRECTION_SCHEMA_VERSION,
+        }
         or not isinstance(correction, dict)
         or successor.claim_id != predecessor.claim_id
         or successor.organization_id != predecessor.organization_id
@@ -913,12 +950,22 @@ def _validate_factual_correction_history_edge(
             "headline": successor.headline,
             "summary": successor.summary,
             "article_body": successor.article_body,
+            **(
+                {"article_body_rich": successor.article_body_rich}
+                if successor.article_body_rich is not None
+                else {}
+            ),
         }
         or proposal_payload["article"]
         != {
             "headline": proposal.headline,
             "summary": proposal.summary,
             "article_body": proposal.article_body,
+            **(
+                {"article_body_rich": proposal.article_body_rich}
+                if proposal.article_body_rich is not None
+                else {}
+            ),
         }
         or [source["url"] for source in proposal_payload["sources"]]
         != proposal.source_urls
@@ -1031,7 +1078,10 @@ def _validate_complete_publication_history(
     root = roots[0]
     if (
         root.revision_kind not in {None, OfficialFactCheck.RevisionKind.INITIAL}
-        or nodes[root.id]["snapshot"].schema_version != FIRST_PUBLICATION_SCHEMA_VERSION
+        or nodes[root.id]["snapshot"].schema_version not in {
+            FIRST_PUBLICATION_SCHEMA_VERSION,
+            RICH_FIRST_PUBLICATION_SCHEMA_VERSION,
+        }
     ):
         raise PublishingConflict(
             "The publication revision chain has uncertain root provenance."
@@ -1429,14 +1479,23 @@ def create_fact_check_draft(
     expected_decision_revision,
     headline,
     summary,
-    article_body="",
+    article_body=None,
+    article_body_rich=None,
     source_urls=None,
 ):
     headline = (headline or "").strip()
 
     summary = (summary or "").strip()
 
-    article_body = (article_body or "").strip()
+    normalized_rich, rich_plain = _normalize_publication_rich_body(
+        article_body_rich,
+        article_body=article_body,
+    )
+    article_body = (
+        rich_plain
+        if normalized_rich is not None
+        else (article_body or "").strip()
+    )
 
     if not headline:
         raise InvalidFactCheckContent("A headline is required.")
@@ -1555,6 +1614,7 @@ def create_fact_check_draft(
             headline=headline,
             summary=summary,
             article_body=article_body,
+            article_body_rich=normalized_rich,
             publication_status=(OfficialFactCheck.PublicationStatus.DRAFT),
             version=max_version + 1,
             drafted_by=actor,
@@ -1608,6 +1668,7 @@ def create_editorial_revision_draft(
     headline=None,
     summary=None,
     article_body=None,
+    article_body_rich=None,
     source_urls=None,
 ):
     expected_predecessor_version = _parse_expected_version(
@@ -1746,11 +1807,23 @@ def create_editorial_revision_draft(
             field_name="summary",
             required=True,
         )
-        resolved_article_body = _revision_content_value(
-            article_body,
-            sealed_payload["article_body"],
-            field_name="article_body",
+        normalized_rich, rich_plain = _normalize_publication_rich_body(
+            article_body_rich,
+            article_body=article_body,
         )
+        if normalized_rich is not None:
+            resolved_article_body = rich_plain
+            resolved_article_body_rich = normalized_rich
+        elif article_body is not None:
+            resolved_article_body = _revision_content_value(
+                article_body,
+                sealed_payload["article_body"],
+                field_name="article_body",
+            )
+            resolved_article_body_rich = None
+        else:
+            resolved_article_body = sealed_payload["article_body"]
+            resolved_article_body_rich = sealed_payload.get("article_body_rich")
         selected_source_urls = (
             explicit_source_urls
             if explicit_source_urls is not None
@@ -1771,6 +1844,7 @@ def create_editorial_revision_draft(
             headline=resolved_headline,
             summary=resolved_summary,
             article_body=resolved_article_body,
+            article_body_rich=resolved_article_body_rich,
             publication_status=OfficialFactCheck.PublicationStatus.DRAFT,
             version=max_version + 1,
             drafted_by=actor,
@@ -1828,6 +1902,7 @@ def update_fact_check_draft(
     headline=None,
     summary=None,
     article_body=None,
+    article_body_rich=None,
     source_urls=None,
 ):
     organization_id = _parse_uuid_identity(organization_id, "organization_id")
@@ -1900,11 +1975,25 @@ def update_fact_check_draft(
                 locked_fact_check.summary = summary
                 changed_fields.append("summary")
 
-        if article_body is not None:
+        normalized_rich, rich_plain = _normalize_publication_rich_body(
+            article_body_rich,
+            article_body=article_body,
+        )
+        if normalized_rich is not None:
+            if locked_fact_check.article_body != rich_plain:
+                locked_fact_check.article_body = rich_plain
+                changed_fields.append("article_body")
+            if locked_fact_check.article_body_rich != normalized_rich:
+                locked_fact_check.article_body_rich = normalized_rich
+                changed_fields.append("article_body_rich")
+        elif article_body is not None:
             article_body = article_body.strip()
             if locked_fact_check.article_body != article_body:
                 locked_fact_check.article_body = article_body
                 changed_fields.append("article_body")
+            if locked_fact_check.article_body_rich is not None:
+                locked_fact_check.article_body_rich = None
+                changed_fields.append("article_body_rich")
 
         locked_fact_check.full_clean(
             validate_unique=False,
@@ -2588,10 +2677,15 @@ def publish_editorial_revision(
                 validate_unique=False,
                 validate_constraints=False,
             )
+            snapshot_schema_version = (
+                RICH_EDITORIAL_REVISION_SCHEMA_VERSION
+                if revision.article_body_rich is not None
+                else EDITORIAL_REVISION_SCHEMA_VERSION
+            )
             sealed_payload = OfficialFactCheckPublicationSnapshot.build_payload(
                 fact_check=revision,
                 decision_snapshot=context["decision_snapshot"],
-                schema_version=EDITORIAL_REVISION_SCHEMA_VERSION,
+                schema_version=snapshot_schema_version,
                 predecessor_snapshot=predecessor_snapshot,
             )
         except ValidationError as error:
@@ -2629,7 +2723,7 @@ def publish_editorial_revision(
                     OfficialFactCheckPublicationSnapshot.objects.create(
                         fact_check=revision,
                         decision_snapshot=context["decision_snapshot"],
-                        schema_version=EDITORIAL_REVISION_SCHEMA_VERSION,
+                        schema_version=snapshot_schema_version,
                         captured_at=replacement_at,
                         payload=sealed_payload,
                     )
@@ -2872,15 +2966,20 @@ def publish_fact_check(
             )
 
         try:
+            snapshot_schema_version = (
+                RICH_FIRST_PUBLICATION_SCHEMA_VERSION
+                if locked_fact_check.article_body_rich is not None
+                else FIRST_PUBLICATION_SCHEMA_VERSION
+            )
             sealed_payload = OfficialFactCheckPublicationSnapshot.build_payload(
                 fact_check=locked_fact_check,
                 decision_snapshot=context["decision_snapshot"],
-                schema_version=FIRST_PUBLICATION_SCHEMA_VERSION,
+                schema_version=snapshot_schema_version,
             )
             OfficialFactCheckPublicationSnapshot.objects.create(
                 fact_check=locked_fact_check,
                 decision_snapshot=context["decision_snapshot"],
-                schema_version=FIRST_PUBLICATION_SCHEMA_VERSION,
+                schema_version=snapshot_schema_version,
                 captured_at=now,
                 payload=sealed_payload,
             )
@@ -3493,6 +3592,11 @@ def publish_factual_correction(
                 "headline": proposal.headline,
                 "summary": proposal.summary,
                 "article_body": proposal.article_body,
+                **(
+                    {"article_body_rich": proposal.article_body_rich}
+                    if proposal.article_body_rich is not None
+                    else {}
+                ),
             }
             or [source["url"] for source in prepared_payload["sources"]]
             != proposal.source_urls
@@ -3615,6 +3719,9 @@ def publish_factual_correction(
                     headline=prepared_payload["article"]["headline"],
                     summary=prepared_payload["article"]["summary"],
                     article_body=prepared_payload["article"]["article_body"],
+                    article_body_rich=prepared_payload["article"].get(
+                        "article_body_rich"
+                    ),
                     publication_status=OfficialFactCheck.PublicationStatus.PUBLISHED,
                     version=max_fact_check_version + 1,
                     drafted_by=None,
@@ -3641,10 +3748,15 @@ def publish_factual_correction(
                     prepared_payload=prepared_payload,
                 )
                 _validate_publication_content(successor)
+                snapshot_schema_version = (
+                    RICH_FACTUAL_CORRECTION_SCHEMA_VERSION
+                    if successor.article_body_rich is not None
+                    else FACTUAL_CORRECTION_SCHEMA_VERSION
+                )
                 sealed_payload = OfficialFactCheckPublicationSnapshot.build_payload(
                     fact_check=successor,
                     decision_snapshot=decision_snapshot,
-                    schema_version=FACTUAL_CORRECTION_SCHEMA_VERSION,
+                    schema_version=snapshot_schema_version,
                     predecessor_snapshot=predecessor_seal,
                     correction_request=request,
                     prepared_proposal=proposal,
@@ -3652,7 +3764,7 @@ def publish_factual_correction(
                 successor_seal = OfficialFactCheckPublicationSnapshot.objects.create(
                     fact_check=successor,
                     decision_snapshot=decision_snapshot,
-                    schema_version=FACTUAL_CORRECTION_SCHEMA_VERSION,
+                    schema_version=snapshot_schema_version,
                     captured_at=handoff_at,
                     payload=sealed_payload,
                 )

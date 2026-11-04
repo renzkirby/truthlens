@@ -1703,7 +1703,8 @@ def fact_check_draft_create(
             expected_decision_revision=data["expected_decision_revision"],
             headline=data["headline"],
             summary=data["summary"],
-            article_body=data.get("article_body", ""),
+            article_body=data.get("article_body"),
+            article_body_rich=data.get("article_body_rich"),
             source_urls=data.get("source_urls", []),
         )
 
@@ -1756,6 +1757,9 @@ def fact_check_draft_update(
             headline=data.get("headline"),
             summary=data.get("summary"),
             article_body=data.get("article_body"),
+            article_body_rich=(
+                data["article_body_rich"] if "article_body_rich" in data else None
+            ),
             source_urls=(data["source_urls"] if "source_urls" in data else None),
         )
 
@@ -2333,7 +2337,8 @@ def factual_correction_proposal_save(request, request_id):
             rationale=data["proposed_rationale"],
             headline=data["headline"],
             summary=data["summary"],
-            article_body=data["article_body"],
+            article_body=data.get("article_body"),
+            article_body_rich=data.get("article_body_rich"),
             source_urls=data["source_urls"],
             verification_run_id=data.get("verification_run_id"),
         )
@@ -2514,6 +2519,9 @@ def editorial_revision_draft_create(request, predecessor_id):
             headline=data.get("headline"),
             summary=data.get("summary"),
             article_body=data.get("article_body"),
+            article_body_rich=(
+                data["article_body_rich"] if "article_body_rich" in data else None
+            ),
             source_urls=data.get("source_urls") if "source_urls" in data else None,
         )
     except PublishingError as error:
@@ -2549,6 +2557,9 @@ def editorial_revision_draft_update(request, revision_id):
             headline=data.get("headline"),
             summary=data.get("summary"),
             article_body=data.get("article_body"),
+            article_body_rich=(
+                data["article_body_rich"] if "article_body_rich" in data else None
+            ),
             source_urls=data["source_urls"] if "source_urls" in data else None,
         )
     except PublishingError as error:

@@ -22,13 +22,23 @@ from .publication_snapshot_schema import (
     EDITORIAL_REVISION_SCHEMA_VERSION as PUBLICATION_SNAPSHOT_REVISION_VERSION,
     FACTUAL_CORRECTION_SCHEMA_VERSION as PUBLICATION_SNAPSHOT_CORRECTION_VERSION,
     FIRST_PUBLICATION_SCHEMA_VERSION as PUBLICATION_SNAPSHOT_INITIAL_VERSION,
+    RICH_EDITORIAL_REVISION_SCHEMA_VERSION as PUBLICATION_SNAPSHOT_RICH_REVISION_VERSION,
+    RICH_FACTUAL_CORRECTION_SCHEMA_VERSION as PUBLICATION_SNAPSHOT_RICH_CORRECTION_VERSION,
+    RICH_FIRST_PUBLICATION_SCHEMA_VERSION as PUBLICATION_SNAPSHOT_RICH_INITIAL_VERSION,
     PublicationSnapshotSchemaError,
     validate_publication_snapshot,
 )
 from .factual_correction_proposal_schema import (
     CURRENT_SCHEMA_VERSION as FACTUAL_CORRECTION_PROPOSAL_SCHEMA_VERSION,
+    LEGACY_SCHEMA_VERSION as FACTUAL_CORRECTION_PROPOSAL_LEGACY_SCHEMA_VERSION,
+    RICH_SCHEMA_VERSION as FACTUAL_CORRECTION_PROPOSAL_RICH_SCHEMA_VERSION,
     FactualCorrectionProposalSchemaError,
     validate_factual_correction_proposal,
+)
+from .rich_text_schema import (
+    PROFILE_PUBLICATION,
+    RichTextSchemaError,
+    normalize_rich_text_with_plain,
 )
 
 
@@ -1643,11 +1653,13 @@ class Thread(models.Model):
         "auth.User", on_delete=models.CASCADE, related_name="authored_threads"
     )
     caption = models.TextField(blank=True, null=True)
+    caption_rich = models.JSONField(blank=True, null=True)
     status = models.CharField(max_length=20, blank=True, null=True, default="OPEN")
     # flag_reason = models.CharField(max_length=20, choices=FlagReason.choices, blank=True, null=True)
     escalation_reason = models.CharField(
         max_length=20, choices=EscalationReason.choices, blank=True, null=True
     )
+    other_concern = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     moderator_verdict = models.CharField(max_length=20, blank=True, null=True)
     moderator_notes = models.TextField(blank=True, null=True)
@@ -1822,6 +1834,7 @@ class EvidenceSubmission(models.Model):
         "auth.User", on_delete=models.CASCADE, related_name="contributed_evidence"
     )
     evidence_caption = models.TextField(blank=True, null=True)
+    evidence_caption_rich = models.JSONField(blank=True, null=True)
     evidence_url = models.URLField(max_length=500, blank=True, null=True)
     evidence_type = models.CharField(
         max_length=20, choices=EvidenceType.choices, blank=True, null=True
@@ -3142,6 +3155,7 @@ class ThreadComment(models.Model):
         related_name="replies",
     )
     comment_text = models.TextField(blank=True, null=True)
+    comment_rich = models.JSONField(blank=True, null=True)
     commented_at = models.DateTimeField(auto_now_add=True)
 
     def clean(self):
@@ -3278,6 +3292,11 @@ class OfficialFactCheck(models.Model):
     article_body = models.TextField(
         blank=True,
         help_text=("Full public-facing fact-check " "analysis."),
+    )
+    article_body_rich = models.JSONField(
+        blank=True,
+        null=True,
+        help_text=("Versioned rich-text document for the public-facing analysis."),
     )
 
     # Temporary compatibility cache.
@@ -3511,6 +3530,7 @@ class OfficialFactCheck(models.Model):
         "headline",
         "summary",
         "article_body",
+        "article_body_rich",
         "sources",
         "version",
         "edit_generation",
@@ -4092,6 +4112,9 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
     FIRST_PUBLICATION_SCHEMA_VERSION = PUBLICATION_SNAPSHOT_INITIAL_VERSION
     EDITORIAL_REVISION_SCHEMA_VERSION = PUBLICATION_SNAPSHOT_REVISION_VERSION
     FACTUAL_CORRECTION_SCHEMA_VERSION = PUBLICATION_SNAPSHOT_CORRECTION_VERSION
+    RICH_FIRST_PUBLICATION_SCHEMA_VERSION = PUBLICATION_SNAPSHOT_RICH_INITIAL_VERSION
+    RICH_EDITORIAL_REVISION_SCHEMA_VERSION = PUBLICATION_SNAPSHOT_RICH_REVISION_VERSION
+    RICH_FACTUAL_CORRECTION_SCHEMA_VERSION = PUBLICATION_SNAPSHOT_RICH_CORRECTION_VERSION
 
     id = models.UUIDField(
         primary_key=True,
@@ -4134,7 +4157,10 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
         correction_request=None,
         prepared_proposal=None,
     ):
-        if schema_version == cls.FIRST_PUBLICATION_SCHEMA_VERSION:
+        if schema_version in {
+            cls.FIRST_PUBLICATION_SCHEMA_VERSION,
+            cls.RICH_FIRST_PUBLICATION_SCHEMA_VERSION,
+        }:
             if (
                 fact_check.supersedes_id is not None
                 or fact_check.revision_kind
@@ -4146,7 +4172,10 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
                 raise ValidationError(
                     "Only an initial publication may use snapshot schema v1."
                 )
-        elif schema_version == cls.EDITORIAL_REVISION_SCHEMA_VERSION:
+        elif schema_version in {
+            cls.EDITORIAL_REVISION_SCHEMA_VERSION,
+            cls.RICH_EDITORIAL_REVISION_SCHEMA_VERSION,
+        }:
             if (
                 fact_check.revision_kind
                 != OfficialFactCheck.RevisionKind.EDITORIAL_REVISION
@@ -4154,7 +4183,10 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
                 raise ValidationError(
                     "Snapshot schema v2 requires an editorial revision."
                 )
-        elif schema_version == cls.FACTUAL_CORRECTION_SCHEMA_VERSION:
+        elif schema_version in {
+            cls.FACTUAL_CORRECTION_SCHEMA_VERSION,
+            cls.RICH_FACTUAL_CORRECTION_SCHEMA_VERSION,
+        }:
             if (
                 fact_check.revision_kind
                 != OfficialFactCheck.RevisionKind.FACTUAL_CORRECTION
@@ -4276,8 +4308,17 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
             "published_by": _publication_snapshot_user(fact_check.published_by),
             "sources": sources,
         }
+        if schema_version in {
+            cls.RICH_FIRST_PUBLICATION_SCHEMA_VERSION,
+            cls.RICH_EDITORIAL_REVISION_SCHEMA_VERSION,
+            cls.RICH_FACTUAL_CORRECTION_SCHEMA_VERSION,
+        }:
+            payload["article_body_rich"] = fact_check.article_body_rich
 
-        if schema_version == cls.EDITORIAL_REVISION_SCHEMA_VERSION:
+        if schema_version in {
+            cls.EDITORIAL_REVISION_SCHEMA_VERSION,
+            cls.RICH_EDITORIAL_REVISION_SCHEMA_VERSION,
+        }:
             predecessor = fact_check.supersedes
             if (
                 fact_check.revision_kind
@@ -4347,7 +4388,10 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
                     fact_check.revision_requested_at
                 ),
             }
-        elif schema_version == cls.FACTUAL_CORRECTION_SCHEMA_VERSION:
+        elif schema_version in {
+            cls.FACTUAL_CORRECTION_SCHEMA_VERSION,
+            cls.RICH_FACTUAL_CORRECTION_SCHEMA_VERSION,
+        }:
             predecessor = fact_check.supersedes
             new_decision = fact_check.adjudication_decision
             if (
@@ -4467,7 +4511,10 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
                 or prepared_proposal.status
                 != FactualCorrectionProposal.Status.PREPARED
                 or prepared_proposal.prepared_payload_schema_version
-                != FACTUAL_CORRECTION_PROPOSAL_SCHEMA_VERSION
+                not in {
+                    FACTUAL_CORRECTION_PROPOSAL_LEGACY_SCHEMA_VERSION,
+                    FACTUAL_CORRECTION_PROPOSAL_RICH_SCHEMA_VERSION,
+                }
                 or prepared_proposal.prepared_payload is None
                 or prepared_proposal.prepared_at is None
             ):
@@ -4531,12 +4578,26 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
                     "headline": fact_check.headline,
                     "summary": fact_check.summary,
                     "article_body": fact_check.article_body,
+                    **(
+                        {"article_body_rich": fact_check.article_body_rich}
+                        if fact_check.article_body_rich is not None
+                        else {}
+                    ),
                 }
                 or proposal_payload["article"]
                 != {
                     "headline": prepared_proposal.headline,
                     "summary": prepared_proposal.summary,
                     "article_body": prepared_proposal.article_body,
+                    **(
+                        {
+                            "article_body_rich": (
+                                prepared_proposal.article_body_rich
+                            )
+                        }
+                        if prepared_proposal.article_body_rich is not None
+                        else {}
+                    ),
                 }
                 or [source["url"] for source in proposal_payload["sources"]]
                 != prepared_proposal.source_urls
@@ -4704,7 +4765,10 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
                 {"payload": "The sealed payload identities are inconsistent."}
             )
 
-        if self.schema_version == self.EDITORIAL_REVISION_SCHEMA_VERSION:
+        if self.schema_version in {
+            self.EDITORIAL_REVISION_SCHEMA_VERSION,
+            self.RICH_EDITORIAL_REVISION_SCHEMA_VERSION,
+        }:
             predecessor_snapshot = (
                 OfficialFactCheckPublicationSnapshot.objects.filter(
                     fact_check_id=fact_check.supersedes_id
@@ -4760,7 +4824,10 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
         correction_request = None
         prepared_proposal = None
         predecessor_snapshot = None
-        if self.schema_version == self.FACTUAL_CORRECTION_SCHEMA_VERSION:
+        if self.schema_version in {
+            self.FACTUAL_CORRECTION_SCHEMA_VERSION,
+            self.RICH_FACTUAL_CORRECTION_SCHEMA_VERSION,
+        }:
             correction = payload["correction"]
             predecessor_snapshot = (
                 OfficialFactCheckPublicationSnapshot.objects.filter(
@@ -5094,6 +5161,7 @@ class FactualCorrectionProposal(models.Model):
     headline = models.CharField(max_length=300)
     summary = models.TextField()
     article_body = models.TextField()
+    article_body_rich = models.JSONField(blank=True, null=True)
     source_urls = models.JSONField(default=list)
     verification_run = models.ForeignKey(
         VerificationRun,
@@ -5165,6 +5233,7 @@ class FactualCorrectionProposal(models.Model):
         "headline",
         "summary",
         "article_body",
+        "article_body_rich",
         "source_urls",
         "verification_run_id",
     )
@@ -5241,6 +5310,23 @@ class FactualCorrectionProposal(models.Model):
                 errors[field] = f"{field} must be a trimmed nonblank string."
         if isinstance(self.headline, str) and len(self.headline) > 300:
             errors["headline"] = "Headline must be 300 characters or fewer."
+        if self.article_body_rich is not None:
+            try:
+                normalized_rich, plain_projection = normalize_rich_text_with_plain(
+                    self.article_body_rich,
+                    profile=PROFILE_PUBLICATION,
+                )
+            except RichTextSchemaError as error:
+                errors["article_body_rich"] = str(error)
+            else:
+                if normalized_rich != self.article_body_rich:
+                    errors["article_body_rich"] = (
+                        "Rich article body must use canonical serialization."
+                    )
+                elif plain_projection != self.article_body:
+                    errors["article_body"] = (
+                        "Article body must match the rich-text plain projection."
+                    )
         if not isinstance(self.source_urls, list) or not self.source_urls:
             errors["source_urls"] = "At least one source URL is required."
 

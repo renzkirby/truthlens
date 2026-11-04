@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import ImageLightbox from "../components/ImageLightbox.jsx";
 import Icons from "../components/Icons.jsx";
+import RichTextEditor from "../components/richtext/RichTextEditor.jsx";
 import { useAuth } from "../hooks/useAuth";
 import { ESCALATION_OPTIONS } from "../utils/constants";
 import { resolveApiEndpoint } from "../utils/api";
@@ -152,12 +153,17 @@ function CreateThreadPage() {
    const navigate = useNavigate();
    const [formValues, setFormValues] = useState({
       caption: "",
+      caption_rich: null,
       escalation_reason: "",
       other_concern: "",
    });
 
-   const handleCaptionChange = (event) => {
-      setFormValues((current) => ({ ...current, caption: event.target.value }));
+   const handleCaptionChange = (richValue, plainText) => {
+      setFormValues((current) => ({
+         ...current,
+         caption: plainText,
+         caption_rich: richValue,
+      }));
    };
 
    const handleOtherConcernChange = (event) => {
@@ -184,11 +190,6 @@ function CreateThreadPage() {
          return;
       }
 
-      const discussionContext = formValues.caption.trim();
-      const caption = formValues.escalation_reason === "OTHER"
-         ? [discussionContext, `Other concern: ${otherConcern}`].filter(Boolean).join("\n\n")
-         : discussionContext;
-
       setSubmitting(true);
       setError("");
       try {
@@ -197,8 +198,9 @@ function CreateThreadPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                claim_id: claimId,
-               caption,
+               caption_rich: formValues.caption_rich,
                escalation_reason: formValues.escalation_reason,
+               other_concern: otherConcern || null,
             }),
          });
          navigate(`/thread/detail/${responseData.id}`);
@@ -226,6 +228,7 @@ function CreateThreadPage() {
       setError("");
       setFormValues({
          caption: "",
+         caption_rich: null,
          escalation_reason: "",
          other_concern: "",
       });
@@ -370,17 +373,15 @@ function CreateThreadPage() {
                               Add context, a concern, or a question that can help guide the discussion. Optional.
                            </p>
                         </div>
-                        <label className="create-thread-field-label" htmlFor="create-thread-caption">
+                        <div className="create-thread-field-label">
                            What would you like the community to examine?
-                        </label>
-                        <textarea
-                           id="create-thread-caption"
-                           name="caption"
-                           className="create-thread-textarea"
+                        </div>
+                        <RichTextEditor
+                           value={formValues.caption_rich}
+                           fallbackText={formValues.caption}
+                           profile="discussion"
                            onChange={handleCaptionChange}
-                           value={formValues.caption}
-                           rows={5}
-                           aria-describedby="create-thread-caption-help"
+                           ariaLabel="Discussion context"
                            placeholder="Add context or a question for the community..."
                         />
                      </section>
@@ -443,7 +444,7 @@ function CreateThreadPage() {
                                  placeholder="Briefly explain what else the community should examine..."
                               />
                               <p id="create-thread-other-concern-help">
-                                 This explanation will appear in the thread as community context.
+                                 This stays as structured escalation context and is shown separately from the formatted discussion.
                               </p>
                            </div>
                         )}

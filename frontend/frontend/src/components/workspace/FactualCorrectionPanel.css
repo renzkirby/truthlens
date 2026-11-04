@@ -211,6 +211,7 @@
 
 .correction-status-filter label,
 .correction-field label,
+.correction-field-label,
 .correction-source-editor legend {
    color: var(--tl-color-text-main);
    font-size: var(--tl-text-xs);

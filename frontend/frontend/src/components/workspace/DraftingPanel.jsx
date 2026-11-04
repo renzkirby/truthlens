@@ -9,6 +9,8 @@ import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
 import Input from "../ui/Input.jsx";
 import Textarea from "../ui/Textarea.jsx";
+import RichTextEditor from "../richtext/RichTextEditor.jsx";
+import RichTextRenderer from "../richtext/RichTextRenderer.jsx";
 
 import "./DraftingPanel.css";
 
@@ -17,6 +19,7 @@ const EMPTY_EDITOR = {
    headline: "",
    summary: "",
    articleBody: "",
+   articleBodyRich: null,
    sourceUrls: "",
 };
 
@@ -152,6 +155,8 @@ function detailToEditor(detail) {
       headline: detail?.headline ?? detail?.article?.headline ?? "",
       summary: detail?.summary ?? detail?.article?.summary ?? "",
       articleBody: detail?.article_body ?? detail?.article?.article_body ?? "",
+      articleBodyRich:
+         detail?.article_body_rich ?? detail?.article?.article_body_rich ?? null,
       sourceUrls,
    };
 }
@@ -1631,6 +1636,7 @@ function DraftingContent({
                headline: editor.headline.trim(),
                summary: editor.summary.trim(),
                article_body: editor.articleBody,
+               article_body_rich: editor.articleBodyRich,
                source_urls: validation.sourceUrls,
             },
          });
@@ -1702,6 +1708,7 @@ function DraftingContent({
                headline: editor.headline.trim(),
                summary: editor.summary.trim(),
                article_body: editor.articleBody,
+               article_body_rich: editor.articleBodyRich,
                source_urls: validation.sourceUrls,
             },
          });
@@ -2336,15 +2343,21 @@ function DraftingContent({
                                        />
                                     </div>
                                     <div className="drafting-field">
-                                       <label htmlFor="drafting-create-body">Article analysis/body</label>
-                                       <Textarea
-                                          id="drafting-create-body"
-                                          rows={10}
-                                          value={editor.articleBody}
+                                       <div className="drafting-field-label">Article analysis/body</div>
+                                       <RichTextEditor
+                                          value={editor.articleBodyRich}
+                                          fallbackText={editor.articleBody}
+                                          profile="publication"
                                           disabled={Boolean(mutation) || authorityBlocked}
-                                          onChange={(event) =>
-                                             setEditor((current) => ({ ...current, articleBody: event.target.value }))
+                                          onChange={(richValue, plainText) =>
+                                             setEditor((current) => ({
+                                                ...current,
+                                                articleBody: plainText,
+                                                articleBodyRich: richValue,
+                                             }))
                                           }
+                                          ariaLabel="Fact-check article analysis"
+                                          placeholder="Write the full evidence-grounded fact-check analysis..."
                                        />
                                        <span>You can leave this blank when creating the draft. It is required before submitting for publication review.</span>
                                     </div>
@@ -2429,20 +2442,26 @@ function DraftingContent({
                                        />
                                     </div>
                                     <div className="drafting-field">
-                                       <label htmlFor="drafting-edit-body">Article analysis/body</label>
-                                       <Textarea
-                                          id="drafting-edit-body"
-                                          rows={14}
-                                          value={editor.articleBody}
+                                       <div className="drafting-field-label">Article analysis/body</div>
+                                       <RichTextEditor
+                                          value={editor.articleBodyRich}
+                                          fallbackText={editor.articleBody}
+                                          profile="publication"
                                           disabled={
                                              Boolean(mutation) ||
                                              authorityBlocked ||
                                              Boolean(conflict) ||
                                              !allowedActions.includes("UPDATE_DRAFT")
                                           }
-                                          onChange={(event) =>
-                                             setEditor((current) => ({ ...current, articleBody: event.target.value }))
+                                          onChange={(richValue, plainText) =>
+                                             setEditor((current) => ({
+                                                ...current,
+                                                articleBody: plainText,
+                                                articleBodyRich: richValue,
+                                             }))
                                           }
+                                          ariaLabel="Edit fact-check article analysis"
+                                          placeholder="Write the full evidence-grounded fact-check analysis..."
                                        />
                                     </div>
                                     <div className="drafting-field">
@@ -2564,7 +2583,15 @@ function DraftingContent({
                                           {detail.summary || "No summary recorded."}
                                        </p>
                                        <div className="drafting-article-body">
-                                          {detail.article_body || "No article body was saved before abandonment."}
+                                          {detail.article_body ? (
+                                             <RichTextRenderer
+                                                value={detail.article_body_rich}
+                                                fallbackText={detail.article_body}
+                                                profile="publication"
+                                             />
+                                          ) : (
+                                             "No article body was saved before abandonment."
+                                          )}
                                        </div>
                                     </section>
                                  </>
@@ -2586,7 +2613,15 @@ function DraftingContent({
                                        {detail.summary || "No summary recorded."}
                                     </p>
                                     <div className="drafting-article-body">
-                                       {detail.article_body || "No article body recorded."}
+                                       {detail.article_body ? (
+                                          <RichTextRenderer
+                                             value={detail.article_body_rich}
+                                             fallbackText={detail.article_body}
+                                             profile="publication"
+                                          />
+                                       ) : (
+                                          "No article body recorded."
+                                       )}
                                     </div>
                                  </section>
                               ) : null}

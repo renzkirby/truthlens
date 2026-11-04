@@ -5,14 +5,23 @@ import re
 import uuid
 
 from .factual_correction_proposal_schema import (
-    CURRENT_SCHEMA_VERSION as FACTUAL_CORRECTION_PROPOSAL_SCHEMA_VERSION,
+    LEGACY_SCHEMA_VERSION as FACTUAL_CORRECTION_PROPOSAL_LEGACY_SCHEMA_VERSION,
+    RICH_SCHEMA_VERSION as FACTUAL_CORRECTION_PROPOSAL_RICH_SCHEMA_VERSION,
+)
+from .rich_text_schema import (
+    PROFILE_PUBLICATION,
+    RichTextSchemaError,
+    normalize_rich_text_with_plain,
 )
 
 
 FIRST_PUBLICATION_SCHEMA_VERSION = 1
 EDITORIAL_REVISION_SCHEMA_VERSION = 2
 FACTUAL_CORRECTION_SCHEMA_VERSION = 3
-CURRENT_SCHEMA_VERSION = FACTUAL_CORRECTION_SCHEMA_VERSION
+RICH_FIRST_PUBLICATION_SCHEMA_VERSION = 4
+RICH_EDITORIAL_REVISION_SCHEMA_VERSION = 5
+RICH_FACTUAL_CORRECTION_SCHEMA_VERSION = 6
+CURRENT_SCHEMA_VERSION = RICH_FACTUAL_CORRECTION_SCHEMA_VERSION
 
 BASE_PAYLOAD_FIELDS = frozenset(
     {
@@ -40,6 +49,10 @@ BASE_PAYLOAD_FIELDS = frozenset(
 V1_PAYLOAD_FIELDS = BASE_PAYLOAD_FIELDS
 V2_PAYLOAD_FIELDS = BASE_PAYLOAD_FIELDS | {"revision"}
 V3_PAYLOAD_FIELDS = BASE_PAYLOAD_FIELDS | {"correction"}
+RICH_BASE_PAYLOAD_FIELDS = BASE_PAYLOAD_FIELDS | {"article_body_rich"}
+V4_PAYLOAD_FIELDS = RICH_BASE_PAYLOAD_FIELDS
+V5_PAYLOAD_FIELDS = RICH_BASE_PAYLOAD_FIELDS | {"revision"}
+V6_PAYLOAD_FIELDS = RICH_BASE_PAYLOAD_FIELDS | {"correction"}
 ORGANIZATION_FIELDS = frozenset({"id", "name", "slug"})
 USER_FIELDS = frozenset({"id", "username"})
 SOURCE_FIELDS = frozenset(
@@ -152,7 +165,7 @@ def _validate_user(value, field):
         _invalid(f"{field} has an invalid user identity.")
 
 
-def _validate_base_payload(payload, *, expected_fields):
+def _validate_base_payload(payload, *, expected_fields, require_rich=False):
     if not isinstance(payload, dict) or set(payload) != expected_fields:
         _invalid("The publication snapshot has an invalid field set.")
 
@@ -183,6 +196,21 @@ def _validate_base_payload(payload, *, expected_fields):
     for field in ("canonical_claim", "headline", "summary", "article_body"):
         if not isinstance(payload[field], str):
             _invalid(f"{field} must be a string.")
+
+    if require_rich:
+        try:
+            normalized_rich, plain_projection = normalize_rich_text_with_plain(
+                payload["article_body_rich"],
+                profile=PROFILE_PUBLICATION,
+            )
+        except RichTextSchemaError as error:
+            raise PublicationSnapshotSchemaError(
+                "article_body_rich is invalid."
+            ) from error
+        if normalized_rich != payload["article_body_rich"]:
+            _invalid("article_body_rich must use canonical rich-text serialization.")
+        if plain_projection != payload["article_body"]:
+            _invalid("article_body does not match article_body_rich.")
     if (
         not isinstance(payload["verdict"], str)
         or payload["verdict"] not in SUPPORTED_VERDICTS
@@ -255,8 +283,25 @@ def _validate_v1(payload):
     _validate_base_payload(payload, expected_fields=V1_PAYLOAD_FIELDS)
 
 
-def _validate_v2(payload):
-    _validate_base_payload(payload, expected_fields=V2_PAYLOAD_FIELDS)
+def _validate_v4(payload):
+    _validate_base_payload(
+        payload,
+        expected_fields=V4_PAYLOAD_FIELDS,
+        require_rich=True,
+    )
+
+
+def _validate_v2(
+    payload,
+    *,
+    expected_fields=V2_PAYLOAD_FIELDS,
+    require_rich=False,
+):
+    _validate_base_payload(
+        payload,
+        expected_fields=expected_fields,
+        require_rich=require_rich,
+    )
 
     revision = payload["revision"]
     if not isinstance(revision, dict) or set(revision) != REVISION_FIELDS:
@@ -306,6 +351,14 @@ def _validate_v2(payload):
     )
 
 
+def _validate_v5(payload):
+    _validate_v2(
+        payload,
+        expected_fields=V5_PAYLOAD_FIELDS,
+        require_rich=True,
+    )
+
+
 def _validate_positive_integer(value, field):
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         _invalid(f"{field} must be a positive integer.")
@@ -321,8 +374,17 @@ def _validate_nonblank(value, field, *, max_length=None):
         _invalid(f"{field} is invalid.")
 
 
-def _validate_v3(payload):
-    _validate_base_payload(payload, expected_fields=V3_PAYLOAD_FIELDS)
+def _validate_v3(
+    payload,
+    *,
+    expected_fields=V3_PAYLOAD_FIELDS,
+    require_rich=False,
+):
+    _validate_base_payload(
+        payload,
+        expected_fields=expected_fields,
+        require_rich=require_rich,
+    )
     source_urls = [source["url"] for source in payload["sources"]]
     if len(source_urls) != len(set(source_urls)):
         _invalid("A factual correction cannot contain duplicate source URLs.")
@@ -356,10 +418,10 @@ def _validate_v3(payload):
         correction["prepared_payload_schema_version"],
         "correction.prepared_payload_schema_version",
     )
-    if (
-        correction["prepared_payload_schema_version"]
-        != FACTUAL_CORRECTION_PROPOSAL_SCHEMA_VERSION
-    ):
+    if correction["prepared_payload_schema_version"] not in {
+        FACTUAL_CORRECTION_PROPOSAL_LEGACY_SCHEMA_VERSION,
+        FACTUAL_CORRECTION_PROPOSAL_RICH_SCHEMA_VERSION,
+    }:
         _invalid("correction.prepared_payload_schema_version is not supported.")
     if correction["new_decision_id"] != payload["decision_id"]:
         _invalid("correction.new_decision_id does not match the publication.")
@@ -421,6 +483,14 @@ def _validate_v3(payload):
     )
 
 
+def _validate_v6(payload):
+    _validate_v3(
+        payload,
+        expected_fields=V6_PAYLOAD_FIELDS,
+        require_rich=True,
+    )
+
+
 def validate_publication_snapshot(*, schema_version, payload):
     """Validate a sealed publication payload without database access."""
 
@@ -431,6 +501,9 @@ def validate_publication_snapshot(*, schema_version, payload):
         FIRST_PUBLICATION_SCHEMA_VERSION: _validate_v1,
         EDITORIAL_REVISION_SCHEMA_VERSION: _validate_v2,
         FACTUAL_CORRECTION_SCHEMA_VERSION: _validate_v3,
+        RICH_FIRST_PUBLICATION_SCHEMA_VERSION: _validate_v4,
+        RICH_EDITORIAL_REVISION_SCHEMA_VERSION: _validate_v5,
+        RICH_FACTUAL_CORRECTION_SCHEMA_VERSION: _validate_v6,
     }
     validator = validators.get(schema_version)
     if validator is None:

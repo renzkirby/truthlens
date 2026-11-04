@@ -10,9 +10,16 @@ from .evidence_snapshot_schema import (
     EvidenceSnapshotSchemaError,
     validate_evidence_snapshot,
 )
+from .rich_text_schema import (
+    PROFILE_PUBLICATION,
+    RichTextSchemaError,
+    normalize_rich_text_with_plain,
+)
 
 
-CURRENT_SCHEMA_VERSION = 1
+LEGACY_SCHEMA_VERSION = 1
+RICH_SCHEMA_VERSION = 2
+CURRENT_SCHEMA_VERSION = RICH_SCHEMA_VERSION
 
 PAYLOAD_FIELDS = frozenset(
     {
@@ -63,7 +70,10 @@ VERIFICATION_RUN_FIELDS = frozenset(
         "created_at",
     }
 )
-ARTICLE_FIELDS = frozenset({"headline", "summary", "article_body"})
+ARTICLE_FIELDS_V1 = frozenset({"headline", "summary", "article_body"})
+ARTICLE_FIELDS_V2 = frozenset(
+    {"headline", "summary", "article_body", "article_body_rich"}
+)
 SOURCE_FIELDS = frozenset(
     {"url", "provenance", "evidence", "editorial_actor"}
 )
@@ -170,7 +180,7 @@ def validate_factual_correction_proposal(*, schema_version, payload):
     if (
         isinstance(schema_version, bool)
         or not isinstance(schema_version, int)
-        or schema_version != CURRENT_SCHEMA_VERSION
+        or schema_version not in {LEGACY_SCHEMA_VERSION, RICH_SCHEMA_VERSION}
     ):
         _fail("The prepared proposal schema is not supported.")
     payload = _dict(payload, PAYLOAD_FIELDS, "payload")
@@ -203,10 +213,29 @@ def validate_factual_correction_proposal(*, schema_version, payload):
     _nonblank(decision["canonical_claim"], "canonical claim")
     _nonblank(decision["rationale"], "rationale")
 
-    article = _dict(payload["article"], ARTICLE_FIELDS, "article")
+    article_fields = (
+        ARTICLE_FIELDS_V2
+        if schema_version == RICH_SCHEMA_VERSION
+        else ARTICLE_FIELDS_V1
+    )
+    article = _dict(payload["article"], article_fields, "article")
     _nonblank(article["headline"], "headline", max_length=300)
     _nonblank(article["summary"], "summary")
     _nonblank(article["article_body"], "article body")
+    if schema_version == RICH_SCHEMA_VERSION:
+        try:
+            normalized_rich, plain_projection = normalize_rich_text_with_plain(
+                article["article_body_rich"],
+                profile=PROFILE_PUBLICATION,
+            )
+        except RichTextSchemaError as error:
+            raise FactualCorrectionProposalSchemaError(
+                "The prepared proposal has invalid rich article content."
+            ) from error
+        if normalized_rich != article["article_body_rich"]:
+            _fail("The prepared proposal rich article is not canonical.")
+        if plain_projection != article["article_body"]:
+            _fail("The prepared proposal article body does not match its rich content.")
 
     basis = _dict(payload["evidence_basis"], EVIDENCE_BASIS_FIELDS, "evidence basis")
     if (

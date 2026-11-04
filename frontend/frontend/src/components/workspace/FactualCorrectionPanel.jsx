@@ -11,6 +11,8 @@ import Button from "../ui/Button.jsx";
 import Input from "../ui/Input.jsx";
 import Select from "../ui/Select.jsx";
 import Textarea from "../ui/Textarea.jsx";
+import RichTextEditor from "../richtext/RichTextEditor.jsx";
+import RichTextRenderer from "../richtext/RichTextRenderer.jsx";
 
 import "./FactualCorrectionPanel.css";
 
@@ -52,6 +54,7 @@ const EMPTY_EDITOR = Object.freeze({
    headline: "",
    summary: "",
    article_body: "",
+   article_body_rich: null,
    source_urls: [""],
    verification_run_id: "",
 });
@@ -516,6 +519,7 @@ function proposalToEditor(proposal) {
       headline: proposal.headline || "",
       summary: proposal.summary || "",
       article_body: proposal.article_body || "",
+      article_body_rich: proposal.article_body_rich || null,
       source_urls: sources.length > 0 ? sources : [""],
       verification_run_id: proposal.verification_run_id || "",
    };
@@ -809,7 +813,13 @@ function ProposalSummary({ proposal, eligibleVerificationRuns }) {
             </div>
             <div className="correction-metadata-wide">
                <dt>Article body</dt>
-               <dd className="correction-article-body">{proposal.article_body}</dd>
+               <dd className="correction-article-body">
+                  <RichTextRenderer
+                     value={proposal.article_body_rich}
+                     fallbackText={proposal.article_body}
+                     profile="publication"
+                  />
+               </dd>
             </div>
             <div>
                <dt>Prepared by</dt>
@@ -950,6 +960,18 @@ function FactualCorrectionContent({
       source_urls: useRef(null),
       verification_run_id: useRef(null),
       cancellation_reason: useRef(null),
+   };
+
+   const focusProposalField = (name) => {
+      const target = proposalRefs[name]?.current;
+      if (!target) {
+         return;
+      }
+      if (name === "article_body") {
+         target.querySelector?.('[contenteditable="true"]')?.focus();
+         return;
+      }
+      target.focus?.();
    };
 
    const normalizedStatus = COLLECTION_STATUSES.includes(status) ? status : "ACTIVE";
@@ -1375,7 +1397,7 @@ function FactualCorrectionContent({
             );
             const firstInvalid = Object.keys(error?.errors || {}).find((name) => proposalRefs[name]);
             if (firstInvalid) {
-               requestAnimationFrame(() => proposalRefs[firstInvalid].current?.focus());
+               requestAnimationFrame(() => focusProposalField(firstInvalid));
             }
             return;
          }
@@ -1448,7 +1470,7 @@ function FactualCorrectionContent({
       setFieldErrors(errors);
       const firstInvalid = Object.keys(errors)[0];
       if (firstInvalid) {
-         requestAnimationFrame(() => proposalRefs[firstInvalid]?.current?.focus());
+         requestAnimationFrame(() => focusProposalField(firstInvalid));
       }
       return { valid: Object.keys(errors).length === 0, sources };
    };
@@ -1480,6 +1502,7 @@ function FactualCorrectionContent({
             headline: editor.headline.trim(),
             summary: editor.summary.trim(),
             article_body: editor.article_body.trim(),
+            article_body_rich: editor.article_body_rich,
             source_urls: validation.sources,
             verification_run_id: editor.verification_run_id.trim() || null,
          },
@@ -1913,20 +1936,29 @@ function FactualCorrectionContent({
                ) : null}
             </div>
             <div className="correction-field correction-field--wide">
-               <label htmlFor="correction-article-body">Article body</label>
-               <Textarea
-                  ref={proposalRefs.article_body}
-                  id="correction-article-body"
-                  rows={12}
-                  required
-                  value={editor.article_body}
-                  disabled={!canEditProposal || Boolean(mutation)}
-                  invalid={Boolean(fieldError(fieldErrors, "article_body"))}
-                  aria-describedby={
-                     fieldError(fieldErrors, "article_body") ? "correction-article-body-error" : undefined
-                  }
-                  onChange={(event) => updateEditor("article_body", event.target.value)}
-               />
+               <div className="correction-field-label">Article body</div>
+               <div ref={proposalRefs.article_body}>
+                  <RichTextEditor
+                     value={editor.article_body_rich}
+                     fallbackText={editor.article_body}
+                     profile="publication"
+                     disabled={!canEditProposal || Boolean(mutation)}
+                     invalid={Boolean(fieldError(fieldErrors, "article_body"))}
+                     onChange={(richValue, plainText) => {
+                        setEditor((current) => ({
+                           ...current,
+                           article_body: plainText,
+                           article_body_rich: richValue,
+                        }));
+                        setFieldErrors((current) => ({
+                           ...current,
+                           article_body: undefined,
+                        }));
+                     }}
+                     ariaLabel="Factual correction article body"
+                     placeholder="Write the corrected evidence-grounded article..."
+                  />
+               </div>
                {fieldError(fieldErrors, "article_body") ? (
                   <span id="correction-article-body-error" className="correction-field-error">
                      {fieldError(fieldErrors, "article_body")}

@@ -22,6 +22,7 @@ from api.publication_snapshot_schema import (
     EDITORIAL_REVISION_SCHEMA_VERSION,
     FACTUAL_CORRECTION_SCHEMA_VERSION,
     FIRST_PUBLICATION_SCHEMA_VERSION,
+    RICH_FACTUAL_CORRECTION_SCHEMA_VERSION,
     PublicationSnapshotSchemaError,
     validate_publication_snapshot,
 )
@@ -126,6 +127,7 @@ class FactualCorrectionPublicationHistoryFixtures(FactualCorrectionProposalFixtu
             headline=proposal.headline,
             summary=proposal.summary,
             article_body=proposal.article_body,
+            article_body_rich=proposal.article_body_rich,
             publication_status=OfficialFactCheck.PublicationStatus.PUBLISHED,
             version=predecessor.version + 1,
             drafted_by=self.researcher,
@@ -159,10 +161,15 @@ class FactualCorrectionPublicationHistoryFixtures(FactualCorrectionProposalFixtu
                     captured_evidence_id=link["evidence_id"],
                 )
 
+        snapshot_schema_version = (
+            RICH_FACTUAL_CORRECTION_SCHEMA_VERSION
+            if successor.article_body_rich is not None
+            else FACTUAL_CORRECTION_SCHEMA_VERSION
+        )
         payload = OfficialFactCheckPublicationSnapshot.build_payload(
             fact_check=successor,
             decision_snapshot=decision_snapshot,
-            schema_version=FACTUAL_CORRECTION_SCHEMA_VERSION,
+            schema_version=snapshot_schema_version,
             predecessor_snapshot=predecessor_seal,
             correction_request=request,
             prepared_proposal=proposal,
@@ -170,7 +177,7 @@ class FactualCorrectionPublicationHistoryFixtures(FactualCorrectionProposalFixtu
         seal = OfficialFactCheckPublicationSnapshot.objects.create(
             fact_check=successor,
             decision_snapshot=decision_snapshot,
-            schema_version=FACTUAL_CORRECTION_SCHEMA_VERSION,
+            schema_version=snapshot_schema_version,
             captured_at=published_at,
             payload=payload,
         )
@@ -248,6 +255,37 @@ class FactualCorrectionPublicationSchemaTests(
             schema_version=EDITORIAL_REVISION_SCHEMA_VERSION,
             payload=revision.publication_snapshot.payload,
         )
+
+    def test_rich_v6_payload_accepts_sealed_v2_proposal(self):
+        context = self.make_proposal_context(suffix="schema-rich-v6")
+        rich_body = self.rich_article_body()
+        proposal = self.save_proposal(
+            context,
+            article_body=None,
+            article_body_rich=rich_body,
+        )
+        context["prepared_proposal"] = self.prepare_proposal(
+            context,
+            proposal,
+        )["proposal"]
+
+        corrected = self.finalize_prepared_correction(context)
+        seal = corrected.publication_snapshot
+
+        self.assertEqual(
+            seal.schema_version,
+            RICH_FACTUAL_CORRECTION_SCHEMA_VERSION,
+        )
+        self.assertEqual(seal.payload["article_body_rich"], rich_body)
+        self.assertEqual(
+            seal.payload["correction"]["prepared_payload_schema_version"],
+            context["prepared_proposal"].prepared_payload_schema_version,
+        )
+        validate_publication_snapshot(
+            schema_version=seal.schema_version,
+            payload=seal.payload,
+        )
+        seal.full_clean()
 
     def test_v3_schema_rejects_missing_unknown_malformed_or_inconsistent_fields(self):
         context = self.make_prepared_context(suffix="schema-strict")

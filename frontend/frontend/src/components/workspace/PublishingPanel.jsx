@@ -7,6 +7,7 @@ import { getAuthSessionIdentity } from "../../utils/authIdentity";
 import { showWorkspaceSuccess, WORKSPACE_LONG_TOAST_DURATION } from "../../utils/workspaceToast";
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
+import RichTextRenderer from "../richtext/RichTextRenderer.jsx";
 import Textarea from "../ui/Textarea.jsx";
 
 import "./PublishingPanel.css";
@@ -1524,7 +1525,15 @@ function PublishingContent({
                                     {detail.summary || "No summary recorded."}
                                  </p>
                                  <div className="publishing-article-body">
-                                    {detail.article_body || "No article body recorded."}
+                                    {detail.article_body ? (
+                                       <RichTextRenderer
+                                          value={detail.article_body_rich}
+                                          fallbackText={detail.article_body}
+                                          profile="publication"
+                                       />
+                                    ) : (
+                                       "No article body recorded."
+                                    )}
                                  </div>
                               </section>
 

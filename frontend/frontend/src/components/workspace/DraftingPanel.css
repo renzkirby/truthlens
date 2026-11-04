@@ -838,7 +838,8 @@
    margin-top: var(--tl-space-4);
 }
 
-.drafting-field label {
+.drafting-field label,
+.drafting-field-label {
    color: var(--tl-color-text-main);
    font-size: var(--tl-text-sm);
    font-weight: 700;
@@ -908,7 +909,6 @@
    font-size: var(--tl-text-ui);
    line-height: 1.75;
    overflow-wrap: anywhere;
-   white-space: pre-wrap;
 }
 
 .drafting-danger-zone {

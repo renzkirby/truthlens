@@ -5,6 +5,8 @@ import { EVIDENCE_VERDICT_META } from "../utils/constants";
 import "./EvidenceCard.css";
 import PartnerAffiliations from "./partners/PartnerAffiliations.jsx";
 import EvidenceSourcePreview from "./evidence/EvidenceSourcePreview.jsx";
+import RichTextEditor from "./richtext/RichTextEditor.jsx";
+import RichTextRenderer from "./richtext/RichTextRenderer.jsx";
 
 function EvidenceAvatar({ contributor }) {
    const [failed, setFailed] = useState(false);
@@ -60,9 +62,11 @@ export default function EvidenceCard({
    votingEvidenceId,
    editingId,
    editingText,
+   editingRich,
    editingVerdict,
    setEditingId,
    setEditingText,
+   setEditingRich,
    setEditingVerdict,
    readOnly = false,
 }) {
@@ -112,6 +116,7 @@ export default function EvidenceCard({
                         onClick={() => {
                            setEditingId(evidence.id);
                            setEditingText(evidence.evidence_caption || "");
+                           setEditingRich(evidence.evidence_caption_rich || null);
                            setEditingVerdict(verdict);
                         }}
                      >
@@ -125,20 +130,40 @@ export default function EvidenceCard({
 
          {isEditing ? (
             <div className="evidence-card-edit">
-               <label htmlFor={`evidence-caption-${evidence.id}`}>Evidence explanation</label>
-               <textarea id={`evidence-caption-${evidence.id}`} rows={4} value={editingText} onChange={(event) => setEditingText(event.target.value)} />
+               <div className="evidence-card-edit-label">Evidence explanation</div>
+               <RichTextEditor
+                  value={editingRich}
+                  fallbackText={editingText}
+                  profile="evidence"
+                  onChange={(richValue, plainText) => {
+                     setEditingRich(richValue);
+                     setEditingText(plainText);
+                  }}
+                  ariaLabel="Edit evidence explanation"
+                  placeholder="Explain why this evidence matters..."
+               />
                <label htmlFor={`evidence-assessment-${evidence.id}`}>Your assessment</label>
                <select id={`evidence-assessment-${evidence.id}`} value={editingVerdict} onChange={(event) => setEditingVerdict(event.target.value)}>
                   {Object.entries(EVIDENCE_VERDICT_META).map(([key, meta]) => <option key={key} value={key}>{meta.label}</option>)}
                </select>
                <p>Your assessment is your interpretation, not a TruthLens or professional verdict.</p>
                <div>
-                  <button type="button" className="is-primary" onClick={() => onEdit(evidence.id, editingText, editingVerdict)}>Save</button>
-                  <button type="button" onClick={() => { setEditingId(null); setEditingText(""); setEditingVerdict("UNVERIFIED"); }}>Cancel</button>
+                  <button type="button" className="is-primary" onClick={() => onEdit(evidence.id, editingRich, editingText, editingVerdict)}>Save</button>
+                  <button type="button" onClick={() => { setEditingId(null); setEditingText(""); setEditingRich(null); setEditingVerdict("UNVERIFIED"); }}>Cancel</button>
                </div>
             </div>
          ) : (
-            <p className="evidence-card-explanation">{evidence.evidence_caption?.trim() || "No explanation provided."}</p>
+            <div className="evidence-card-explanation">
+               {evidence.evidence_caption?.trim() ? (
+                  <RichTextRenderer
+                     value={evidence.evidence_caption_rich}
+                     fallbackText={evidence.evidence_caption}
+                     profile="evidence"
+                  />
+               ) : (
+                  "No explanation provided."
+               )}
+            </div>
          )}
 
          <EvidenceSourcePreview
