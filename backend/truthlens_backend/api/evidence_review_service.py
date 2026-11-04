@@ -769,6 +769,32 @@ def review_correction_evidence(
                             "correction_case_id": str(correction_case.pk),
                         },
                     )
+                    record_accountability_event(
+                        action_type=AccountabilityEvent.ActionType.EVIDENCE_REOPENED,
+                        resource_type=AccountabilityEvent.ResourceType.EVIDENCE_SUBMISSION,
+                        resource_id=locked_evidence.pk,
+                        authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+                        actor=actor,
+                        authority_organization=context["organization"],
+                        subject_organization=context["organization"],
+                        capability=PartnerCapability.REVIEW_EVIDENCE,
+                        previous_state={
+                            "case_id": str(previous_resolved_case.pk),
+                            "case_status": ModerationCase.Status.RESOLVED,
+                        },
+                        new_state={
+                            "case_id": str(case.pk),
+                            "case_status": ModerationCase.Status.OPEN,
+                        },
+                        reason_code="CORRECTION_REVIEW",
+                        context={
+                            "correction_request_id": str(correction_request.pk),
+                            "correction_case_id": str(correction_case.pk),
+                            "claim_id": str(context["claim"].pk),
+                            "previous_case_id": str(previous_resolved_case.pk),
+                            "new_case_id": str(case.pk),
+                        },
+                    )
             except DuplicateActiveModerationCase as error:
                 if _is_expected_active_evidence_case_conflict(error):
                     raise EvidenceReviewConflict(

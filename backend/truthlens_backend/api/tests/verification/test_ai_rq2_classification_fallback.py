@@ -104,6 +104,7 @@ class StrictClassificationContractTests(SimpleTestCase):
 class ClassificationProviderHierarchyTests(SimpleTestCase):
     def setUp(self):
         self.enterContext(patch.dict(os.environ, {
+            "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
             "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "1",
             "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
             "ENABLE_CLOUDFLARE_CLASSIFICATION_PILOT": "1",
@@ -273,6 +274,7 @@ class ClassificationProviderHierarchyTests(SimpleTestCase):
 class CloudflareClassificationAdapterTests(SimpleTestCase):
     def setUp(self):
         self.enterContext(patch.dict(os.environ, {
+            "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
             "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "1",
             "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
             "ENABLE_CLOUDFLARE_CLASSIFICATION_PILOT": "1",
