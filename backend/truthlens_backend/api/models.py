@@ -5136,6 +5136,7 @@ class FactualCorrectionProposal(models.Model):
     headline = models.CharField(max_length=300)
     summary = models.TextField()
     article_body = models.TextField()
+    article_body_rich = models.JSONField(blank=True, null=True)
     source_urls = models.JSONField(default=list)
     verification_run = models.ForeignKey(
         VerificationRun,
@@ -5207,6 +5208,7 @@ class FactualCorrectionProposal(models.Model):
         "headline",
         "summary",
         "article_body",
+        "article_body_rich",
         "source_urls",
         "verification_run_id",
     )
