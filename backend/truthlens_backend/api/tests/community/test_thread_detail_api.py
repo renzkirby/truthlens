@@ -292,6 +292,26 @@ class ThreadDetailApiTests(TestCase):
         self.assertFalse(stray.is_valid())
         self.assertIn("other_concern", stray.errors)
 
+    def test_legacy_other_thread_without_structured_concern_remains_editable(self):
+        _claim, thread = self._create_thread("legacy other concern")
+        thread.escalation_reason = Thread.EscalationReason.OTHER
+        thread.caption = "Legacy context.\n\nOther concern: Historical embedded text."
+        thread.other_concern = None
+        thread.save(
+            update_fields=["escalation_reason", "caption", "other_concern"]
+        )
+
+        serializer = ThreadSerializer(
+            instance=thread,
+            data={"caption": "Updated legacy discussion context."},
+            partial=True,
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        updated = serializer.save()
+        self.assertEqual(updated.caption, "Updated legacy discussion context.")
+        self.assertIsNone(updated.other_concern)
+
     def test_rich_thread_comment_and_evidence_serializers_derive_plain_text(self):
         _claim, thread = self._create_thread("rich serializer projection")
 
