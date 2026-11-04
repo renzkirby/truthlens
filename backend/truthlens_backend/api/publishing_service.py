@@ -950,12 +950,22 @@ def _validate_factual_correction_history_edge(
             "headline": successor.headline,
             "summary": successor.summary,
             "article_body": successor.article_body,
+            **(
+                {"article_body_rich": successor.article_body_rich}
+                if successor.article_body_rich is not None
+                else {}
+            ),
         }
         or proposal_payload["article"]
         != {
             "headline": proposal.headline,
             "summary": proposal.summary,
             "article_body": proposal.article_body,
+            **(
+                {"article_body_rich": proposal.article_body_rich}
+                if proposal.article_body_rich is not None
+                else {}
+            ),
         }
         or [source["url"] for source in proposal_payload["sources"]]
         != proposal.source_urls
@@ -1068,7 +1078,10 @@ def _validate_complete_publication_history(
     root = roots[0]
     if (
         root.revision_kind not in {None, OfficialFactCheck.RevisionKind.INITIAL}
-        or nodes[root.id]["snapshot"].schema_version != FIRST_PUBLICATION_SCHEMA_VERSION
+        or nodes[root.id]["snapshot"].schema_version not in {
+            FIRST_PUBLICATION_SCHEMA_VERSION,
+            RICH_FIRST_PUBLICATION_SCHEMA_VERSION,
+        }
     ):
         raise PublishingConflict(
             "The publication revision chain has uncertain root provenance."
@@ -3701,6 +3714,9 @@ def publish_factual_correction(
                     headline=prepared_payload["article"]["headline"],
                     summary=prepared_payload["article"]["summary"],
                     article_body=prepared_payload["article"]["article_body"],
+                    article_body_rich=prepared_payload["article"].get(
+                        "article_body_rich"
+                    ),
                     publication_status=OfficialFactCheck.PublicationStatus.PUBLISHED,
                     version=max_fact_check_version + 1,
                     drafted_by=None,
@@ -3727,10 +3743,15 @@ def publish_factual_correction(
                     prepared_payload=prepared_payload,
                 )
                 _validate_publication_content(successor)
+                snapshot_schema_version = (
+                    RICH_FACTUAL_CORRECTION_SCHEMA_VERSION
+                    if successor.article_body_rich is not None
+                    else FACTUAL_CORRECTION_SCHEMA_VERSION
+                )
                 sealed_payload = OfficialFactCheckPublicationSnapshot.build_payload(
                     fact_check=successor,
                     decision_snapshot=decision_snapshot,
-                    schema_version=FACTUAL_CORRECTION_SCHEMA_VERSION,
+                    schema_version=snapshot_schema_version,
                     predecessor_snapshot=predecessor_seal,
                     correction_request=request,
                     prepared_proposal=proposal,
@@ -3738,7 +3759,7 @@ def publish_factual_correction(
                 successor_seal = OfficialFactCheckPublicationSnapshot.objects.create(
                     fact_check=successor,
                     decision_snapshot=decision_snapshot,
-                    schema_version=FACTUAL_CORRECTION_SCHEMA_VERSION,
+                    schema_version=snapshot_schema_version,
                     captured_at=handoff_at,
                     payload=sealed_payload,
                 )
