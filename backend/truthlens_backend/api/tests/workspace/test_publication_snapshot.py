@@ -26,12 +26,42 @@ from api.publishing_service import (
     submit_fact_check_for_review,
     update_fact_check_draft,
 )
+from api.publication_snapshot_schema import (
+    PublicationSnapshotSchemaError,
+    validate_publication_snapshot,
+)
 from api.tests.adjudication.test_adjudication_transaction_contract import (
     AdjudicationContractFixtures,
 )
 
 
 class PublicationSnapshotTests(AdjudicationContractFixtures, TestCase):
+    @staticmethod
+    def rich_article_body():
+        return {
+            "schema_version": 1,
+            "doc": {
+                "type": "doc",
+                "content": [
+                    {
+                        "type": "heading",
+                        "attrs": {"level": 2},
+                        "content": [{"type": "text", "text": "What we found"}],
+                    },
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "The reviewed source supports the conclusion.",
+                                "marks": [{"type": "bold"}],
+                            }
+                        ],
+                    },
+                ],
+            },
+        }
+
     def make_decided_context(self, evidence_statuses=None):
         context = self.make_context(
             evidence_statuses=evidence_statuses
@@ -82,6 +112,10 @@ class PublicationSnapshotTests(AdjudicationContractFixtures, TestCase):
         snapshot = OfficialFactCheckPublicationSnapshot.objects.get(
             fact_check=fact_check
         )
+        self.assertEqual(
+            snapshot.schema_version,
+            OfficialFactCheckPublicationSnapshot.FIRST_PUBLICATION_SCHEMA_VERSION,
+        )
         payload = snapshot.payload
         self.assertEqual(snapshot.captured_at, fact_check.published_at)
         self.assertEqual(snapshot.decision_snapshot, context["decision_snapshot"])
@@ -123,6 +157,93 @@ class PublicationSnapshotTests(AdjudicationContractFixtures, TestCase):
             context["assignment"].status,
             VerificationAssignment.Status.COMPLETED,
         )
+
+    def test_rich_first_publication_uses_v4_and_seals_canonical_rich_body(self):
+        context = self.make_decided_context()
+        rich_body = self.rich_article_body()
+        draft = create_fact_check_draft(
+            decision=context["decision"],
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_decision_revision=context["decision"].revision_number,
+            headline="Rich publication",
+            summary="A rich publication summary.",
+            article_body_rich=rich_body,
+            source_urls=["https://example.com/rich-publication-source"],
+        )
+        self.assertEqual(
+            draft.article_body,
+            "What we found\n\nThe reviewed source supports the conclusion.",
+        )
+        self.assertEqual(draft.article_body_rich, rich_body)
+
+        submitted = submit_fact_check_for_review(
+            fact_check=draft,
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
+        )
+        published = publish_fact_check(
+            fact_check=submitted,
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=submitted.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
+        )["fact_check"]
+
+        snapshot = OfficialFactCheckPublicationSnapshot.objects.get(
+            fact_check=published
+        )
+        self.assertEqual(
+            snapshot.schema_version,
+            OfficialFactCheckPublicationSnapshot.RICH_FIRST_PUBLICATION_SCHEMA_VERSION,
+        )
+        self.assertEqual(snapshot.payload["article_body_rich"], rich_body)
+        self.assertEqual(snapshot.payload["article_body"], published.article_body)
+        validate_publication_snapshot(
+            schema_version=snapshot.schema_version,
+            payload=snapshot.payload,
+        )
+
+    def test_rich_publication_snapshot_rejects_plain_projection_mismatch(self):
+        context = self.make_decided_context()
+        rich_body = self.rich_article_body()
+        draft = create_fact_check_draft(
+            decision=context["decision"],
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_decision_revision=context["decision"].revision_number,
+            headline="Rich mismatch publication",
+            summary="A rich publication summary.",
+            article_body_rich=rich_body,
+            source_urls=["https://example.com/rich-mismatch-source"],
+        )
+        submitted = submit_fact_check_for_review(
+            fact_check=draft,
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
+        )
+        published = publish_fact_check(
+            fact_check=submitted,
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=submitted.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
+        )["fact_check"]
+        snapshot = OfficialFactCheckPublicationSnapshot.objects.get(
+            fact_check=published
+        )
+        tampered = deepcopy(snapshot.payload)
+        tampered["article_body"] = "Tampered plain projection."
+
+        with self.assertRaises(PublicationSnapshotSchemaError):
+            validate_publication_snapshot(
+                schema_version=snapshot.schema_version,
+                payload=tampered,
+            )
 
     def test_duplicate_url_and_dual_origin_capture_complete_lineage(self):
         context = self.make_context(
