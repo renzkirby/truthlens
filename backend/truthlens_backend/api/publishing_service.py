@@ -3592,6 +3592,11 @@ def publish_factual_correction(
                 "headline": proposal.headline,
                 "summary": proposal.summary,
                 "article_body": proposal.article_body,
+                **(
+                    {"article_body_rich": proposal.article_body_rich}
+                    if proposal.article_body_rich is not None
+                    else {}
+                ),
             }
             or [source["url"] for source in prepared_payload["sources"]]
             != proposal.source_urls
