@@ -22,6 +22,7 @@ from api.publication_snapshot_schema import (
     EDITORIAL_REVISION_SCHEMA_VERSION,
     FACTUAL_CORRECTION_SCHEMA_VERSION,
     FIRST_PUBLICATION_SCHEMA_VERSION,
+    RICH_FACTUAL_CORRECTION_SCHEMA_VERSION,
     PublicationSnapshotSchemaError,
     validate_publication_snapshot,
 )
@@ -126,6 +127,7 @@ class FactualCorrectionPublicationHistoryFixtures(FactualCorrectionProposalFixtu
             headline=proposal.headline,
             summary=proposal.summary,
             article_body=proposal.article_body,
+            article_body_rich=proposal.article_body_rich,
             publication_status=OfficialFactCheck.PublicationStatus.PUBLISHED,
             version=predecessor.version + 1,
             drafted_by=self.researcher,
@@ -159,10 +161,15 @@ class FactualCorrectionPublicationHistoryFixtures(FactualCorrectionProposalFixtu
                     captured_evidence_id=link["evidence_id"],
                 )
 
+        snapshot_schema_version = (
+            RICH_FACTUAL_CORRECTION_SCHEMA_VERSION
+            if successor.article_body_rich is not None
+            else FACTUAL_CORRECTION_SCHEMA_VERSION
+        )
         payload = OfficialFactCheckPublicationSnapshot.build_payload(
             fact_check=successor,
             decision_snapshot=decision_snapshot,
-            schema_version=FACTUAL_CORRECTION_SCHEMA_VERSION,
+            schema_version=snapshot_schema_version,
             predecessor_snapshot=predecessor_seal,
             correction_request=request,
             prepared_proposal=proposal,
@@ -170,7 +177,7 @@ class FactualCorrectionPublicationHistoryFixtures(FactualCorrectionProposalFixtu
         seal = OfficialFactCheckPublicationSnapshot.objects.create(
             fact_check=successor,
             decision_snapshot=decision_snapshot,
-            schema_version=FACTUAL_CORRECTION_SCHEMA_VERSION,
+            schema_version=snapshot_schema_version,
             captured_at=published_at,
             payload=payload,
         )
