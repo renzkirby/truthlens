@@ -39,4 +39,9 @@ class Migration(migrations.Migration):
                 null=True,
             ),
         ),
+        migrations.AddField(
+            model_name="factualcorrectionproposal",
+            name="article_body_rich",
+            field=models.JSONField(blank=True, null=True),
+        ),
     ]
