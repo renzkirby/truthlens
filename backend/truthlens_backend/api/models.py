@@ -3530,6 +3530,7 @@ class OfficialFactCheck(models.Model):
         "headline",
         "summary",
         "article_body",
+        "article_body_rich",
         "sources",
         "version",
         "edit_generation",
