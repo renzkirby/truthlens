@@ -1643,6 +1643,7 @@ class Thread(models.Model):
         "auth.User", on_delete=models.CASCADE, related_name="authored_threads"
     )
     caption = models.TextField(blank=True, null=True)
+    caption_rich = models.JSONField(blank=True, null=True)
     status = models.CharField(max_length=20, blank=True, null=True, default="OPEN")
     # flag_reason = models.CharField(max_length=20, choices=FlagReason.choices, blank=True, null=True)
     escalation_reason = models.CharField(
@@ -1822,6 +1823,7 @@ class EvidenceSubmission(models.Model):
         "auth.User", on_delete=models.CASCADE, related_name="contributed_evidence"
     )
     evidence_caption = models.TextField(blank=True, null=True)
+    evidence_caption_rich = models.JSONField(blank=True, null=True)
     evidence_url = models.URLField(max_length=500, blank=True, null=True)
     evidence_type = models.CharField(
         max_length=20, choices=EvidenceType.choices, blank=True, null=True
@@ -3142,6 +3144,7 @@ class ThreadComment(models.Model):
         related_name="replies",
     )
     comment_text = models.TextField(blank=True, null=True)
+    comment_rich = models.JSONField(blank=True, null=True)
     commented_at = models.DateTimeField(auto_now_add=True)
 
     def clean(self):
@@ -3278,6 +3281,11 @@ class OfficialFactCheck(models.Model):
     article_body = models.TextField(
         blank=True,
         help_text=("Full public-facing fact-check " "analysis."),
+    )
+    article_body_rich = models.JSONField(
+        blank=True,
+        null=True,
+        help_text=("Versioned rich-text document for the public-facing analysis."),
     )
 
     # Temporary compatibility cache.
