@@ -31,7 +31,11 @@ from api.publishing_service import (
     publish_fact_check,
     submit_fact_check_for_review,
 )
-from api.serializers import ThreadSerializer
+from api.serializers import (
+    EvidenceSubmissionSerializer,
+    ThreadCommentSerializer,
+    ThreadSerializer,
+)
 
 
 class ThreadDetailApiTests(TestCase):
@@ -86,6 +90,25 @@ class ThreadDetailApiTests(TestCase):
             status=Thread.Status.OPEN,
         )
         return claim, thread
+
+    @staticmethod
+    def rich_text(*parts):
+        return {
+            "schema_version": 1,
+            "doc": {
+                "type": "doc",
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {"type": "text", "text": part}
+                            for part in parts
+                            if part
+                        ],
+                    }
+                ],
+            },
+        }
 
     def _detail(self, thread):
         return self.client.get(reverse("thread-detail", args=[thread.id]))
@@ -210,6 +233,136 @@ class ThreadDetailApiTests(TestCase):
         self.assertEqual(
             serializer.validated_data["escalation_reason"],
             Thread.EscalationReason.UNVERIFIED_RESULT,
+        )
+
+    def test_rich_thread_serializer_derives_plain_caption_and_keeps_other_concern_separate(self):
+        claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="A claim that needs formatted community context.",
+        )
+        rich = self.rich_text("Formatted discussion context.")
+        serializer = ThreadSerializer(
+            data={
+                "claim_id": str(claim.id),
+                "caption_rich": rich,
+                "escalation_reason": Thread.EscalationReason.OTHER,
+                "other_concern": "Please examine the source attribution.",
+            }
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(
+            serializer.validated_data["caption"],
+            "Formatted discussion context.",
+        )
+        self.assertEqual(serializer.validated_data["caption_rich"], rich)
+        self.assertEqual(
+            serializer.validated_data["other_concern"],
+            "Please examine the source attribution.",
+        )
+        self.assertNotIn(
+            "Other concern",
+            serializer.validated_data["caption"],
+        )
+
+    def test_rich_thread_comment_and_evidence_serializers_derive_plain_text(self):
+        _claim, thread = self._create_thread("rich serializer projection")
+
+        comment_rich = self.rich_text("Formatted comment.")
+        comment_serializer = ThreadCommentSerializer(
+            data={
+                "thread_id": str(thread.id),
+                "comment_rich": comment_rich,
+            }
+        )
+        self.assertTrue(comment_serializer.is_valid(), comment_serializer.errors)
+        self.assertEqual(
+            comment_serializer.validated_data["comment_text"],
+            "Formatted comment.",
+        )
+
+        evidence_rich = self.rich_text("Formatted evidence explanation.")
+        evidence_serializer = EvidenceSubmissionSerializer(
+            data={
+                "thread_id": str(thread.id),
+                "evidence_caption_rich": evidence_rich,
+                "evidence_url": "https://example.com/rich-evidence",
+                "evidence_type": EvidenceSubmission.EvidenceType.PROVIDES_CONTEXT,
+            }
+        )
+        self.assertTrue(evidence_serializer.is_valid(), evidence_serializer.errors)
+        self.assertEqual(
+            evidence_serializer.validated_data["evidence_caption"],
+            "Formatted evidence explanation.",
+        )
+
+    def test_rich_and_plain_mismatch_is_rejected(self):
+        claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="Mismatch claim.",
+        )
+        serializer = ThreadSerializer(
+            data={
+                "claim_id": str(claim.id),
+                "caption": "Different plain text.",
+                "caption_rich": self.rich_text("Canonical rich text."),
+                "escalation_reason": Thread.EscalationReason.UNVERIFIED_RESULT,
+            }
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("caption", serializer.errors)
+
+    def test_thread_detail_exposes_rich_discussion_comment_evidence_and_other_concern(self):
+        _claim, thread = self._create_thread("rich detail")
+        thread.caption = "Rich discussion context."
+        thread.caption_rich = self.rich_text("Rich discussion context.")
+        thread.escalation_reason = Thread.EscalationReason.OTHER
+        thread.other_concern = "Check whether the attribution is accurate."
+        thread.save(
+            update_fields=[
+                "caption",
+                "caption_rich",
+                "escalation_reason",
+                "other_concern",
+            ]
+        )
+        comment = ThreadComment.objects.create(
+            thread=thread,
+            commenter=self.other_user,
+            comment_text="Rich community comment.",
+            comment_rich=self.rich_text("Rich community comment."),
+        )
+        evidence = EvidenceSubmission.objects.create(
+            thread=thread,
+            contributor=self.other_user,
+            evidence_caption="Rich evidence explanation.",
+            evidence_caption_rich=self.rich_text("Rich evidence explanation."),
+            evidence_type=EvidenceSubmission.EvidenceType.PROVIDES_CONTEXT,
+        )
+
+        response = self._detail(thread)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["caption_rich"], thread.caption_rich)
+        self.assertEqual(response.data["other_concern"], thread.other_concern)
+        serialized_comment = next(
+            item
+            for item in response.data["comments"]
+            if item["id"] == str(comment.id)
+        )
+        self.assertEqual(
+            serialized_comment["comment_rich"],
+            comment.comment_rich,
+        )
+        serialized_evidence = next(
+            item
+            for item in response.data["evidence_submissions"]
+            if item["id"] == str(evidence.id)
+        )
+        self.assertEqual(
+            serialized_evidence["evidence_caption_rich"],
+            evidence.evidence_caption_rich,
         )
 
     def test_thread_detail_serializes_legacy_thread_without_escalation_reason(self):
