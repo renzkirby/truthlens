@@ -206,6 +206,55 @@ class PublicationSnapshotTests(AdjudicationContractFixtures, TestCase):
             payload=snapshot.payload,
         )
 
+    def test_sealed_rich_article_rejects_format_only_live_mutation(self):
+        context = self.make_decided_context()
+        rich_body = self.rich_article_body()
+        draft = create_fact_check_draft(
+            decision=context["decision"],
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_decision_revision=context["decision"].revision_number,
+            headline="Rich immutable publication",
+            summary="A rich immutable publication summary.",
+            article_body_rich=rich_body,
+            source_urls=["https://example.com/rich-immutable-source"],
+        )
+        submitted = submit_fact_check_for_review(
+            fact_check=draft,
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
+        )
+        published = publish_fact_check(
+            fact_check=submitted,
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=submitted.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
+        )["fact_check"]
+
+        original_rich = deepcopy(published.article_body_rich)
+        changed_formatting = deepcopy(original_rich)
+        changed_formatting["doc"]["content"][1]["content"][0]["marks"] = [
+            {"type": "italic"}
+        ]
+        self.assertEqual(
+            published.article_body,
+            "What we found\n\nThe reviewed source supports the conclusion.",
+        )
+
+        published.article_body_rich = changed_formatting
+        with self.assertRaises(ValidationError):
+            published.save(update_fields=["article_body_rich", "updated_at"])
+
+        published.refresh_from_db()
+        self.assertEqual(published.article_body_rich, original_rich)
+        self.assertEqual(
+            published.publication_snapshot.payload["article_body_rich"],
+            original_rich,
+        )
+
     def test_rich_publication_snapshot_rejects_plain_projection_mismatch(self):
         context = self.make_decided_context()
         rich_body = self.rich_article_body()
