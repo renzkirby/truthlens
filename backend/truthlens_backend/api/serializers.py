@@ -2792,6 +2792,10 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
+        if self.instance and "thread_id" in attrs:
+            raise serializers.ValidationError(
+                {"thread_id": "Cannot be changed after evidence creation."}
+            )
         return _apply_rich_text_projection(
             self,
             attrs,
@@ -2846,14 +2850,6 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
             "url_safety",
             "url_preview",
         ]
-
-    def validate(self, attrs):
-        if self.instance and "thread_id" in attrs:
-            raise serializers.ValidationError(
-                {"thread_id": "Cannot be changed after evidence creation."}
-            )
-        return attrs
-
 
 class ThreadDetailEvidenceSubmissionSerializer(serializers.ModelSerializer):
     contributor = ThreadDetailEvidenceContributorSerializer(read_only=True)
