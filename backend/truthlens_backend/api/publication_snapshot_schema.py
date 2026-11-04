@@ -5,7 +5,8 @@ import re
 import uuid
 
 from .factual_correction_proposal_schema import (
-    CURRENT_SCHEMA_VERSION as FACTUAL_CORRECTION_PROPOSAL_SCHEMA_VERSION,
+    LEGACY_SCHEMA_VERSION as FACTUAL_CORRECTION_PROPOSAL_LEGACY_SCHEMA_VERSION,
+    RICH_SCHEMA_VERSION as FACTUAL_CORRECTION_PROPOSAL_RICH_SCHEMA_VERSION,
 )
 from .rich_text_schema import (
     PROFILE_PUBLICATION,
@@ -417,10 +418,10 @@ def _validate_v3(
         correction["prepared_payload_schema_version"],
         "correction.prepared_payload_schema_version",
     )
-    if (
-        correction["prepared_payload_schema_version"]
-        != FACTUAL_CORRECTION_PROPOSAL_SCHEMA_VERSION
-    ):
+    if correction["prepared_payload_schema_version"] not in {
+        FACTUAL_CORRECTION_PROPOSAL_LEGACY_SCHEMA_VERSION,
+        FACTUAL_CORRECTION_PROPOSAL_RICH_SCHEMA_VERSION,
+    }:
         _invalid("correction.prepared_payload_schema_version is not supported.")
     if correction["new_decision_id"] != payload["decision_id"]:
         _invalid("correction.new_decision_id does not match the publication.")
