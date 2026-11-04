@@ -1056,23 +1056,60 @@ Never include a factual verdict."""
 
 
 def is_fact_check_relevant(original_text, fact_check_text):
-    """Check if a fact check result is relevant to the original claim or article."""
+    """Require material proposition coverage before GFC can terminate verification.
+
+    Google Fact Check metadata may refer to the same event while reviewing a
+    materially different allegation. Treat that as useful related evidence, not
+    as sufficient coverage for an early factual verdict.
+    """
+    if any(
+        not isinstance(text, str) or not text.strip()
+        for text in (original_text, fact_check_text)
+    ):
+        return False
+
     system_instructions = (
-        "You are a strict relevance checker for a fact-checking pipeline. "
-        "Two texts are relevant ONLY if they discuss the exact same real-world "
-        "event, person, and time period. "
-        "Output a JSON object with 'reasoning' (1 sentence of deduction) and 'is_relevant' (boolean true/false)."
+        "You are a strict proposition-coverage checker for a fact-checking pipeline. "
+        "Return is_relevant=true ONLY when the fact-check text addresses the same "
+        "materially asserted factual proposition as the submitted claim. Preserve "
+        "all material facts that could change the verdict, including subject/entity, "
+        "actor/object relationship, core event/action, polarity/negation, quantities, "
+        "dates/time period, locations, intent or purpose, attribution/speaker, "
+        "causal relationships, certainty, and other material qualifiers. "
+        "Topical overlap, the same person, or the same real-world event is NOT enough. "
+        "A fact check about whether footage of an event is authentic is not sufficient "
+        "coverage for a separate claim about why the event happened, its exact date, "
+        "or another material detail unless those propositions are actually asserted. "
+        "If the fact-check text omits, narrows, broadens, or changes a material part "
+        "of the submitted claim, return false so the pipeline can retrieve additional "
+        "evidence instead of treating missing metadata as contradiction. "
+        "Return ONLY a JSON object with exactly two fields: "
+        "{\"reasoning\": \"nonempty explanation\", \"is_relevant\": true or false}."
     )
 
     try:
         response_text = call_llm_with_fallback(
             system_instructions,
-            f'Claim: "{original_text}"\n\nFact Check: "{fact_check_text}"',
+            json.dumps(
+                {
+                    "claim": original_text,
+                    "fact_check_reviewed_claim": fact_check_text,
+                },
+                ensure_ascii=False,
+            ),
             operation="fact_check_relevance",
         )
         result = _parse_llm_json(response_text)
         logger.debug("is_fact_check_relevant RESPONSE: %s", result)
-        return result.get("is_relevant", False)
+        if (
+            not isinstance(result, dict)
+            or set(result) != {"reasoning", "is_relevant"}
+            or type(result["is_relevant"]) is not bool
+            or not isinstance(result["reasoning"], str)
+            or not result["reasoning"].strip()
+        ):
+            return False
+        return result["is_relevant"]
     except Exception as e:
         logger.error("Relevance Checker AI Error: %s", e)
         return False
