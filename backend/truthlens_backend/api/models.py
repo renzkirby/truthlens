@@ -4740,7 +4740,10 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
                 {"payload": "The sealed payload identities are inconsistent."}
             )
 
-        if self.schema_version == self.EDITORIAL_REVISION_SCHEMA_VERSION:
+        if self.schema_version in {
+            self.EDITORIAL_REVISION_SCHEMA_VERSION,
+            self.RICH_EDITORIAL_REVISION_SCHEMA_VERSION,
+        }:
             predecessor_snapshot = (
                 OfficialFactCheckPublicationSnapshot.objects.filter(
                     fact_check_id=fact_check.supersedes_id
@@ -4796,7 +4799,10 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
         correction_request = None
         prepared_proposal = None
         predecessor_snapshot = None
-        if self.schema_version == self.FACTUAL_CORRECTION_SCHEMA_VERSION:
+        if self.schema_version in {
+            self.FACTUAL_CORRECTION_SCHEMA_VERSION,
+            self.RICH_FACTUAL_CORRECTION_SCHEMA_VERSION,
+        }:
             correction = payload["correction"]
             predecessor_snapshot = (
                 OfficialFactCheckPublicationSnapshot.objects.filter(
