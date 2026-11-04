@@ -1654,16 +1654,21 @@ class ThreadSerializer(serializers.ModelSerializer):
             if self.instance is not None
             else attrs.get("escalation_reason")
         )
+        concern_was_provided = "other_concern" in attrs
         other_concern = (
             attrs.get("other_concern")
-            if "other_concern" in attrs
+            if concern_was_provided
             else (
                 self.instance.other_concern
                 if self.instance is not None
                 else None
             )
         )
-        if escalation_reason == Thread.EscalationReason.OTHER and not other_concern:
+        if (
+            escalation_reason == Thread.EscalationReason.OTHER
+            and not other_concern
+            and (self.instance is None or concern_was_provided)
+        ):
             raise serializers.ValidationError(
                 {"other_concern": "Other concern is required for this escalation reason."}
             )
