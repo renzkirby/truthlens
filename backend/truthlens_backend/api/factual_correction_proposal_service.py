@@ -15,7 +15,8 @@ from .evidence_snapshot_schema import (
     validate_evidence_snapshot,
 )
 from .factual_correction_proposal_schema import (
-    CURRENT_SCHEMA_VERSION as PROPOSAL_SCHEMA_VERSION,
+    LEGACY_SCHEMA_VERSION as LEGACY_PROPOSAL_SCHEMA_VERSION,
+    RICH_SCHEMA_VERSION as RICH_PROPOSAL_SCHEMA_VERSION,
     FactualCorrectionProposalSchemaError,
     validate_factual_correction_proposal,
 )
@@ -39,6 +40,7 @@ from .publishing_service import (
     PublishingAuthorizationError,
     PublishingConflict,
     _lock_publication_context,
+    _normalize_publication_rich_body,
     _normalize_source_urls,
     _validate_editorial_revision_chain,
 )
@@ -104,6 +106,7 @@ def _normalize_content(
     headline,
     summary,
     article_body,
+    article_body_rich,
     source_urls,
 ):
     valid_verdicts = {
@@ -117,13 +120,26 @@ def _normalize_content(
         raise InvalidFactualCorrectionProposal(str(error)) from error
     if not normalized_urls:
         raise InvalidFactualCorrectionProposal("At least one source URL is required.")
+    try:
+        normalized_rich, rich_plain = _normalize_publication_rich_body(
+            article_body_rich,
+            article_body=article_body,
+        )
+    except InvalidFactCheckContent as error:
+        raise InvalidFactualCorrectionProposal(str(error)) from error
+    normalized_article_body = (
+        rich_plain
+        if normalized_rich is not None
+        else _normalize_text(article_body, "article_body")
+    )
     return {
         "verdict": verdict,
         "canonical_claim": _normalize_text(canonical_claim, "canonical_claim"),
         "rationale": _normalize_text(rationale, "rationale"),
         "headline": _normalize_text(headline, "headline", max_length=300),
         "summary": _normalize_text(summary, "summary"),
-        "article_body": _normalize_text(article_body, "article_body"),
+        "article_body": normalized_article_body,
+        "article_body_rich": normalized_rich,
         "source_urls": normalized_urls,
     }
 
@@ -304,8 +320,9 @@ def save_factual_correction_proposal(
     rationale,
     headline,
     summary,
-    article_body,
-    source_urls,
+    article_body=None,
+    article_body_rich=None,
+    source_urls=None,
     verification_run_id=None,
 ):
     """Create or update the sole editable proposal for an active request."""
@@ -335,6 +352,7 @@ def save_factual_correction_proposal(
         headline=headline,
         summary=summary,
         article_body=article_body,
+        article_body_rich=article_body_rich,
         source_urls=source_urls,
     )
     if not actor or not actor.is_authenticated:
@@ -942,6 +960,11 @@ def prepare_factual_correction_proposal(
                 "headline": proposal.headline,
                 "summary": proposal.summary,
                 "article_body": proposal.article_body,
+                **(
+                    {"article_body_rich": proposal.article_body_rich}
+                    if proposal.article_body_rich is not None
+                    else {}
+                ),
             },
             "sources": _freeze_sources(
                 proposal.source_urls,
@@ -953,18 +976,23 @@ def prepare_factual_correction_proposal(
                 "prepared_at": prepared_at.isoformat(),
             },
         }
+        proposal_schema_version = (
+            RICH_PROPOSAL_SCHEMA_VERSION
+            if proposal.article_body_rich is not None
+            else LEGACY_PROPOSAL_SCHEMA_VERSION
+        )
         try:
             validate_factual_correction_proposal(
-                schema_version=PROPOSAL_SCHEMA_VERSION,
+                schema_version=proposal_schema_version,
                 payload=payload,
             )
         except FactualCorrectionProposalSchemaError as error:
             raise FactualCorrectionProposalConflict(
-                "The correction proposal could not be sealed as a valid v1 payload."
+                "The correction proposal could not be sealed as a valid payload."
             ) from error
 
         proposal.status = FactualCorrectionProposal.Status.PREPARED
-        proposal.prepared_payload_schema_version = PROPOSAL_SCHEMA_VERSION
+        proposal.prepared_payload_schema_version = proposal_schema_version
         proposal.prepared_payload = payload
         proposal.prepared_by = actor
         proposal.prepared_by_snapshot = actor_snapshot
@@ -995,7 +1023,7 @@ def prepare_factual_correction_proposal(
                 "correction_request_id": str(request.id),
                 "proposal_id": str(proposal.id),
                 "proposal_version": proposal.version,
-                "prepared_payload_schema_version": PROPOSAL_SCHEMA_VERSION,
+                "prepared_payload_schema_version": proposal_schema_version,
                 "predecessor_decision_id": str(context["decision"].id),
                 "predecessor_decision_revision": context["decision"].revision_number,
                 "predecessor_fact_check_id": str(context["fact_check"].id),
@@ -1028,7 +1056,7 @@ def prepare_factual_correction_proposal(
                 "predecessor_decision_revision": context["decision"].revision_number,
                 "predecessor_fact_check_id": str(context["fact_check"].pk),
                 "predecessor_fact_check_version": context["fact_check"].version,
-                "prepared_payload_schema_version": PROPOSAL_SCHEMA_VERSION,
+                "prepared_payload_schema_version": proposal_schema_version,
             },
         )
         return {"proposal": proposal, "event": event, "case": correction_case}
