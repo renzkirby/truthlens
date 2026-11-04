@@ -22,6 +22,9 @@ from .publication_snapshot_schema import (
     EDITORIAL_REVISION_SCHEMA_VERSION,
     FACTUAL_CORRECTION_SCHEMA_VERSION,
     FIRST_PUBLICATION_SCHEMA_VERSION,
+    RICH_EDITORIAL_REVISION_SCHEMA_VERSION,
+    RICH_FACTUAL_CORRECTION_SCHEMA_VERSION,
+    RICH_FIRST_PUBLICATION_SCHEMA_VERSION,
     PublicationSnapshotSchemaError,
     validate_publication_snapshot,
 )
@@ -170,18 +173,28 @@ def _record_state(fact_check):
         and payload["headline"] == fact_check.headline
         and payload["summary"] == fact_check.summary
         and payload["article_body"] == fact_check.article_body
+        and (
+            "article_body_rich" not in payload
+            or payload["article_body_rich"] == fact_check.article_body_rich
+        )
     )
     if not identity_is_valid:
         return RECORD_INVALID_SEAL
 
     revision_kind = _revision_kind(fact_check)
-    if snapshot.schema_version == FIRST_PUBLICATION_SCHEMA_VERSION:
+    if snapshot.schema_version in {
+        FIRST_PUBLICATION_SCHEMA_VERSION,
+        RICH_FIRST_PUBLICATION_SCHEMA_VERSION,
+    }:
         if (
             revision_kind != OfficialFactCheck.RevisionKind.INITIAL
             or fact_check.supersedes_id is not None
         ):
             return RECORD_INVALID_SEAL
-    elif snapshot.schema_version == EDITORIAL_REVISION_SCHEMA_VERSION:
+    elif snapshot.schema_version in {
+        EDITORIAL_REVISION_SCHEMA_VERSION,
+        RICH_EDITORIAL_REVISION_SCHEMA_VERSION,
+    }:
         predecessor = fact_check.supersedes
         predecessor_snapshot = (
             _publication_snapshot(predecessor) if predecessor is not None else None
@@ -214,7 +227,10 @@ def _record_state(fact_check):
             )
         ):
             return RECORD_INVALID_SEAL
-    elif snapshot.schema_version == FACTUAL_CORRECTION_SCHEMA_VERSION:
+    elif snapshot.schema_version in {
+        FACTUAL_CORRECTION_SCHEMA_VERSION,
+        RICH_FACTUAL_CORRECTION_SCHEMA_VERSION,
+    }:
         predecessor = fact_check.supersedes
         predecessor_snapshot = (
             _publication_snapshot(predecessor) if predecessor is not None else None
@@ -898,6 +914,7 @@ def get_organization_publication_detail(
             "headline": selected.headline,
             "summary": selected.summary,
             "article_body": selected.article_body,
+            "article_body_rich": selected.article_body_rich,
             "version": selected.version,
             "revision_kind": _revision_kind(selected),
             "publication_status": selected.publication_status,
