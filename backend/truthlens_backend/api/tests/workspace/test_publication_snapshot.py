@@ -532,6 +532,47 @@ class PublicationSnapshotTests(AdjudicationContractFixtures, TestCase):
             OfficialFactCheck.PublicationStatus.ARCHIVED,
         )
 
+    def test_rich_draft_updates_keep_projection_synced_and_plain_update_clears_rich(self):
+        context = self.make_decided_context()
+        draft = create_fact_check_draft(
+            decision=context["decision"],
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_decision_revision=context["decision"].revision_number,
+            headline="Rich editable draft",
+            summary="Draft summary.",
+            article_body="Initial plain body.",
+        )
+        rich_body = self.rich_article_body()
+
+        updated = update_fact_check_draft(
+            fact_check=draft,
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
+            article_body_rich=rich_body,
+        )
+        self.assertEqual(updated.article_body_rich, rich_body)
+        self.assertEqual(
+            updated.article_body,
+            "What we found\n\nThe reviewed source supports the conclusion.",
+        )
+
+        legacy_updated = update_fact_check_draft(
+            fact_check=updated,
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=updated.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
+            article_body="A legacy client replaced the article body.",
+        )
+        self.assertEqual(
+            legacy_updated.article_body,
+            "A legacy client replaced the article body.",
+        )
+        self.assertIsNone(legacy_updated.article_body_rich)
+
     def test_draft_edits_and_sealed_index_maintenance_remain_allowed(self):
         draft_context = self.make_decided_context()
         draft = create_fact_check_draft(
