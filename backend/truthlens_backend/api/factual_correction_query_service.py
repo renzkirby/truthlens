@@ -558,6 +558,7 @@ def _proposal_payload(proposal):
         "headline": proposal.headline,
         "summary": proposal.summary,
         "article_body": proposal.article_body,
+        "article_body_rich": proposal.article_body_rich,
         "source_urls": proposal.source_urls,
         "verification_run_id": (
             str(proposal.verification_run_id)
