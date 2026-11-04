@@ -4232,12 +4232,32 @@ class FactualCorrectionProposalSaveSerializer(serializers.Serializer):
         trim_whitespace=True,
     )
     summary = serializers.CharField(allow_blank=False, trim_whitespace=True)
-    article_body = serializers.CharField(allow_blank=False, trim_whitespace=True)
+    article_body = serializers.CharField(
+        required=False,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    article_body_rich = serializers.JSONField(required=False)
     source_urls = serializers.ListField(
         child=serializers.URLField(max_length=2000),
         allow_empty=False,
     )
     verification_run_id = serializers.UUIDField(required=False, allow_null=True)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        attrs = _apply_rich_text_projection(
+            self,
+            attrs,
+            rich_field="article_body_rich",
+            plain_field="article_body",
+            profile=PROFILE_PUBLICATION,
+        )
+        if not attrs.get("article_body"):
+            raise serializers.ValidationError(
+                {"article_body": "Article body is required."}
+            )
+        return attrs
 
 
 class FactualCorrectionConcurrencyMutationSerializer(serializers.Serializer):
@@ -4490,6 +4510,7 @@ class FactualCorrectionProposalReadSerializer(serializers.Serializer):
     headline = serializers.CharField()
     summary = serializers.CharField()
     article_body = serializers.CharField()
+    article_body_rich = serializers.JSONField(allow_null=True)
     source_urls = serializers.ListField(child=serializers.URLField())
     verification_run_id = serializers.UUIDField(allow_null=True)
     prepared_by = PublicationWorkflowActorSerializer(allow_null=True)
