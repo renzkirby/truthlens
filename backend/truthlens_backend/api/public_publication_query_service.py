@@ -9,6 +9,9 @@ from .publication_snapshot_schema import (
     EDITORIAL_REVISION_SCHEMA_VERSION,
     FACTUAL_CORRECTION_SCHEMA_VERSION,
     FIRST_PUBLICATION_SCHEMA_VERSION,
+    RICH_EDITORIAL_REVISION_SCHEMA_VERSION,
+    RICH_FACTUAL_CORRECTION_SCHEMA_VERSION,
+    RICH_FIRST_PUBLICATION_SCHEMA_VERSION,
     PublicationSnapshotSchemaError,
     validate_publication_snapshot,
 )
@@ -56,27 +59,45 @@ def _validated_payload(fact_check):
 
 def _revision_kind(fact_check):
     schema_version = fact_check.publication_snapshot.schema_version
-    if schema_version == FIRST_PUBLICATION_SCHEMA_VERSION:
+    if schema_version in {
+        FIRST_PUBLICATION_SCHEMA_VERSION,
+        RICH_FIRST_PUBLICATION_SCHEMA_VERSION,
+    }:
         return OfficialFactCheck.RevisionKind.INITIAL
-    if schema_version == EDITORIAL_REVISION_SCHEMA_VERSION:
+    if schema_version in {
+        EDITORIAL_REVISION_SCHEMA_VERSION,
+        RICH_EDITORIAL_REVISION_SCHEMA_VERSION,
+    }:
         return OfficialFactCheck.RevisionKind.EDITORIAL_REVISION
-    if schema_version == FACTUAL_CORRECTION_SCHEMA_VERSION:
+    if schema_version in {
+        FACTUAL_CORRECTION_SCHEMA_VERSION,
+        RICH_FACTUAL_CORRECTION_SCHEMA_VERSION,
+    }:
         return OfficialFactCheck.RevisionKind.FACTUAL_CORRECTION
     raise PublicPublicationNotFound("Publication not found.")
 
 
 def _revision_values(fact_check, payload):
     schema_version = fact_check.publication_snapshot.schema_version
-    if schema_version == FIRST_PUBLICATION_SCHEMA_VERSION:
+    if schema_version in {
+        FIRST_PUBLICATION_SCHEMA_VERSION,
+        RICH_FIRST_PUBLICATION_SCHEMA_VERSION,
+    }:
         return None
-    if schema_version == EDITORIAL_REVISION_SCHEMA_VERSION:
+    if schema_version in {
+        EDITORIAL_REVISION_SCHEMA_VERSION,
+        RICH_EDITORIAL_REVISION_SCHEMA_VERSION,
+    }:
         revision = payload["revision"]
         return {
             "kind": OfficialFactCheck.RevisionKind.EDITORIAL_REVISION,
             "reason": revision["revision_reason"],
             "requested_at": revision["revision_requested_at"],
         }
-    if schema_version == FACTUAL_CORRECTION_SCHEMA_VERSION:
+    if schema_version in {
+        FACTUAL_CORRECTION_SCHEMA_VERSION,
+        RICH_FACTUAL_CORRECTION_SCHEMA_VERSION,
+    }:
         correction = payload["correction"]
         return {
             "kind": OfficialFactCheck.RevisionKind.FACTUAL_CORRECTION,
@@ -181,6 +202,7 @@ def _detail_payload(*, organization, selected, current, lineage):
             "headline": selected_payload["headline"],
             "summary": selected_payload["summary"],
             "article_body": selected_payload["article_body"],
+            "article_body_rich": selected_payload.get("article_body_rich"),
             "version": selected_payload["article_version"],
             "revision_kind": _revision_kind(selected_item),
         },
