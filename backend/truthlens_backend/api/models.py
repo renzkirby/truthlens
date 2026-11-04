@@ -1652,6 +1652,7 @@ class Thread(models.Model):
     escalation_reason = models.CharField(
         max_length=20, choices=EscalationReason.choices, blank=True, null=True
     )
+    other_concern = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     moderator_verdict = models.CharField(max_length=20, blank=True, null=True)
     moderator_notes = models.TextField(blank=True, null=True)
