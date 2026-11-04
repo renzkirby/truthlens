@@ -22,6 +22,9 @@ from .publication_snapshot_schema import (
     EDITORIAL_REVISION_SCHEMA_VERSION as PUBLICATION_SNAPSHOT_REVISION_VERSION,
     FACTUAL_CORRECTION_SCHEMA_VERSION as PUBLICATION_SNAPSHOT_CORRECTION_VERSION,
     FIRST_PUBLICATION_SCHEMA_VERSION as PUBLICATION_SNAPSHOT_INITIAL_VERSION,
+    RICH_EDITORIAL_REVISION_SCHEMA_VERSION as PUBLICATION_SNAPSHOT_RICH_REVISION_VERSION,
+    RICH_FACTUAL_CORRECTION_SCHEMA_VERSION as PUBLICATION_SNAPSHOT_RICH_CORRECTION_VERSION,
+    RICH_FIRST_PUBLICATION_SCHEMA_VERSION as PUBLICATION_SNAPSHOT_RICH_INITIAL_VERSION,
     PublicationSnapshotSchemaError,
     validate_publication_snapshot,
 )
@@ -4100,6 +4103,9 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
     FIRST_PUBLICATION_SCHEMA_VERSION = PUBLICATION_SNAPSHOT_INITIAL_VERSION
     EDITORIAL_REVISION_SCHEMA_VERSION = PUBLICATION_SNAPSHOT_REVISION_VERSION
     FACTUAL_CORRECTION_SCHEMA_VERSION = PUBLICATION_SNAPSHOT_CORRECTION_VERSION
+    RICH_FIRST_PUBLICATION_SCHEMA_VERSION = PUBLICATION_SNAPSHOT_RICH_INITIAL_VERSION
+    RICH_EDITORIAL_REVISION_SCHEMA_VERSION = PUBLICATION_SNAPSHOT_RICH_REVISION_VERSION
+    RICH_FACTUAL_CORRECTION_SCHEMA_VERSION = PUBLICATION_SNAPSHOT_RICH_CORRECTION_VERSION
 
     id = models.UUIDField(
         primary_key=True,
@@ -4142,7 +4148,10 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
         correction_request=None,
         prepared_proposal=None,
     ):
-        if schema_version == cls.FIRST_PUBLICATION_SCHEMA_VERSION:
+        if schema_version in {
+            cls.FIRST_PUBLICATION_SCHEMA_VERSION,
+            cls.RICH_FIRST_PUBLICATION_SCHEMA_VERSION,
+        }:
             if (
                 fact_check.supersedes_id is not None
                 or fact_check.revision_kind
@@ -4154,7 +4163,10 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
                 raise ValidationError(
                     "Only an initial publication may use snapshot schema v1."
                 )
-        elif schema_version == cls.EDITORIAL_REVISION_SCHEMA_VERSION:
+        elif schema_version in {
+            cls.EDITORIAL_REVISION_SCHEMA_VERSION,
+            cls.RICH_EDITORIAL_REVISION_SCHEMA_VERSION,
+        }:
             if (
                 fact_check.revision_kind
                 != OfficialFactCheck.RevisionKind.EDITORIAL_REVISION
@@ -4162,7 +4174,10 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
                 raise ValidationError(
                     "Snapshot schema v2 requires an editorial revision."
                 )
-        elif schema_version == cls.FACTUAL_CORRECTION_SCHEMA_VERSION:
+        elif schema_version in {
+            cls.FACTUAL_CORRECTION_SCHEMA_VERSION,
+            cls.RICH_FACTUAL_CORRECTION_SCHEMA_VERSION,
+        }:
             if (
                 fact_check.revision_kind
                 != OfficialFactCheck.RevisionKind.FACTUAL_CORRECTION
@@ -4284,8 +4299,17 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
             "published_by": _publication_snapshot_user(fact_check.published_by),
             "sources": sources,
         }
+        if schema_version in {
+            cls.RICH_FIRST_PUBLICATION_SCHEMA_VERSION,
+            cls.RICH_EDITORIAL_REVISION_SCHEMA_VERSION,
+            cls.RICH_FACTUAL_CORRECTION_SCHEMA_VERSION,
+        }:
+            payload["article_body_rich"] = fact_check.article_body_rich
 
-        if schema_version == cls.EDITORIAL_REVISION_SCHEMA_VERSION:
+        if schema_version in {
+            cls.EDITORIAL_REVISION_SCHEMA_VERSION,
+            cls.RICH_EDITORIAL_REVISION_SCHEMA_VERSION,
+        }:
             predecessor = fact_check.supersedes
             if (
                 fact_check.revision_kind
@@ -4355,7 +4379,10 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
                     fact_check.revision_requested_at
                 ),
             }
-        elif schema_version == cls.FACTUAL_CORRECTION_SCHEMA_VERSION:
+        elif schema_version in {
+            cls.FACTUAL_CORRECTION_SCHEMA_VERSION,
+            cls.RICH_FACTUAL_CORRECTION_SCHEMA_VERSION,
+        }:
             predecessor = fact_check.supersedes
             new_decision = fact_check.adjudication_decision
             if (
