@@ -265,6 +265,33 @@ class ThreadDetailApiTests(TestCase):
             serializer.validated_data["caption"],
         )
 
+    def test_other_concern_requires_matching_other_escalation_reason(self):
+        claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="Structured other concern validation.",
+        )
+
+        missing = ThreadSerializer(
+            data={
+                "claim_id": str(claim.id),
+                "caption_rich": self.rich_text("Discussion context."),
+                "escalation_reason": Thread.EscalationReason.OTHER,
+            }
+        )
+        self.assertFalse(missing.is_valid())
+        self.assertIn("other_concern", missing.errors)
+
+        stray = ThreadSerializer(
+            data={
+                "claim_id": str(claim.id),
+                "caption_rich": self.rich_text("Discussion context."),
+                "escalation_reason": Thread.EscalationReason.UNVERIFIED_RESULT,
+                "other_concern": "This must not be stored for another reason.",
+            }
+        )
+        self.assertFalse(stray.is_valid())
+        self.assertIn("other_concern", stray.errors)
+
     def test_rich_thread_comment_and_evidence_serializers_derive_plain_text(self):
         _claim, thread = self._create_thread("rich serializer projection")
 
