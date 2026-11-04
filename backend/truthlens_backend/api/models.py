@@ -30,6 +30,8 @@ from .publication_snapshot_schema import (
 )
 from .factual_correction_proposal_schema import (
     CURRENT_SCHEMA_VERSION as FACTUAL_CORRECTION_PROPOSAL_SCHEMA_VERSION,
+    LEGACY_SCHEMA_VERSION as FACTUAL_CORRECTION_PROPOSAL_LEGACY_SCHEMA_VERSION,
+    RICH_SCHEMA_VERSION as FACTUAL_CORRECTION_PROPOSAL_RICH_SCHEMA_VERSION,
     FactualCorrectionProposalSchemaError,
     validate_factual_correction_proposal,
 )
@@ -4508,7 +4510,10 @@ class OfficialFactCheckPublicationSnapshot(models.Model):
                 or prepared_proposal.status
                 != FactualCorrectionProposal.Status.PREPARED
                 or prepared_proposal.prepared_payload_schema_version
-                != FACTUAL_CORRECTION_PROPOSAL_SCHEMA_VERSION
+                not in {
+                    FACTUAL_CORRECTION_PROPOSAL_LEGACY_SCHEMA_VERSION,
+                    FACTUAL_CORRECTION_PROPOSAL_RICH_SCHEMA_VERSION,
+                }
                 or prepared_proposal.prepared_payload is None
                 or prepared_proposal.prepared_at is None
             ):
