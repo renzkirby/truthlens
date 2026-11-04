@@ -784,6 +784,44 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.evaluate_gfc.assert_not_called()
         self.retrieve_tavily.assert_called_once()
 
+    def test_same_event_different_gfc_proposition_continues_to_tavily(self):
+        dart_claim = (
+            "NASA's DART spacecraft intentionally collided with Dimorphos, "
+            "the moonlet of asteroid Didymos, on September 26, 2022."
+        )
+        reviewed_claim = (
+            "A viral video authentically shows NASA's DART spacecraft "
+            "colliding with Dimorphos."
+        )
+        self.cleaned.update({
+            "cleaned_claim": dart_claim,
+            "search_query": "NASA DART Dimorphos September 26 2022",
+        })
+        self.clean.return_value = self.cleaned
+        self.gfc_payload["claims"][0]["text"] = reviewed_claim
+        self.retrieve_gfc.return_value = self.gfc_payload
+        self.relevance.side_effect = services.is_fact_check_relevant
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            return_value=json.dumps({
+                "reasoning": (
+                    "The reviewed claim is about footage authenticity and does "
+                    "not cover the submitted claim's intent and exact date."
+                ),
+                "is_relevant": False,
+            }),
+        ):
+            self._assert_terminal(
+                self._execute(),
+                VerificationRun.Status.COMPLETED,
+            )
+
+        self.relevance.assert_called_once_with(dart_claim, reviewed_claim)
+        self.evaluate_gfc.assert_not_called()
+        self.retrieve_tavily.assert_called_once()
+        self.assertEqual(self.save_claim.call_args.args[2], "Live Web Search")
+
     def test_gfc_evaluation_failure_continues_to_tavily(self):
         self.evaluate_persisted.side_effect = [
             RuntimeError("GFC evaluation unavailable"),
