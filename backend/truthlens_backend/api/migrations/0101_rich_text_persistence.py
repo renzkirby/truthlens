@@ -16,6 +16,11 @@ class Migration(migrations.Migration):
             field=models.JSONField(blank=True, null=True),
         ),
         migrations.AddField(
+            model_name="thread",
+            name="other_concern",
+            field=models.TextField(blank=True, null=True),
+        ),
+        migrations.AddField(
             model_name="evidencesubmission",
             name="evidence_caption_rich",
             field=models.JSONField(blank=True, null=True),
