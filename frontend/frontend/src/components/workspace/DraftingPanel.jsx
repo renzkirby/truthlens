@@ -10,6 +10,7 @@ import Button from "../ui/Button.jsx";
 import Input from "../ui/Input.jsx";
 import Textarea from "../ui/Textarea.jsx";
 import RichTextEditor from "../richtext/RichTextEditor.jsx";
+import RichTextRenderer from "../richtext/RichTextRenderer.jsx";
 
 import "./DraftingPanel.css";
 
@@ -2582,7 +2583,15 @@ function DraftingContent({
                                           {detail.summary || "No summary recorded."}
                                        </p>
                                        <div className="drafting-article-body">
-                                          {detail.article_body || "No article body was saved before abandonment."}
+                                          {detail.article_body ? (
+                                             <RichTextRenderer
+                                                value={detail.article_body_rich}
+                                                fallbackText={detail.article_body}
+                                                profile="publication"
+                                             />
+                                          ) : (
+                                             "No article body was saved before abandonment."
+                                          )}
                                        </div>
                                     </section>
                                  </>
@@ -2604,7 +2613,15 @@ function DraftingContent({
                                        {detail.summary || "No summary recorded."}
                                     </p>
                                     <div className="drafting-article-body">
-                                       {detail.article_body || "No article body recorded."}
+                                       {detail.article_body ? (
+                                          <RichTextRenderer
+                                             value={detail.article_body_rich}
+                                             fallbackText={detail.article_body}
+                                             profile="publication"
+                                          />
+                                       ) : (
+                                          "No article body recorded."
+                                       )}
                                     </div>
                                  </section>
                               ) : null}
