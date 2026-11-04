@@ -75,6 +75,56 @@ from .adjudication_provenance import (
     get_adjudication_decision_provenance,
     get_claim_adjudication_provenance,
 )
+from .rich_text_schema import (
+    PROFILE_COMMENT,
+    PROFILE_DISCUSSION,
+    PROFILE_EVIDENCE,
+    RichTextSchemaError,
+    normalize_rich_text_with_plain,
+)
+
+
+def _apply_rich_text_projection(
+    serializer,
+    attrs,
+    *,
+    rich_field,
+    plain_field,
+    profile,
+):
+    if rich_field in attrs:
+        rich_value = attrs[rich_field]
+        if rich_value is None:
+            attrs[rich_field] = None
+            if plain_field not in attrs and serializer.instance is None:
+                attrs[plain_field] = ""
+            return attrs
+        try:
+            normalized, plain = normalize_rich_text_with_plain(
+                rich_value,
+                profile=profile,
+            )
+        except RichTextSchemaError as error:
+            raise serializers.ValidationError(
+                {rich_field: str(error)}
+            ) from error
+
+        if plain_field in attrs and (attrs[plain_field] or "").strip() != plain:
+            raise serializers.ValidationError(
+                {
+                    plain_field: (
+                        "Plain text must match the server projection of the "
+                        "rich-text document."
+                    )
+                }
+            )
+        attrs[rich_field] = normalized
+        attrs[plain_field] = plain
+        return attrs
+
+    if serializer.instance is not None and plain_field in attrs:
+        attrs[rich_field] = None
+    return attrs
 
 
 class NotificationSerializer(serializers.ModelSerializer):
@@ -1582,7 +1632,13 @@ class ThreadSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"escalation_reason": "Cannot be changed after thread creation."}
             )
-        return attrs
+        return _apply_rich_text_projection(
+            self,
+            attrs,
+            rich_field="caption_rich",
+            plain_field="caption",
+            profile=PROFILE_DISCUSSION,
+        )
 
     class Meta:
         model = Thread
@@ -1593,6 +1649,7 @@ class ThreadSerializer(serializers.ModelSerializer):
             "claim_id",
             "author",
             "caption",
+            "caption_rich",
             "status",
             "recent_flag_reason",
             "escalation_reason",
@@ -2467,6 +2524,7 @@ class ThreadCommentSerializer(serializers.ModelSerializer):
             "parent_id",
             "reply_to_username",
             "comment_text",
+            "comment_rich",
             "commented_at",
             "like_count",
             "is_liked",
@@ -2496,7 +2554,13 @@ class ThreadCommentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"parent_id": "Parent comment must belong to the same thread."}
             )
-        return attrs
+        return _apply_rich_text_projection(
+            self,
+            attrs,
+            rich_field="comment_rich",
+            plain_field="comment_text",
+            profile=PROFILE_COMMENT,
+        )
 
 
 def _evidence_url_safety_payload(obj):
@@ -2676,6 +2740,16 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
         )
         return validated_data
 
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        return _apply_rich_text_projection(
+            self,
+            attrs,
+            rich_field="evidence_caption_rich",
+            plain_field="evidence_caption",
+            profile=PROFILE_EVIDENCE,
+        )
+
     def create(self, validated_data):
         return super().create(self._apply_url_metadata(validated_data))
 
@@ -2690,6 +2764,7 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
             "thread",
             "contributor",
             "evidence_caption",
+            "evidence_caption_rich",
             "evidence_url",
             "evidence_type",
             "evidence_verdict",
@@ -2792,6 +2867,7 @@ class ThreadDetailEvidenceSubmissionSerializer(serializers.ModelSerializer):
             "id",
             "contributor",
             "evidence_caption",
+            "evidence_caption_rich",
             "evidence_url",
             "evidence_type",
             "evidence_verdict",
@@ -2841,6 +2917,7 @@ class ThreadDetailSerializer(serializers.ModelSerializer):
             "claim",
             "author",
             "caption",
+            "caption_rich",
             "escalation_reason",
             "status",
             "created_at",
@@ -3162,7 +3239,7 @@ class AdjudicationCaseDetailUserSerializer(serializers.ModelSerializer):
 class AdjudicationCaseDetailThreadSerializer(serializers.ModelSerializer):
     class Meta:
         model = Thread
-        fields = ["id", "caption", "created_at"]
+        fields = ["id", "caption", "caption_rich", "created_at"]
         read_only_fields = fields
 
 
@@ -3246,6 +3323,7 @@ class AdjudicationCaseDetailEvidenceSerializer(serializers.ModelSerializer):
             "review_basis",
             "thread_id",
             "evidence_caption",
+            "evidence_caption_rich",
             "evidence_type",
             "evidence_type_label",
             "evidence_status",
