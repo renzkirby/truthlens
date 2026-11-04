@@ -256,6 +256,37 @@ class FactualCorrectionPublicationSchemaTests(
             payload=revision.publication_snapshot.payload,
         )
 
+    def test_rich_v6_payload_accepts_sealed_v2_proposal(self):
+        context = self.make_proposal_context(suffix="schema-rich-v6")
+        rich_body = self.rich_article_body()
+        proposal = self.save_proposal(
+            context,
+            article_body=None,
+            article_body_rich=rich_body,
+        )
+        context["prepared_proposal"] = self.prepare_proposal(
+            context,
+            proposal,
+        )["proposal"]
+
+        corrected = self.finalize_prepared_correction(context)
+        seal = corrected.publication_snapshot
+
+        self.assertEqual(
+            seal.schema_version,
+            RICH_FACTUAL_CORRECTION_SCHEMA_VERSION,
+        )
+        self.assertEqual(seal.payload["article_body_rich"], rich_body)
+        self.assertEqual(
+            seal.payload["correction"]["prepared_payload_schema_version"],
+            context["prepared_proposal"].prepared_payload_schema_version,
+        )
+        validate_publication_snapshot(
+            schema_version=seal.schema_version,
+            payload=seal.payload,
+        )
+        seal.full_clean()
+
     def test_v3_schema_rejects_missing_unknown_malformed_or_inconsistent_fields(self):
         context = self.make_prepared_context(suffix="schema-strict")
         corrected = self.finalize_prepared_correction(context)
