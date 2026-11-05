@@ -216,6 +216,32 @@ class ThreadDetailApiTests(TestCase):
             Thread.EscalationReason.UNVERIFIED_RESULT,
         )
 
+    def test_nonclaimable_claims_cannot_start_community_threads(self):
+        for claimability_status in (
+            Claim.ClaimabilityStatus.PENDING,
+            Claim.ClaimabilityStatus.INSUFFICIENT_CONTEXT,
+            Claim.ClaimabilityStatus.OUT_OF_SCOPE,
+        ):
+            with self.subTest(claimability_status=claimability_status):
+                claim = Claim.objects.create(
+                    claim_type=Claim.ClaimType.TEXT,
+                    context_text=f"Nonclaimable {claimability_status} submission.",
+                    claimability_status=claimability_status,
+                )
+
+                response = self.client.post(
+                    reverse("thread-list"),
+                    {
+                        "claim_id": str(claim.id),
+                        "caption": "Please verify this.",
+                        "escalation_reason": Thread.EscalationReason.UNVERIFIED_RESULT,
+                    },
+                    format="json",
+                )
+
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertFalse(Thread.objects.filter(claim=claim).exists())
+
     def test_thread_serializer_accepts_unverified_result_escalation_reason(self):
         claim = Claim.objects.create(
             claim_type=Claim.ClaimType.TEXT,
