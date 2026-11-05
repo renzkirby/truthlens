@@ -509,6 +509,18 @@ function DeepAnalysisPage() {
       );
    }
 
+   if (runStatus === "ABSTAINED" && statusData?.abstention_reason === "INSUFFICIENT_CONTEXT") {
+      return (
+         <DeepAnalysisTerminalState
+            tone="neutral"
+            icon="help-circle"
+            title="More context needed"
+            detail="TruthLens stopped before evidence retrieval because it could not identify one stable factual proposition without making assumptions. Return to Verify, add identifying context, and submit the claim again."
+            onBack={handleBack}
+         />
+      );
+   }
+
    if (runStatus === "ABSTAINED") {
       return (
          <DeepAnalysisTerminalState
