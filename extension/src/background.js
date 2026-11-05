@@ -357,7 +357,7 @@ function startPollingClaim({
          ) {
             stopWithError(
                "TruthLens needs more context before it can verify this claim. Add identifying details such as the full person or organization name and any relevant event, amount, date, or location, then try again.",
-               "unsupported",
+               "needs_context",
             );
             return;
          }
