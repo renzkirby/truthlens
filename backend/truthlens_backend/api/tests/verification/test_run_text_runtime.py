@@ -436,6 +436,34 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.assertEqual(self.claim.ai_summary, self.verdict["summary"])
         self.assertFalse(run.telemetry_events.exists())
 
+    def test_insufficient_context_abstains_before_any_evidence_retrieval(self):
+        self.cleaned = {
+            "cleaned_claim": "INSUFFICIENT_CONTEXT",
+            "search_query": "",
+            "search_queries": [],
+            "article_stance": "NEUTRAL",
+        }
+        self.clean.return_value = self.cleaned
+
+        run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.ABSTAINED)
+        self.assertEqual(
+            run.abstention_reason,
+            VerificationRun.AbstentionReason.INSUFFICIENT_CONTEXT,
+        )
+        self.claim.refresh_from_db()
+        self.assertEqual(
+            self.claim.claimability_status,
+            Claim.ClaimabilityStatus.INSUFFICIENT_CONTEXT,
+        )
+        self.assertIsNone(self.claim.ai_verdict)
+        self.vault.assert_not_called()
+        self.retrieve_gfc.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
+        self.evaluate_persisted.assert_not_called()
+        self.assess_evidence.assert_not_called()
+
     def test_out_of_scope_abstains_without_persisting_verdict(self):
         self.cleaned["cleaned_claim"] = "OUT_OF_SCOPE"
 
