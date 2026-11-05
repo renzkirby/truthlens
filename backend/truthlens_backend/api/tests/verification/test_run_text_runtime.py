@@ -132,7 +132,7 @@ class VerificationRunTextRuntimeTests(TestCase):
             ),
         )
         self._patch("api.embedding_service.generate_embedding", return_value=None)
-        self._patch("api.tasks._log_stage")
+        self.log_stage = self._patch("api.tasks._log_stage")
         self.save_claim = self._patch("api.tasks._save_claim", wraps=tasks._save_claim)
         self.create_run = self._patch(
             "api.tasks.create_verification_run", wraps=runs.create_verification_run
@@ -470,6 +470,16 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.retrieve_tavily.assert_not_called()
         self.evaluate_persisted.assert_not_called()
         self.assess_evidence.assert_not_called()
+        core_total_calls = [
+            call
+            for call in self.log_stage.call_args_list
+            if len(call.args) >= 2 and call.args[1] == "core_text_pipeline_total"
+        ]
+        self.assertEqual(len(core_total_calls), 1)
+        self.assertEqual(
+            core_total_calls[0].kwargs.get("outcome"),
+            "abstained_insufficient_context",
+        )
 
     def test_out_of_scope_abstains_without_persisting_verdict(self):
         self.cleaned["cleaned_claim"] = "OUT_OF_SCOPE"
