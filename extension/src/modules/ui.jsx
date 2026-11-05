@@ -830,6 +830,11 @@ export function displayErrorCard(message, { kind = "service" } = {}) {
          heading: "Verification cancelled",
          footer: "No verdict was generated. Start a new scan if you still want to verify this content.",
       },
+      needs_context: {
+         badge: "MORE CONTEXT",
+         heading: "More context needed",
+         footer: "Verification stopped before evidence retrieval so TruthLens would not guess what the claim meant.",
+      },
       unsupported: {
          badge: "NO CONCLUSION",
          heading: "No supported conclusion",
@@ -848,6 +853,12 @@ export function displayErrorCard(message, { kind = "service" } = {}) {
    const badgeLabel = presentation.badge;
    const heading = presentation.heading;
    const footer = presentation.footer;
+   const isNeedsContext = kind === "needs_context";
+   const badgeBackground = isNeedsContext ? "#eef2ff" : "#fef2f2";
+   const badgeColor = isNeedsContext ? "#4338ca" : "#b91c1c";
+   const iconBackground = isNeedsContext ? "#eef2ff" : "#fef2f2";
+   const iconColor = isNeedsContext ? "#4f46e5" : "#dc2626";
+   const statusIcon = isNeedsContext ? iconHelp : iconAlert;
    document.querySelectorAll("#truthlens-error-card").forEach((errorCard) => {
       errorCard.remove();
    });
@@ -865,8 +876,8 @@ export function displayErrorCard(message, { kind = "service" } = {}) {
                   align-items: center;
                   padding: 3px 7px;
                   border-radius: 999px;
-                  background: #fef2f2;
-                  color: #b91c1c;
+                  background: ${badgeBackground};
+                  color: ${badgeColor};
                   font-size: 9px;
                   font-weight: 700;
                   letter-spacing: 0.06em;
@@ -918,11 +929,11 @@ export function displayErrorCard(message, { kind = "service" } = {}) {
                align-items: center;
                justify-content: center;
                border-radius: 10px;
-               background: #fef2f2;
-               color: #dc2626;
+               background: ${iconBackground};
+               color: ${iconColor};
             "
          >
-            ${iconAlert}
+            ${statusIcon}
          </div>
 
          <div style="min-width: 0; flex: 1;">
