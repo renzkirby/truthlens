@@ -167,6 +167,7 @@ function NavigationBar() {
                         setNotificationsOpen(false);
                         setIsOpen((v) => !v);
                      }}
+                     aria-label={`Account menu for ${user?.username || "your account"}`}
                      aria-expanded={isOpen}
                      aria-controls={ACCOUNT_PANEL_ID}
                   >
