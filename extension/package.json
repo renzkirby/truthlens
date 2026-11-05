@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run build:production",
     "lint": "eslint .",
     "test:errors": "node --test src/modules/userFacingError.test.js",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:local": "vite build --mode development",
+    "build:production": "vite build --mode production"
   },
   "dependencies": {
     "@fontsource-variable/mona-sans": "^5.3.0",
