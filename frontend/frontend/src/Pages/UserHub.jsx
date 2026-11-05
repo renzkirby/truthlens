@@ -395,8 +395,8 @@ const VerdictBadge = ({ verdict, claimabilityStatus }) => {
          bg: "#eef2ff",
          text: "#3730a3",
          border: "#6366f1",
-         label: "Checking",
-         Icon: "loader",
+         label: "Not assessed",
+         Icon: "info",
       },
       INSUFFICIENT_CONTEXT: {
          bg: "#fff7ed",
