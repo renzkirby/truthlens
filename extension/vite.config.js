@@ -19,6 +19,15 @@ export default defineConfig(({ mode }) => {
    }
 
    const buildManifest = JSON.parse(JSON.stringify(manifest));
+   if (isLocalBuild) {
+      buildManifest.name = "TruthLens Local";
+      buildManifest.version_name = `${manifest.version}-local`;
+      buildManifest.action = {
+         ...buildManifest.action,
+         default_title: "TruthLens Local",
+      };
+   }
+
    buildManifest.host_permissions = isLocalBuild
       ? [
            "http://localhost:8000/*",
