@@ -174,6 +174,40 @@ class VerificationAssignmentServiceTests(TestCase):
             1,
         )
 
+    def test_nonclaimable_claims_never_enter_shared_intake(self):
+        for claimability_status in (
+            Claim.ClaimabilityStatus.PENDING,
+            Claim.ClaimabilityStatus.INSUFFICIENT_CONTEXT,
+            Claim.ClaimabilityStatus.OUT_OF_SCOPE,
+        ):
+            with self.subTest(claimability_status=claimability_status):
+                claim = Claim.objects.create(
+                    claim_type=Claim.ClaimType.TEXT,
+                    context_text=f"Nonclaimable {claimability_status} fixture.",
+                    claimability_status=claimability_status,
+                )
+
+                self.assertIsNone(
+                    ensure_verification_assignment(claim=claim)
+                )
+
+    def test_available_intake_hides_nonclaimable_existing_assignment(self):
+        claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="Legacy race fixture.",
+            claimability_status=Claim.ClaimabilityStatus.INSUFFICIENT_CONTEXT,
+        )
+        assignment = VerificationAssignment.objects.create(
+            claim=claim,
+            status=VerificationAssignment.Status.AVAILABLE,
+        )
+
+        visible_ids = set(
+            get_available_verification_assignments().values_list("id", flat=True)
+        )
+
+        self.assertNotIn(assignment.id, visible_ids)
+
     def test_cache_only_claim_remains_eligible_for_intake(
         self,
     ):
