@@ -101,6 +101,13 @@ class ClaimPersistenceError(RuntimeError):
     """Raised when automated analysis cannot be persisted to a Claim."""
 
 
+def _set_claimability_status(claim_id, status):
+    """Persist input claimability without mutating verdict or evidence state."""
+    if status not in Claim.ClaimabilityStatus.values:
+        raise ValueError("Unsupported claimability status")
+    Claim.objects.filter(pk=claim_id).update(claimability_status=status)
+
+
 def _schedule_subject_classification(claim_id):
     """Best effort: never turn a classification outage into a fact-check failure."""
     try:
@@ -124,7 +131,11 @@ def _persist_subject_classification_input(claim_id, context_text):
     if classification_mode() == "off" or not isinstance(context_text, str):
         return False
     normalized_text = context_text.strip()
-    if not normalized_text or normalized_text == "OUT_OF_SCOPE":
+    if normalized_text in {
+        "",
+        "OUT_OF_SCOPE",
+        "INSUFFICIENT_CONTEXT",
+    }:
         return False
 
     try:
@@ -409,7 +420,14 @@ def _resolve_exact_published_claim(
             if reference is None:
                 return False
             claim.context_text = cleaned_claim
-            claim.save(update_fields=["context_text", "last_updated"])
+            claim.claimability_status = Claim.ClaimabilityStatus.CLAIMABLE
+            claim.save(
+                update_fields=[
+                    "context_text",
+                    "claimability_status",
+                    "last_updated",
+                ]
+            )
             if schedule_classification:
                 # Fallback for authority paths reached before normal ClaimGate
                 # normalization/early dispatch.
@@ -438,7 +456,14 @@ def _resolve_equivalent_published_claim(
             if reference is None:
                 return False
             claim.context_text = cleaned_claim
-            claim.save(update_fields=["context_text", "last_updated"])
+            claim.claimability_status = Claim.ClaimabilityStatus.CLAIMABLE
+            claim.save(
+                update_fields=[
+                    "context_text",
+                    "claimability_status",
+                    "last_updated",
+                ]
+            )
             if schedule_classification:
                 # Fallback for authority paths reached before normal ClaimGate
                 # normalization/early dispatch.
@@ -1222,6 +1247,10 @@ def snippet_fact_check_process(
     if not ocr_result:
         # If there is no text, BUT it is an AI image, give them a verdict!
         if is_deepfake:
+            _set_claimability_status(
+                claim_id,
+                Claim.ClaimabilityStatus.CLAIMABLE,
+            )
             ai_verdict = {
                 "verdict": "MISLEADING",
                 "summary": f"This image contains no verifiable text, but forensic analysis indicates with {int(ai_prob * 100)}% confidence that the image itself is AI-generated ({fake_category}).",
@@ -1338,15 +1367,9 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
             published_resolution = True
             return
 
-        # Preserve the historical TEXT/non-IMAGE ordering. IMAGE claims defer
-        # automated cache reuse until canonical publication authority has had
-        # the first opportunity to resolve the claim.
-        if has_second_chance_match and not is_image_claim:
-            selected_verdict = _reuse_second_chance_ai_analysis(
-                matched_claim,
-                claim_id,
-            )
-            return
+        # Automated cache reuse is intentionally deferred until the current
+        # input has passed ClaimGate. Exact published IMAGE authority above is
+        # deterministic proposition identity and remains a safe early exit.
         # -------------------------------------------
 
         outcome = "completed"
@@ -1368,6 +1391,10 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
 
             if cleaned_claim == "OUT_OF_SCOPE":
                 logger.info("Claim %s was gated as out of scope.", claim_id)
+                _set_claimability_status(
+                    claim_id,
+                    Claim.ClaimabilityStatus.OUT_OF_SCOPE,
+                )
                 outcome = "abstained_out_of_scope"
                 selected_verdict = "OUT_OF_SCOPE"
                 _log_stage(
@@ -1378,8 +1405,36 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 )
                 return
 
+            if cleaned_claim == "INSUFFICIENT_CONTEXT":
+                logger.info("Claim %s needs more context.", claim_id)
+                _set_claimability_status(
+                    claim_id,
+                    Claim.ClaimabilityStatus.INSUFFICIENT_CONTEXT,
+                )
+                outcome = "abstained_insufficient_context"
+                selected_verdict = "INSUFFICIENT_CONTEXT"
+                _log_stage(
+                    claim_id,
+                    "core_text_pipeline_total",
+                    pipeline_started_at,
+                    outcome=outcome,
+                )
+                return
+
+            _set_claimability_status(
+                claim_id,
+                Claim.ClaimabilityStatus.CLAIMABLE,
+            )
             _persist_subject_classification_input(claim_id, cleaned_claim)
             target_claim = Claim.objects.filter(id=claim_id).first()
+
+            if has_second_chance_match and not is_image_claim:
+                selected_verdict = _reuse_second_chance_ai_analysis(
+                    matched_claim,
+                    claim_id,
+                    schedule_classification=False,
+                )
+                return
 
             # TEXT and IMAGE claims share the same publication-authority rule:
             # semantic/full-text Vault similarity only discovers candidates. A
@@ -1959,7 +2014,11 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         abstention_reason=(
                             VerificationRun.AbstentionReason.OUT_OF_SCOPE
                             if selected_verdict == "OUT_OF_SCOPE"
-                            else None
+                            else (
+                                VerificationRun.AbstentionReason.INSUFFICIENT_CONTEXT
+                                if selected_verdict == "INSUFFICIENT_CONTEXT"
+                                else None
+                            )
                         ),
                     )
             except Exception:
@@ -2155,18 +2214,39 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
         search_queries = _claim_gate_retrieval_queries(result)
         article_stance = result.get("article_stance", "NEUTRAL")
 
-        # Step 2 — OUT_OF_SCOPE check
-        if (
-            not isinstance(cleaned_claim, str)
-            or not cleaned_claim.strip()
-            or cleaned_claim == "OUT_OF_SCOPE"
-        ):
+        # Step 2 — claimability gate
+        if not isinstance(cleaned_claim, str) or not cleaned_claim.strip():
+            logger.info("Claim %s has no usable gated claim.", claim_id)
+            outcome = "url_content_insufficient"
+            _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
+            return
+
+        if cleaned_claim == "OUT_OF_SCOPE":
             logger.info("Claim %s was gated as out of scope.", claim_id)
+            _set_claimability_status(
+                claim_id,
+                Claim.ClaimabilityStatus.OUT_OF_SCOPE,
+            )
             outcome = "abstained_out_of_scope"
             selected_verdict = "OUT_OF_SCOPE"
             _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
             return
 
+        if cleaned_claim == "INSUFFICIENT_CONTEXT":
+            logger.info("URL claim %s needs more context.", claim_id)
+            _set_claimability_status(
+                claim_id,
+                Claim.ClaimabilityStatus.INSUFFICIENT_CONTEXT,
+            )
+            outcome = "abstained_insufficient_context"
+            selected_verdict = "INSUFFICIENT_CONTEXT"
+            _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
+            return
+
+        _set_claimability_status(
+            claim_id,
+            Claim.ClaimabilityStatus.CLAIMABLE,
+        )
         _persist_subject_classification_input(claim_id, cleaned_claim)
         target_claim = Claim.objects.filter(id=claim_id).first()
 
@@ -2683,7 +2763,11 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         abstention_reason=(
                             VerificationRun.AbstentionReason.OUT_OF_SCOPE
                             if selected_verdict == "OUT_OF_SCOPE"
-                            else None
+                            else (
+                                VerificationRun.AbstentionReason.INSUFFICIENT_CONTEXT
+                                if selected_verdict == "INSUFFICIENT_CONTEXT"
+                                else None
+                            )
                         ),
                     )
             except Exception:
