@@ -340,13 +340,21 @@ class VerificationRunTextRuntimeTests(TestCase):
             allow_semantic_fallback=False,
         )
 
-    def test_cached_substantive_ai_verdicts_complete_and_preserve_ai_fields(self):
+    def test_cached_substantive_ai_verdicts_reuse_only_after_claim_gate(self):
         for verdict in ("FACT", "FAKE", "MISLEADING", "SATIRE"):
             with self.subTest(verdict=verdict):
                 cached = self._cached_claim(verdict)
+                clean_before = self.clean.call_count
+
                 run = self._execute()
+
                 self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+                self.assertEqual(self.clean.call_count, clean_before + 1)
                 self.claim.refresh_from_db()
+                self.assertEqual(
+                    self.claim.claimability_status,
+                    Claim.ClaimabilityStatus.CLAIMABLE,
+                )
                 for field in (
                     "ai_verdict", "ai_summary", "consensus_score",
                     "source_type", "source_link", "top_verdict_source", "ai_sources",
@@ -358,7 +366,6 @@ class VerificationRunTextRuntimeTests(TestCase):
                     self.claim.score_context,
                     "This result was matched from a prior analysis of the same claim.",
                 )
-        self.clean.assert_not_called()
         self.retrieve_gfc.assert_not_called()
         self.retrieve_tavily.assert_not_called()
         self.save_claim.assert_not_called()
