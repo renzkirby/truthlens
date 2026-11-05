@@ -2267,7 +2267,8 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         original_save = Claim.save
 
         def fail_context_save(claim, *args, **kwargs):
-            if kwargs.get("update_fields") == ["context_text", "last_updated"]:
+            update_fields = set(kwargs.get("update_fields") or [])
+            if {"context_text", "claimability_status", "last_updated"} <= update_fields:
                 raise RuntimeError("Context storage failed")
             return original_save(claim, *args, **kwargs)
 
@@ -2275,6 +2276,8 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             with self.assertRaises(tasks.ClaimPersistenceError):
                 self.image()
         self.assert_no_target_verdicts()
+        self.target.refresh_from_db()
+        self.assertIsNone(self.target.claimability_status)
         self.assertFalse(self.target.fact_check_references.exists())
         self.assertFalse(KnowledgeReuseEvent.objects.exists())
         self.assertEqual(
@@ -2792,7 +2795,8 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         original_save = Claim.save
 
         def fail_context_save(claim, *args, **kwargs):
-            if kwargs.get("update_fields") == ["context_text", "last_updated"]:
+            update_fields = set(kwargs.get("update_fields") or [])
+            if {"context_text", "claimability_status", "last_updated"} <= update_fields:
                 raise RuntimeError("Context storage failed")
             return original_save(claim, *args, **kwargs)
 
@@ -2800,6 +2804,8 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             with self.assertRaises(tasks.ClaimPersistenceError):
                 self.image()
         self.assertFalse(self.target.fact_check_references.exists())
+        self.target.refresh_from_db()
+        self.assertIsNone(self.target.claimability_status)
         self.assert_no_target_verdicts()
         self.image_gfc.assert_not_called()
         self.assertEqual(
