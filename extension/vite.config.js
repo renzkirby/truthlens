@@ -10,14 +10,50 @@ export default defineConfig(({ mode }) => {
    const extensionEnv = loadEnv(mode, extensionRoot, "VITE_");
    const apiBaseUrl = extensionEnv.VITE_EXTENSION_API_BASE_URL?.trim();
    const webAppBaseUrl = extensionEnv.VITE_EXTENSION_WEB_APP_BASE_URL?.trim();
+   const isLocalBuild = mode === "development";
 
-   if (mode === "production" && (!apiBaseUrl || !webAppBaseUrl)) {
+   if (!apiBaseUrl || !webAppBaseUrl) {
       throw new Error(
-         "VITE_EXTENSION_API_BASE_URL and VITE_EXTENSION_WEB_APP_BASE_URL are required for production extension builds.",
+         "VITE_EXTENSION_API_BASE_URL and VITE_EXTENSION_WEB_APP_BASE_URL are required for extension builds.",
       );
    }
 
+   const buildManifest = JSON.parse(JSON.stringify(manifest));
+   if (isLocalBuild) {
+      buildManifest.name = "TruthLens Local";
+      buildManifest.version_name = `${manifest.version}-local`;
+      buildManifest.action = {
+         ...buildManifest.action,
+         default_title: "TruthLens Local",
+      };
+   }
+
+   buildManifest.host_permissions = isLocalBuild
+      ? [
+           "http://localhost:8000/*",
+           "http://127.0.0.1:8000/*",
+        ]
+      : [
+           "https://api.truthlens.social/*",
+        ];
+
+   const authBridgeResources = buildManifest.web_accessible_resources?.find(
+      (entry) => entry.resources?.includes("auth-bridge.js"),
+   );
+   if (authBridgeResources) {
+      authBridgeResources.matches = isLocalBuild
+         ? [
+              "http://localhost:5174/*",
+              "http://127.0.0.1:5174/*",
+           ]
+         : [
+              "https://truthlens-dev.vercel.app/*",
+              "https://truthlens.social/*",
+              "https://www.truthlens.social/*",
+           ];
+   }
+
    return {
-      plugins: [react(), crx({ manifest })],
+      plugins: [react(), crx({ manifest: buildManifest })],
    };
 });

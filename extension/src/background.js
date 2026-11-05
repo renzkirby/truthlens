@@ -353,6 +353,17 @@ function startPollingClaim({
 
          if (
             claim.run_status === "ABSTAINED" &&
+            claim.abstention_reason === "INSUFFICIENT_CONTEXT"
+         ) {
+            stopWithError(
+               "TruthLens needs more context before it can verify this claim. Add identifying details such as the full person or organization name and any relevant event, amount, date, or location, then try again.",
+               "needs_context",
+            );
+            return;
+         }
+
+         if (
+            claim.run_status === "ABSTAINED" &&
             !(claim.abstention_reason === "OUT_OF_SCOPE" && claim.verdict === "OUT_OF_SCOPE")
          ) {
             stopWithError(

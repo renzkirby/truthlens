@@ -456,7 +456,7 @@ def _valid_claim_gate(raw):
         return False
     if not isinstance(query, str) or not isinstance(queries, list):
         return False
-    if claim == "OUT_OF_SCOPE":
+    if claim in {"OUT_OF_SCOPE", "INSUFFICIENT_CONTEXT"}:
         return not queries and not query.strip()
     if not query.strip() or not 1 <= len(queries) <= 3:
         return False

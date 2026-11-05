@@ -132,7 +132,7 @@ class VerificationRunTextRuntimeTests(TestCase):
             ),
         )
         self._patch("api.embedding_service.generate_embedding", return_value=None)
-        self._patch("api.tasks._log_stage")
+        self.log_stage = self._patch("api.tasks._log_stage")
         self.save_claim = self._patch("api.tasks._save_claim", wraps=tasks._save_claim)
         self.create_run = self._patch(
             "api.tasks.create_verification_run", wraps=runs.create_verification_run
@@ -340,13 +340,21 @@ class VerificationRunTextRuntimeTests(TestCase):
             allow_semantic_fallback=False,
         )
 
-    def test_cached_substantive_ai_verdicts_complete_and_preserve_ai_fields(self):
+    def test_cached_substantive_ai_verdicts_reuse_only_after_claim_gate(self):
         for verdict in ("FACT", "FAKE", "MISLEADING", "SATIRE"):
             with self.subTest(verdict=verdict):
                 cached = self._cached_claim(verdict)
+                clean_before = self.clean.call_count
+
                 run = self._execute()
+
                 self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+                self.assertEqual(self.clean.call_count, clean_before + 1)
                 self.claim.refresh_from_db()
+                self.assertEqual(
+                    self.claim.claimability_status,
+                    Claim.ClaimabilityStatus.CLAIMABLE,
+                )
                 for field in (
                     "ai_verdict", "ai_summary", "consensus_score",
                     "source_type", "source_link", "top_verdict_source", "ai_sources",
@@ -358,7 +366,6 @@ class VerificationRunTextRuntimeTests(TestCase):
                     self.claim.score_context,
                     "This result was matched from a prior analysis of the same claim.",
                 )
-        self.clean.assert_not_called()
         self.retrieve_gfc.assert_not_called()
         self.retrieve_tavily.assert_not_called()
         self.save_claim.assert_not_called()
@@ -435,6 +442,44 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.assertEqual(self.claim.ai_verdict, self.verdict["verdict"])
         self.assertEqual(self.claim.ai_summary, self.verdict["summary"])
         self.assertFalse(run.telemetry_events.exists())
+
+    def test_insufficient_context_abstains_before_any_evidence_retrieval(self):
+        self.cleaned = {
+            "cleaned_claim": "INSUFFICIENT_CONTEXT",
+            "search_query": "",
+            "search_queries": [],
+            "article_stance": "NEUTRAL",
+        }
+        self.clean.return_value = self.cleaned
+
+        run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.ABSTAINED)
+        self.assertEqual(
+            run.abstention_reason,
+            VerificationRun.AbstentionReason.INSUFFICIENT_CONTEXT,
+        )
+        self.claim.refresh_from_db()
+        self.assertEqual(
+            self.claim.claimability_status,
+            Claim.ClaimabilityStatus.INSUFFICIENT_CONTEXT,
+        )
+        self.assertIsNone(self.claim.ai_verdict)
+        self.vault.assert_not_called()
+        self.retrieve_gfc.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
+        self.evaluate_persisted.assert_not_called()
+        self.assess_evidence.assert_not_called()
+        core_total_calls = [
+            call
+            for call in self.log_stage.call_args_list
+            if len(call.args) >= 2 and call.args[1] == "core_text_pipeline_total"
+        ]
+        self.assertEqual(len(core_total_calls), 1)
+        self.assertEqual(
+            core_total_calls[0].kwargs.get("outcome"),
+            "abstained_insufficient_context",
+        )
 
     def test_out_of_scope_abstains_without_persisting_verdict(self):
         self.cleaned["cleaned_claim"] = "OUT_OF_SCOPE"

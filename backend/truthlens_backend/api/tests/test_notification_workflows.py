@@ -428,6 +428,23 @@ class VerificationNotificationTests(TestCase):
         self.assertIn("sufficiently verifiable public factual claim", row.message)
         self.assertNotIn("without enough evidence", row.message)
 
+    def test_insufficient_context_abstention_requests_more_context(self):
+        run = self.started()
+        with self.captureOnCommitCallbacks(execute=True):
+            run = runs.abstain_verification_run(
+                run,
+                abstention_reason=(
+                    VerificationRun.AbstentionReason.INSUFFICIENT_CONTEXT
+                ),
+            )
+
+        row = Notification.objects.get(
+            dedupe_key=f"verification-run:{run.pk}:finished"
+        )
+        self.assertEqual(row.title, "More context is needed to verify your claim")
+        self.assertIn("stopped before evidence verification", row.message)
+        self.assertNotIn("without enough evidence", row.message)
+
     def test_completion_does_not_fabricate_a_claim_verdict(self):
         with self.captureOnCommitCallbacks(execute=True):
             runs.complete_verification_run(self.started())

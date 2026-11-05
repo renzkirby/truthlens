@@ -145,7 +145,12 @@ def _hamming_distance(hash1, hash2):
         return 999  # Return large distance on error
 
 
-def find_semantic_match(embedding, claim_type="TEXT", threshold=0.85):
+def find_semantic_match(
+    embedding,
+    claim_type="TEXT",
+    threshold=0.85,
+    allowed_claimability_statuses=None,
+):
     """
     Search for a semantically similar claim using cosine distance.
     Returns the best match that has a cosine similarity > threshold.
@@ -166,6 +171,10 @@ def find_semantic_match(embedding, claim_type="TEXT", threshold=0.85):
         .prefetch_related("threads")
         .order_by("distance", "-last_updated")
     )
+    if allowed_claimability_statuses is not None:
+        candidates = candidates.filter(
+            claimability_status__in=tuple(allowed_claimability_statuses)
+        )
 
     # Prioritization only: cached verdict -> thread -> any match.
     # get_match_result validates authority before exposing a human verdict.
@@ -188,6 +197,7 @@ def find_matching_claim(
     context_text=None,
     semantic_threshold=0.80,
     allow_semantic_fallback=False,
+    allowed_claimability_statuses=None,
 ):
     """
     Search the database for an existing claim that matches the given fingerprint or text.
@@ -205,6 +215,11 @@ def find_matching_claim(
     The cache affects candidate ordering only. Response construction validates
     authoritative adjudication provenance before exposing a human verdict.
 
+    When allowed_claimability_statuses is provided, only candidates in
+    those explicitly assessed states are eligible. This lets verification entry
+    points avoid legacy or non-claimable cache reuse without changing unrelated
+    matching callers.
+
     Returns None if no match found.
     """
     from .models import Claim  # Local import to avoid circular dependency
@@ -217,6 +232,10 @@ def find_matching_claim(
             .prefetch_related("threads")
             .order_by("-last_updated")
         )
+        if allowed_claimability_statuses is not None:
+            exact_matches = exact_matches.filter(
+                claimability_status__in=tuple(allowed_claimability_statuses)
+            )
 
         # Prioritize cached candidates first, then threaded claims, then any.
         # This does not confer adjudication authority on the selected result.
@@ -244,6 +263,10 @@ def find_matching_claim(
             .prefetch_related("threads")
             .order_by("-last_updated")
         )
+        if allowed_claimability_statuses is not None:
+            image_candidates = image_candidates.filter(
+                claimability_status__in=tuple(allowed_claimability_statuses)
+            )
 
         best_match = None
         best_distance = hamming_threshold + 1
@@ -267,7 +290,10 @@ def find_matching_claim(
         embedding = generate_embedding(context_text)
         if embedding:
             semantic_match = find_semantic_match(
-                embedding, claim_type, semantic_threshold
+                embedding,
+                claim_type,
+                semantic_threshold,
+                allowed_claimability_statuses=allowed_claimability_statuses,
             )
             if semantic_match:
                 logger.debug("Semantic match found.")

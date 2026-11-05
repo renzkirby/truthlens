@@ -238,6 +238,30 @@ class ClaimPollingThrottleTests(APITestCase):
         self.assertEqual(payload["abstention_reason"], "OUT_OF_SCOPE")
         self.assertIn("sufficiently verifiable public factual claim", payload["summary"])
 
+    def test_insufficient_context_abstention_requests_clarification(self):
+        self.claim.claimability_status = Claim.ClaimabilityStatus.INSUFFICIENT_CONTEXT
+        self.claim.save(update_fields=["claimability_status"])
+        VerificationRun.objects.create(
+            claim=self.claim,
+            status=VerificationRun.Status.ABSTAINED,
+            abstention_reason=VerificationRun.AbstentionReason.INSUFFICIENT_CONTEXT,
+        )
+
+        response = APIClient().get(self.polling_url)
+        payload = response.json()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(payload["verdict"], "PENDING")
+        self.assertEqual(payload["run_status"], "ABSTAINED")
+        self.assertEqual(payload["abstention_reason"], "INSUFFICIENT_CONTEXT")
+        self.assertEqual(
+            payload["claimability_status"],
+            Claim.ClaimabilityStatus.INSUFFICIENT_CONTEXT,
+        )
+        self.assertIn("needs more context", payload["detail"].lower())
+        self.assertIsNone(payload["ai_verdict"])
+        self.assertNotEqual(payload.get("ai_verdict"), "UNVERIFIED")
+
     def test_generic_abstention_does_not_fabricate_unverified(self):
         VerificationRun.objects.create(
             claim=self.claim,

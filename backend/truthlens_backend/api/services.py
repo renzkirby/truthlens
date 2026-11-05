@@ -295,6 +295,12 @@ def _normalize_claim_gate_stance(result, *, has_known_satire_provenance):
     return normalized_result
 
 
+CLAIM_GATE_NON_RETRIEVAL_SENTINELS = frozenset({
+    "OUT_OF_SCOPE",
+    "INSUFFICIENT_CONTEXT",
+})
+
+
 def _normalize_claim_gate_queries(result):
     """Normalize bounded retrieval queries while preserving the primary query."""
     normalized_result = result.copy()
@@ -312,8 +318,8 @@ def _normalize_claim_gate_queries(result):
     else:
         primary_query = ""
 
-    if cleaned_claim == "OUT_OF_SCOPE":
-        normalized_result["search_query"] = primary_query
+    if cleaned_claim in CLAIM_GATE_NON_RETRIEVAL_SENTINELS:
+        normalized_result["search_query"] = ""
         normalized_result["search_queries"] = []
         return normalized_result
 
@@ -933,6 +939,14 @@ def clean_ocr_text(raw_text):
         - NEUTRAL: The text presents the claim without clearly endorsing or debunking it.
     8. OUT OF SCOPE DETECTION (CRITICAL GATEKEEPER): If the text is a personal message, a greeting, a menu, a recipe, song lyrics, random UI buttons, a selfie with no text, or contains NO verifiable public factual claim or rumor, you MUST set "cleaned_claim" to exactly "OUT_OF_SCOPE".
 
+    9. INSUFFICIENT CONTEXT DETECTION (CRITICAL GATEKEEPER):
+    - If the text DOES contain a factual assertion or rumor, but a material person, organization, event, transaction, attribution, object, place, time reference, or other referent is too ambiguous to identify one stable proposition without guessing, set "cleaned_claim" to exactly "INSUFFICIENT_CONTEXT".
+    - Use this only when proceeding would require inventing or assuming a material detail that could change which real-world proposition is being checked.
+    - Examples that require more context include: "Joel stole 800 million pesos", "Sara gave back the money she stole", "The senator was arrested yesterday", and "He stole government funds".
+    - Do NOT infer that a first name, surname, title, pronoun, abbreviation, organization, or vague event refers to a particular real-world entity merely because one interpretation seems likely.
+    - Do NOT require a date, location, or other detail when the proposition is already stable and identifiable. For example, "The Philippines has 82 provinces" is sufficiently specific.
+    - Do NOT use INSUFFICIENT_CONTEXT merely because evidence may be difficult to find, because the claim is implausible, or because the final verdict may be UNVERIFIED. Evidence sufficiency is decided later.
+
     ANTI-FALSE-SATIRE RULES:
     - Absurdity alone is NOT evidence of satire.
     - Humor alone is NOT evidence of satire.
@@ -946,7 +960,7 @@ def clean_ocr_text(raw_text):
     
     JSON Schema:
     {
-        "cleaned_claim": "A complete sentence detailing the core claim AND its specific context.",
+        "cleaned_claim": "A complete sentence detailing the core claim and its specific context, OR exactly 'OUT_OF_SCOPE' or 'INSUFFICIENT_CONTEXT'.",
         "search_query": "Primary 6-10 keyword retrieval query.",
         "search_queries": [
             "Primary query identical to search_query.",
@@ -955,7 +969,7 @@ def clean_ocr_text(raw_text):
         ],
         "article_stance": "DEBUNKING, REPORTING, or NEUTRAL"
     }
-    For OUT_OF_SCOPE, search_queries may be empty.
+    For OUT_OF_SCOPE or INSUFFICIENT_CONTEXT, search_query MUST be empty and search_queries MUST be empty.
     """
 
     try:
@@ -1554,6 +1568,14 @@ def extract_search_query(text, source_url=""):
         - NEUTRAL: The text presents the claim without clearly endorsing or debunking it.
     8. OUT OF SCOPE DETECTION (CRITICAL GATEKEEPER): If the text is a personal message, a greeting, a menu, a recipe, song lyrics, random UI buttons, a selfie with no text, or contains NO verifiable public factual claim or rumor, you MUST set "cleaned_claim" to exactly "OUT_OF_SCOPE".
 
+    9. INSUFFICIENT CONTEXT DETECTION (CRITICAL GATEKEEPER):
+    - If the text DOES contain a factual assertion or rumor, but a material person, organization, event, transaction, attribution, object, place, time reference, or other referent is too ambiguous to identify one stable proposition without guessing, set "cleaned_claim" to exactly "INSUFFICIENT_CONTEXT".
+    - Use this only when proceeding would require inventing or assuming a material detail that could change which real-world proposition is being checked.
+    - Examples that require more context include: "Joel stole 800 million pesos", "Sara gave back the money she stole", "The senator was arrested yesterday", and "He stole government funds".
+    - Do NOT infer that a first name, surname, title, pronoun, abbreviation, organization, or vague event refers to a particular real-world entity merely because one interpretation seems likely.
+    - Do NOT require a date, location, or other detail when the proposition is already stable and identifiable. For example, "The Philippines has 82 provinces" is sufficiently specific.
+    - Do NOT use INSUFFICIENT_CONTEXT merely because evidence may be difficult to find, because the claim is implausible, or because the final verdict may be UNVERIFIED. Evidence sufficiency is decided later.
+
     ANTI-FALSE-SATIRE RULES:
     - Absurdity alone is NOT evidence of satire.
     - Humor alone is NOT evidence of satire.
@@ -1567,7 +1589,7 @@ def extract_search_query(text, source_url=""):
     
     JSON Schema:
     {
-        "cleaned_claim": "A complete sentence detailing the core claim, OR exactly 'OUT_OF_SCOPE'.",
+        "cleaned_claim": "A complete sentence detailing the core claim, OR exactly 'OUT_OF_SCOPE' or 'INSUFFICIENT_CONTEXT'.",
         "search_query": "Primary 6-10 keyword retrieval query.",
         "search_queries": [
             "Primary query identical to search_query.",
@@ -1576,7 +1598,7 @@ def extract_search_query(text, source_url=""):
         ],
         "article_stance": "DEBUNKING, REPORTING, or NEUTRAL"
     }
-    For OUT_OF_SCOPE, search_queries may be empty.
+    For OUT_OF_SCOPE or INSUFFICIENT_CONTEXT, search_query MUST be empty and search_queries MUST be empty.
     """
     try:
         response_text = call_llm_with_fallback(

@@ -27,6 +27,9 @@ const normalizeResult = (payload, claimId) => ({
 const isOutOfScopeAbstention = (result) =>
    result?.run_status === "ABSTAINED" && result?.abstention_reason === "OUT_OF_SCOPE";
 
+const isInsufficientContextAbstention = (result) =>
+   result?.run_status === "ABSTAINED" && result?.abstention_reason === "INSUFFICIENT_CONTEXT";
+
 const isLifecycleOnlyResult = (result) =>
    result?.run_status === "ABSTAINED" ||
    (result?.run_status === "COMPLETED" && result?.verdict === "PENDING");
@@ -399,24 +402,32 @@ const ResultCard = ({ result }) => {
 
 const TerminalResultCard = ({ result }) => {
    const isOutOfScope = isOutOfScopeAbstention(result);
-   const title = isOutOfScope ? "Out of scope" : "Analysis finished";
-   const detail = isOutOfScope
-      ? result.summary ||
-        "This input does not contain a sufficiently verifiable public factual claim for automated fact-checking."
-      : result.detail || "Analysis finished without a supported automated conclusion.";
+   const needsContext = isInsufficientContextAbstention(result);
+   const title = needsContext ? "More context needed" : isOutOfScope ? "Out of scope" : "Analysis finished";
+   const detail = needsContext
+      ? result.detail ||
+        "TruthLens cannot reliably identify the exact factual claim yet. Add identifying details such as the full name of the person or organization and, when relevant, the event, amount, project, date, or location involved."
+      : isOutOfScope
+        ? result.summary ||
+          "This input does not contain a sufficiently verifiable public factual claim for automated fact-checking."
+        : result.detail || "Analysis finished without a supported automated conclusion.";
+   const headerTone = isOutOfScope ? "out-of-scope" : "terminal";
+   const icon = isOutOfScope ? "alert-octagon" : needsContext ? "help-circle" : "info";
 
    return (
       <article className="result-card terminal-result-card" aria-labelledby="terminal-result-title">
-         <header className={`result-provenance result-provenance--${isOutOfScope ? "out-of-scope" : "terminal"}`}>
+         <header className={`result-provenance result-provenance--${headerTone}`}>
             <span className="result-provenance-icon" aria-hidden="true">
-               <Icons name={isOutOfScope ? "alert-octagon" : "info"} size={18} />
+               <Icons name={icon} size={18} />
             </span>
             <div>
                <h2 id="terminal-result-title">{title}</h2>
                <p>
-                  {isOutOfScope
-                     ? "No automated factual verdict was produced for this submission."
-                     : "No automated verdict is available for this completed analysis."}
+                  {needsContext
+                     ? "Verification stopped before evidence retrieval so TruthLens would not guess what you meant."
+                     : isOutOfScope
+                       ? "No automated factual verdict was produced for this submission."
+                       : "No automated verdict is available for this completed analysis."}
                </p>
             </div>
          </header>

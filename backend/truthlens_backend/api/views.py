@@ -653,7 +653,14 @@ def receive_snippet(request):
     authenticated_user = _authenticated_user_or_none(request)
 
     if fingerprint:
-        matched_claim = find_matching_claim(fingerprint, "IMAGE")
+        matched_claim = find_matching_claim(
+            fingerprint,
+            "IMAGE",
+            allowed_claimability_statuses=(
+                Claim.ClaimabilityStatus.PENDING,
+                Claim.ClaimabilityStatus.CLAIMABLE,
+            ),
+        )
         if matched_claim and not _should_retry_unresolved_cached_claim(matched_claim):
             _record_authenticated_claim_check(authenticated_user, matched_claim)
             # Reuse a result or an in-progress verification; never replay a
@@ -679,6 +686,7 @@ def receive_snippet(request):
         media_hash=image_hash,
         media_url=media_url,
         claim_fingerprint=fingerprint,
+        claimability_status=Claim.ClaimabilityStatus.PENDING,
         verified_via=Claim.VerificationSource.PENDING,
     )
     _record_authenticated_claim_check(authenticated_user, claim)
@@ -731,6 +739,7 @@ def claim_polling_endpoint(request, claim_id):
                 "ai_verdict": None,
                 "final_verdict": None,
                 "run_status": latest_run.status,
+                "claimability_status": claim.claimability_status,
             }
             if latest_run.status == VerificationRun.Status.FAILED:
                 if latest_run.failure_code == "URL_KNOWN_THREAT":
@@ -776,6 +785,14 @@ def claim_polling_endpoint(request, claim_id):
                             "public factual claim for automated fact-checking."
                         ),
                     })
+                elif (
+                    latest_run.abstention_reason
+                    == VerificationRun.AbstentionReason.INSUFFICIENT_CONTEXT
+                ):
+                    terminal_payload["detail"] = (
+                        "TruthLens needs more context before it can reliably "
+                        "identify the factual claim to verify."
+                    )
                 else:
                     terminal_payload["detail"] = (
                         "Analysis finished without a supported automated conclusion."
@@ -793,6 +810,7 @@ def claim_polling_endpoint(request, claim_id):
             "verdict": (match_result["verdict"]),
             "ai_verdict": (match_result["ai_verdict"]),
             "final_verdict": (match_result["final_verdict"]),
+            "claimability_status": claim.claimability_status,
             "summary": (match_result["summary"]),
             "confidence_score": (match_result["confidence_score"]),
             "source_type": (match_result["source_type"]),
@@ -844,7 +862,14 @@ def verify_url(request):
     authenticated_user = _authenticated_user_or_none(request)
 
     if fingerprint:
-        matched_claim = find_matching_claim(fingerprint, "URL")
+        matched_claim = find_matching_claim(
+            fingerprint,
+            "URL",
+            allowed_claimability_statuses=(
+                Claim.ClaimabilityStatus.PENDING,
+                Claim.ClaimabilityStatus.CLAIMABLE,
+            ),
+        )
         if matched_claim and not _should_retry_unresolved_cached_claim(matched_claim):
             _record_authenticated_claim_check(authenticated_user, matched_claim)
             match_result = get_match_result(
@@ -867,6 +892,7 @@ def verify_url(request):
         claim_type=Claim.ClaimType.URL,
         url_link=safe_url,
         claim_fingerprint=fingerprint,
+        claimability_status=Claim.ClaimabilityStatus.PENDING,
         verified_via=Claim.VerificationSource.PENDING,
     )
     _record_authenticated_claim_check(authenticated_user, claim)
@@ -3460,6 +3486,27 @@ class ThreadViewSet(viewsets.ModelViewSet):
         except Claim.DoesNotExist:
             raise NotFound("Claim not found.")
 
+        if claim.claimability_status == Claim.ClaimabilityStatus.PENDING:
+            raise ValidationError({
+                "detail": (
+                    "This claim is still being checked for sufficient context. "
+                    "Please wait for the verification result before starting a discussion."
+                )
+            })
+        if claim.claimability_status == Claim.ClaimabilityStatus.INSUFFICIENT_CONTEXT:
+            raise ValidationError({
+                "detail": (
+                    "This submission needs more context before it can be escalated "
+                    "to Community verification."
+                )
+            })
+        if claim.claimability_status == Claim.ClaimabilityStatus.OUT_OF_SCOPE:
+            raise ValidationError({
+                "detail": (
+                    "Out-of-scope submissions cannot be escalated to Community verification."
+                )
+            })
+
         # ── Thread Deduplication: Block + Redirect ──
         # Check if this claim (or a matching claim) already has an active thread
         existing_thread = self._find_existing_thread(claim)
@@ -3531,7 +3578,10 @@ class ClaimViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Claim.objects.all()
+        return Claim.objects.filter(
+            Q(claimability_status__isnull=True)
+            | Q(claimability_status=Claim.ClaimabilityStatus.CLAIMABLE)
+        )
 
 
 class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
@@ -3856,6 +3906,10 @@ def verify_text(request):
         "TEXT",
         context_text=text_content,
         allow_semantic_fallback=False,
+        allowed_claimability_statuses=(
+            Claim.ClaimabilityStatus.PENDING,
+            Claim.ClaimabilityStatus.CLAIMABLE,
+        ),
     )
     authenticated_user = _authenticated_user_or_none(request)
 
@@ -3879,6 +3933,7 @@ def verify_text(request):
         claim_type=Claim.ClaimType.TEXT,
         context_text=text_content,
         claim_fingerprint=fingerprint,
+        claimability_status=Claim.ClaimabilityStatus.PENDING,
         verified_via=Claim.VerificationSource.PENDING,
     )
     _record_authenticated_claim_check(authenticated_user, claim)
@@ -3922,6 +3977,10 @@ def claim_match(request):
         claim_type,
         context_text=text,
         allow_semantic_fallback=False,
+        allowed_claimability_statuses=(
+            Claim.ClaimabilityStatus.PENDING,
+            Claim.ClaimabilityStatus.CLAIMABLE,
+        ),
     )
     if matched_claim:
         match_result = get_match_result(
@@ -4072,6 +4131,10 @@ def public_user_claims(request, username):
     )
     claims = (
         Claim.objects.filter(check_history__user=target_user)
+        .filter(
+            Q(claimability_status__isnull=True)
+            | Q(claimability_status=Claim.ClaimabilityStatus.CLAIMABLE)
+        )
         .annotate(last_checked_at=Max("check_history__checked_at"))
         .order_by("-last_checked_at", "-last_updated")
     )
@@ -4562,11 +4625,17 @@ def verify_file(request):
         # ── Claim Deduplication Pre-Check ──
         fingerprint = compute_fingerprint("TEXT", extracted_text)
         matched_claim = find_matching_claim(
-            fingerprint, "TEXT", context_text=extracted_text
+            fingerprint,
+            "TEXT",
+            context_text=extracted_text,
+            allowed_claimability_statuses=(
+                Claim.ClaimabilityStatus.PENDING,
+                Claim.ClaimabilityStatus.CLAIMABLE,
+            ),
         )
         authenticated_user = _authenticated_user_or_none(request)
 
-        if matched_claim:
+        if matched_claim and not _should_retry_unresolved_cached_claim(matched_claim):
             _record_authenticated_claim_check(authenticated_user, matched_claim)
             match_result = get_match_result(
                 matched_claim,
@@ -4588,6 +4657,7 @@ def verify_file(request):
             claim_type=Claim.ClaimType.FILE,
             url_link=f"Document Input: {file_name}",
             claim_fingerprint=fingerprint,
+            claimability_status=Claim.ClaimabilityStatus.PENDING,
             verified_via=Claim.VerificationSource.PENDING,
         )
         _record_authenticated_claim_check(authenticated_user, claim)

@@ -779,6 +779,7 @@ class ClaimSerializer(serializers.ModelSerializer):
             "id",
             "claim_type",
             "context_text",
+            "claimability_status",
             "ai_verdict",
             "final_verdict",
             "effective_verdict",

@@ -510,6 +510,36 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.assertNotEqual(first.pk, second.pk)
         self.assertEqual(self.claim.verification_runs.count(), 2)
 
+    def test_insufficient_context_abstains_before_any_evidence_retrieval(self):
+        self.cleaned = {
+            "cleaned_claim": "INSUFFICIENT_CONTEXT",
+            "search_query": "",
+            "search_queries": [],
+            "article_stance": "NEUTRAL",
+        }
+        self.query.return_value = self.cleaned
+
+        run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.ABSTAINED)
+        self.assertEqual(
+            run.abstention_reason,
+            VerificationRun.AbstentionReason.INSUFFICIENT_CONTEXT,
+        )
+        self.claim.refresh_from_db()
+        self.assertEqual(
+            self.claim.claimability_status,
+            Claim.ClaimabilityStatus.INSUFFICIENT_CONTEXT,
+        )
+        self.assertIsNone(self.claim.ai_verdict)
+        self.assertIsNone(self.claim.final_verdict)
+        self.save_claim.assert_not_called()
+        self.vault.assert_not_called()
+        self.bridge.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
+        self.evaluate_persisted.assert_not_called()
+        self.assess_evidence.assert_not_called()
+
     def test_out_of_scope_abstains_without_persisting_verdict(self):
         self.cleaned["cleaned_claim"] = "OUT_OF_SCOPE"
 

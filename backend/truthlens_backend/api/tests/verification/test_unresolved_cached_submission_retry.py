@@ -15,11 +15,19 @@ class UnresolvedCachedSubmissionRetryTests(APITestCase):
             patch("api.throttles.FactCheckRateThrottle.allow_request", return_value=True)
         )
 
-    def _old_claim(self, claim_type, text, status, ai_verdict=None):
+    def _old_claim(
+        self,
+        claim_type,
+        text,
+        status,
+        ai_verdict=None,
+        claimability_status=Claim.ClaimabilityStatus.CLAIMABLE,
+    ):
         fields = {
             "claim_type": claim_type,
             "claim_fingerprint": compute_fingerprint(claim_type, text),
             "ai_verdict": ai_verdict,
+            "claimability_status": claimability_status,
         }
         if claim_type == Claim.ClaimType.TEXT:
             fields["context_text"] = text
@@ -135,6 +143,33 @@ class UnresolvedCachedSubmissionRetryTests(APITestCase):
         self.assertEqual(response.json()["claim_id"], str(old.pk))
         self.assertEqual(response.json()["match"]["verdict"], "FACT")
         enqueue.assert_not_called()
+
+    def test_legacy_decisive_cache_cannot_bypass_current_claim_gate(self):
+        text = "Joel stole 800 million pesos"
+        old, _ = self._old_claim(
+            Claim.ClaimType.TEXT,
+            text,
+            VerificationRun.Status.COMPLETED,
+            ai_verdict="FAKE",
+            claimability_status=None,
+        )
+
+        with patch("api.views.text_fact_check_process.delay") as enqueue:
+            response = self.client.post(
+                reverse("verify_text"),
+                {"text": text},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["cached"])
+        self.assertNotEqual(response.json()["claim_id"], str(old.pk))
+        fresh = Claim.objects.get(pk=response.json()["claim_id"])
+        self.assertEqual(
+            fresh.claimability_status,
+            Claim.ClaimabilityStatus.PENDING,
+        )
+        enqueue.assert_called_once_with(text, fresh.pk, triggered_by_id=None)
 
     def test_unverified_terminal_ai_cache_can_be_reassessed(self):
         text = "A past unresolved fact-check should be independently rechecked."

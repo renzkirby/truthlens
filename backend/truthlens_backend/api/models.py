@@ -1017,6 +1017,12 @@ class Claim(models.Model):
         URL = "URL", "URL"
         FILE = "FILE", "File"
 
+    class ClaimabilityStatus(models.TextChoices):
+        PENDING = "PENDING", "Pending claimability assessment"
+        CLAIMABLE = "CLAIMABLE", "Claimable"
+        INSUFFICIENT_CONTEXT = "INSUFFICIENT_CONTEXT", "Insufficient context"
+        OUT_OF_SCOPE = "OUT_OF_SCOPE", "Out of scope"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     claim_type = models.CharField(
@@ -1027,6 +1033,17 @@ class Claim(models.Model):
     media_hash = models.CharField(max_length=64, blank=True, null=True)
     url_link = models.URLField(max_length=2000, blank=True, null=True)
     context_text = models.TextField(blank=True, null=True)
+    claimability_status = models.CharField(
+        max_length=32,
+        choices=ClaimabilityStatus.choices,
+        blank=True,
+        null=True,
+        db_index=True,
+        help_text=(
+            "Input claimability state. NULL is reserved for legacy records that "
+            "predate claimability assessment."
+        ),
+    )
     # Contextual recommendations only: never an AI evidence source or human verdict.
     # Older development rows can be NULL following the legacy 0086 repair.
     relatedness_context = models.JSONField(
@@ -1415,6 +1432,10 @@ class VerificationRun(models.Model):
 
     class AbstentionReason(models.TextChoices):
         OUT_OF_SCOPE = "OUT_OF_SCOPE", "Out of scope"
+        INSUFFICIENT_CONTEXT = (
+            "INSUFFICIENT_CONTEXT",
+            "Insufficient context",
+        )
 
     id = models.UUIDField(
         primary_key=True,

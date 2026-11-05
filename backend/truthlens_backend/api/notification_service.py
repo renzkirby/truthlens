@@ -149,6 +149,16 @@ def notify_verification_finished(run):
                 "Analysis finished because the submitted content did not contain "
                 "a sufficiently verifiable public factual claim."
             )
+        elif (
+            run.status == VerificationRun.Status.ABSTAINED
+            and run.abstention_reason
+            == VerificationRun.AbstentionReason.INSUFFICIENT_CONTEXT
+        ):
+            title = "More context is needed to verify your claim"
+            message = (
+                "TruthLens stopped before evidence verification because the "
+                "submitted claim could not be identified reliably."
+            )
         elif run.status == VerificationRun.Status.ABSTAINED:
             message = (
                 "Analysis finished without enough evidence to reach a supported "

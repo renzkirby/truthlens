@@ -180,6 +180,10 @@ def get_available_verification_assignments():
             status=(VerificationAssignment.Status.AVAILABLE),
             organization__isnull=True,
         )
+        .filter(
+            Q(claim__claimability_status__isnull=True)
+            | Q(claim__claimability_status=Claim.ClaimabilityStatus.CLAIMABLE)
+        )
         .select_related(
             "claim",
             "claim__investigation_classification",
@@ -289,6 +293,13 @@ def ensure_verification_assignment(
 
     with transaction.atomic():
         locked_claim = Claim.objects.select_for_update().get(pk=claim.pk)
+
+        if locked_claim.claimability_status in {
+            Claim.ClaimabilityStatus.PENDING,
+            Claim.ClaimabilityStatus.INSUFFICIENT_CONTEXT,
+            Claim.ClaimabilityStatus.OUT_OF_SCOPE,
+        }:
+            return None
 
         existing = get_open_verification_assignment(
             locked_claim,
@@ -532,6 +543,16 @@ def claim_verification_assignment(
         locked_claim, locked_assignment = _lock_assignment_claim_then_assignment(
             assignment
         )
+
+        if locked_claim.claimability_status in {
+            Claim.ClaimabilityStatus.PENDING,
+            Claim.ClaimabilityStatus.INSUFFICIENT_CONTEXT,
+            Claim.ClaimabilityStatus.OUT_OF_SCOPE,
+        }:
+            raise VerificationAssignmentConflict(
+                "This submission is not eligible for partner verification work "
+                "until it contains a sufficiently identifiable factual claim."
+            )
 
         # Idempotent response when the same organization
         # already owns the work.

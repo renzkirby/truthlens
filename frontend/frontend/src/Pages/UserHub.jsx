@@ -389,7 +389,41 @@ const TrustExplainerModal = ({ reputation, onClose }) => {
    );
 };
 
-const VerdictBadge = ({ verdict }) => {
+const VerdictBadge = ({ verdict, claimabilityStatus }) => {
+   const claimabilityMap = {
+      PENDING: {
+         bg: "#eef2ff",
+         text: "#3730a3",
+         border: "#6366f1",
+         label: "Not assessed",
+         Icon: "info",
+      },
+      INSUFFICIENT_CONTEXT: {
+         bg: "#fff7ed",
+         text: "#9a3412",
+         border: "#f97316",
+         label: "Needs context",
+         Icon: "help-circle",
+      },
+      OUT_OF_SCOPE: {
+         bg: "#f3f4f6",
+         text: "#374151",
+         border: "#9ca3af",
+         label: "Out of scope",
+         Icon: "alert-octagon",
+      },
+   };
+
+   if (claimabilityStatus && claimabilityStatus !== "CLAIMABLE" && claimabilityMap[claimabilityStatus]) {
+      const state = claimabilityMap[claimabilityStatus];
+      return (
+         <span className="hub-verdict-badge" style={{ background: state.bg, color: state.text, borderColor: state.border }}>
+            <Icons name={state.Icon} size={12} strokeWidth={2.5} />
+            {state.label}
+         </span>
+      );
+   }
+
    const map = {
       FACT: {
          bg: "#d1fae5",
@@ -1979,6 +2013,7 @@ export default function UserHub() {
                                     <div className="li-verdict-top-right">
                                        <VerdictBadge
                                           verdict={claim.effective_verdict || claim.final_verdict || claim.ai_verdict}
+                                          claimabilityStatus={claim.claimability_status}
                                        />
                                     </div>
 
@@ -2008,14 +2043,18 @@ export default function UserHub() {
                                           View Analysis Report
                                        </button>
 
-                                       <button
-                                          type="button"
-                                          className="hub-btn-publish"
-                                          onClick={() => handleEscalate(claim.id)}
-                                       >
-                                          <Icons name="arrow-up-right" size={14} className="hub-btn-icon" />
-                                          Escalate
-                                       </button>
+                                       {(claim.claimability_status === null ||
+                                          claim.claimability_status === undefined ||
+                                          claim.claimability_status === "CLAIMABLE") && (
+                                          <button
+                                             type="button"
+                                             className="hub-btn-publish"
+                                             onClick={() => handleEscalate(claim.id)}
+                                          >
+                                             <Icons name="arrow-up-right" size={14} className="hub-btn-icon" />
+                                             Escalate
+                                          </button>
+                                       )}
                                     </div>
                                  </div>
                               </div>
