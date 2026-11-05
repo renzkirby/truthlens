@@ -3,6 +3,8 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase
 
+from api.verification.cloudflare_pilot import validate_pilot_response
+
 from api.services import (
     ClaimGateError,
     _is_known_satire_source_url,
@@ -263,6 +265,48 @@ class ClaimGateFailureRegressionTests(SimpleTestCase):
         self.assertEqual(
             result["article_stance"],
             "NEUTRAL",
+        )
+
+    @patch("api.services.call_llm_with_fallback")
+    def test_insufficient_context_is_preserved_without_retrieval_queries(
+        self,
+        mock_llm,
+    ):
+        mock_llm.return_value = json.dumps(
+            {
+                "cleaned_claim": "INSUFFICIENT_CONTEXT",
+                "search_query": "joel 800 million pesos",
+                "search_queries": ["joel 800 million pesos"],
+                "article_stance": "NEUTRAL",
+            }
+        )
+
+        result = clean_ocr_text("Joel stole 800 million pesos")
+
+        self.assertEqual(result["cleaned_claim"], "INSUFFICIENT_CONTEXT")
+        self.assertEqual(result["search_query"], "")
+        self.assertEqual(result["search_queries"], [])
+
+    def test_strict_claim_gate_contract_accepts_only_empty_queries_for_insufficient_context(
+        self,
+    ):
+        valid = {
+            "cleaned_claim": "INSUFFICIENT_CONTEXT",
+            "search_query": "",
+            "search_queries": [],
+            "article_stance": "NEUTRAL",
+        }
+        invalid = {
+            **valid,
+            "search_query": "joel 800 million pesos",
+            "search_queries": ["joel 800 million pesos"],
+        }
+
+        self.assertTrue(
+            validate_pilot_response("claim_gate", json.dumps(valid), "Text: ...")
+        )
+        self.assertFalse(
+            validate_pilot_response("claim_gate", json.dumps(invalid), "Text: ...")
         )
 
     @patch(
