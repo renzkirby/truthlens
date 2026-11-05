@@ -1397,12 +1397,6 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 )
                 outcome = "abstained_out_of_scope"
                 selected_verdict = "OUT_OF_SCOPE"
-                _log_stage(
-                    claim_id,
-                    "core_text_pipeline_total",
-                    pipeline_started_at,
-                    outcome=outcome,
-                )
                 return
 
             if cleaned_claim == "INSUFFICIENT_CONTEXT":
@@ -1413,12 +1407,6 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 )
                 outcome = "abstained_insufficient_context"
                 selected_verdict = "INSUFFICIENT_CONTEXT"
-                _log_stage(
-                    claim_id,
-                    "core_text_pipeline_total",
-                    pipeline_started_at,
-                    outcome=outcome,
-                )
                 return
 
             _set_claimability_status(
