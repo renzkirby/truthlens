@@ -447,6 +447,37 @@
     }
 
     .tl-app-nav__account {
+        display: block;
+    }
+
+    .tl-app-nav__account-trigger {
+        width: var(--tl-control-height-standard);
+        height: var(--tl-control-height-standard);
+        min-height: var(--tl-control-height-standard);
+        justify-content: center;
+        gap: 0;
+        padding: 0;
+    }
+
+    .tl-app-nav__account-copy,
+    .tl-app-nav__platform-role,
+    .tl-app-nav__chevron {
+        display: none;
+    }
+
+    .tl-app-nav__account-avatar {
+        width: 24px;
+        height: 24px;
+    }
+
+    .tl-app-nav__account-panel {
+        width: min(264px, calc(100vw - (2 * var(--tl-space-3))));
+    }
+
+    /* Mobile already exposes Profile, Settings, and role-specific destinations
+       through persistent navigation. Keep this popover focused on identity and
+       the session action instead of duplicating those links. */
+    .tl-app-nav__account-links {
         display: none;
     }
 
@@ -645,7 +676,7 @@
     }
 
     .tl-app-nav__brand-name {
-        font-size: 1.1rem;
+        display: none;
     }
 
     .mobile-bottom-bar {
