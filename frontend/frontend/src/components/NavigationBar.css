@@ -474,6 +474,13 @@
         width: min(264px, calc(100vw - (2 * var(--tl-space-3))));
     }
 
+    /* Mobile already exposes Profile, Settings, and role-specific destinations
+       through persistent navigation. Keep this popover focused on identity and
+       the session action instead of duplicating those links. */
+    .tl-app-nav__account-links {
+        display: none;
+    }
+
     .top-navbar {
         padding-top: 0;
         padding-right: max(var(--tl-space-4), env(safe-area-inset-right, 0px));
