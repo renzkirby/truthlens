@@ -1,4 +1,4 @@
-import monaSansAssetPath from "@fontsource-variable/mona-sans/files/mona-sans-latin-wght-normal.woff2?url";
+import monaSansInlineUrl from "@fontsource-variable/mona-sans/files/mona-sans-latin-wght-normal.woff2?inline";
 
 const TRUTHLENS_FONT_FAMILY = "Mona Sans Variable";
 let fontLoadPromise = null;
@@ -10,9 +10,15 @@ function fontIsLoaded() {
    );
 }
 
-function extensionAssetUrl(assetPath) {
-   const normalizedPath = String(assetPath || "").replace(/^\/+/, "");
-   return chrome.runtime.getURL(normalizedPath);
+async function inlineFontBytes() {
+   const response = await fetch(monaSansInlineUrl);
+   if (!response.ok) {
+      throw new Error(
+         `Inline Mona Sans data could not be read (HTTP ${response.status}).`,
+      );
+   }
+
+   return response.arrayBuffer();
 }
 
 export function loadTruthLensFont() {
@@ -26,25 +32,12 @@ export function loadTruthLensFont() {
 
    if (
       typeof FontFace !== "function" ||
-      !document.fonts ||
-      typeof chrome === "undefined" ||
-      !chrome.runtime?.getURL
+      !document.fonts
    ) {
       return Promise.resolve(false);
    }
 
-   const fontUrl = extensionAssetUrl(monaSansAssetPath);
-
-   fontLoadPromise = fetch(fontUrl)
-      .then((response) => {
-         if (!response.ok) {
-            throw new Error(
-               `Font request failed with HTTP ${response.status} for ${fontUrl}`,
-            );
-         }
-
-         return response.arrayBuffer();
-      })
+   fontLoadPromise = inlineFontBytes()
       .then((fontBytes) =>
          new FontFace(
             TRUTHLENS_FONT_FAMILY,
@@ -63,12 +56,19 @@ export function loadTruthLensFont() {
             console.info("[TruthLens Local] Mona Sans loaded:", loaded);
          }
 
+         if (!loaded) {
+            fontLoadPromise = null;
+         }
+
          return loaded;
       })
       .catch((error) => {
+         fontLoadPromise = null;
+
          if (import.meta.env.DEV) {
             console.warn("[TruthLens Local] Mona Sans failed to load", error);
          }
+
          return false;
       });
 
