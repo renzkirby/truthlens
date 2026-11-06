@@ -1122,15 +1122,8 @@
    color: var(--truthlens-verdict-ink, #374151);
    font-size: 20px;
    line-height: 1.15;
-   font-weight: 850;
-   letter-spacing: -0.01em;
-}
-
-
-/* Optical compensation: Mona Sans reads lighter in the green FACT treatment
-   than in the red/violet states at the same numeric weight. */
-.truthlens-result-card-shell.verdict-fact .truthlens-verdict-label {
    font-weight: 900;
+   letter-spacing: -0.01em;
 }
 
 .truthlens-verdict-description {
