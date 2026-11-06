@@ -57,13 +57,17 @@ def get_public_partner_by_slug(slug):
 
 def get_publication_organization_by_slug(slug):
     """
-    Resolve an organization for historical public publication routes.
+    Resolve an organization for public publication routes.
 
-    Unlike Partner Directory/profile eligibility, this lookup is based on
-    durable sealed published work. A former or suspended organization may lose
-    its current public Partner profile while its published fact-checks remain
-    readable and attributable.
+    Current eligible public partners remain resolvable even before they publish
+    their first fact-check, so collection endpoints can return a normal empty
+    page. Former or suspended organizations remain resolvable only through
+    durable sealed published work, preserving historical publication access.
     """
+
+    current_public_partner = get_public_partner_by_slug(slug)
+    if current_public_partner is not None:
+        return current_public_partner
 
     return (
         Organization.objects.filter(
