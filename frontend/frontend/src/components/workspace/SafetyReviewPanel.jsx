@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
+import { userFacingErrorMessage } from "../../utils/userFacingError";
 import { showWorkspaceSuccess, WORKSPACE_LONG_TOAST_DURATION } from "../../utils/workspaceToast";
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
@@ -252,7 +253,12 @@ function SafetyReviewPanel() {
                return;
             }
 
-            setQueueError(error?.message || "Unable to load the Platform Safety queue.");
+            setQueueError(userFacingErrorMessage(error, {
+               fallback: "We couldn't load the Platform Safety queue. Try again.",
+               authMessage: "Your session has expired. Sign in again to load Platform Safety.",
+               permissionMessage: "Your account doesn't have permission to review Platform Safety cases.",
+               serviceMessage: "Platform Safety is temporarily unavailable. Try again shortly.",
+            }));
          })
          .finally(() => {
             if (!cancelled && queueRequestIdRef.current === requestId) {
@@ -300,7 +306,12 @@ function SafetyReviewPanel() {
             setDetailError(
                isUnavailable
                   ? "This Safety case is no longer available. The queue has been refreshed."
-                  : (error?.message || "Unable to load this Safety case."),
+                  : userFacingErrorMessage(error, {
+                       fallback: "We couldn't load this Safety case. Try again.",
+                       authMessage: "Your session has expired. Sign in again to load this Safety case.",
+                       permissionMessage: "Your account doesn't have permission to review this Safety case.",
+                       serviceMessage: "This Safety case is temporarily unavailable. Try again shortly.",
+                    }),
             );
             setDetailUnavailable(isUnavailable);
 
