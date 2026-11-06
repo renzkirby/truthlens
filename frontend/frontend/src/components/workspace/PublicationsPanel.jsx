@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
+import { userFacingErrorMessage } from "../../utils/userFacingError";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
 import { showWorkspaceSuccess } from "../../utils/workspaceToast";
 import Icons from "../Icons.jsx";
@@ -741,7 +742,12 @@ function PublicationsContent({
                revokeAuthority();
                return;
             }
-            setLibraryError(error?.message || "Unable to load this organization's publication library.");
+            setLibraryError(userFacingErrorMessage(error, {
+               fallback: "We couldn't load this organization's publication library. Try again.",
+               authMessage: "Your session has expired. Sign in again to load the publication library.",
+               permissionMessage: "You don't have permission to view this organization's publication library.",
+               serviceMessage: "The publication library is temporarily unavailable. Try again shortly.",
+            }));
             setLibraryLoading(false);
             setLibraryRefreshing(false);
          });
@@ -805,7 +811,12 @@ function PublicationsContent({
             setDetailError(
                error?.status === 404
                   ? "This publication is no longer available in the organization library."
-                  : error?.message || "Unable to load this publication.",
+                  : userFacingErrorMessage(error, {
+                       fallback: "We couldn't load this publication. Try again.",
+                       authMessage: "Your session has expired. Sign in again to load this publication.",
+                       permissionMessage: "You don't have permission to view this publication.",
+                       serviceMessage: "This publication is temporarily unavailable. Try again shortly.",
+                    }),
             );
          });
 
