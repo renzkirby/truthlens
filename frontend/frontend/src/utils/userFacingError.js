@@ -43,7 +43,11 @@ export function safeUserFacingDetail(value) {
 }
 
 export function userFacingFieldError(error, field) {
-   return safeUserFacingDetail(error?.[field]);
+   const value = error?.[field];
+   if (Array.isArray(value)) {
+      return value.map(safeUserFacingDetail).filter(Boolean).join(" ");
+   }
+   return safeUserFacingDetail(value);
 }
 
 function errorStatus(error) {
