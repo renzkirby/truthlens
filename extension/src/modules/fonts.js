@@ -10,6 +10,11 @@ function fontIsLoaded() {
    );
 }
 
+function extensionAssetUrl(assetPath) {
+   const normalizedPath = String(assetPath || "").replace(/^\/+/, "");
+   return chrome.runtime.getURL(normalizedPath);
+}
+
 export function loadTruthLensFont() {
    if (fontIsLoaded()) {
       return Promise.resolve(true);
@@ -28,17 +33,28 @@ export function loadTruthLensFont() {
       return Promise.resolve(false);
    }
 
-   const fontUrl = chrome.runtime.getURL(monaSansAssetPath);
+   const fontUrl = extensionAssetUrl(monaSansAssetPath);
 
-   fontLoadPromise = new FontFace(
-      TRUTHLENS_FONT_FAMILY,
-      `url("${fontUrl}") format("woff2")`,
-      {
-         style: "normal",
-         weight: "200 900",
-      },
-   )
-      .load()
+   fontLoadPromise = fetch(fontUrl)
+      .then((response) => {
+         if (!response.ok) {
+            throw new Error(
+               `Font request failed with HTTP ${response.status} for ${fontUrl}`,
+            );
+         }
+
+         return response.arrayBuffer();
+      })
+      .then((fontBytes) =>
+         new FontFace(
+            TRUTHLENS_FONT_FAMILY,
+            fontBytes,
+            {
+               style: "normal",
+               weight: "200 900",
+            },
+         ).load(),
+      )
       .then((fontFace) => {
          document.fonts.add(fontFace);
          const loaded = fontIsLoaded();
