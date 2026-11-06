@@ -157,7 +157,7 @@ def set_public_fact_check_collection_payload(
     )
     return _safe_cache_set(
         key,
-        deepcopy(payload),
+        _plain_payload(payload),
         timeout=settings.PUBLIC_FACT_CHECK_COLLECTION_CACHE_SECONDS,
     )
 
@@ -188,7 +188,7 @@ def set_public_fact_check_detail_payload(
     )
     return _safe_cache_set(
         key,
-        deepcopy(payload),
+        _plain_payload(payload),
         timeout=settings.PUBLIC_FACT_CHECK_DETAIL_CACHE_SECONDS,
     )
 
