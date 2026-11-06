@@ -1,10 +1,11 @@
 import React from "react";
 import { renderToString } from "react-dom/server";
-import "@fontsource-variable/mona-sans/wght.css";
 import {
    Sparkles,
    ShieldCheck,
+   Check,
    CheckCircle,
+   X,
    XCircle,
    AlertTriangle,
    HelpCircle,
@@ -14,6 +15,16 @@ import {
    ExternalLink,
 } from "lucide-react";
 import { state } from "./state.js";
+import { loadTruthLensFont } from "./fonts.js";
+import {
+   getAiResultReminderText,
+   getConfidenceLevel,
+   getVerdictPresentation,
+   shouldShowAiResultReminder,
+   shouldShowResultActions,
+} from "./verdictPresentation.js";
+
+void loadTruthLensFont();
 
 const COMMUNITY_PLATFORM_URL = state.WEB_APP_BASE_URL;
 const TRUTHLENS_LOGO_URL = chrome.runtime.getURL("truthlens_logo.png");
@@ -23,6 +34,8 @@ const iconSparkles = renderToString(React.createElement(Sparkles, { size: 14 }))
 const iconShield = renderToString(React.createElement(ShieldCheck, { size: 16 }));
 const iconCheck = renderToString(React.createElement(CheckCircle, { size: 16 }));
 const iconX = renderToString(React.createElement(XCircle, { size: 16 }));
+const iconHeroCheck = renderToString(React.createElement(Check, { size: 24, strokeWidth: 2.5 }));
+const iconHeroX = renderToString(React.createElement(X, { size: 24, strokeWidth: 2.5 }));
 const iconAlert = renderToString(React.createElement(AlertTriangle, { size: 16 }));
 const iconHelp = renderToString(React.createElement(HelpCircle, { size: 16 }));
 const iconActivity = renderToString(React.createElement(Activity, { size: 12 }));
@@ -30,54 +43,43 @@ const iconSearch = renderToString(React.createElement(Search, { size: 16 }));
 const iconUsers = renderToString(React.createElement(Users, { size: 16 }));
 const iconExternal = renderToString(React.createElement(ExternalLink, { size: 12 }));
 
-// Helper function to get UI properties based on verdict
+// Compose pure verdict presentation tokens with the matching Lucide icon.
 function getVerdictUI(verdict) {
-   switch (verdict) {
-      case "FACT":
-         return {
-            color: "#10b981",
-            class: "fact",
-            icon: iconCheck,
-            text: "Fact",
-         };
-      case "FAKE":
-         return { color: "#ef4444", class: "fake", icon: iconX, text: "Fake" };
-      case "MISLEADING":
-         return {
-            color: "#f59e0b",
-            class: "misleading",
-            icon: iconAlert,
-            text: "Misleading",
-         };
-      case "SATIRE":
-         return {
-            color: "#8b5cf6",
-            class: "satire",
-            icon: iconSparkles,
-            text: "Satire",
-         };
-      case "OUT_OF_SCOPE":
-         return {
-            color: "#9ca3af",
-            class: "out-of-scope",
-            icon: iconHelp,
-            text: "Out of Scope",
-         };
-      case "UNVERIFIED":
-         return {
-            color: "#ebdc09",
-            class: "unverified",
-            icon: iconHelp,
-            text: "Unverified",
-         };
-      default:
-         return {
-            color: "#ebdc09",
-            class: "unverified",
-            icon: iconHelp,
-            text: "Unverified",
-         };
-   }
+   const presentation = getVerdictPresentation(verdict);
+   const icons = {
+      fact: iconCheck,
+      fake: iconX,
+      misleading: iconAlert,
+      satire: iconSparkles,
+      "out-of-scope": iconHelp,
+      unverified: iconHelp,
+   };
+   const heroIcons = {
+      fact: iconHeroCheck,
+      fake: iconHeroX,
+      misleading: iconAlert,
+      satire: iconSparkles,
+      "out-of-scope": iconHelp,
+      unverified: iconHelp,
+   };
+   const legacyColors = {
+      fact: "#10b981",
+      fake: "#ef4444",
+      misleading: "#f59e0b",
+      satire: "#8b5cf6",
+      "out-of-scope": "#9ca3af",
+      unverified: "#ebdc09",
+   };
+
+   return {
+      ...presentation,
+      // Keep the historical title color for institutional/publication cards.
+      color: legacyColors[presentation.className] || "#9ca3af",
+      class: presentation.className,
+      text: presentation.label,
+      icon: icons[presentation.className] || iconHelp,
+      heroIcon: heroIcons[presentation.className] || iconHelp,
+   };
 }
 
 function escapeHtml(value) {
@@ -148,13 +150,27 @@ function normalizeEvidenceSources(sources, sourceUrl) {
          }
       }
 
-      normalized.push({ url, title });
+      let hostname = "";
+      try {
+         hostname = new URL(url).hostname.replace(/^www\./i, "");
+      } catch {
+         hostname = "";
+      }
+
+      normalized.push({ url, title, hostname });
    }
 
    return normalized;
 }
 
-function compactSourcesHTML({ sources, sourceUrl, moreUrl = null, moreLabel = "full report" }) {
+function compactSourcesHTML({
+   sources,
+   sourceUrl,
+   moreUrl = null,
+   moreLabel = "full report",
+   showHeading = true,
+   showDomain = false,
+}) {
    const normalizedSources = normalizeEvidenceSources(sources, sourceUrl);
    if (!normalizedSources.length) return "";
 
@@ -172,8 +188,11 @@ function compactSourcesHTML({ sources, sourceUrl, moreUrl = null, moreLabel = "f
                rel="noopener noreferrer"
                title="${escapeHtml(source.url)}"
             >
-               <span>${escapeHtml(source.title)}</span>
-               ${iconExternal}
+               <span class="truthlens-source-copy">
+                  <strong>${escapeHtml(source.title)}</strong>
+                  ${showDomain && source.hostname ? `<span class="truthlens-source-domain"> · ${escapeHtml(source.hostname)}</span>` : ""}
+               </span>
+               <span class="truthlens-source-arrow" aria-hidden="true">↗</span>
             </a>
          `,
       )
@@ -189,7 +208,7 @@ function compactSourcesHTML({ sources, sourceUrl, moreUrl = null, moreLabel = "f
 
    return `
       <section class="truthlens-compact-sources" aria-label="Sources">
-         <strong class="truthlens-source-heading">Sources</strong>
+         ${showHeading ? '<strong class="truthlens-source-heading">Sources</strong>' : ""}
          <div class="truthlens-source-list">
             ${sourceLinks}
          </div>
@@ -495,8 +514,10 @@ export function displayResultCard(claim) {
    const displayVerdict = final_verdict || verdict || "UNVERIFIED";
    const ui = getVerdictUI(displayVerdict);
    const isAdjudicated = resolution_source === "ADJUDICATION" && Boolean(final_verdict);
+   const isOutOfScope = displayVerdict === "OUT_OF_SCOPE";
    const confidenceValue = Number(confidence_score);
    const hasConfidence = Number.isFinite(confidenceValue);
+   const confidenceLevel = hasConfidence ? getConfidenceLevel(confidenceValue) : "Unavailable";
    const adjudicationReview = isRecord(adjudication_review) ? adjudication_review : {};
    const decisionRationale = nonblankText(adjudicationReview.rationale);
    const reviewOrganization = isRecord(adjudicationReview.organization)
@@ -512,19 +533,13 @@ export function displayResultCard(claim) {
               sourceUrl: source_url,
               moreUrl: deepAnalysisUrl,
               moreLabel: "full report",
+              showHeading: false,
+              showDomain: true,
            });
 
    const confidenceHTML =
-      displayVerdict === "OUT_OF_SCOPE"
-         ? `
-            <section class="truthlens-confidence-na" aria-label="Confidence score not applicable">
-               <span class="truthlens-confidence-na-icon" aria-hidden="true">${iconHelp}</span>
-               <div>
-                  <strong>Confidence score not applicable</strong>
-                  <p>No factual verdict was produced for this input, so there is no factual confidence score to show.</p>
-               </div>
-            </section>
-         `
+      isOutOfScope
+         ? ""
          : isAdjudicated
            ? ""
            : hasConfidence
@@ -534,10 +549,11 @@ export function displayResultCard(claim) {
                   <div class="truthlens-confidence-title">
                      ${iconActivity} AI CONFIDENCE
                   </div>
-                  <div class="truthlens-confidence-value" style="color: ${ui.color};">${confidenceValue}%</div>
+                  <span class="truthlens-confidence-level">${escapeHtml(confidenceLevel)}</span>
+                  <div class="truthlens-confidence-value">${confidenceValue}%</div>
                </div>
                <div class="truthlens-confidence-bar">
-                  <div class="truthlens-confidence-fill" style="width: ${Math.max(0, Math.min(100, confidenceValue))}%; background: linear-gradient(90deg, #10b981 0%, ${ui.color} 100%);"></div>
+                  <div class="truthlens-confidence-fill" style="width: ${Math.max(0, Math.min(100, confidenceValue))}%;"></div>
                </div>
                <div class="truthlens-score-context">
                   ${nonblankText(score_context)
@@ -559,21 +575,33 @@ export function displayResultCard(claim) {
          `;
 
    const sourceTypeText = nonblankText(source_type);
-   const sourceMetadataHTML = isAdjudicated
-      ? `
-         <div class="truthlens-result-source-meta" aria-label="Review provenance">
-            ${reviewOrganizationName
-               ? `<div><strong>Reviewed by</strong><span>${escapeHtml(reviewOrganizationName)}</span></div>`
-               : `<div><strong>Partner Reviewed</strong></div>`}
-         </div>
-      `
-      : sourceTypeText
+   const sourceMetadataHTML = isOutOfScope
+      ? ""
+      : isAdjudicated
         ? `
-         <div class="truthlens-result-source-meta">
-            <div><strong>Source Type</strong><span>${escapeHtml(sourceTypeText)}</span></div>
-         </div>
+           <div class="truthlens-result-source-meta" aria-label="Review provenance">
+              ${reviewOrganizationName
+                 ? `<div><strong>Reviewed by</strong><span>${escapeHtml(reviewOrganizationName)}</span></div>`
+                 : `<div><strong>Partner Reviewed</strong></div>`}
+           </div>
+        `
+        : sourceTypeText
+          ? `
+             <div class="truthlens-result-source-meta" aria-label="Source type">
+                <div><strong>Source Type</strong><span>${escapeHtml(sourceTypeText)}</span></div>
+             </div>
+          `
+          : "";
+
+   const aiReminderHTML =
+      shouldShowAiResultReminder({ isAdjudicated, isOutOfScope })
+         ? `
+         <aside class="truthlens-ai-reminder" aria-label="AI result reminder">
+            <span class="truthlens-ai-reminder-icon" aria-hidden="true">i</span>
+            <p>${escapeHtml(getAiResultReminderText(Boolean(sourcesHTML)))}</p>
+         </aside>
       `
-        : "";
+         : "";
 
    let primaryButtonHTML = "";
    let secondaryLinkHTML = "";
@@ -587,56 +615,101 @@ export function displayResultCard(claim) {
            : null;
    const communityText = thread_id ? "View Community Discussion" : "Ask the Community";
 
-   if (displayVerdict === "UNVERIFIED") {
-      primaryButtonHTML = communityLink
-         ? `<a href='${escapeHtml(communityLink)}' target='_blank' rel='noopener noreferrer' class='truthlens-primary-btn'>${iconUsers} ${communityText}</a>`
-         : "";
-      secondaryLinkHTML = deepAnalysisUrl
-         ? `<a href='${escapeHtml(deepAnalysisUrl)}' target='_blank' rel='noopener noreferrer' class='truthlens-dashboard-link'>View full report ${iconExternal}</a>`
-         : "";
-   } else {
-      primaryButtonHTML = deepAnalysisUrl
-         ? `<a href='${escapeHtml(deepAnalysisUrl)}' target='_blank' rel='noopener noreferrer' class='truthlens-primary-btn'>${iconSearch} View Full Report</a>`
-         : "";
-      secondaryLinkHTML = communityLink
-         ? `<a href='${escapeHtml(communityLink)}' target='_blank' rel='noopener noreferrer' class='truthlens-dashboard-link'>${communityText} ${iconExternal}</a>`
-         : "";
+   if (shouldShowResultActions(displayVerdict)) {
+      if (displayVerdict === "UNVERIFIED") {
+         primaryButtonHTML = communityLink
+            ? `<a href='${escapeHtml(communityLink)}' target='_blank' rel='noopener noreferrer' class='truthlens-primary-btn'>${iconUsers} ${communityText}</a>`
+            : "";
+         secondaryLinkHTML = deepAnalysisUrl
+            ? `<a href='${escapeHtml(deepAnalysisUrl)}' target='_blank' rel='noopener noreferrer' class='truthlens-dashboard-link'>View full report ${iconExternal}</a>`
+            : "";
+      } else {
+         primaryButtonHTML = deepAnalysisUrl
+            ? `<a href='${escapeHtml(deepAnalysisUrl)}' target='_blank' rel='noopener noreferrer' class='truthlens-primary-btn'>${iconSearch} View Full Report</a>`
+            : "";
+         secondaryLinkHTML = communityLink
+            ? `<a href='${escapeHtml(communityLink)}' target='_blank' rel='noopener noreferrer' class='truthlens-dashboard-link'>${communityText} ${iconExternal}</a>`
+            : "";
+      }
    }
+
+   const footerHTML =
+      primaryButtonHTML || secondaryLinkHTML
+         ? `
+         <div class="truthlens-result-footer">
+            ${primaryButtonHTML}
+            ${secondaryLinkHTML}
+         </div>
+      `
+         : "";
 
    const card = document.createElement("div");
    card.id = "truthlens-result-card";
    card.className = `truthlens-card truthlens-result-card-shell verdict-${ui.class}`;
+   card.style.setProperty("--truthlens-verdict-accent", ui.accent);
+   card.style.setProperty("--truthlens-verdict-ink", ui.ink);
+   card.style.setProperty("--truthlens-verdict-tint", ui.tint);
+   card.style.setProperty("--truthlens-verdict-chip", ui.chip);
+
+   const verdictKicker = isAdjudicated ? "PARTNER VERDICT" : isOutOfScope ? "STATUS" : "VERDICT";
+   const summaryHeading = isAdjudicated
+      ? "DECISION RATIONALE"
+      : isOutOfScope
+        ? "WHAT THIS MEANS"
+        : "AI SUMMARY";
+
+   const outOfScopeGuidanceHTML = isOutOfScope
+      ? `
+         <section class="truthlens-context-guidance" aria-labelledby="truthlens-out-of-scope-guidance-title">
+            <div id="truthlens-out-of-scope-guidance-title" class="truthlens-context-guidance-title">
+               What to submit instead
+            </div>
+            <p>
+               Submit a specific factual claim about a real person, organization, event, date, place,
+               amount, action, or statement that can be checked against evidence.
+            </p>
+         </section>
+      `
+      : "";
 
    card.innerHTML = `
+      <span class="truthlens-verdict-accent" aria-hidden="true"></span>
+
       <div class="truthlens-header">
          ${truthLensBrandHTML()}
          <button id="truthlens-close-btn" class="truthlens-close-btn" aria-label="Close verification result">&times;</button>
       </div>
 
       <div class="truthlens-result-body" role="region" aria-label="Verification result details" tabindex="0">
-         <div class="truthlens-badge badge-${ui.class}">
-            ${ui.icon} ${ui.text}
-         </div>
+         <section class="truthlens-verdict-hero" aria-label="${escapeHtml(verdictKicker)}: ${escapeHtml(ui.text)}">
+            <span class="truthlens-verdict-icon" aria-hidden="true">${ui.heroIcon || ui.icon}</span>
+            <div class="truthlens-verdict-copy">
+               <span class="truthlens-verdict-kicker">${escapeHtml(verdictKicker)}</span>
+               <strong class="truthlens-verdict-label">${escapeHtml(ui.text)}</strong>
+               <p class="truthlens-verdict-description">${escapeHtml(ui.description)}</p>
+            </div>
+         </section>
 
-         <div class="truthlens-summary-box">
+         <section class="truthlens-summary-box truthlens-result-summary">
             <div class="truthlens-summary-title">
-               ${isAdjudicated ? iconShield : iconSparkles} ${isAdjudicated ? "DECISION RATIONALE" : "AI SUMMARY"}
+               ${isAdjudicated ? iconShield : iconSparkles} ${summaryHeading}
             </div>
             <div class="truthlens-summary-text">${escapeHtml(
                isAdjudicated
                   ? decisionRationale || "This claim was reviewed by a TruthLens partner organization."
                   : summary || "No summary available.",
             )}</div>
-         </div>
+         </section>
 
          ${confidenceHTML}
          ${sourcesHTML}
+         ${outOfScopeGuidanceHTML}
+         ${isOutOfScope ? "" : relatedPublicationsHTML(claim)}
          ${sourceMetadataHTML}
-         ${relatedPublicationsHTML(claim)}
-
-         ${primaryButtonHTML}
-         ${secondaryLinkHTML}
+         ${aiReminderHTML}
       </div>
+
+      ${footerHTML}
    `;
 
    document.body.appendChild(card);
@@ -778,7 +851,107 @@ export function removeLoadingCard() {
    }
 }
 
+function displayNeedsContextCard(message) {
+   document.querySelectorAll("#truthlens-error-card").forEach((errorCard) => {
+      errorCard.remove();
+   });
+
+   const card = document.createElement("div");
+   card.id = "truthlens-error-card";
+   card.className =
+      "truthlens-card truthlens-result-card-shell truthlens-non-conclusion-card truthlens-needs-context-card";
+   card.style.setProperty("--truthlens-verdict-accent", "#6366f1");
+   card.style.setProperty("--truthlens-verdict-ink", "#3730a3");
+   card.style.setProperty("--truthlens-verdict-tint", "#eef2ff");
+   card.style.setProperty("--truthlens-verdict-chip", "#4f46e5");
+
+   card.innerHTML = `
+      <span class="truthlens-verdict-accent" aria-hidden="true"></span>
+
+      <div class="truthlens-header">
+         ${truthLensBrandHTML()}
+         <button
+            type="button"
+            id="truthlens-error-close-btn"
+            class="truthlens-close-btn"
+            aria-label="Dismiss more context notice"
+            title="Dismiss"
+         >
+            &times;
+         </button>
+      </div>
+
+      <div
+         class="truthlens-result-body"
+         role="status"
+         aria-label="More context needed"
+         tabindex="0"
+      >
+         <section class="truthlens-verdict-hero" aria-label="More context needed">
+            <span class="truthlens-verdict-icon" aria-hidden="true">${iconHelp}</span>
+            <div class="truthlens-verdict-copy">
+               <span class="truthlens-verdict-kicker">MORE CONTEXT</span>
+               <strong class="truthlens-verdict-label">More context needed</strong>
+               <p class="truthlens-verdict-description">
+                  TruthLens needs more detail before it can reliably identify the factual claim.
+               </p>
+            </div>
+         </section>
+
+         <section class="truthlens-summary-box truthlens-result-summary">
+            <div class="truthlens-summary-title">
+               ${iconSparkles} WHAT THIS MEANS
+            </div>
+            <div class="truthlens-summary-text">
+               ${escapeHtml(
+                  nonblankText(message) ||
+                     "TruthLens cannot reliably identify the exact factual claim yet.",
+               )}
+            </div>
+         </section>
+
+         <section class="truthlens-context-guidance" aria-labelledby="truthlens-context-guidance-title">
+            <div id="truthlens-context-guidance-title" class="truthlens-context-guidance-title">
+               What to add
+            </div>
+            <p>
+               Add identifying details such as the full person or organization name and, when relevant,
+               the event, amount, date, or location.
+            </p>
+         </section>
+
+         <aside class="truthlens-terminal-note">
+            <span aria-hidden="true">${iconShield}</span>
+            <p>
+               Verification stopped before evidence retrieval so TruthLens would not guess what the claim meant.
+            </p>
+         </aside>
+      </div>
+   `;
+
+   document.body.appendChild(card);
+   const cleanupScrollShadows = initializeScrollPositionShadows(
+      card.querySelector(".truthlens-result-body"),
+   );
+   void card.offsetWidth;
+   const showTimer = setTimeout(() => card.classList.add("show"), 100);
+
+   card.querySelector("#truthlens-error-close-btn").addEventListener("click", () => {
+      clearTimeout(showTimer);
+      card.classList.remove("show");
+      setTimeout(() => {
+         cleanupScrollShadows();
+         card.remove();
+      }, 300);
+   });
+}
+
 export function displayErrorCard(message, { kind = "service" } = {}) {
+   if (kind === "needs_context") {
+      displayNeedsContextCard(message);
+      return;
+   }
+
    const presentation = {
       security_threat: {
          badge: "SECURITY ALERT",

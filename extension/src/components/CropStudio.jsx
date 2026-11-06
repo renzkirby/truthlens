@@ -1,6 +1,5 @@
 import { useState, useRef } from "react";
 import ReactCrop from "react-image-crop";
-import "@fontsource-variable/mona-sans/wght.css";
 import "react-image-crop/dist/ReactCrop.css";
 import "./CropStudio.css";
 

@@ -1,16 +1,19 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { FileText, ScanLine } from "lucide-react";
+import { shouldSubmitTextVerifyOnKeyDown } from "./textVerifyKeyboard.js";
 import "./TextVerify.css";
 
 function TextVerify() {
    const [text, setText] = useState("");
    const [error, setError] = useState("");
    const [isAnalyzing, setIsAnalyzing] = useState(false);
+   const submissionInFlightRef = useRef(false);
 
    const handleVerify = async () => {
       const claimText = text.trim();
-      if (!claimText || isAnalyzing) return;
+      if (!claimText || isAnalyzing || submissionInFlightRef.current) return;
 
+      submissionInFlightRef.current = true;
       setIsAnalyzing(true);
       setError("");
 
@@ -25,6 +28,7 @@ function TextVerify() {
             tab.url?.startsWith("about:")
          ) {
             setError("Open a normal webpage first so TruthLens has somewhere to display the result.");
+            submissionInFlightRef.current = false;
             setIsAnalyzing(false);
             return;
          }
@@ -56,6 +60,7 @@ function TextVerify() {
       } catch (submissionError) {
          console.error("Text verification failed:", submissionError);
          setError("TruthLens could not start this verification. Reload the extension and try again.");
+         submissionInFlightRef.current = false;
          setIsAnalyzing(false);
       }
    };
@@ -81,10 +86,10 @@ function TextVerify() {
                   if (error) setError("");
                }}
                onKeyDown={(event) => {
-                  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-                     event.preventDefault();
-                     handleVerify();
-                  }
+                  if (!shouldSubmitTextVerifyOnKeyDown(event)) return;
+
+                  event.preventDefault();
+                  handleVerify();
                }}
                placeholder="Paste the claim you want TruthLens to investigate…"
                rows={6}
@@ -93,7 +98,7 @@ function TextVerify() {
          </div>
 
          <p id="truthlens-text-help" className="text-verify-help">
-            Be specific enough that the claim can be checked against public evidence. Press Ctrl/⌘ + Enter to analyze.
+            Be specific enough that the claim can be checked against public evidence. Press Enter to verify, or Shift + Enter for a new line.
          </p>
 
          {error && (
