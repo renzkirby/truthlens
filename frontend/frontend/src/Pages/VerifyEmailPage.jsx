@@ -53,7 +53,7 @@ function VerifyEmailPage() {
       const verify = async () => {
          if (!token) {
             setStatus("invalid");
-            setMessage("This verification link is missing its token.");
+            setMessage("This verification link is invalid or has expired. Request a new verification email.");
             return;
          }
 
@@ -81,7 +81,7 @@ function VerifyEmailPage() {
 
             if (data?.status === "expired") {
                setStatus("expired");
-               setMessage(data?.detail || "This verification link has expired.");
+               setMessage("This verification link is invalid or has expired. Request a new verification email.");
                return;
             }
 
@@ -98,7 +98,7 @@ function VerifyEmailPage() {
                           serviceMessage: "Email verification is temporarily unavailable. Try again shortly.",
                        },
                     )
-                  : data?.detail || "This verification link is invalid or has already been used.",
+                  : "This verification link is invalid or has expired. Request a new verification email.",
             );
          } catch (error) {
             console.error("Email verification failed:", error);
