@@ -1,5 +1,6 @@
 import uuid
 from copy import deepcopy
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.core.cache import cache
@@ -162,6 +163,140 @@ class PublicFactCheckApiTests(
             self.organization.logo_url,
         )
 
+    def test_initial_publication_invalidates_cached_empty_collection(self):
+        context = self.make_context(
+            evidence_statuses=[EvidenceSubmission.EvidenceStatus.VERIFIED]
+        )
+        context["decision"] = self.issue(context)["decision"]
+        client = APIClient()
+
+        empty_collection = client.get(self.collection_url())
+        self.assertEqual(empty_collection.status_code, status.HTTP_200_OK)
+        self.assertEqual(empty_collection.data["count"], 0)
+        self.assertEqual(empty_collection.data["results"], [])
+
+        draft = create_fact_check_draft(
+            decision=context["decision"],
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_decision_revision=context["decision"].revision_number,
+            headline="First cached publication",
+            summary="The first public article must replace the cached empty state.",
+            article_body="Verified analysis for the first public publication.",
+            source_urls=["https://example.com/first-cached-publication"],
+        )
+        submitted = submit_fact_check_for_review(
+            fact_check=draft,
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
+        )
+        with (
+            patch("api.publishing_service._queue_fact_check_index"),
+            patch("api.publishing_service.notify_fact_check_published"),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            published = publish_fact_check(
+                fact_check=submitted,
+                actor=self.lead,
+                organization_id=self.organization.id,
+                expected_edit_generation=submitted.edit_generation,
+                expected_decision_revision=context["decision"].revision_number,
+            )["fact_check"]
+
+        refreshed_collection = client.get(self.collection_url())
+        self.assertEqual(refreshed_collection.status_code, status.HTTP_200_OK)
+        self.assertEqual(refreshed_collection.data["count"], 1)
+        self.assertEqual(
+            refreshed_collection.data["results"][0]["publication_id"],
+            str(published.id),
+        )
+
+    def test_public_collection_and_detail_reuse_cached_serialized_payloads(self):
+        context = self.make_published("cache-hit")
+        client = APIClient()
+
+        first_collection = client.get(self.collection_url())
+        first_detail = client.get(self.detail_url(context["published"]))
+
+        with patch(
+            "api.views.list_public_partner_fact_checks",
+            side_effect=AssertionError("Collection query should not run on a cache hit."),
+        ):
+            second_collection = client.get(self.collection_url())
+        with patch(
+            "api.views.get_public_partner_fact_check_detail",
+            side_effect=AssertionError("Detail query should not run on a cache hit."),
+        ):
+            second_detail = client.get(self.detail_url(context["published"]))
+
+        self.assertEqual(second_collection.status_code, status.HTTP_200_OK)
+        self.assertEqual(second_detail.status_code, status.HTTP_200_OK)
+        self.assertEqual(second_collection.data, first_collection.data)
+        self.assertEqual(second_detail.data, first_detail.data)
+
+    def test_publication_cache_invalidates_after_editorial_replacement_commits(self):
+        context = self.make_published("cache-invalidation")
+        original = context["published"]
+        client = APIClient()
+
+        cached_collection = client.get(self.collection_url())
+        cached_detail = client.get(self.detail_url(original))
+        self.assertEqual(
+            cached_collection.data["results"][0]["publication_id"],
+            str(original.id),
+        )
+        self.assertEqual(cached_detail.data["history_state"], "CURRENT")
+
+        revision = self.make_submitted_revision(
+            context,
+            reason="Refresh the cached public article.",
+        )
+        with (
+            patch("api.publishing_service._queue_fact_check_index"),
+            patch("api.publishing_service.notify_fact_check_published"),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            replacement = self.replace(context, revision)["fact_check"]
+
+        refreshed_collection = client.get(self.collection_url())
+        refreshed_original = client.get(self.detail_url(original))
+
+        self.assertEqual(
+            refreshed_collection.data["results"][0]["publication_id"],
+            str(replacement.id),
+        )
+        self.assertEqual(refreshed_original.data["history_state"], "SUPERSEDED")
+        self.assertEqual(
+            refreshed_original.data["current_publication_id"],
+            str(replacement.id),
+        )
+
+    def test_publication_cache_invalidates_after_organization_status_change(self):
+        context = self.make_published("organization-cache-invalidation")
+        client = APIClient()
+
+        initial = client.get(self.detail_url(context["published"]))
+        self.assertEqual(
+            initial.data["organization"]["partner_status"],
+            Organization.PartnerStatus.ACTIVE,
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.organization.partner_status = Organization.PartnerStatus.FORMER
+            self.organization.save(update_fields=["partner_status", "updated_at"])
+
+        refreshed = client.get(self.detail_url(context["published"]))
+        self.assertEqual(refreshed.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            refreshed.data["organization"]["partner_status"],
+            Organization.PartnerStatus.FORMER,
+        )
+        self.assertFalse(
+            refreshed.data["organization"]["public_profile_available"]
+        )
+
     def test_public_detail_returns_sealed_rich_article_document(self):
         context = self.make_context(
             evidence_statuses=[EvidenceSubmission.EvidenceStatus.VERIFIED]
@@ -289,9 +424,11 @@ class PublicFactCheckApiTests(
             self.organization.logo_url,
         )
 
-        Organization.objects.filter(pk=self.organization.pk).update(
-            public_logo_enabled=False
-        )
+        with self.captureOnCommitCallbacks(execute=True):
+            self.organization.public_logo_enabled = False
+            self.organization.save(
+                update_fields=["public_logo_enabled", "updated_at"]
+            )
 
         hidden = APIClient().get(self.detail_url(context["published"]))
         self.assertIsNone(hidden.data["organization"]["logo_url"])
@@ -322,8 +459,12 @@ class PublicFactCheckApiTests(
         )
         for changes in eligibility_changes:
             with self.subTest(changes=changes):
-                Organization.objects.filter(pk=self.organization.pk).update(**changes)
-                self.organization.refresh_from_db()
+                with self.captureOnCommitCallbacks(execute=True):
+                    for field_name, value in changes.items():
+                        setattr(self.organization, field_name, value)
+                    self.organization.save(
+                        update_fields=[*changes.keys(), "updated_at"]
+                    )
 
                 collection = client.get(self.collection_url())
                 detail = client.get(self.detail_url(context["published"]))
@@ -346,12 +487,20 @@ class PublicFactCheckApiTests(
                 )
                 self.assertEqual(profile.status_code, status.HTTP_404_NOT_FOUND)
 
-                Organization.objects.filter(pk=self.organization.pk).update(
-                    public_profile_enabled=True,
-                    verification_status=Organization.VerificationStatus.VERIFIED,
-                    partner_status=Organization.PartnerStatus.ACTIVE,
-                )
-                self.organization.refresh_from_db()
+                with self.captureOnCommitCallbacks(execute=True):
+                    self.organization.public_profile_enabled = True
+                    self.organization.verification_status = (
+                        Organization.VerificationStatus.VERIFIED
+                    )
+                    self.organization.partner_status = Organization.PartnerStatus.ACTIVE
+                    self.organization.save(
+                        update_fields=[
+                            "public_profile_enabled",
+                            "verification_status",
+                            "partner_status",
+                            "updated_at",
+                        ]
+                    )
 
     def test_only_current_cards_appear_and_history_counts_actual_lineage(self):
         context = self.make_published("published-history")

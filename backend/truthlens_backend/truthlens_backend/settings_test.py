@@ -8,8 +8,14 @@ os.environ["GROQ_API_KEY"] = "truthlens-offline-test-groq-key"
 os.environ["GEMINI_API_KEY"] = "truthlens-offline-test-gemini-key"
 os.environ["INVESTIGATION_CLASSIFICATION_MODE"] = "off"
 os.environ["INVESTIGATION_ROUTING_MODE"] = "off"
+# Offline tests must never inherit or reload a developer/CI Redis endpoint.
+os.environ["CACHE_REDIS_URL"] = ""
 
 from .settings import *
+
+# Keep cache-backed throttles and public-read caches isolated across tests while
+# preserving the real configured throttle rates inside each individual test.
+TEST_RUNNER = "truthlens_backend.test_runner.TruthLensTestRunner"
 
 # Test settings must not depend on an ignored local .env file. This value is
 # intentionally test-only and must never be used by development/staging/production.

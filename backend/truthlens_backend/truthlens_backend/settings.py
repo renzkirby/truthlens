@@ -90,8 +90,8 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
     "DEFAULT_THROTTLE_CLASSES": [
-        "rest_framework.throttling.AnonRateThrottle",
-        "rest_framework.throttling.UserRateThrottle",
+        "api.throttles.TruthLensAnonRateThrottle",
+        "api.throttles.TruthLensUserRateThrottle",
     ],
     "DEFAULT_THROTTLE_RATES": {
         "anon": "5/minute",
@@ -282,6 +282,44 @@ INVESTIGATION_ROUTING_MODE = os.getenv(
 ).strip().lower()
 if INVESTIGATION_ROUTING_MODE not in {"off", "enforce"}:
     raise ValueError("INVESTIGATION_ROUTING_MODE must be off or enforce.")
+
+# Public read caching is optional and fail-soft at the application layer.
+# Production should provide a shared Redis URL (preferably a dedicated logical
+# database such as /1). Local/test environments retain an in-process cache so
+# contributors do not need Redis just to run the application or test suite.
+CACHE_REDIS_URL = (os.getenv("CACHE_REDIS_URL") or "").strip()
+CACHE_KEY_PREFIX = (os.getenv("CACHE_KEY_PREFIX", "truthlens") or "truthlens").strip()
+CACHE_DEFAULT_TIMEOUT_SECONDS = int(
+    os.getenv("CACHE_DEFAULT_TIMEOUT_SECONDS", "300")
+)
+PUBLIC_PARTNER_DIRECTORY_CACHE_SECONDS = int(
+    os.getenv("PUBLIC_PARTNER_DIRECTORY_CACHE_SECONDS", "60")
+)
+PUBLIC_FACT_CHECK_COLLECTION_CACHE_SECONDS = int(
+    os.getenv("PUBLIC_FACT_CHECK_COLLECTION_CACHE_SECONDS", "60")
+)
+PUBLIC_FACT_CHECK_DETAIL_CACHE_SECONDS = int(
+    os.getenv("PUBLIC_FACT_CHECK_DETAIL_CACHE_SECONDS", "300")
+)
+
+if CACHE_REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": CACHE_REDIS_URL,
+            "KEY_PREFIX": CACHE_KEY_PREFIX,
+            "TIMEOUT": CACHE_DEFAULT_TIMEOUT_SECONDS,
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "truthlens-local-cache",
+            "KEY_PREFIX": CACHE_KEY_PREFIX,
+            "TIMEOUT": CACHE_DEFAULT_TIMEOUT_SECONDS,
+        }
+    }
 
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")

@@ -140,6 +140,21 @@ class FactualCorrectionHandoffFixtures(FactualCorrectionPublicationHistoryFixtur
 
 
 class FactualCorrectionHandoffTests(FactualCorrectionHandoffFixtures, TestCase):
+    def test_handoff_invalidates_public_fact_check_cache_after_commit(self):
+        context = self.make_prepared_context(suffix="cache-invalidation")
+
+        with (
+            patch("api.publishing_service._queue_fact_check_index"),
+            patch("api.publishing_service.notify_factual_correction_published"),
+            patch(
+                "api.publishing_service.invalidate_public_fact_check_cache"
+            ) as invalidate_cache,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            self.handoff(context)
+
+        invalidate_cache.assert_called_once_with(self.organization.id)
+
     def test_handoff_preserves_distinct_approval_publication_and_source_provenance(
         self,
     ):

@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.conf import settings
 from django.core.cache import cache
@@ -141,6 +142,40 @@ class PublicPartnerApiTests(APITestCase):
                 self.climate.slug,
             ],
         )
+
+    def test_directory_reuses_cached_payload_for_identical_query(self):
+        client = APIClient()
+        first = client.get(self.directory_url)
+
+        with patch(
+            "api.views.get_public_partner_directory",
+            side_effect=AssertionError("Directory query should not run on a cache hit."),
+        ):
+            second = client.get(self.directory_url)
+
+        self.assertEqual(second.status_code, status.HTTP_200_OK)
+        self.assertEqual(second.data, first.data)
+
+    def test_directory_cache_invalidates_after_organization_save_commits(self):
+        client = APIClient()
+        initial = client.get(self.directory_url)
+        initial_alpha = next(
+            item for item in initial.data["results"] if item["id"] == str(self.alpha.id)
+        )
+        self.assertEqual(initial_alpha["description"], self.alpha.description)
+
+        updated_description = "Updated public verification description."
+        with self.captureOnCommitCallbacks(execute=True):
+            self.alpha.description = updated_description
+            self.alpha.save(update_fields=["description", "updated_at"])
+
+        refreshed = client.get(self.directory_url)
+        refreshed_alpha = next(
+            item
+            for item in refreshed.data["results"]
+            if item["id"] == str(self.alpha.id)
+        )
+        self.assertEqual(refreshed_alpha["description"], updated_description)
 
     def test_eligible_slug_returns_public_profile(self):
         response = APIClient().get(

@@ -155,6 +155,14 @@ from .public_reach_service import (
     PublicReachTargetNotFound,
     record_public_reach_event,
 )
+from .public_read_cache import (
+    get_public_fact_check_collection_payload,
+    get_public_fact_check_detail_payload,
+    get_public_partner_directory_payload,
+    set_public_fact_check_collection_payload,
+    set_public_fact_check_detail_payload,
+    set_public_partner_directory_payload,
+)
 from .organization_public_presence_service import (
     get_public_partner_by_slug,
     get_public_partner_directory,
@@ -4851,21 +4859,36 @@ def public_partner_directory(request):
         raise_exception=True,
     )
 
+    search = query_serializer.validated_data.get("search", "")
+    organization_type = query_serializer.validated_data.get("type", "")
+    cached_payload = get_public_partner_directory_payload(
+        search=search,
+        organization_type=organization_type,
+    )
+    if cached_payload is not None:
+        return Response(cached_payload, status=status.HTTP_200_OK)
+
     organizations = get_public_partner_directory(
-        search=query_serializer.validated_data.get("search", ""),
-        organization_type=query_serializer.validated_data.get("type", ""),
+        search=search,
+        organization_type=organization_type,
     )
 
     serializer = PublicPartnerSummarySerializer(
         organizations,
         many=True,
     )
+    payload = {
+        "count": organizations.count(),
+        "results": serializer.data,
+    }
+    set_public_partner_directory_payload(
+        payload,
+        search=search,
+        organization_type=organization_type,
+    )
 
     return Response(
-        {
-            "count": organizations.count(),
-            "results": serializer.data,
-        },
+        payload,
         status=status.HTTP_200_OK,
     )
 
@@ -4919,13 +4942,30 @@ def public_partner_fact_checks(request, slug):
     if organization is None:
         raise NotFound()
 
+    limit = query_serializer.validated_data["limit"]
+    offset = query_serializer.validated_data["offset"]
+    cached_payload = get_public_fact_check_collection_payload(
+        organization_id=organization.id,
+        limit=limit,
+        offset=offset,
+    )
+    if cached_payload is not None:
+        return Response(cached_payload, status=status.HTTP_200_OK)
+
     result = list_public_partner_fact_checks(
         organization=organization,
-        limit=query_serializer.validated_data["limit"],
-        offset=query_serializer.validated_data["offset"],
+        limit=limit,
+        offset=offset,
+    )
+    payload = PublicFactCheckPageSerializer(result).data
+    set_public_fact_check_collection_payload(
+        payload,
+        organization_id=organization.id,
+        limit=limit,
+        offset=offset,
     )
     return Response(
-        PublicFactCheckPageSerializer(result).data,
+        payload,
         status=status.HTTP_200_OK,
     )
 
@@ -4938,6 +4978,13 @@ def public_partner_fact_check_detail(request, slug, publication_id):
     if organization is None:
         raise NotFound()
 
+    cached_payload = get_public_fact_check_detail_payload(
+        organization_id=organization.id,
+        publication_id=publication_id,
+    )
+    if cached_payload is not None:
+        return Response(cached_payload, status=status.HTTP_200_OK)
+
     try:
         result = get_public_partner_fact_check_detail(
             organization=organization,
@@ -4945,8 +4992,14 @@ def public_partner_fact_check_detail(request, slug, publication_id):
         )
     except PublicPublicationNotFound as error:
         raise NotFound() from error
+    payload = PublicFactCheckDetailSerializer(result).data
+    set_public_fact_check_detail_payload(
+        payload,
+        organization_id=organization.id,
+        publication_id=publication_id,
+    )
     return Response(
-        PublicFactCheckDetailSerializer(result).data,
+        payload,
         status=status.HTTP_200_OK,
     )
 

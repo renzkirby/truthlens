@@ -150,6 +150,14 @@ celery -A truthlens_backend worker -l info --pool=solo
 ```
 
 > **Note:** Configure the required API keys and database credentials in the backend `.env` file before running the verification features.
+>
+> TruthLens can also use Redis as a shared Django cache for public read-heavy
+> endpoints and DRF throttle counters. Set `CACHE_REDIS_URL` in deployed
+> environments to enable it. Prefer a dedicated Redis URL or logical database
+> separate from the Celery broker (for example, Celery on `/0` and cache on
+> `/1` when the Redis provider supports logical databases). If
+> `CACHE_REDIS_URL` is unset, Django falls back to an in-process local-memory
+> cache so the application remains usable without Redis-backed caching.
 
 ### 3. Web Platform Setup
 
