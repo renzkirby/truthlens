@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --mode development",
     "build": "npm run build:production",
-    "lint": "eslint .",
+    "lint": "eslint src vite.config.js",
     "test:errors": "node --test src/modules/userFacingError.test.js",
     "preview": "vite preview",
     "build:local": "vite build --mode development",
