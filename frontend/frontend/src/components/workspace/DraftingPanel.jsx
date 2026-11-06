@@ -1501,7 +1501,9 @@ function DraftingContent({
             setDetailError("");
             setConflict({
                code: error?.code || "CONFLICT",
-               detail: error?.message || "The update was not applied.",
+               detail: userFacingErrorMessage(error, {
+                  conflictMessage: "This draft changed while you were working. Refresh the latest version before continuing.",
+               }),
                blockers: Array.isArray(error?.blockers) ? error.blockers : [],
                serverDetail: latest,
                loading: false,
@@ -1527,7 +1529,9 @@ function DraftingContent({
             );
             setConflict({
                code: error?.code || "CONFLICT",
-               detail: error?.message || "The update was not applied.",
+               detail: userFacingErrorMessage(error, {
+                  conflictMessage: "This draft changed while you were working. Refresh the latest version before continuing.",
+               }),
                blockers: Array.isArray(error?.blockers) ? error.blockers : [],
                serverDetail: null,
                loading: false,
@@ -1552,7 +1556,9 @@ function DraftingContent({
 
             setConflict({
                code: error?.code || "CONFLICT",
-               detail: error?.message || "The update was not applied.",
+               detail: userFacingErrorMessage(error, {
+                  conflictMessage: "This draft changed while you were working. Refresh the latest version before continuing.",
+               }),
                blockers: Array.isArray(error?.blockers) ? error.blockers : [],
                serverDetail: null,
                loading: true,
@@ -1578,7 +1584,10 @@ function DraftingContent({
             return;
          }
 
-         setActionError(error?.message || fallbackMessage);
+         setActionError(userFacingErrorMessage(error, {
+            fallback: fallbackMessage,
+            serviceMessage: "Drafting actions are temporarily unavailable. Try again shortly.",
+         }));
          focusActionMessageRef.current = true;
       },
       [isOperationCurrent, refreshDetailAfterConflict, requestQueueRefresh, revokeAuthority],
