@@ -11,6 +11,7 @@ import OrganizationPublicProfilePanel from "./OrganizationPublicProfilePanel.jsx
 import OrganizationVerificationScopePanel from "./OrganizationVerificationScopePanel.jsx";
 
 import { resolveApiEndpoint } from "../../utils/api";
+import { userFacingErrorMessage } from "../../utils/userFacingError";
 import { showWorkspaceSuccess } from "../../utils/workspaceToast";
 
 import "./OrganizationAdminPanel.css";
@@ -454,7 +455,12 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
             }
 
             setInvitations([]);
-            setInvitationsError(error?.message || "Unable to load organization invitations.");
+            setInvitationsError(userFacingErrorMessage(error, {
+               fallback: "We couldn't load organization invitations. Try again.",
+               authMessage: "Your session has expired. Sign in again to load organization invitations.",
+               permissionMessage: "You don't have the required organization role to view invitations.",
+               serviceMessage: "Organization invitations are temporarily unavailable. Try again shortly.",
+            }));
          })
          .finally(() => {
             if (!cancelled) {
@@ -500,7 +506,12 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
                return;
             }
 
-            setErrorMessage(error?.message || "Unable to load organization members.");
+            setErrorMessage(userFacingErrorMessage(error, {
+               fallback: "We couldn't load organization members. Try again.",
+               authMessage: "Your session has expired. Sign in again to load organization members.",
+               permissionMessage: "You don't have the required organization role to view organization members.",
+               serviceMessage: "Organization membership information is temporarily unavailable. Try again shortly.",
+            }));
 
             setRoster({
                organization: null,
