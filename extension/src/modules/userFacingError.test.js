@@ -31,6 +31,33 @@ test("known URL threat maps to security alert", () => {
    assert.match(result.message, /known security threat/i);
 });
 
+test("URL policy block remains specific without server detail", () => {
+   const result = extensionErrorPresentation({
+      status: 400,
+      payload: { failure_code: "URL_POLICY_BLOCKED" },
+   });
+   assert.equal(result.kind, "input");
+   assert.equal(
+      result.message,
+      "This URL cannot be processed because it does not meet TruthLens URL safety requirements.",
+   );
+});
+
+test("uses actionable lifecycle messages", () => {
+   assert.equal(
+      extensionErrorPresentation({ status: 404 }).message,
+      "This verification is no longer available. Start a new verification.",
+   );
+   assert.equal(
+      extensionErrorPresentation({ status: 409 }).message,
+      "This verification changed while it was running. Start a new verification.",
+   );
+   assert.equal(
+      extensionErrorPresentation({ error: { code: "ETIMEDOUT", message: "timed out" } }).message,
+      "Verification took longer than expected. Try again when you're ready.",
+   );
+});
+
 test("does not expose server diagnostics", () => {
    const result = extensionErrorPresentation({
       status: 500,
