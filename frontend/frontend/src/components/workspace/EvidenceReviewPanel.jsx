@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
+import { userFacingErrorMessage } from "../../utils/userFacingError";
 import { showWorkspaceSuccess } from "../../utils/workspaceToast";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
 import Icons from "../Icons.jsx";
@@ -357,7 +358,12 @@ function EvidenceReviewContent({
             setQueueError(
                error?.status === 403
                   ? "You no longer have permission to review evidence for this organization."
-                  : (error?.message || "Unable to load the Evidence Review queue."),
+                  : userFacingErrorMessage(error, {
+                       fallback: "We couldn't load the Evidence Review queue. Try again.",
+                       authMessage: "Your session has expired. Sign in again to load Evidence Review.",
+                       permissionMessage: "You no longer have permission to review evidence for this organization.",
+                       serviceMessage: "Evidence Review is temporarily unavailable. Try again shortly.",
+                    }),
             );
             setQueueLoading(false);
          });
@@ -418,7 +424,12 @@ function EvidenceReviewContent({
             setDetailError(
                unavailable
                   ? "This Evidence case is no longer available."
-                  : (error?.message || "Unable to load this Evidence case."),
+                  : userFacingErrorMessage(error, {
+                       fallback: "We couldn't load this Evidence case. Try again.",
+                       authMessage: "Your session has expired. Sign in again to load this Evidence case.",
+                       permissionMessage: "You no longer have permission to review evidence for this organization.",
+                       serviceMessage: "This Evidence case is temporarily unavailable. Try again shortly.",
+                    }),
             );
             setDecision(null);
             setActionError("");
