@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
    VERDICT_PRESENTATIONS,
+   getAiResultReminderText,
    getConfidenceLevel,
    getVerdictPresentation,
    shouldShowAiResultReminder,
@@ -63,4 +64,9 @@ test("AI reminder is limited to automated factual results", () => {
       shouldShowAiResultReminder({ isOutOfScope: true }),
       false,
    );
+});
+
+test("AI reminder copy handles results without source cards", () => {
+   assert.match(getAiResultReminderText(true), /cited sources/i);
+   assert.match(getAiResultReminderText(false), /verify important information independently/i);
 });
