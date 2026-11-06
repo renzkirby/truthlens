@@ -611,7 +611,13 @@ function SafetyReviewPanel() {
          if (requiresServerReconciliation(error)) {
             reconcileConflict(caseId, error);
          } else {
-            reportMutationFailure(caseId, error?.message || "Unable to claim this Safety case.");
+            reportMutationFailure(caseId, userFacingErrorMessage(error, {
+               fallback: "We couldn't claim this Safety case. Refresh the queue and review its current status.",
+               authMessage: "Your session has expired. Sign in again before claiming a Safety case.",
+               permissionMessage: "Your account doesn't have permission to claim this Safety case.",
+               conflictMessage: "This Safety case is no longer available to claim. Refresh the queue and review its current status.",
+               serviceMessage: "Platform Safety actions are temporarily unavailable. Try again shortly.",
+            }));
          }
       } finally {
          if (generation === safetyGenerationRef.current) {
@@ -661,7 +667,13 @@ function SafetyReviewPanel() {
          if (requiresServerReconciliation(error)) {
             reconcileConflict(caseId, error);
          } else {
-            reportMutationFailure(caseId, error?.message || "Unable to release this Safety case.");
+            reportMutationFailure(caseId, userFacingErrorMessage(error, {
+               fallback: "We couldn't release this Safety case. Refresh the queue and try again.",
+               authMessage: "Your session has expired. Sign in again before releasing a Safety case.",
+               permissionMessage: "Your account doesn't have permission to release this Safety case.",
+               conflictMessage: "This Safety case changed before it could be released. Refresh the queue and review its current status.",
+               serviceMessage: "Platform Safety actions are temporarily unavailable. Try again shortly.",
+            }));
          }
       } finally {
          if (generation === safetyGenerationRef.current) {
@@ -742,7 +754,13 @@ function SafetyReviewPanel() {
          if (requiresServerReconciliation(error)) {
             reconcileConflict(caseId, error);
          } else {
-            reportMutationFailure(caseId, error?.message || "Unable to complete this Safety action.");
+            reportMutationFailure(caseId, userFacingErrorMessage(error, {
+               fallback: "We couldn't complete this Safety action. Refresh the case and try again.",
+               authMessage: "Your session has expired. Sign in again before completing this Safety action.",
+               permissionMessage: "Your account doesn't have permission to complete this Safety action.",
+               conflictMessage: "This Safety case changed before your action completed. Refresh it and review the latest status.",
+               serviceMessage: "Platform Safety actions are temporarily unavailable. Try again shortly.",
+            }));
          }
       } finally {
          if (generation === safetyGenerationRef.current) {
