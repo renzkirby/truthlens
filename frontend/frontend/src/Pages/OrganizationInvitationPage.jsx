@@ -7,7 +7,10 @@ import Icons from "../components/Icons.jsx";
 import Button from "../components/ui/Button.jsx";
 
 import { resolveApiEndpoint } from "../utils/api";
-import { userFacingErrorMessage } from "../utils/userFacingError";
+import {
+   safeUserFacingDetail,
+   userFacingErrorMessage,
+} from "../utils/userFacingError";
 import { createAuthReturnState } from "../utils/authNavigation";
 import { canAccessWorkspace } from "../utils/workspace";
 
@@ -185,7 +188,10 @@ function OrganizationInvitationPage() {
             method: "POST",
          });
 
-         setActionMessage(response?.detail || "Verification email sent. Check your inbox.");
+         setActionMessage(
+            safeUserFacingDetail(response?.detail) ||
+               "Verification email sent. Check your inbox.",
+         );
       } catch (error) {
          console.error("Failed to send verification email:", error);
 
@@ -255,9 +261,10 @@ function OrganizationInvitationPage() {
       } catch (error) {
          console.error("Failed to accept organization invitation:", error);
 
-         const message = error?.message || "Unable to accept this invitation.";
-
-         const normalizedMessage = message.toLowerCase();
+         const safeDetail =
+            safeUserFacingDetail(error?.detail) ||
+            safeUserFacingDetail(error?.message);
+         const normalizedMessage = safeDetail.toLowerCase();
 
          if (error?.status === 404) {
             setInvitation(null);
@@ -268,21 +275,30 @@ function OrganizationInvitationPage() {
          if (error?.status === 403 && normalizedMessage.includes("verify your email")) {
             setAcceptanceState("verification-required");
 
-            setActionMessage(message);
+            setActionMessage(
+               safeDetail ||
+                  "Verify the email address on your TruthLens account before accepting this invitation.",
+            );
             return;
          }
 
          if (error?.status === 403) {
             setAcceptanceState("wrong-account");
 
-            setActionMessage(message);
+            setActionMessage(
+               safeDetail ||
+                  "This invitation belongs to another TruthLens account. Switch accounts and try again.",
+            );
             return;
          }
 
          if (error?.status === 409) {
             setAcceptanceState("conflict");
 
-            setActionMessage(message);
+            setActionMessage(
+               safeDetail ||
+                  "This invitation can no longer be accepted in its current state. Reload it and try again.",
+            );
             return;
          }
 
