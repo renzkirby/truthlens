@@ -460,8 +460,12 @@ function SafetyReviewPanel() {
       setNotice("");
       requestQueueRefresh();
 
+      const conflictMessage = userFacingErrorMessage(error, {
+         conflictMessage: "This Safety case changed before the request completed. Refresh it and review the latest status.",
+      });
+
       if (selectedCaseIdRef.current === caseId) {
-         setActionError(error?.message || "This Safety case changed before the request completed.");
+         setActionError(conflictMessage);
          setConfirmingRelease(false);
          decisionReturnFocusRef.current = null;
          restoreReleaseFocusRef.current = false;
@@ -469,11 +473,7 @@ function SafetyReviewPanel() {
          setDecisionAction(null);
          requestDetailRefresh(caseId);
       } else {
-         setNotice(
-            `Case ${formatCaseReference(caseId)}: ${
-               error?.message || "The case changed before the request completed."
-            }`,
-         );
+         setNotice(`Case ${formatCaseReference(caseId)}: ${conflictMessage}`);
       }
    };
 
