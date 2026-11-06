@@ -27,6 +27,16 @@ function ResetPasswordPage() {
    const handleSubmit = async (event) => {
       event.preventDefault();
 
+      if (!formValues.newPassword) {
+         setError("Enter a new password.");
+         return;
+      }
+
+      if (!formValues.confirmPassword) {
+         setError("Confirm your new password.");
+         return;
+      }
+
       if (formValues.newPassword !== formValues.confirmPassword) {
          setError("Passwords do not match.");
          return;
@@ -58,7 +68,7 @@ function ResetPasswordPage() {
                {
                   fallback: "We couldn't reset your password. Request a new reset link if this one is no longer valid.",
                   validationMessage: "Review the new password requirements and try again.",
-                  notFoundMessage: "This password reset link is no longer available. Request a new one.",
+                  notFoundMessage: "This password reset link is invalid or has expired. Request a new one.",
                   rateLimitMessage: "Too many password reset attempts were made in a short period. Wait before trying again.",
                   serviceMessage: "Password reset is temporarily unavailable. Try again shortly.",
                },
@@ -113,7 +123,7 @@ function ResetPasswordPage() {
                   <h1 className="account-form__title">Create a new password</h1>
                </div>
 
-               <form onSubmit={handleSubmit}>
+               <form onSubmit={handleSubmit} noValidate>
                   {error && (
                      <div className="account-form__alert" role="alert" aria-live="polite">
                         <Icons name="alert-triangle" size={16} aria-hidden="true" />
