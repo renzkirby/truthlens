@@ -41,6 +41,7 @@ from .factual_correction_proposal_schema import (
     validate_factual_correction_proposal,
 )
 from .accountability_service import record_accountability_event
+from .public_read_cache import invalidate_public_fact_check_cache
 
 from .models import (
     AccountabilityEvent,
@@ -2789,7 +2790,13 @@ def publish_editorial_revision(
             ) from error
 
         revision_id_for_index = revision.id
+        organization_id_for_cache = context["organization"].id
         transaction.on_commit(lambda: _queue_fact_check_index(revision_id_for_index))
+        transaction.on_commit(
+            lambda organization_id=organization_id_for_cache: (
+                invalidate_public_fact_check_cache(organization_id)
+            )
+        )
         dispatch_after_commit(notify_fact_check_published, revision, actor_id=actor.pk)
         return {
             "fact_check": revision,
@@ -2990,8 +2997,14 @@ def publish_fact_check(
             ) from error
 
         published_fact_check_id = locked_fact_check.id
+        organization_id_for_cache = context["organization"].id
 
         transaction.on_commit(lambda: _queue_fact_check_index(published_fact_check_id))
+        transaction.on_commit(
+            lambda organization_id=organization_id_for_cache: (
+                invalidate_public_fact_check_cache(organization_id)
+            )
+        )
         dispatch_after_commit(notify_fact_check_published, locked_fact_check, actor_id=actor.pk)
 
         return {
@@ -3917,7 +3930,13 @@ def publish_factual_correction(
         )
 
         successor_id_for_index = successor.id
+        organization_id_for_cache = context["organization"].id
         transaction.on_commit(lambda: _queue_fact_check_index(successor_id_for_index))
+        transaction.on_commit(
+            lambda organization_id=organization_id_for_cache: (
+                invalidate_public_fact_check_cache(organization_id)
+            )
+        )
         dispatch_after_commit(
             notify_factual_correction_published, successor, actor_id=actor.pk,
             workspace_recipient_ids=(request.requested_by_id, proposal.prepared_by_id),
