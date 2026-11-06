@@ -1,5 +1,6 @@
 import uuid
 from copy import deepcopy
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.core.cache import cache
@@ -160,6 +161,86 @@ class PublicFactCheckApiTests(
         self.assertEqual(
             detail.data["organization"]["logo_url"],
             self.organization.logo_url,
+        )
+
+    def test_public_collection_and_detail_reuse_cached_serialized_payloads(self):
+        context = self.make_published("cache-hit")
+        client = APIClient()
+
+        first_collection = client.get(self.collection_url())
+        first_detail = client.get(self.detail_url(context["published"]))
+
+        with patch(
+            "api.views.list_public_partner_fact_checks",
+            side_effect=AssertionError("Collection query should not run on a cache hit."),
+        ):
+            second_collection = client.get(self.collection_url())
+        with patch(
+            "api.views.get_public_partner_fact_check_detail",
+            side_effect=AssertionError("Detail query should not run on a cache hit."),
+        ):
+            second_detail = client.get(self.detail_url(context["published"]))
+
+        self.assertEqual(second_collection.status_code, status.HTTP_200_OK)
+        self.assertEqual(second_detail.status_code, status.HTTP_200_OK)
+        self.assertEqual(second_collection.data, first_collection.data)
+        self.assertEqual(second_detail.data, first_detail.data)
+
+    def test_publication_cache_invalidates_after_editorial_replacement_commits(self):
+        context = self.make_published("cache-invalidation")
+        original = context["published"]
+        client = APIClient()
+
+        cached_collection = client.get(self.collection_url())
+        cached_detail = client.get(self.detail_url(original))
+        self.assertEqual(
+            cached_collection.data["results"][0]["publication_id"],
+            str(original.id),
+        )
+        self.assertEqual(cached_detail.data["history_state"], "CURRENT")
+
+        revision = self.make_submitted_revision(
+            context,
+            reason="Refresh the cached public article.",
+        )
+        with self.captureOnCommitCallbacks(execute=True):
+            replacement = self.replace(context, revision)["fact_check"]
+
+        refreshed_collection = client.get(self.collection_url())
+        refreshed_original = client.get(self.detail_url(original))
+
+        self.assertEqual(
+            refreshed_collection.data["results"][0]["publication_id"],
+            str(replacement.id),
+        )
+        self.assertEqual(refreshed_original.data["history_state"], "SUPERSEDED")
+        self.assertEqual(
+            refreshed_original.data["current_publication_id"],
+            str(replacement.id),
+        )
+
+    def test_publication_cache_invalidates_after_organization_status_change(self):
+        context = self.make_published("organization-cache-invalidation")
+        client = APIClient()
+
+        initial = client.get(self.detail_url(context["published"]))
+        self.assertEqual(
+            initial.data["organization"]["partner_status"],
+            Organization.PartnerStatus.ACTIVE,
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.organization.partner_status = Organization.PartnerStatus.FORMER
+            self.organization.save(update_fields=["partner_status", "updated_at"])
+
+        refreshed = client.get(self.detail_url(context["published"]))
+        self.assertEqual(refreshed.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            refreshed.data["organization"]["partner_status"],
+            Organization.PartnerStatus.FORMER,
+        )
+        self.assertFalse(
+            refreshed.data["organization"]["public_profile_available"]
         )
 
     def test_public_detail_returns_sealed_rich_article_document(self):
