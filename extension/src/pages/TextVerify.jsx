@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { FileText, ScanLine } from "lucide-react";
+import { shouldSubmitTextVerifyOnKeyDown } from "./textVerifyKeyboard.js";
 import "./TextVerify.css";
 
 function TextVerify() {
@@ -81,10 +82,10 @@ function TextVerify() {
                   if (error) setError("");
                }}
                onKeyDown={(event) => {
-                  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-                     event.preventDefault();
-                     handleVerify();
-                  }
+                  if (!shouldSubmitTextVerifyOnKeyDown(event)) return;
+
+                  event.preventDefault();
+                  handleVerify();
                }}
                placeholder="Paste the claim you want TruthLens to investigate…"
                rows={6}
@@ -93,7 +94,7 @@ function TextVerify() {
          </div>
 
          <p id="truthlens-text-help" className="text-verify-help">
-            Be specific enough that the claim can be checked against public evidence. Press Ctrl/⌘ + Enter to analyze.
+            Be specific enough that the claim can be checked against public evidence. Press Enter to verify, or Shift + Enter for a new line.
          </p>
 
          {error && (
