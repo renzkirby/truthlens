@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { resolveApiEndpoint } from "../utils/api";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 
 /**
  * Hook to fetch all threads from the API.
@@ -49,7 +50,12 @@ function useFetchThreads(authFetch) {
          setThreads(normalizeThreadResponse(data));
       } catch (err) {
          console.error("Failed to fetch threads:", err);
-         setError("Failed to load threads");
+         setError(userFacingErrorMessage(err, {
+            fallback: "We couldn't load discussions. Try again.",
+            authMessage: "Your session has expired. Sign in again to load discussions.",
+            permissionMessage: "Your account doesn't have permission to load these discussions.",
+            serviceMessage: "Community discussions are temporarily unavailable. Try again shortly.",
+         }));
       } finally {
          setLoading(false);
       }
