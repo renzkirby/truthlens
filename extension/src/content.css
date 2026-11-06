@@ -1258,6 +1258,59 @@
    margin: 0;
 }
 
+.truthlens-context-guidance {
+   margin: 0 0 14px;
+   padding: 12px;
+   border: 1px solid #e0e7ff;
+   border-radius: 10px;
+   background: #f8faff;
+}
+
+.truthlens-context-guidance-title {
+   margin-bottom: 5px;
+   color: #3730a3;
+   font-size: 10.5px;
+   line-height: 1.4;
+   font-weight: 800;
+   letter-spacing: 0.06em;
+   text-transform: uppercase;
+}
+
+.truthlens-context-guidance p {
+   margin: 0;
+   color: #4b5563;
+   font-size: 11.5px;
+   line-height: 1.55;
+}
+
+.truthlens-terminal-note {
+   display: flex;
+   align-items: flex-start;
+   gap: 7px;
+   margin: 0;
+   padding-top: 10px;
+   border-top: 1px solid #e5e7eb;
+   color: #6b7280;
+   font-size: 10.5px;
+   line-height: 1.5;
+}
+
+.truthlens-terminal-note > span {
+   flex: 0 0 auto;
+   display: inline-flex;
+   margin-top: 1px;
+   color: #64748b;
+}
+
+.truthlens-terminal-note > span svg {
+   width: 14px;
+   height: 14px;
+}
+
+.truthlens-terminal-note p {
+   margin: 0;
+}
+
 @media (max-width: 400px) {
    .truthlens-card.truthlens-result-card-shell {
       top: 16px;
