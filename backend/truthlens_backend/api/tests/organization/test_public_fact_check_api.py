@@ -203,7 +203,11 @@ class PublicFactCheckApiTests(
             context,
             reason="Refresh the cached public article.",
         )
-        with self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("api.publishing_service._queue_fact_check_index"),
+            patch("api.publishing_service.notify_fact_check_published"),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             replacement = self.replace(context, revision)["fact_check"]
 
         refreshed_collection = client.get(self.collection_url())
