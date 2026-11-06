@@ -36,7 +36,6 @@ export function loadTruthLensFont() {
       {
          style: "normal",
          weight: "200 900",
-         stretch: "75% 125%",
       },
    )
       .load()
