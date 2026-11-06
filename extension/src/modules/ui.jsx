@@ -479,8 +479,10 @@ export function displayResultCard(claim) {
    const displayVerdict = final_verdict || verdict || "UNVERIFIED";
    const ui = getVerdictUI(displayVerdict);
    const isAdjudicated = resolution_source === "ADJUDICATION" && Boolean(final_verdict);
+   const isOutOfScope = displayVerdict === "OUT_OF_SCOPE";
    const confidenceValue = Number(confidence_score);
    const hasConfidence = Number.isFinite(confidenceValue);
+   const confidenceLevel = hasConfidence ? getConfidenceLevel(confidenceValue) : "Unavailable";
    const adjudicationReview = isRecord(adjudication_review) ? adjudication_review : {};
    const decisionRationale = nonblankText(adjudicationReview.rationale);
    const reviewOrganization = isRecord(adjudicationReview.organization)
@@ -499,7 +501,7 @@ export function displayResultCard(claim) {
            });
 
    const confidenceHTML =
-      displayVerdict === "OUT_OF_SCOPE"
+      isOutOfScope
          ? `
             <section class="truthlens-confidence-na" aria-label="Confidence score not applicable">
                <span class="truthlens-confidence-na-icon" aria-hidden="true">${iconHelp}</span>
@@ -518,10 +520,11 @@ export function displayResultCard(claim) {
                   <div class="truthlens-confidence-title">
                      ${iconActivity} AI CONFIDENCE
                   </div>
-                  <div class="truthlens-confidence-value" style="color: ${ui.color};">${confidenceValue}%</div>
+                  <span class="truthlens-confidence-level">${escapeHtml(confidenceLevel)}</span>
+                  <div class="truthlens-confidence-value">${confidenceValue}%</div>
                </div>
                <div class="truthlens-confidence-bar">
-                  <div class="truthlens-confidence-fill" style="width: ${Math.max(0, Math.min(100, confidenceValue))}%; background: linear-gradient(90deg, #10b981 0%, ${ui.color} 100%);"></div>
+                  <div class="truthlens-confidence-fill" style="width: ${Math.max(0, Math.min(100, confidenceValue))}%;"></div>
                </div>
                <div class="truthlens-score-context">
                   ${nonblankText(score_context)
@@ -559,6 +562,16 @@ export function displayResultCard(claim) {
       `
         : "";
 
+   const aiReminderHTML =
+      !isAdjudicated && !isOutOfScope
+         ? `
+         <aside class="truthlens-ai-reminder" aria-label="AI result reminder">
+            <span class="truthlens-ai-reminder-icon" aria-hidden="true">i</span>
+            <p>AI can make mistakes. Review the summary and cited sources before relying on this result.</p>
+         </aside>
+      `
+         : "";
+
    let primaryButtonHTML = "";
    let secondaryLinkHTML = "";
 
@@ -590,33 +603,48 @@ export function displayResultCard(claim) {
    const card = document.createElement("div");
    card.id = "truthlens-result-card";
    card.className = `truthlens-card truthlens-result-card-shell verdict-${ui.class}`;
+   card.style.setProperty("--truthlens-verdict-accent", ui.accent);
+   card.style.setProperty("--truthlens-verdict-ink", ui.ink);
+   card.style.setProperty("--truthlens-verdict-tint", ui.tint);
+   card.style.setProperty("--truthlens-verdict-chip", ui.chip);
+
+   const verdictKicker = isAdjudicated ? "PARTNER VERDICT" : isOutOfScope ? "STATUS" : "VERDICT";
+   const summaryHeading = isAdjudicated ? "DECISION RATIONALE" : "AI SUMMARY";
 
    card.innerHTML = `
+      <span class="truthlens-verdict-accent" aria-hidden="true"></span>
+
       <div class="truthlens-header">
          ${truthLensBrandHTML()}
          <button id="truthlens-close-btn" class="truthlens-close-btn" aria-label="Close verification result">&times;</button>
       </div>
 
       <div class="truthlens-result-body" role="region" aria-label="Verification result details" tabindex="0">
-         <div class="truthlens-badge badge-${ui.class}">
-            ${ui.icon} ${ui.text}
-         </div>
+         <section class="truthlens-verdict-hero" aria-label="${escapeHtml(verdictKicker)}: ${escapeHtml(ui.text)}">
+            <span class="truthlens-verdict-icon" aria-hidden="true">${ui.icon}</span>
+            <div class="truthlens-verdict-copy">
+               <span class="truthlens-verdict-kicker">${escapeHtml(verdictKicker)}</span>
+               <strong class="truthlens-verdict-label">${escapeHtml(ui.text)}</strong>
+               <p class="truthlens-verdict-description">${escapeHtml(ui.description)}</p>
+            </div>
+         </section>
 
-         <div class="truthlens-summary-box">
+         <section class="truthlens-summary-box truthlens-result-summary">
             <div class="truthlens-summary-title">
-               ${isAdjudicated ? iconShield : iconSparkles} ${isAdjudicated ? "DECISION RATIONALE" : "AI SUMMARY"}
+               ${isAdjudicated ? iconShield : iconSparkles} ${summaryHeading}
             </div>
             <div class="truthlens-summary-text">${escapeHtml(
                isAdjudicated
                   ? decisionRationale || "This claim was reviewed by a TruthLens partner organization."
                   : summary || "No summary available.",
             )}</div>
-         </div>
+         </section>
 
          ${confidenceHTML}
          ${sourcesHTML}
          ${sourceMetadataHTML}
          ${relatedPublicationsHTML(claim)}
+         ${aiReminderHTML}
 
          ${primaryButtonHTML}
          ${secondaryLinkHTML}
