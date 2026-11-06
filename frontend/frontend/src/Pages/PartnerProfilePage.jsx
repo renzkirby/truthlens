@@ -336,7 +336,7 @@ function PartnerPublishedFactChecks({ slug, isCommunity, onCountChange }) {
 }
 
 function PartnerProfileContent({ slug, isCommunity }) {
-   const { authFetch } = useAuth();
+   const { user, authFetch } = useAuth();
    const { addToast } = useNotification();
    const [partner, setPartner] = useState(null);
    const [isLoading, setIsLoading] = useState(true);
@@ -495,6 +495,15 @@ function PartnerProfileContent({ slug, isCommunity }) {
    }
 
    const followerCount = Number(partner.followers_count || 0);
+   const professionalOrganization =
+      user?.community_identity?.professional_identity?.organization || null;
+   const isOwnOrganization = Boolean(
+      professionalOrganization &&
+      (
+         String(professionalOrganization.id) === String(partner.id) ||
+         professionalOrganization.slug === partner.slug
+      )
+   );
    const hasVerificationSpecializations = Array.isArray(partner.verification_specializations);
    const expertiseAreas = hasVerificationSpecializations
       ? partner.verification_specializations
@@ -556,7 +565,7 @@ function PartnerProfileContent({ slug, isCommunity }) {
                      </span>
                   </div>
 
-                  {isCommunity && (
+                  {isCommunity && !isOwnOrganization && (
                      <button
                         type="button"
                         className={`user-profile__primary-button user-profile__profile-action ${
