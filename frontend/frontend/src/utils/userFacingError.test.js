@@ -56,7 +56,7 @@ test("uses stable application-code fallbacks when safe detail is absent", () => 
    );
    assert.equal(
       userFacingErrorMessage({ status: 403, code: "OUTSIDE_SPECIALIZATIONS" }),
-      "Your account doesn't have permission to perform this action.",
+      "This investigation is outside your organization's selected verification specializations.",
    );
    assert.equal(
       userFacingErrorMessage({ status: 400, failure_code: "URL_POLICY_BLOCKED" }),
