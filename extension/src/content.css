@@ -1199,11 +1199,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-   .truthlens-media-likelihood-fill {
+   .truthlens-media-likelihood-fill,
+   .truthlens-result-card-shell:not(.truthlens-institutional-card) .truthlens-confidence-fill {
       transition: none;
    }
 
-   .truthlens-card.truthlens-institutional-card {
+   .truthlens-card.truthlens-result-card-shell {
       transition: none;
    }
 }
