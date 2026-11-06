@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { state } from "./state.js";
 import {
+   getAiResultReminderText,
    getConfidenceLevel,
    getVerdictPresentation,
    shouldShowAiResultReminder,
@@ -568,7 +569,7 @@ export function displayResultCard(claim) {
          ? `
          <aside class="truthlens-ai-reminder" aria-label="AI result reminder">
             <span class="truthlens-ai-reminder-icon" aria-hidden="true">i</span>
-            <p>AI can make mistakes. Review the summary and cited sources before relying on this result.</p>
+            <p>${escapeHtml(getAiResultReminderText(Boolean(sourcesHTML)))}</p>
          </aside>
       `
          : "";
