@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { FileText, ScanLine } from "lucide-react";
 import { shouldSubmitTextVerifyOnKeyDown } from "./textVerifyKeyboard.js";
 import "./TextVerify.css";
@@ -7,11 +7,13 @@ function TextVerify() {
    const [text, setText] = useState("");
    const [error, setError] = useState("");
    const [isAnalyzing, setIsAnalyzing] = useState(false);
+   const submissionInFlightRef = useRef(false);
 
    const handleVerify = async () => {
       const claimText = text.trim();
-      if (!claimText || isAnalyzing) return;
+      if (!claimText || isAnalyzing || submissionInFlightRef.current) return;
 
+      submissionInFlightRef.current = true;
       setIsAnalyzing(true);
       setError("");
 
@@ -26,6 +28,7 @@ function TextVerify() {
             tab.url?.startsWith("about:")
          ) {
             setError("Open a normal webpage first so TruthLens has somewhere to display the result.");
+            submissionInFlightRef.current = false;
             setIsAnalyzing(false);
             return;
          }
@@ -57,6 +60,7 @@ function TextVerify() {
       } catch (submissionError) {
          console.error("Text verification failed:", submissionError);
          setError("TruthLens could not start this verification. Reload the extension and try again.");
+         submissionInFlightRef.current = false;
          setIsAnalyzing(false);
       }
    };
