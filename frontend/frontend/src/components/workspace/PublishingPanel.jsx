@@ -885,7 +885,9 @@ function PublishingContent({
             );
             setConflict({
                code: error?.code || "CONFLICT",
-               detail: error?.message || "The publication action was not applied.",
+               detail: userFacingErrorMessage(error, {
+                  conflictMessage: "The publication changed before this action completed. Refresh it and review the latest status.",
+               }),
                remainsInReview,
             });
          } catch (refreshError) {
@@ -911,7 +913,9 @@ function PublishingContent({
             );
             setConflict({
                code: error?.code || "CONFLICT",
-               detail: error?.message || "The publication action was not applied.",
+               detail: userFacingErrorMessage(error, {
+                  conflictMessage: "The publication changed before this action completed. Refresh it and review the latest status.",
+               }),
                remainsInReview: false,
             });
          }
@@ -937,7 +941,9 @@ function PublishingContent({
             setActionError("");
             setConflict({
                code: error?.code || "CONFLICT",
-               detail: error?.message || "The publication action was not applied.",
+               detail: userFacingErrorMessage(error, {
+                  conflictMessage: "The publication changed before this action completed. Refresh it and review the latest status.",
+               }),
                remainsInReview: null,
             });
             refreshAfterConflict(operation, error);
@@ -959,7 +965,10 @@ function PublishingContent({
             return;
          }
 
-         setActionError(error?.message || fallbackMessage);
+         setActionError(userFacingErrorMessage(error, {
+            fallback: fallbackMessage,
+            serviceMessage: "Publication actions are temporarily unavailable. Try again shortly.",
+         }));
          focusActionMessageRef.current = true;
       },
       [isOperationCurrent, refreshAfterConflict, requestQueueRefresh, revokeAuthority],
