@@ -424,9 +424,11 @@ class PublicFactCheckApiTests(
             self.organization.logo_url,
         )
 
-        Organization.objects.filter(pk=self.organization.pk).update(
-            public_logo_enabled=False
-        )
+        with self.captureOnCommitCallbacks(execute=True):
+            self.organization.public_logo_enabled = False
+            self.organization.save(
+                update_fields=["public_logo_enabled", "updated_at"]
+            )
 
         hidden = APIClient().get(self.detail_url(context["published"]))
         self.assertIsNone(hidden.data["organization"]["logo_url"])
@@ -457,8 +459,12 @@ class PublicFactCheckApiTests(
         )
         for changes in eligibility_changes:
             with self.subTest(changes=changes):
-                Organization.objects.filter(pk=self.organization.pk).update(**changes)
-                self.organization.refresh_from_db()
+                with self.captureOnCommitCallbacks(execute=True):
+                    for field_name, value in changes.items():
+                        setattr(self.organization, field_name, value)
+                    self.organization.save(
+                        update_fields=[*changes.keys(), "updated_at"]
+                    )
 
                 collection = client.get(self.collection_url())
                 detail = client.get(self.detail_url(context["published"]))
@@ -481,12 +487,20 @@ class PublicFactCheckApiTests(
                 )
                 self.assertEqual(profile.status_code, status.HTTP_404_NOT_FOUND)
 
-                Organization.objects.filter(pk=self.organization.pk).update(
-                    public_profile_enabled=True,
-                    verification_status=Organization.VerificationStatus.VERIFIED,
-                    partner_status=Organization.PartnerStatus.ACTIVE,
-                )
-                self.organization.refresh_from_db()
+                with self.captureOnCommitCallbacks(execute=True):
+                    self.organization.public_profile_enabled = True
+                    self.organization.verification_status = (
+                        Organization.VerificationStatus.VERIFIED
+                    )
+                    self.organization.partner_status = Organization.PartnerStatus.ACTIVE
+                    self.organization.save(
+                        update_fields=[
+                            "public_profile_enabled",
+                            "verification_status",
+                            "partner_status",
+                            "updated_at",
+                        ]
+                    )
 
     def test_only_current_cards_appear_and_history_counts_actual_lineage(self):
         context = self.make_published("published-history")
