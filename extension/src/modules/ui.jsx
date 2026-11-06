@@ -542,15 +542,7 @@ export function displayResultCard(claim) {
 
    const confidenceHTML =
       isOutOfScope
-         ? `
-            <section class="truthlens-confidence-na" aria-label="Confidence score not applicable">
-               <span class="truthlens-confidence-na-icon" aria-hidden="true">${iconHelp}</span>
-               <div>
-                  <strong>Confidence score not applicable</strong>
-                  <p>No factual verdict was produced for this input, so there is no factual confidence score to show.</p>
-               </div>
-            </section>
-         `
+         ? ""
          : isAdjudicated
            ? ""
            : hasConfidence
@@ -586,16 +578,18 @@ export function displayResultCard(claim) {
          `;
 
    const sourceTypeText = nonblankText(source_type);
-   const sourceMetadataHTML = isAdjudicated
-      ? `
+   const sourceMetadataHTML = isOutOfScope
+      ? ""
+      : isAdjudicated
+        ? `
          <div class="truthlens-result-source-meta" aria-label="Review provenance">
             ${reviewOrganizationName
                ? `<div><strong>Reviewed by</strong><span>${escapeHtml(reviewOrganizationName)}</span></div>`
                : `<div><strong>Partner Reviewed</strong></div>`}
          </div>
-      `
-      : sourceTypeText
-        ? `
+        `
+        : sourceTypeText
+          ? `
          <div class="truthlens-result-source-meta">
             <div><strong>Source Type</strong><span>${escapeHtml(sourceTypeText)}</span></div>
          </div>
@@ -651,7 +645,25 @@ export function displayResultCard(claim) {
    card.style.setProperty("--truthlens-verdict-chip", ui.chip);
 
    const verdictKicker = isAdjudicated ? "PARTNER VERDICT" : isOutOfScope ? "STATUS" : "VERDICT";
-   const summaryHeading = isAdjudicated ? "DECISION RATIONALE" : "AI SUMMARY";
+   const summaryHeading = isAdjudicated
+      ? "DECISION RATIONALE"
+      : isOutOfScope
+        ? "WHAT THIS MEANS"
+        : "AI SUMMARY";
+
+   const outOfScopeGuidanceHTML = isOutOfScope
+      ? `
+         <section class="truthlens-context-guidance" aria-labelledby="truthlens-out-of-scope-guidance-title">
+            <div id="truthlens-out-of-scope-guidance-title" class="truthlens-context-guidance-title">
+               What to submit instead
+            </div>
+            <p>
+               Submit a specific factual claim about a real person, organization, event, date, place,
+               amount, action, or statement that can be checked against evidence.
+            </p>
+         </section>
+      `
+      : "";
 
    card.innerHTML = `
       <span class="truthlens-verdict-accent" aria-hidden="true"></span>
@@ -685,7 +697,8 @@ export function displayResultCard(claim) {
          ${confidenceHTML}
          ${sourcesHTML}
          ${sourceMetadataHTML}
-         ${relatedPublicationsHTML(claim)}
+         ${outOfScopeGuidanceHTML}
+         ${isOutOfScope ? "" : relatedPublicationsHTML(claim)}
          ${aiReminderHTML}
 
          ${primaryButtonHTML}
