@@ -76,8 +76,8 @@ export function shouldShowAiResultReminder({
 
 export function getAiResultReminderText(hasSources) {
    return hasSources
-      ? "AI can make mistakes. Review the summary and cited sources before relying on this result."
-      : "AI can make mistakes. Treat this result as guidance and verify important information independently.";
+      ? "AI can make mistakes. Check the cited sources before relying on this result."
+      : "AI can make mistakes. Verify important information independently before relying on this result.";
 }
 
 export function shouldShowResultActions(verdict) {
