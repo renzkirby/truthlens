@@ -6,6 +6,10 @@ import Icons from "../components/Icons.jsx";
 import Button from "../components/ui/Button.jsx";
 import { useAuth } from "../hooks/useAuth";
 import { resolveApiEndpoint } from "../utils/api";
+import {
+   safeUserFacingDetail,
+   userFacingErrorMessage,
+} from "../utils/userFacingError";
 import { createAuthReturnState } from "../utils/authNavigation";
 
 import "./OrganizationInvitationPage.css";
@@ -81,7 +85,12 @@ function PlatformStaffInvitationPage() {
             return;
          }
          if (!response.ok) {
-            throw new Error(data?.detail || "Unable to load invitation.");
+            const requestError = new Error(
+               safeUserFacingDetail(data?.detail) || "Unable to load invitation.",
+            );
+            requestError.status = response.status;
+            requestError.detail = data?.detail;
+            throw requestError;
          }
          setInvitation(data);
          setLoadState("ready");
@@ -120,9 +129,17 @@ function PlatformStaffInvitationPage() {
          const response = await authFetch(resolveApiEndpoint("SEND_VERIFICATION"), {
             method: "POST",
          });
-         setActionMessage(response?.detail || "Verification email sent. Check your inbox.");
+         setActionMessage(
+            safeUserFacingDetail(response?.detail) ||
+               "Verification email sent. Check your inbox.",
+         );
       } catch (error) {
-         setActionMessage(error?.message || "Unable to send a verification email right now.");
+         setActionMessage(userFacingErrorMessage(error, {
+            fallback: "We couldn't send a verification email. Try again.",
+            rateLimitMessage: "Several verification emails were requested recently. Wait before requesting another one.",
+            authMessage: "Your session has expired. Sign in again before requesting another verification email.",
+            serviceMessage: "Verification email delivery is temporarily unavailable. Try again shortly.",
+         }));
       } finally {
          setIsSendingVerification(false);
       }
@@ -140,8 +157,12 @@ function PlatformStaffInvitationPage() {
          } else {
             setActionMessage("Your email is not verified yet.");
          }
-      } catch {
-         setActionMessage("Unable to refresh your account right now.");
+      } catch (error) {
+         setActionMessage(userFacingErrorMessage(error, {
+            fallback: "We couldn't refresh your account. Try again.",
+            authMessage: "Your session has expired. Sign in again to continue with this invitation.",
+            serviceMessage: "Account status is temporarily unavailable. Try again shortly.",
+         }));
       } finally {
          setIsCheckingVerification(false);
       }
@@ -158,24 +179,40 @@ function PlatformStaffInvitationPage() {
          setInvitation(result?.invitation || invitation);
          setAcceptanceState("accepted");
       } catch (error) {
-         const message = error?.message || "Unable to accept this invitation.";
-         const normalized = message.toLowerCase();
+         const safeDetail =
+            safeUserFacingDetail(error?.detail) ||
+            safeUserFacingDetail(error?.message);
+         const normalized = safeDetail.toLowerCase();
 
          if (error?.status === 404) {
             setInvitation(null);
             setLoadState("invalid");
          } else if (error?.status === 403 && normalized.includes("verify your email")) {
             setAcceptanceState("verification-required");
-            setActionMessage(message);
+            setActionMessage(
+               safeDetail ||
+                  "Verify the email address on your TruthLens account before accepting this invitation.",
+            );
          } else if (error?.status === 403) {
             setAcceptanceState("wrong-account");
-            setActionMessage(message);
+            setActionMessage(
+               safeDetail ||
+                  "This invitation belongs to another TruthLens account. Switch accounts and try again.",
+            );
          } else if (error?.status === 409) {
             setAcceptanceState("conflict");
-            setActionMessage(message);
+            setActionMessage(
+               safeDetail ||
+                  "This invitation can no longer be accepted in its current state. Reload it and try again.",
+            );
          } else {
             setAcceptanceState("error");
-            setActionMessage(message);
+            setActionMessage(userFacingErrorMessage(error, {
+               fallback: "We couldn't accept this invitation. Try again.",
+               rateLimitMessage: "Too many invitation attempts were made in a short period. Wait before trying again.",
+               serviceMessage: "Invitation acceptance is temporarily unavailable. Try again shortly.",
+               networkMessage: "TruthLens couldn't be reached. Check your connection and try accepting the invitation again.",
+            }));
          }
       } finally {
          setIsAccepting(false);
