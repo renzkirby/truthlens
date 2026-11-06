@@ -251,6 +251,35 @@ class PublicFactCheckApiTests(
             },
         )
 
+    def test_public_partner_with_no_fact_checks_returns_empty_collection(self):
+        response = APIClient().get(self.collection_url())
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 0)
+        self.assertEqual(response.data["offset"], 0)
+        self.assertEqual(response.data["results"], [])
+        self.assertEqual(
+            response.data["organization"]["id"],
+            str(self.organization.id),
+        )
+        self.assertTrue(
+            response.data["organization"]["public_profile_available"]
+        )
+
+    def test_nonpublic_organization_without_fact_checks_remains_not_found(self):
+        organization = Organization.objects.create(
+            name="Private organization without publications",
+            slug="private-no-publications",
+            organization_type=Organization.OrganizationType.NEWS,
+            verification_status=Organization.VerificationStatus.VERIFIED,
+            partner_status=Organization.PartnerStatus.ACTIVE,
+            public_profile_enabled=False,
+        )
+
+        response = APIClient().get(self.collection_url(organization))
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
     def test_public_organization_logo_honors_public_logo_setting(self):
         context = self.make_published("public-logo")
 
