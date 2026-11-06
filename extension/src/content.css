@@ -133,6 +133,22 @@
 }
 
 
+.truthlens-local-environment-badge {
+   display: inline-flex;
+   align-items: center;
+   min-height: 18px;
+   padding: 2px 6px;
+   border: 1px solid #c7d2fe;
+   border-radius: 999px;
+   background: #eef2ff;
+   color: #4338ca;
+   font-size: 9px;
+   line-height: 1;
+   font-weight: 800;
+   letter-spacing: 0.06em;
+}
+
+
 .truthlens-close-btn {
    border: none;
    background: none;
