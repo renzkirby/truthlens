@@ -13,19 +13,9 @@ os.environ["CACHE_REDIS_URL"] = ""
 
 from .settings import *
 
-# The full test suite reuses low user primary keys across isolated TestCase
-# transactions. Keep the global anonymous/user throttles enabled but give them
-# effectively non-limiting test rates so throttle history from one unrelated
-# test cannot cause 429 responses in another. Endpoint-specific scopes retain
-# their production-like rates and are exercised by their dedicated tests.
-REST_FRAMEWORK = {
-    **REST_FRAMEWORK,
-    "DEFAULT_THROTTLE_RATES": {
-        **REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"],
-        "anon": "1000000/minute",
-        "user": "1000000/minute",
-    },
-}
+# Keep cache-backed throttles and public-read caches isolated across tests while
+# preserving the real configured throttle rates inside each individual test.
+TEST_RUNNER = "truthlens_backend.test_runner.TruthLensTestRunner"
 
 # Test settings must not depend on an ignored local .env file. This value is
 # intentionally test-only and must never be used by development/staging/production.
