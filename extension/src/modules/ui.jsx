@@ -17,6 +17,7 @@ import { state } from "./state.js";
 import {
    getConfidenceLevel,
    getVerdictPresentation,
+   shouldShowAiResultReminder,
 } from "./verdictPresentation.js";
 
 const COMMUNITY_PLATFORM_URL = state.WEB_APP_BASE_URL;
@@ -563,7 +564,7 @@ export function displayResultCard(claim) {
         : "";
 
    const aiReminderHTML =
-      !isAdjudicated && !isOutOfScope
+      shouldShowAiResultReminder({ isAdjudicated, isOutOfScope })
          ? `
          <aside class="truthlens-ai-reminder" aria-label="AI result reminder">
             <span class="truthlens-ai-reminder-icon" aria-hidden="true">i</span>
