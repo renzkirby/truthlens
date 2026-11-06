@@ -14,6 +14,10 @@ import {
    ExternalLink,
 } from "lucide-react";
 import { state } from "./state.js";
+import {
+   getConfidenceLevel,
+   getVerdictPresentation,
+} from "./verdictPresentation.js";
 
 const COMMUNITY_PLATFORM_URL = state.WEB_APP_BASE_URL;
 const TRUTHLENS_LOGO_URL = chrome.runtime.getURL("truthlens_logo.png");
@@ -30,54 +34,25 @@ const iconSearch = renderToString(React.createElement(Search, { size: 16 }));
 const iconUsers = renderToString(React.createElement(Users, { size: 16 }));
 const iconExternal = renderToString(React.createElement(ExternalLink, { size: 12 }));
 
-// Helper function to get UI properties based on verdict
+// Compose pure verdict presentation tokens with the matching Lucide icon.
 function getVerdictUI(verdict) {
-   switch (verdict) {
-      case "FACT":
-         return {
-            color: "#10b981",
-            class: "fact",
-            icon: iconCheck,
-            text: "Fact",
-         };
-      case "FAKE":
-         return { color: "#ef4444", class: "fake", icon: iconX, text: "Fake" };
-      case "MISLEADING":
-         return {
-            color: "#f59e0b",
-            class: "misleading",
-            icon: iconAlert,
-            text: "Misleading",
-         };
-      case "SATIRE":
-         return {
-            color: "#8b5cf6",
-            class: "satire",
-            icon: iconSparkles,
-            text: "Satire",
-         };
-      case "OUT_OF_SCOPE":
-         return {
-            color: "#9ca3af",
-            class: "out-of-scope",
-            icon: iconHelp,
-            text: "Out of Scope",
-         };
-      case "UNVERIFIED":
-         return {
-            color: "#ebdc09",
-            class: "unverified",
-            icon: iconHelp,
-            text: "Unverified",
-         };
-      default:
-         return {
-            color: "#ebdc09",
-            class: "unverified",
-            icon: iconHelp,
-            text: "Unverified",
-         };
-   }
+   const presentation = getVerdictPresentation(verdict);
+   const icons = {
+      fact: iconCheck,
+      fake: iconX,
+      misleading: iconAlert,
+      satire: iconSparkles,
+      "out-of-scope": iconHelp,
+      unverified: iconHelp,
+   };
+
+   return {
+      ...presentation,
+      color: presentation.accent,
+      class: presentation.className,
+      text: presentation.label,
+      icon: icons[presentation.className] || iconHelp,
+   };
 }
 
 function escapeHtml(value) {
