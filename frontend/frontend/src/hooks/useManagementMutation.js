@@ -6,7 +6,15 @@ import {
    userFacingErrorMessage,
 } from "../utils/userFacingError";
 
-const ERROR_METADATA_KEYS = new Set(["detail", "message", "stack", "status"]);
+const ERROR_METADATA_KEYS = new Set([
+   "detail",
+   "message",
+   "stack",
+   "status",
+   "code",
+   "failure_code",
+   "url_safety",
+]);
 
 function firstErrorMessage(value) {
    return safeUserFacingDetail(value);
