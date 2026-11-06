@@ -45,10 +45,19 @@ function getVerdictUI(verdict) {
       "out-of-scope": iconHelp,
       unverified: iconHelp,
    };
+   const legacyColors = {
+      fact: "#10b981",
+      fake: "#ef4444",
+      misleading: "#f59e0b",
+      satire: "#8b5cf6",
+      "out-of-scope": "#9ca3af",
+      unverified: "#ebdc09",
+   };
 
    return {
       ...presentation,
-      color: presentation.accent,
+      // Keep the historical title color for institutional/publication cards.
+      color: legacyColors[presentation.className] || "#9ca3af",
       class: presentation.className,
       text: presentation.label,
       icon: icons[presentation.className] || iconHelp,
