@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from django.contrib.auth.models import AnonymousUser
 from django.test import SimpleTestCase
+from redis.exceptions import ConnectionError as RedisConnectionError
 from rest_framework.test import APIRequestFactory
 
 from api.throttles import (
@@ -13,7 +14,7 @@ from api.throttles import (
 
 class _UnavailableCache:
     def get(self, key, default=None):
-        raise RuntimeError("cache unavailable")
+        raise RedisConnectionError("cache unavailable")
 
 
 class ThrottleCacheFailureTests(SimpleTestCase):
