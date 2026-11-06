@@ -72,10 +72,15 @@ function escapeHtml(value) {
 }
 
 function truthLensBrandHTML() {
+   const localBadge = import.meta.env.DEV
+      ? '<span class="truthlens-local-environment-badge">LOCAL</span>'
+      : "";
+
    return `
       <div class="truthlens-brand-title" aria-label="TruthLens">
          <img class="truthlens-brand-logo" src="${escapeHtml(TRUTHLENS_LOGO_URL)}" alt="" aria-hidden="true">
          <span>TruthLens</span>
+         ${localBadge}
       </div>
    `;
 }
