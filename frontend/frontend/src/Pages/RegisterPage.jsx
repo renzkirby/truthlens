@@ -162,7 +162,9 @@ function RegisterPage() {
    };
 
    const normalizeRegistrationFieldMessage = (field, value) => {
-      const message = safeUserFacingDetail(value);
+      const message = Array.isArray(value)
+         ? value.map(safeUserFacingDetail).filter(Boolean).join(" ")
+         : safeUserFacingDetail(value);
       const normalized = message.toLowerCase();
 
       if (field === "username" && /already|taken|exists/.test(normalized)) {
