@@ -163,6 +163,56 @@ class PublicFactCheckApiTests(
             self.organization.logo_url,
         )
 
+    def test_initial_publication_invalidates_cached_empty_collection(self):
+        context = self.make_context(
+            evidence_statuses=[EvidenceSubmission.EvidenceStatus.VERIFIED]
+        )
+        context["decision"] = self.issue(context)["decision"]
+        client = APIClient()
+
+        empty_collection = client.get(self.collection_url())
+        self.assertEqual(empty_collection.status_code, status.HTTP_200_OK)
+        self.assertEqual(empty_collection.data["count"], 0)
+        self.assertEqual(empty_collection.data["results"], [])
+
+        draft = create_fact_check_draft(
+            decision=context["decision"],
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_decision_revision=context["decision"].revision_number,
+            headline="First cached publication",
+            summary="The first public article must replace the cached empty state.",
+            article_body="Verified analysis for the first public publication.",
+            source_urls=["https://example.com/first-cached-publication"],
+        )
+        submitted = submit_fact_check_for_review(
+            fact_check=draft,
+            actor=self.lead,
+            organization_id=self.organization.id,
+            expected_edit_generation=draft.edit_generation,
+            expected_decision_revision=context["decision"].revision_number,
+        )
+        with (
+            patch("api.publishing_service._queue_fact_check_index"),
+            patch("api.publishing_service.notify_fact_check_published"),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            published = publish_fact_check(
+                fact_check=submitted,
+                actor=self.lead,
+                organization_id=self.organization.id,
+                expected_edit_generation=submitted.edit_generation,
+                expected_decision_revision=context["decision"].revision_number,
+            )["fact_check"]
+
+        refreshed_collection = client.get(self.collection_url())
+        self.assertEqual(refreshed_collection.status_code, status.HTTP_200_OK)
+        self.assertEqual(refreshed_collection.data["count"], 1)
+        self.assertEqual(
+            refreshed_collection.data["results"][0]["publication_id"],
+            str(published.id),
+        )
+
     def test_public_collection_and_detail_reuse_cached_serialized_payloads(self):
         context = self.make_published("cache-hit")
         client = APIClient()
