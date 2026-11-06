@@ -80,4 +80,8 @@ export function getAiResultReminderText(hasSources) {
       : "AI can make mistakes. Treat this result as guidance and verify important information independently.";
 }
 
+export function shouldShowResultActions(verdict) {
+   return verdict !== "OUT_OF_SCOPE";
+}
+
 export { VERDICT_PRESENTATIONS };
