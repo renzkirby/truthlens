@@ -55,11 +55,13 @@ const getUrlErrorMessage = (error, fallback) => {
       return KNOWN_URL_THREAT_MESSAGE;
    }
 
-   if (error?.status === 400 && typeof error?.detail === "string" && error.detail.trim()) {
-      return error.detail.trim();
-   }
-
-   return getErrorMessage(error, fallback);
+   return userFacingErrorMessage(error, {
+      fallback,
+      validationMessage: "Check the submitted URL and try again.",
+      rateLimitMessage: "Too many verification requests were made in a short period. Wait a moment before trying again.",
+      serviceMessage: "TruthLens analysis is temporarily unavailable. Try again shortly.",
+      securityMessage: KNOWN_URL_THREAT_MESSAGE,
+   });
 };
 
 const getSafeSourceUrl = (value) => {
