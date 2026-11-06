@@ -222,7 +222,8 @@ async function maybeSyncGuestScansAfterLogin() {
       return syncResult;
    } catch (error) {
       console.warn("Guest scan sync failed:", error);
-      const syncErrorMessage = error?.message || "Guest scan sync failed.";
+      const syncErrorMessage =
+         "Your local ghost scans remain on this device and will retry automatically when TruthLens is available.";
       await writeGuestScanSyncStatus({
          status: "error",
          synced_count: 0,

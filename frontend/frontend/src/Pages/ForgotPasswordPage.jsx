@@ -18,6 +18,12 @@ function ForgotPasswordPage() {
    const handleSubmit = async (event) => {
       event.preventDefault();
 
+      const normalizedEmail = email.trim().toLowerCase();
+      if (!normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+         setError("Enter a valid email address.");
+         return;
+      }
+
       setIsSubmitting(true);
       setError(null);
 
@@ -27,7 +33,7 @@ function ForgotPasswordPage() {
             headers: {
                "Content-Type": "application/json",
             },
-            body: JSON.stringify({ email }),
+            body: JSON.stringify({ email: normalizedEmail }),
          });
 
          const data = await response.json().catch(() => ({}));
@@ -37,9 +43,9 @@ function ForgotPasswordPage() {
                { status: response.status, detail: data?.detail },
                {
                   fallback: "We couldn't send password reset instructions. Please try again.",
-                  validationMessage: "Check the email address and try again.",
-                  rateLimitMessage: "Too many password reset requests were made in a short period. Wait before requesting another email.",
-                  serviceMessage: "Password recovery is temporarily unavailable. Try again shortly.",
+                  validationMessage: "Enter a valid email address.",
+                  rateLimitMessage: "Too many password reset requests were made. Wait a moment before trying again.",
+                  serviceMessage: "Password reset email delivery is temporarily unavailable. Try again shortly.",
                },
             ));
             return;
@@ -51,7 +57,7 @@ function ForgotPasswordPage() {
          setError(userFacingErrorMessage(err, {
             fallback: "We couldn't send password reset instructions. Please try again.",
             networkMessage: "TruthLens couldn't be reached. Check your internet connection and try requesting the reset email again.",
-            serviceMessage: "Password recovery is temporarily unavailable. Try again shortly.",
+            serviceMessage: "Password reset email delivery is temporarily unavailable. Try again shortly.",
          }));
       } finally {
          setIsSubmitting(false);
@@ -77,7 +83,7 @@ function ForgotPasswordPage() {
                title="Reset instructions sent"
                description={
                   <>
-                     If an account exists for <strong>{email}</strong>, we've sent password reset instructions.
+                     If an account uses that email address, password reset instructions will be sent shortly.
                   </>
                }
                actions={
@@ -99,7 +105,7 @@ function ForgotPasswordPage() {
                   </p>
                </div>
 
-               <form onSubmit={handleSubmit}>
+               <form onSubmit={handleSubmit} noValidate>
                   {error && (
                      <div className="account-form__alert" role="alert" aria-live="polite">
                         <Icons name="alert-triangle" size={16} aria-hidden="true" />

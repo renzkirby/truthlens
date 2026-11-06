@@ -15,6 +15,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { buildApiUrl, resolveApiEndpoint } from "../utils/api";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 
 /**
  * Hook to fetch claims from the API.
@@ -76,7 +77,12 @@ function useFetchClaims(authFetch, claimType = "claims") {
          setClaims(normalizeClaimResponse(data));
       } catch (err) {
          console.error(`Failed to fetch ${claimType}:`, err);
-         setError(`Failed to load ${claimType}`);
+         setError(userFacingErrorMessage(err, {
+            fallback: "We couldn't load claims. Try again.",
+            authMessage: "Your session has expired. Sign in again to load your claims.",
+            permissionMessage: "Your account doesn't have permission to load these claims.",
+            serviceMessage: "Claims are temporarily unavailable. Try again shortly.",
+         }));
       } finally {
          setLoading(false);
       }

@@ -7,6 +7,7 @@ import Button from "../ui/Button.jsx";
 import Select from "../ui/Select.jsx";
 
 import { resolveApiEndpoint } from "../../utils/api";
+import { userFacingErrorMessage } from "../../utils/userFacingError";
 import { showWorkspaceSuccess } from "../../utils/workspaceToast";
 
 import { VERDICT_CONFIG } from "../../utils/constants";
@@ -172,7 +173,12 @@ function VerificationIntakePanel({
                return;
             }
 
-            setErrorMessage(error?.message || "Unable to load verification intake.");
+            setErrorMessage(userFacingErrorMessage(error, {
+               fallback: "We couldn't load verification intake. Try again.",
+               authMessage: "Your session has expired. Sign in again to load verification intake.",
+               permissionMessage: "You don't have permission to access verification intake for this organization.",
+               serviceMessage: "Verification intake is temporarily unavailable. Try again shortly.",
+            }));
 
             setIntake({
                count: 0,
@@ -309,7 +315,13 @@ function VerificationIntakePanel({
 
             refreshFromFirstPage();
          } else {
-            setErrorMessage(error?.message || "Unable to claim this investigation.");
+            setErrorMessage(userFacingErrorMessage(error, {
+               fallback: "This investigation could not be claimed. Refresh the queue and review its current status.",
+               authMessage: "Your session has expired. Sign in again before claiming an investigation.",
+               permissionMessage: "You don't have permission to claim this investigation.",
+               conflictMessage: "This investigation is no longer available to claim. Refresh the queue and review its current status.",
+               serviceMessage: "Investigation claiming is temporarily unavailable. Try again shortly.",
+            }));
          }
       } finally {
          setClaimingId(null);

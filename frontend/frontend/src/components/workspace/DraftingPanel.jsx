@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
+import { userFacingErrorMessage } from "../../utils/userFacingError";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
 import { showWorkspaceSuccess, WORKSPACE_LONG_TOAST_DURATION } from "../../utils/workspaceToast";
 import Icons from "../Icons.jsx";
@@ -1298,7 +1299,12 @@ function DraftingContent({
             }
 
             stopAuthorityRetry(authorityGeneration);
-            setQueueError(error?.message || "Unable to load the publication Drafting queue.");
+            setQueueError(userFacingErrorMessage(error, {
+               fallback: "We couldn't load the publication Drafting queue. Try again.",
+               authMessage: "Your session has expired. Sign in again to load publication Drafting.",
+               permissionMessage: "You don't have permission to access publication Drafting for this organization.",
+               serviceMessage: "Publication Drafting is temporarily unavailable. Try again shortly.",
+            }));
             setQueueLoading(false);
             setQueueRefreshing(false);
          });
@@ -1431,7 +1437,12 @@ function DraftingContent({
             setDetailError(
                unavailable
                   ? "This publication work item is no longer available."
-                  : error?.message || "Unable to load this publication work item.",
+                  : userFacingErrorMessage(error, {
+                       fallback: "We couldn't load this publication work item. Try again.",
+                       authMessage: "Your session has expired. Sign in again to load this publication work item.",
+                       permissionMessage: "You don't have permission to work on this publication draft.",
+                       serviceMessage: "This publication work item is temporarily unavailable. Try again shortly.",
+                    }),
             );
 
             if (unavailable) {
@@ -1490,7 +1501,9 @@ function DraftingContent({
             setDetailError("");
             setConflict({
                code: error?.code || "CONFLICT",
-               detail: error?.message || "The update was not applied.",
+               detail: userFacingErrorMessage(error, {
+                  conflictMessage: "This draft changed while you were working. Refresh the latest version before continuing.",
+               }),
                blockers: Array.isArray(error?.blockers) ? error.blockers : [],
                serverDetail: latest,
                loading: false,
@@ -1516,7 +1529,9 @@ function DraftingContent({
             );
             setConflict({
                code: error?.code || "CONFLICT",
-               detail: error?.message || "The update was not applied.",
+               detail: userFacingErrorMessage(error, {
+                  conflictMessage: "This draft changed while you were working. Refresh the latest version before continuing.",
+               }),
                blockers: Array.isArray(error?.blockers) ? error.blockers : [],
                serverDetail: null,
                loading: false,
@@ -1541,7 +1556,9 @@ function DraftingContent({
 
             setConflict({
                code: error?.code || "CONFLICT",
-               detail: error?.message || "The update was not applied.",
+               detail: userFacingErrorMessage(error, {
+                  conflictMessage: "This draft changed while you were working. Refresh the latest version before continuing.",
+               }),
                blockers: Array.isArray(error?.blockers) ? error.blockers : [],
                serverDetail: null,
                loading: true,
@@ -1567,7 +1584,10 @@ function DraftingContent({
             return;
          }
 
-         setActionError(error?.message || fallbackMessage);
+         setActionError(userFacingErrorMessage(error, {
+            fallback: fallbackMessage,
+            serviceMessage: "Drafting actions are temporarily unavailable. Try again shortly.",
+         }));
          focusActionMessageRef.current = true;
       },
       [isOperationCurrent, refreshDetailAfterConflict, requestQueueRefresh, revokeAuthority],

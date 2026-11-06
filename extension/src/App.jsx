@@ -48,7 +48,10 @@ function normalizeGuestSyncStatus(rawStatus) {
       status,
       syncedCount: Number.isFinite(syncedCount) ? Math.max(0, syncedCount) : 0,
       updatedAt: rawStatus.updated_at || rawStatus.updatedAt || null,
-      error: typeof rawStatus.error === "string" ? rawStatus.error : null,
+      error:
+         status === "error"
+            ? "Your local ghost scans remain on this device and will retry automatically when TruthLens is available."
+            : null,
    };
 }
 

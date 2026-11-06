@@ -1,13 +1,23 @@
 import { useCallback, useRef, useState } from "react";
 
 import { useAuth } from "./useAuth";
+import {
+   safeUserFacingDetail,
+   userFacingErrorMessage,
+} from "../utils/userFacingError";
 
-const ERROR_METADATA_KEYS = new Set(["detail", "message", "stack", "status"]);
+const ERROR_METADATA_KEYS = new Set([
+   "detail",
+   "message",
+   "stack",
+   "status",
+   "code",
+   "failure_code",
+   "url_safety",
+]);
 
 function firstErrorMessage(value) {
-   if (Array.isArray(value)) return value.map(firstErrorMessage).find(Boolean) || "";
-   if (typeof value === "string") return value;
-   return "";
+   return safeUserFacingDetail(value);
 }
 
 function normalizeManagementMutationError(requestError) {
@@ -27,12 +37,19 @@ function normalizeManagementMutationError(requestError) {
       if (message) fields[key] = message;
    });
 
+   const fieldMessage = fields.non_field_errors || Object.values(fields)[0] || "";
+
    return {
       message:
-         requestError?.detail ||
-         fields.non_field_errors ||
-         requestError?.message ||
-         "The management action could not be completed.",
+         safeUserFacingDetail(requestError?.detail) ||
+         fieldMessage ||
+         userFacingErrorMessage(requestError, {
+            fallback: "We couldn't complete this management action. Try again.",
+            authMessage: "Your session has expired. Sign in again before continuing.",
+            permissionMessage: "Your account doesn't have permission to perform this management action.",
+            conflictMessage: "This record changed before your action was completed. Refresh it and try again.",
+            serviceMessage: "Management actions are temporarily unavailable. Try again shortly.",
+         }),
       fields,
       status: requestError?.status ?? null,
    };

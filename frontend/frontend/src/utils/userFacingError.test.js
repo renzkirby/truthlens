@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { classifyUserFacingError, userFacingErrorMessage } from "./userFacingError.js";
+import {
+   classifyUserFacingError,
+   safeUserFacingDetail,
+   userFacingErrorMessage,
+   userFacingFieldError,
+} from "./userFacingError.js";
 
 test("classifies common HTTP errors", () => {
    assert.equal(classifyUserFacingError({ status: 401 }), "auth");
@@ -23,6 +28,42 @@ test("preserves safe validation and conflict detail", () => {
    );
 });
 
+test("sanitizes structured field detail", () => {
+   assert.equal(
+      userFacingFieldError(
+         { email: ["Enter a valid email address."] },
+         "email",
+      ),
+      "Enter a valid email address.",
+   );
+   assert.equal(
+      safeUserFacingDetail(["", "Choose a supported file type."]),
+      "Choose a supported file type.",
+   );
+   assert.equal(
+      userFacingFieldError(
+         { password: ["IntegrityError: password constraint failed"] },
+         "password",
+      ),
+      "",
+   );
+});
+
+test("uses stable application-code fallbacks when safe detail is absent", () => {
+   assert.equal(
+      userFacingErrorMessage({ status: 409, code: "ASSIGNMENT_CONFLICT" }),
+      "This investigation is no longer available for this action. Refresh the investigation and review its current status.",
+   );
+   assert.equal(
+      userFacingErrorMessage({ status: 403, code: "OUTSIDE_SPECIALIZATIONS" }),
+      "This investigation is outside your organization's selected verification specializations.",
+   );
+   assert.equal(
+      userFacingErrorMessage({ status: 400, failure_code: "URL_POLICY_BLOCKED" }),
+      "This URL cannot be processed because it does not meet TruthLens URL safety requirements.",
+   );
+});
+
 test("does not surface internal server diagnostics", () => {
    const message = userFacingErrorMessage({
       status: 500,
@@ -37,6 +78,10 @@ test("distinguishes network and timeout failures", () => {
    assert.equal(classifyUserFacingError({ code: "ECONNABORTED", message: "timeout exceeded" }), "timeout");
 });
 
-test("known URL threats are security failures", () => {
+test("known URL threats are security failures with specific safe copy", () => {
    assert.equal(classifyUserFacingError({ failure_code: "URL_KNOWN_THREAT" }), "security");
+   assert.equal(
+      userFacingErrorMessage({ failure_code: "URL_KNOWN_THREAT" }),
+      "This URL was flagged for a known security threat and cannot be analyzed.",
+   );
 });

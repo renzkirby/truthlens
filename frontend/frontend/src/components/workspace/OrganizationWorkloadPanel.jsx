@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
+import { userFacingErrorMessage } from "../../utils/userFacingError";
 import { showWorkspaceSuccess } from "../../utils/workspaceToast";
 
 import Icons from "../Icons.jsx";
@@ -140,7 +141,12 @@ function OrganizationWorkloadPanel({
          })
          .catch((error) => {
             if (cancelled) return;
-            setErrorMessage(error?.message || "Unable to load organization investigations.");
+            setErrorMessage(userFacingErrorMessage(error, {
+               fallback: "We couldn't load organization investigations. Try again.",
+               authMessage: "Your session has expired. Sign in again to load organization investigations.",
+               permissionMessage: "You don't have permission to view this organization's investigation workload.",
+               serviceMessage: "Organization investigations are temporarily unavailable. Try again shortly.",
+            }));
          })
          .finally(() => {
             if (!cancelled) setLoading(false);
@@ -254,10 +260,19 @@ function OrganizationWorkloadPanel({
          setConfirmingReleaseId(null);
 
          if (error?.status === 409) {
-            setActionError(error?.message || "This investigation can no longer be released.");
+            setActionError(userFacingErrorMessage(error, {
+               fallback: "This investigation can no longer be released. Refresh the workload and review its current status.",
+               conflictMessage: "This investigation can no longer be released. Refresh the workload and review its current status.",
+               permissionMessage: "You don't have permission to release this investigation.",
+            }));
             setRequestVersion((current) => current + 1);
          } else {
-            setActionError(error?.message || "Unable to release this investigation.");
+            setActionError(userFacingErrorMessage(error, {
+               fallback: "We couldn't release this investigation. Refresh the workload and try again.",
+               authMessage: "Your session has expired. Sign in again before releasing this investigation.",
+               permissionMessage: "You don't have permission to release this investigation.",
+               serviceMessage: "Investigation workload actions are temporarily unavailable. Try again shortly.",
+            }));
          }
       } finally {
          setReleasingId(null);

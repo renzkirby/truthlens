@@ -4,6 +4,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
 import { resolveApiEndpoint } from "../utils/api";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 import { getWorkspaceMembership } from "../utils/workspace";
 import Button from "../components/ui/Button.jsx";
 import Icons from "../components/Icons.jsx";
@@ -205,7 +206,12 @@ function InvestigationWorkspacePage() {
             const message =
                error?.status === 404
                   ? "This active investigation is no longer available for the selected organization."
-                  : error?.message || "Unable to load this investigation.";
+                  : userFacingErrorMessage(error, {
+                       fallback: "We couldn't load this investigation. Try again.",
+                       authMessage: "Your session has expired. Sign in again to load this investigation.",
+                       permissionMessage: "You don't have permission to access this investigation.",
+                       serviceMessage: "This investigation is temporarily unavailable. Try again shortly.",
+                    });
 
             setResult((current) => {
                const currentDataMatchesRoute =

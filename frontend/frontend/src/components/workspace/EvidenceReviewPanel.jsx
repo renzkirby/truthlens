@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
+import { userFacingErrorMessage } from "../../utils/userFacingError";
 import { showWorkspaceSuccess } from "../../utils/workspaceToast";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
 import Icons from "../Icons.jsx";
@@ -357,7 +358,12 @@ function EvidenceReviewContent({
             setQueueError(
                error?.status === 403
                   ? "You no longer have permission to review evidence for this organization."
-                  : (error?.message || "Unable to load the Evidence Review queue."),
+                  : userFacingErrorMessage(error, {
+                       fallback: "We couldn't load the Evidence Review queue. Try again.",
+                       authMessage: "Your session has expired. Sign in again to load Evidence Review.",
+                       permissionMessage: "You no longer have permission to review evidence for this organization.",
+                       serviceMessage: "Evidence Review is temporarily unavailable. Try again shortly.",
+                    }),
             );
             setQueueLoading(false);
          });
@@ -418,7 +424,12 @@ function EvidenceReviewContent({
             setDetailError(
                unavailable
                   ? "This Evidence case is no longer available."
-                  : (error?.message || "Unable to load this Evidence case."),
+                  : userFacingErrorMessage(error, {
+                       fallback: "We couldn't load this Evidence case. Try again.",
+                       authMessage: "Your session has expired. Sign in again to load this Evidence case.",
+                       permissionMessage: "You no longer have permission to review evidence for this organization.",
+                       serviceMessage: "This Evidence case is temporarily unavailable. Try again shortly.",
+                    }),
             );
             setDecision(null);
             setActionError("");
@@ -659,8 +670,10 @@ function EvidenceReviewContent({
       if (selectedCaseIdRef.current === caseId) {
          focusActionErrorRef.current = true;
          setActionError(
-            error?.message ||
-               "This case changed before your decision was submitted. Review its current state before continuing.",
+            userFacingErrorMessage(error, {
+               conflictMessage:
+                  "This case changed before your decision was submitted. Review its current state before continuing.",
+            }),
          );
          requestDetailRefresh(caseId);
       } else {
@@ -767,7 +780,10 @@ function EvidenceReviewContent({
             }
          } else {
             focusActionErrorRef.current = true;
-            setActionError(error?.message || `Unable to ${DECISION_COPY[operation.decision].label.toLowerCase()}.`);
+            setActionError(userFacingErrorMessage(error, {
+               fallback: `We couldn't ${DECISION_COPY[operation.decision].label.toLowerCase()}. Review the case and try again.`,
+               serviceMessage: "Evidence Review actions are temporarily unavailable. Try again shortly.",
+            }));
          }
       } finally {
          if (
@@ -861,7 +877,13 @@ function EvidenceReviewContent({
          } else {
             focusActionErrorRef.current = true;
             setActionError(
-               error?.message || "Unable to accept the prior institutional review.",
+               userFacingErrorMessage(error, {
+                  fallback: "We couldn't accept the prior institutional review. Refresh the case and try again.",
+                  authMessage: "Your session has expired. Sign in again before accepting the prior review.",
+                  permissionMessage: "You no longer have permission to review evidence for this organization.",
+                  conflictMessage: "This Evidence case changed before the prior review could be accepted. Refresh the case and review the latest status.",
+                  serviceMessage: "Evidence Review actions are temporarily unavailable. Try again shortly.",
+               }),
             );
          }
       } finally {

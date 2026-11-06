@@ -28,7 +28,7 @@ import AuthShell from "../components/auth/AuthShell.jsx";
 
 // ── Utilities & Constants ──
 import { resolveApiEndpoint } from "../utils/api";
-import { userFacingErrorMessage } from "../utils/userFacingError";
+import { safeUserFacingDetail, userFacingErrorMessage } from "../utils/userFacingError";
 import { resolveAuthDestination } from "../utils/authNavigation";
 
 // ── Styles ──
@@ -123,7 +123,7 @@ function RegisterPage() {
       onError: () => {
          console.error("Google Sign-In Error");
 
-         setError("Google sign-in failed. Please try again.");
+         setError("Google sign-in could not be completed. Start the Google sign-in again.");
       },
    });
 
@@ -161,6 +161,27 @@ function RegisterPage() {
       });
    };
 
+   const normalizeRegistrationFieldMessage = (field, value) => {
+      const message = Array.isArray(value)
+         ? value.map(safeUserFacingDetail).filter(Boolean).join(" ")
+         : safeUserFacingDetail(value);
+      const normalized = message.toLowerCase();
+
+      if (field === "username" && /already|taken|exists/.test(normalized)) {
+         return "That username is already in use. Choose a different username.";
+      }
+
+      if (field === "email" && /already|exists|registered|associated/.test(normalized)) {
+         return "An account is already associated with that email address. Try signing in or resetting your password.";
+      }
+
+      if (field === "email" && /valid|invalid|format/.test(normalized)) {
+         return "Enter a valid email address.";
+      }
+
+      return message;
+   };
+
    const normalizeRegistrationErrors = (data) => {
       const fields = {};
 
@@ -172,24 +193,25 @@ function RegisterPage() {
       }
 
       if (data.username) {
-         fields.username = Array.isArray(data.username) ? data.username.join(" ") : String(data.username);
+         fields.username = normalizeRegistrationFieldMessage("username", data.username);
       }
 
       if (data.email) {
-         fields.email = Array.isArray(data.email) ? data.email.join(" ") : String(data.email);
+         fields.email = normalizeRegistrationFieldMessage("email", data.email);
       }
 
       if (data.password) {
-         fields.password = Array.isArray(data.password) ? data.password.join(" ") : String(data.password);
+         fields.password = normalizeRegistrationFieldMessage("password", data.password);
       }
+
+      Object.keys(fields).forEach((field) => {
+         if (!fields[field]) delete fields[field];
+      });
 
       return {
          form:
-            typeof data.detail === "string"
-               ? data.detail
-               : typeof data.non_field_errors?.[0] === "string"
-                 ? data.non_field_errors[0]
-                 : "",
+            safeUserFacingDetail(data.detail) ||
+            safeUserFacingDetail(data.non_field_errors),
          fields,
       };
    };
@@ -199,6 +221,30 @@ function RegisterPage() {
     */
    const handleSubmit = async () => {
       if (isSigningIn) return;
+
+      const username = formValues.username.trim();
+      const email = formValues.email.trim().toLowerCase();
+      const nextFieldErrors = {};
+
+      if (!username) {
+         nextFieldErrors.username = "Enter a username.";
+      }
+
+      if (!email) {
+         nextFieldErrors.email = "Enter a valid email address.";
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+         nextFieldErrors.email = "Enter a valid email address.";
+      }
+
+      if (!formValues.password) {
+         nextFieldErrors.password = "Enter a password.";
+      }
+
+      if (Object.keys(nextFieldErrors).length > 0) {
+         setFieldErrors(nextFieldErrors);
+         setError("Check the highlighted information and try again.");
+         return;
+      }
 
       setIsSigningIn(true);
       setError("");
@@ -213,8 +259,8 @@ function RegisterPage() {
                "Content-Type": "application/json",
             },
             body: JSON.stringify({
-               username: formValues.username.trim(),
-               email: formValues.email.trim().toLowerCase(),
+               username,
+               email,
                password: formValues.password,
             }),
          });

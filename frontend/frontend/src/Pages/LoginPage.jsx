@@ -50,6 +50,7 @@ function LoginPage() {
    const from = resolveAuthDestination(location.state?.from, null);
 
    const [error, setError] = useState(null);
+   const [fieldErrors, setFieldErrors] = useState({});
    const [formValues, setFormValues] = useState({
       username: "",
       password: "",
@@ -97,6 +98,13 @@ function LoginPage() {
          ...formValues,
          [name]: value,
       });
+      setFieldErrors((current) => {
+         if (!current[name]) return current;
+         const next = { ...current };
+         delete next[name];
+         return next;
+      });
+      setError(null);
    };
 
    /**
@@ -115,15 +123,34 @@ function LoginPage() {
     * Posts credentials to backend, stores tokens, redirects on success
     */
    const handleSubmit = async () => {
+      if (isSigningIn) return;
+
+      const identifier = formValues.username.trim();
+      const nextFieldErrors = {};
+
+      if (!identifier) {
+         nextFieldErrors.username = "Enter your username or email.";
+      }
+      if (!formValues.password) {
+         nextFieldErrors.password = "Enter your password.";
+      }
+
+      if (Object.keys(nextFieldErrors).length > 0) {
+         setFieldErrors(nextFieldErrors);
+         setError(null);
+         return;
+      }
+
       setIsSigningIn(true);
       setError(null);
+      setFieldErrors({});
 
       try {
          const response = await fetch(loginEndpoint, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-               username: formValues.username,
+               username: identifier,
                password: formValues.password,
                remember_me: formValues.remember_me,
             }),
@@ -141,7 +168,7 @@ function LoginPage() {
             { status: response.status, detail: data?.detail },
             {
                fallback: "We couldn't sign you in. Please try again.",
-               authMessage: "The username, email, or password was not accepted.",
+               authMessage: "Incorrect sign-in details. Check your username or email and password, then try again.",
                validationMessage: "Check your sign-in details and try again.",
                rateLimitMessage: "Too many sign-in attempts were made in a short period. Wait a moment before trying again.",
                serviceMessage: "Sign-in is temporarily unavailable. Try again shortly.",
@@ -273,9 +300,15 @@ function LoginPage() {
                         onChange={handleInputChange}
                         autoComplete="username"
                         disabled={isSigningIn}
-                        aria-invalid={undefined}
+                        aria-invalid={Boolean(fieldErrors.username)}
+                        aria-describedby={fieldErrors.username ? "login-identifier-error" : undefined}
                         required
                      />
+                     {fieldErrors.username && (
+                        <p id="login-identifier-error" className="account-field__error" role="alert">
+                           {fieldErrors.username}
+                        </p>
+                     )}
                   </div>
 
                   <div className="account-field account-field--text-toggle">
@@ -314,8 +347,15 @@ function LoginPage() {
                         onChange={handleInputChange}
                         autoComplete="current-password"
                         disabled={isSigningIn}
+                        aria-invalid={Boolean(fieldErrors.password)}
+                        aria-describedby={fieldErrors.password ? "login-password-error" : undefined}
                         required
                      />
+                     {fieldErrors.password && (
+                        <p id="login-password-error" className="account-field__error" role="alert">
+                           {fieldErrors.password}
+                        </p>
+                     )}
                   </div>
 
                   <div className="account-form__options">

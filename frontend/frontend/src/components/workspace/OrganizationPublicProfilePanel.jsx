@@ -3,6 +3,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
+import {
+   userFacingErrorMessage,
+   userFacingFieldError,
+} from "../../utils/userFacingError";
 import { showWorkspaceSuccess } from "../../utils/workspaceToast";
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
@@ -181,10 +185,10 @@ function getVisibilityState(profile) {
 
 function getServerFieldErrors(error) {
    return EDITABLE_FIELDS.reduce((errors, field) => {
-      const detail = error?.[field];
+      const detail = userFacingFieldError(error, field);
 
       if (detail) {
-         errors[field] = Array.isArray(detail) ? detail.join(" ") : String(detail);
+         errors[field] = detail;
       }
 
       return errors;
@@ -293,7 +297,12 @@ function OrganizationPublicProfilePanel({ organizationId }) {
                return;
             }
 
-            setLoadError(error?.message || "Unable to load the organization's public profile settings.");
+            setLoadError(userFacingErrorMessage(error, {
+               fallback: "We couldn't load the organization's public profile settings. Try again.",
+               authMessage: "Your session has expired. Sign in again to load the organization profile.",
+               permissionMessage: "You don't have permission to view this organization's public profile settings.",
+               serviceMessage: "Organization profile settings are temporarily unavailable. Try again shortly.",
+            }));
          })
          .finally(() => {
             if (!cancelled && profileRequestIdRef.current === requestId) {
@@ -414,10 +423,14 @@ function OrganizationPublicProfilePanel({ organizationId }) {
          const serverFieldErrors = getServerFieldErrors(error);
          const firstFieldError = Object.values(serverFieldErrors)[0];
          const message =
-            error?.detail ||
             firstFieldError ||
-            error?.message ||
-            "Unable to save the organization's public profile settings.";
+            userFacingErrorMessage(error, {
+               fallback: "We couldn't save the organization profile. Review the information and try again.",
+               authMessage: "Your session has expired. Sign in again before saving the organization profile.",
+               permissionMessage: "You don't have the required organization role to update this public profile.",
+               conflictMessage: "The organization profile changed while you were editing it. Refresh and try again.",
+               serviceMessage: "Organization profile updates are temporarily unavailable. Try again shortly.",
+            });
 
          setFieldErrors(serverFieldErrors);
          setSaveError(message);
@@ -506,8 +519,13 @@ function OrganizationPublicProfilePanel({ organizationId }) {
             return;
          }
 
-         const logoDetail = Array.isArray(error?.logo) ? error.logo.join(" ") : error?.logo;
-         const message = error?.detail || logoDetail || error?.message || "Unable to upload the organization logo.";
+         const logoDetail = userFacingFieldError(error, "logo");
+         const message = logoDetail || userFacingErrorMessage(error, {
+            fallback: "We couldn't upload the organization logo. Check the image and try again.",
+            authMessage: "Your session has expired. Sign in again before uploading the organization logo.",
+            permissionMessage: "You don't have the required organization role to update the organization logo.",
+            serviceMessage: "Organization logo uploads are temporarily unavailable. Try again shortly.",
+         });
          setLogoError(message);
 
          addToast({
@@ -561,7 +579,13 @@ function OrganizationPublicProfilePanel({ organizationId }) {
             return;
          }
 
-         const message = error?.detail || error?.message || "Unable to remove the organization logo.";
+         const message = userFacingErrorMessage(error, {
+            fallback: "We couldn't remove the organization logo. Try again.",
+            authMessage: "Your session has expired. Sign in again before removing the organization logo.",
+            permissionMessage: "You don't have the required organization role to update the organization logo.",
+            conflictMessage: "The organization logo changed before the removal completed. Refresh and try again.",
+            serviceMessage: "Organization logo updates are temporarily unavailable. Try again shortly.",
+         });
          setLogoError(message);
 
          addToast({
