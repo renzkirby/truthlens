@@ -4,11 +4,20 @@ const UNSAFE_DETAIL_PATTERN =
 const NETWORK_PATTERN = /network error|failed to fetch|load failed|network request failed|connection refused|err_network/i;
 const TIMEOUT_PATTERN = /timeout|timed out|econnaborted|etimedout/i;
 
+const KNOWN_CODE_MESSAGES = {
+   URL_KNOWN_THREAT: "This URL was flagged for a known security threat and cannot be analyzed.",
+   URL_POLICY_BLOCKED: "This URL cannot be processed because it does not meet TruthLens URL safety requirements.",
+};
+
 function cleanDetail(value) {
    if (typeof value !== "string") return "";
    const compact = value.trim().replace(/\s+/g, " ");
    if (!compact || compact.length > MAX_SAFE_DETAIL_LENGTH || UNSAFE_DETAIL_PATTERN.test(compact)) return "";
    return compact;
+}
+
+function normalizedErrorCode({ payload = null, error = null, failureCode = "" } = {}) {
+   return String(failureCode || payload?.failure_code || error?.code || "").trim().toUpperCase();
 }
 
 export function classifyExtensionError({ status = null, payload = null, error = null, failureCode = "" } = {}) {
@@ -18,7 +27,7 @@ export function classifyExtensionError({ status = null, payload = null, error = 
          : Number.isInteger(Number(status))
            ? Number(status)
            : null;
-   const code = String(failureCode || payload?.failure_code || error?.code || "").trim().toUpperCase();
+   const code = normalizedErrorCode({ payload, error, failureCode });
    const message = String(error?.message || "");
    const safetyStatus = payload?.url_safety?.status;
 
@@ -46,19 +55,36 @@ export function extensionErrorPresentation({
    notFoundMessage = null,
 } = {}) {
    const kind = classifyExtensionError({ status, payload, error, failureCode });
+   const code = normalizedErrorCode({ payload, error, failureCode });
    const safeDetail = cleanDetail(payload?.detail) || cleanDetail(payload?.error) || cleanDetail(error?.message);
+   const codeMessage = KNOWN_CODE_MESSAGES[code] || "";
 
    const messages = {
-      security_threat: safeDetail || "This URL was flagged for a known security threat and cannot be analyzed.",
-      input: safeDetail || inputMessage || "Check the submitted content and try again.",
+      security_threat:
+         safeDetail ||
+         codeMessage ||
+         "This URL was flagged for a known security threat and cannot be analyzed.",
+      input:
+         safeDetail ||
+         codeMessage ||
+         inputMessage ||
+         "Check the submitted content and try again.",
       auth: "Your TruthLens session has expired. Sign in again before starting another verification.",
       permission: "Your account doesn't have permission to perform this verification.",
-      not_found: notFoundMessage || "This verification is no longer available. Start a new scan.",
-      conflict: safeDetail || "This verification changed while it was running. Start a new scan.",
-      rate_limit: "Too many verification requests were made in a short period. Wait a moment before trying again.",
-      timeout: "Verification took longer than expected. Start a new scan when you're ready to try again.",
-      network: "TruthLens couldn't be reached. Check your internet connection and try again.",
-      service: "TruthLens analysis is temporarily unavailable. Try again shortly.",
+      not_found:
+         notFoundMessage ||
+         "This verification is no longer available. Start a new verification.",
+      conflict:
+         safeDetail ||
+         "This verification changed while it was running. Start a new verification.",
+      rate_limit:
+         "Too many verification requests were made in a short period. Wait a moment before trying again.",
+      timeout:
+         "Verification took longer than expected. Try again when you're ready.",
+      network:
+         "TruthLens couldn't be reached. Check your internet connection and try again.",
+      service:
+         "TruthLens analysis is temporarily unavailable. Try again shortly.",
    };
 
    return { kind, message: messages[kind] || fallback };
