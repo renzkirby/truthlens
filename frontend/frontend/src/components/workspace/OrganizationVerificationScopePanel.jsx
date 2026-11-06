@@ -3,6 +3,7 @@ import { useAuth } from "../../hooks/useAuth";
 import Button from "../ui/Button.jsx";
 import Icons from "../Icons.jsx";
 import { resolveApiEndpoint } from "../../utils/api";
+import { userFacingErrorMessage } from "../../utils/userFacingError";
 import {
    MANAGEMENT_VERIFICATION_DOMAINS,
    formatVerificationDomain,
@@ -37,7 +38,13 @@ function SpecializationsEditor({ scope, onClose, onSaved }) {
          });
          onSaved();
       } catch (err) {
-         setError(err?.detail || err?.message || "Could not save specializations.");
+         setError(userFacingErrorMessage(err, {
+            fallback: "We couldn't save the organization's verification specializations. Review the selections and try again.",
+            authMessage: "Your session has expired. Sign in again before saving verification specializations.",
+            permissionMessage: "You don't have the required organization role to manage verification specializations.",
+            conflictMessage: "The organization's verification specializations changed while you were editing them. Refresh and try again.",
+            serviceMessage: "Verification specialization management is temporarily unavailable. Try again shortly.",
+         }));
       } finally {
          setSaving(false);
       }
@@ -125,7 +132,12 @@ export default function OrganizationVerificationScopePanel({ organizationId }) {
          .catch((err) => {
             if (active) setRequestState({
                key: currentKey, scope: null,
-               error: err?.message || "Unable to load verification specializations.",
+               error: userFacingErrorMessage(err, {
+                  fallback: "We couldn't load the organization's verification specializations. Try again.",
+                  authMessage: "Your session has expired. Sign in again to load verification specializations.",
+                  permissionMessage: "You don't have permission to view this organization's verification specializations.",
+                  serviceMessage: "Verification specializations are temporarily unavailable. Try again shortly.",
+               }),
             });
          });
       return () => { active = false; };
