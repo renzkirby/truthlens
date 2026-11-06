@@ -16,8 +16,6 @@ import {
 } from "lucide-react";
 import { state } from "./state.js";
 import { loadTruthLensFont } from "./fonts.js";
-
-void loadTruthLensFont();
 import {
    getAiResultReminderText,
    getConfidenceLevel,
@@ -25,6 +23,8 @@ import {
    shouldShowAiResultReminder,
    shouldShowResultActions,
 } from "./verdictPresentation.js";
+
+void loadTruthLensFont();
 
 const COMMUNITY_PLATFORM_URL = state.WEB_APP_BASE_URL;
 const TRUTHLENS_LOGO_URL = chrome.runtime.getURL("truthlens_logo.png");
