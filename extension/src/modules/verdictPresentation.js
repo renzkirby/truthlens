@@ -67,4 +67,11 @@ export function getConfidenceLevel(value) {
    return "Low";
 }
 
+export function shouldShowAiResultReminder({
+   isAdjudicated = false,
+   isOutOfScope = false,
+} = {}) {
+   return !isAdjudicated && !isOutOfScope;
+}
+
 export { VERDICT_PRESENTATIONS };
