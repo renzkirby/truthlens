@@ -7,6 +7,7 @@ import {
    getConfidenceLevel,
    getVerdictPresentation,
    shouldShowAiResultReminder,
+   shouldShowResultActions,
 } from "./verdictPresentation.js";
 
 test("defines all TruthLens verdict presentations", () => {
@@ -69,4 +70,13 @@ test("AI reminder is limited to automated factual results", () => {
 test("AI reminder copy handles results without source cards", () => {
    assert.match(getAiResultReminderText(true), /cited sources/i);
    assert.match(getAiResultReminderText(false), /verify important information independently/i);
+});
+
+test("out-of-scope results do not expose follow-up actions", () => {
+   assert.equal(shouldShowResultActions("OUT_OF_SCOPE"), false);
+   assert.equal(shouldShowResultActions("FACT"), true);
+   assert.equal(shouldShowResultActions("FAKE"), true);
+   assert.equal(shouldShowResultActions("MISLEADING"), true);
+   assert.equal(shouldShowResultActions("SATIRE"), true);
+   assert.equal(shouldShowResultActions("UNVERIFIED"), true);
 });
