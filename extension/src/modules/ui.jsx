@@ -15,6 +15,9 @@ import {
    ExternalLink,
 } from "lucide-react";
 import { state } from "./state.js";
+import { loadTruthLensFont } from "./fonts.js";
+
+void loadTruthLensFont();
 import {
    getAiResultReminderText,
    getConfidenceLevel,
