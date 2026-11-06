@@ -376,43 +376,6 @@ function initializeScrollPositionShadows(scrollBody) {
    };
 }
 
-function initializeCollapsibleSummary(card) {
-   if (!card) return () => {};
-
-   const summary = card.querySelector("[data-truthlens-collapsible-summary]");
-   const toggle = card.querySelector("[data-truthlens-summary-toggle]");
-   if (!summary || !toggle) return () => {};
-
-   const updateToggleVisibility = () => {
-      summary.classList.add("truthlens-summary-collapsed");
-      const isOverflowing = summary.scrollHeight > summary.clientHeight + 2;
-
-      if (!isOverflowing) {
-         summary.classList.remove("truthlens-summary-collapsed");
-         toggle.hidden = true;
-         toggle.setAttribute("aria-hidden", "true");
-      } else {
-         toggle.hidden = false;
-         toggle.removeAttribute("aria-hidden");
-      }
-   };
-
-   const handleToggle = () => {
-      const expanded = toggle.getAttribute("aria-expanded") === "true";
-      toggle.setAttribute("aria-expanded", String(!expanded));
-      summary.classList.toggle("truthlens-summary-collapsed", expanded);
-      toggle.textContent = expanded ? "Show more" : "Show less";
-   };
-
-   toggle.addEventListener("click", handleToggle);
-   const layoutFrame = requestAnimationFrame(updateToggleVisibility);
-
-   return () => {
-      cancelAnimationFrame(layoutFrame);
-      toggle.removeEventListener("click", handleToggle);
-   };
-}
-
 function displayPublishedResultCard(claim, publication) {
    const organization = isRecord(publication.organization) ? publication.organization : {};
    const organizationName = nonblankText(organization.name);
@@ -731,24 +694,11 @@ export function displayResultCard(claim) {
             <div class="truthlens-summary-title">
                ${isAdjudicated ? iconShield : iconSparkles} ${summaryHeading}
             </div>
-            <div
-               id="truthlens-result-summary-text"
-               class="truthlens-summary-text"
-               data-truthlens-collapsible-summary
-            >${escapeHtml(
+            <div class="truthlens-summary-text">${escapeHtml(
                isAdjudicated
                   ? decisionRationale || "This claim was reviewed by a TruthLens partner organization."
                   : summary || "No summary available.",
             )}</div>
-            ${isOutOfScope
-               ? ""
-               : `<button
-                     type="button"
-                     class="truthlens-summary-toggle"
-                     data-truthlens-summary-toggle
-                     aria-controls="truthlens-result-summary-text"
-                     aria-expanded="false"
-                  >Show more</button>`}
          </section>
 
          ${confidenceHTML}
@@ -767,7 +717,6 @@ export function displayResultCard(claim) {
    const cleanupScrollShadows = initializeScrollPositionShadows(
       card.querySelector(".truthlens-result-body"),
    );
-   const cleanupSummaryToggle = initializeCollapsibleSummary(card);
    instrumentPublicPublicationLinks(card);
    void card.offsetWidth;
    setTimeout(() => card.classList.add("show"), 100);
@@ -775,7 +724,6 @@ export function displayResultCard(claim) {
    document.getElementById("truthlens-close-btn").addEventListener("click", () => {
       card.classList.remove("show");
       setTimeout(() => {
-         cleanupSummaryToggle();
          cleanupScrollShadows();
          card.remove();
       }, 300);
