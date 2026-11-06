@@ -1,6 +1,9 @@
 import "./content.css";
 import { state } from "./modules/state.js";
 import { startCropStudio } from "./modules/screenshot.jsx";
+import { loadTruthLensFont } from "./modules/fonts.js";
+
+void loadTruthLensFont();
 
 const BRIDGE_EVENT_SOURCE = "TRUTHLENS_WEB_AUTH_BRIDGE";
 const EXTENSION_EVENT_SOURCE = "TRUTHLENS_EXTENSION";
