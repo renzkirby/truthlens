@@ -1000,6 +1000,191 @@
    outline-offset: 2px;
 }
 
+
+/* ── Verdict result redesign ────────────────────────────────────────────────
+   Scoped to the normal AI/partner result shell. Institutional publication
+   cards keep their dedicated human-authority presentation above. */
+.truthlens-card.truthlens-result-card-shell:not(.truthlens-institutional-card) {
+   border: 1px solid #e5e7eb;
+   border-radius: 14px;
+   padding-top: 24px;
+}
+
+.truthlens-result-card-shell:not(.truthlens-institutional-card) > .truthlens-header {
+   margin-bottom: 14px;
+}
+
+.truthlens-verdict-accent {
+   position: absolute;
+   top: 0;
+   left: 0;
+   right: 0;
+   height: 5px;
+   pointer-events: none;
+   background: var(--truthlens-verdict-accent, #9ca3af);
+}
+
+.truthlens-result-card-shell.verdict-unverified .truthlens-verdict-accent {
+   background: repeating-linear-gradient(
+      135deg,
+      var(--truthlens-verdict-accent) 0 7px,
+      var(--truthlens-verdict-tint) 7px 12px
+   );
+}
+
+.truthlens-verdict-hero {
+   display: flex;
+   align-items: center;
+   gap: 12px;
+   padding: 12px;
+   margin-bottom: 16px;
+   border: 1px solid color-mix(
+      in srgb,
+      var(--truthlens-verdict-accent, #9ca3af) 50%,
+      transparent
+   );
+   border-radius: 10px;
+   background: var(--truthlens-verdict-tint, #f3f4f6);
+}
+
+.truthlens-verdict-icon {
+   width: 44px;
+   height: 44px;
+   flex: 0 0 44px;
+   display: grid;
+   place-items: center;
+   border-radius: 12px;
+   background: var(--truthlens-verdict-chip, #6b7280);
+   color: #ffffff;
+}
+
+.truthlens-verdict-icon svg {
+   width: 24px;
+   height: 24px;
+}
+
+.truthlens-result-card-shell.verdict-unverified .truthlens-verdict-icon {
+   outline: 2px dashed var(--truthlens-verdict-ink, #5c4700);
+   outline-offset: 2px;
+}
+
+.truthlens-verdict-copy {
+   min-width: 0;
+}
+
+.truthlens-verdict-kicker {
+   display: block;
+   margin-bottom: 1px;
+   color: var(--truthlens-verdict-ink, #374151);
+   font-size: 10px;
+   line-height: 1.4;
+   font-weight: 800;
+   letter-spacing: 0.08em;
+}
+
+.truthlens-verdict-label {
+   display: block;
+   color: var(--truthlens-verdict-ink, #374151);
+   font-size: 20px;
+   line-height: 1.15;
+   font-weight: 800;
+   letter-spacing: -0.01em;
+}
+
+.truthlens-verdict-description {
+   margin: 3px 0 0;
+   color: #374151;
+   font-size: 11.5px;
+   line-height: 1.45;
+}
+
+.truthlens-result-card-shell:not(.truthlens-institutional-card) .truthlens-result-summary {
+   margin: 16px 0;
+   padding: 2px 0 2px 12px;
+   border: 0;
+   border-left: 3px solid var(--truthlens-verdict-accent, #9ca3af);
+   border-radius: 0;
+   background: transparent;
+}
+
+.truthlens-result-card-shell:not(.truthlens-institutional-card) .truthlens-result-summary .truthlens-summary-title {
+   margin-bottom: 6px;
+}
+
+.truthlens-result-card-shell:not(.truthlens-institutional-card) .truthlens-confidence-container {
+   margin-bottom: 18px;
+}
+
+.truthlens-result-card-shell:not(.truthlens-institutional-card) .truthlens-confidence-header {
+   justify-content: flex-start;
+   align-items: baseline;
+   gap: 8px;
+}
+
+.truthlens-confidence-level {
+   padding: 2px 8px;
+   border: 1px solid color-mix(
+      in srgb,
+      var(--truthlens-verdict-accent, #9ca3af) 55%,
+      transparent
+   );
+   border-radius: 999px;
+   background: var(--truthlens-verdict-tint, #f3f4f6);
+   color: var(--truthlens-verdict-ink, #374151);
+   font-size: 10.5px;
+   line-height: 1.4;
+   font-weight: 800;
+}
+
+.truthlens-result-card-shell:not(.truthlens-institutional-card) .truthlens-confidence-value {
+   margin-left: auto;
+   color: var(--truthlens-verdict-ink, #374151);
+   font-size: 22px;
+   line-height: 1;
+   font-weight: 850;
+}
+
+.truthlens-result-card-shell:not(.truthlens-institutional-card) .truthlens-confidence-bar {
+   height: 8px;
+   margin-top: 8px;
+}
+
+.truthlens-result-card-shell:not(.truthlens-institutional-card) .truthlens-confidence-fill {
+   background: var(--truthlens-verdict-accent, #9ca3af);
+   transition: width 1s ease-in-out;
+}
+
+.truthlens-ai-reminder {
+   display: flex;
+   align-items: flex-start;
+   gap: 8px;
+   margin: 0 0 14px;
+   padding: 10px;
+   border: 1px solid #e0e7ff;
+   border-radius: 8px;
+   background: #f8faff;
+   color: #4b5563;
+   font-size: 10.5px;
+   line-height: 1.5;
+}
+
+.truthlens-ai-reminder-icon {
+   width: 17px;
+   height: 17px;
+   flex: 0 0 17px;
+   display: grid;
+   place-items: center;
+   border-radius: 50%;
+   background: #eef2ff;
+   color: #4338ca;
+   font-size: 11px;
+   font-weight: 900;
+}
+
+.truthlens-ai-reminder p {
+   margin: 0;
+}
+
 @media (max-width: 400px) {
    .truthlens-card.truthlens-result-card-shell {
       top: 16px;
