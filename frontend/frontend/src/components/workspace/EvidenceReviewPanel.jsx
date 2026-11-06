@@ -872,7 +872,13 @@ function EvidenceReviewContent({
          } else {
             focusActionErrorRef.current = true;
             setActionError(
-               error?.message || "Unable to accept the prior institutional review.",
+               userFacingErrorMessage(error, {
+                  fallback: "We couldn't accept the prior institutional review. Refresh the case and try again.",
+                  authMessage: "Your session has expired. Sign in again before accepting the prior review.",
+                  permissionMessage: "You no longer have permission to review evidence for this organization.",
+                  conflictMessage: "This Evidence case changed before the prior review could be accepted. Refresh the case and review the latest status.",
+                  serviceMessage: "Evidence Review actions are temporarily unavailable. Try again shortly.",
+               }),
             );
          }
       } finally {
