@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "../../hooks/useAuth";
 import { resolveApiEndpoint } from "../../utils/api";
+import { userFacingErrorMessage } from "../../utils/userFacingError";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
@@ -484,7 +485,12 @@ function AccountabilityPanel({ scope, organizationId, organizationName }) {
                setLoadedRequestKey("");
                return;
             }
-            setErrorMessage(error?.message || "Unable to load accountability history.");
+            setErrorMessage(userFacingErrorMessage(error, {
+               fallback: "We couldn't load accountability history. Try again.",
+               authMessage: "Your session has expired. Sign in again to load accountability history.",
+               permissionMessage: "You don't have permission to view this accountability history.",
+               serviceMessage: "Accountability history is temporarily unavailable. Try again shortly.",
+            }));
          });
 
       return () => {
