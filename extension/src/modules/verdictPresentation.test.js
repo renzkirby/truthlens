@@ -5,6 +5,7 @@ import {
    VERDICT_PRESENTATIONS,
    getConfidenceLevel,
    getVerdictPresentation,
+   shouldShowAiResultReminder,
 } from "./verdictPresentation.js";
 
 test("defines all TruthLens verdict presentations", () => {
@@ -50,4 +51,16 @@ test("confidence level labels are deterministic", () => {
    assert.equal(getConfidenceLevel(59), "Low");
    assert.equal(getConfidenceLevel(49), "Low");
    assert.equal(getConfidenceLevel(undefined), "Unavailable");
+});
+
+test("AI reminder is limited to automated factual results", () => {
+   assert.equal(shouldShowAiResultReminder(), true);
+   assert.equal(
+      shouldShowAiResultReminder({ isAdjudicated: true }),
+      false,
+   );
+   assert.equal(
+      shouldShowAiResultReminder({ isOutOfScope: true }),
+      false,
+   );
 });
