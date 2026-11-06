@@ -74,4 +74,10 @@ export function shouldShowAiResultReminder({
    return !isAdjudicated && !isOutOfScope;
 }
 
+export function getAiResultReminderText(hasSources) {
+   return hasSources
+      ? "AI can make mistakes. Review the summary and cited sources before relying on this result."
+      : "AI can make mistakes. Treat this result as guidance and verify important information independently.";
+}
+
 export { VERDICT_PRESENTATIONS };
