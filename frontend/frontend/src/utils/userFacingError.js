@@ -114,6 +114,7 @@ export function getUserFacingError(error, options = {}) {
       auth: authMessage || "Your session has expired. Sign in again to continue.",
       permission:
          permissionMessage ||
+         codeMessage ||
          "Your account doesn't have permission to perform this action.",
       not_found:
          notFoundMessage ||
