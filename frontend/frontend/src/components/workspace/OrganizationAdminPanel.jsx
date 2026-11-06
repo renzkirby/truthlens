@@ -939,7 +939,13 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
          addToast({
             type: "error",
             title: "Invitation not sent",
-            message: error?.message || "Unable to send this invitation.",
+            message: userFacingErrorMessage(error, {
+               fallback: "We couldn't send this invitation. Review the email address and role, then try again.",
+               authMessage: "Your session has expired. Sign in again before sending an invitation.",
+               permissionMessage: "You don't have the required organization role to send invitations.",
+               conflictMessage: "An active invitation may already exist for this account. Refresh the invitation list and try again.",
+               serviceMessage: "Organization invitations are temporarily unavailable. Try again shortly.",
+            }),
          });
       } finally {
          setIsSendingInvite(false);
@@ -988,7 +994,13 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
          addToast({
             type: "error",
             title: "Invitation not resent",
-            message: error?.message || "Unable to resend this invitation.",
+            message: userFacingErrorMessage(error, {
+               fallback: "We couldn't resend this invitation. Refresh the invitation list and try again.",
+               authMessage: "Your session has expired. Sign in again before resending an invitation.",
+               permissionMessage: "You don't have the required organization role to resend invitations.",
+               conflictMessage: "This invitation changed before it could be resent. Refresh the invitation list and try again.",
+               serviceMessage: "Organization invitations are temporarily unavailable. Try again shortly.",
+            }),
          });
       } finally {
          setInvitationActionId(null);
@@ -1041,7 +1053,13 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
          addToast({
             type: "error",
             title: "Invitation not cancelled",
-            message: error?.message || "Unable to cancel this invitation.",
+            message: userFacingErrorMessage(error, {
+               fallback: "We couldn't cancel this invitation. Refresh the invitation list and try again.",
+               authMessage: "Your session has expired. Sign in again before cancelling an invitation.",
+               permissionMessage: "You don't have the required organization role to cancel invitations.",
+               conflictMessage: "This invitation changed before it could be cancelled. Refresh the invitation list and try again.",
+               serviceMessage: "Organization invitations are temporarily unavailable. Try again shortly.",
+            }),
          });
       } finally {
          setInvitationActionId(null);
@@ -1107,7 +1125,13 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
          addToast({
             type: "error",
             title: "Role not updated",
-            message: error?.message || "Unable to change this organization role.",
+            message: userFacingErrorMessage(error, {
+               fallback: "We couldn't update this organization role. Refresh the member list and try again.",
+               authMessage: "Your session has expired. Sign in again before changing organization roles.",
+               permissionMessage: "You don't have the required organization role to change this member's role.",
+               conflictMessage: "This membership changed before the role update completed. Refresh the member list and try again.",
+               serviceMessage: "Organization membership updates are temporarily unavailable. Try again shortly.",
+            }),
          });
       } finally {
          setMemberActionId(null);
@@ -1160,7 +1184,13 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
          addToast({
             type: "error",
             title: "Membership not suspended",
-            message: error?.message || "Unable to suspend this membership.",
+            message: userFacingErrorMessage(error, {
+               fallback: "We couldn't suspend this membership. Refresh the member list and try again.",
+               authMessage: "Your session has expired. Sign in again before suspending a membership.",
+               permissionMessage: "You don't have the required organization role to suspend this membership.",
+               conflictMessage: "This membership changed before the suspension completed. Refresh the member list and try again.",
+               serviceMessage: "Organization membership updates are temporarily unavailable. Try again shortly.",
+            }),
          });
       } finally {
          setMemberActionId(null);
@@ -1209,7 +1239,13 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
          addToast({
             type: "error",
             title: "Membership not restored",
-            message: error?.message || "Unable to restore this membership.",
+            message: userFacingErrorMessage(error, {
+               fallback: "We couldn't restore this membership. Refresh the member list and try again.",
+               authMessage: "Your session has expired. Sign in again before restoring a membership.",
+               permissionMessage: "You don't have the required organization role to restore this membership.",
+               conflictMessage: "This membership changed before the restore completed. Refresh the member list and try again.",
+               serviceMessage: "Organization membership updates are temporarily unavailable. Try again shortly.",
+            }),
          });
       } finally {
          setMemberActionId(null);
@@ -1254,7 +1290,13 @@ function OrganizationAdminPanel({ organizationId, membershipRole }) {
          addToast({
             type: "error",
             title: "Member not removed",
-            message: error?.message || "Unable to remove this membership.",
+            message: userFacingErrorMessage(error, {
+               fallback: "We couldn't remove this member. Refresh the organization and try again.",
+               authMessage: "Your session has expired. Sign in again before removing a member.",
+               permissionMessage: "You don't have the required organization role to remove this member.",
+               conflictMessage: "This membership changed before the removal completed. Refresh the member list and try again.",
+               serviceMessage: "Organization membership updates are temporarily unavailable. Try again shortly.",
+            }),
          });
       } finally {
          setMemberActionId(null);
