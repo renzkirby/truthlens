@@ -21,6 +21,7 @@ import {
    getConfidenceLevel,
    getVerdictPresentation,
    shouldShowAiResultReminder,
+   shouldShowResultActions,
 } from "./verdictPresentation.js";
 
 const COMMUNITY_PLATFORM_URL = state.WEB_APP_BASE_URL;
@@ -623,20 +624,22 @@ export function displayResultCard(claim) {
            : null;
    const communityText = thread_id ? "View Community Discussion" : "Ask the Community";
 
-   if (displayVerdict === "UNVERIFIED") {
-      primaryButtonHTML = communityLink
-         ? `<a href='${escapeHtml(communityLink)}' target='_blank' rel='noopener noreferrer' class='truthlens-primary-btn'>${iconUsers} ${communityText}</a>`
-         : "";
-      secondaryLinkHTML = deepAnalysisUrl
-         ? `<a href='${escapeHtml(deepAnalysisUrl)}' target='_blank' rel='noopener noreferrer' class='truthlens-dashboard-link'>View full report ${iconExternal}</a>`
-         : "";
-   } else {
-      primaryButtonHTML = deepAnalysisUrl
-         ? `<a href='${escapeHtml(deepAnalysisUrl)}' target='_blank' rel='noopener noreferrer' class='truthlens-primary-btn'>${iconSearch} View Full Report</a>`
-         : "";
-      secondaryLinkHTML = communityLink
-         ? `<a href='${escapeHtml(communityLink)}' target='_blank' rel='noopener noreferrer' class='truthlens-dashboard-link'>${communityText} ${iconExternal}</a>`
-         : "";
+   if (shouldShowResultActions(displayVerdict)) {
+      if (displayVerdict === "UNVERIFIED") {
+         primaryButtonHTML = communityLink
+            ? `<a href='${escapeHtml(communityLink)}' target='_blank' rel='noopener noreferrer' class='truthlens-primary-btn'>${iconUsers} ${communityText}</a>`
+            : "";
+         secondaryLinkHTML = deepAnalysisUrl
+            ? `<a href='${escapeHtml(deepAnalysisUrl)}' target='_blank' rel='noopener noreferrer' class='truthlens-dashboard-link'>View full report ${iconExternal}</a>`
+            : "";
+      } else {
+         primaryButtonHTML = deepAnalysisUrl
+            ? `<a href='${escapeHtml(deepAnalysisUrl)}' target='_blank' rel='noopener noreferrer' class='truthlens-primary-btn'>${iconSearch} View Full Report</a>`
+            : "";
+         secondaryLinkHTML = communityLink
+            ? `<a href='${escapeHtml(communityLink)}' target='_blank' rel='noopener noreferrer' class='truthlens-dashboard-link'>${communityText} ${iconExternal}</a>`
+            : "";
+      }
    }
 
    const card = document.createElement("div");
@@ -829,7 +832,107 @@ export function removeLoadingCard() {
    }
 }
 
+function displayNeedsContextCard(message) {
+   document.querySelectorAll("#truthlens-error-card").forEach((errorCard) => {
+      errorCard.remove();
+   });
+
+   const card = document.createElement("div");
+   card.id = "truthlens-error-card";
+   card.className =
+      "truthlens-card truthlens-result-card-shell truthlens-non-conclusion-card truthlens-needs-context-card";
+   card.style.setProperty("--truthlens-verdict-accent", "#6366f1");
+   card.style.setProperty("--truthlens-verdict-ink", "#3730a3");
+   card.style.setProperty("--truthlens-verdict-tint", "#eef2ff");
+   card.style.setProperty("--truthlens-verdict-chip", "#4f46e5");
+
+   card.innerHTML = `
+      <span class="truthlens-verdict-accent" aria-hidden="true"></span>
+
+      <div class="truthlens-header">
+         ${truthLensBrandHTML()}
+         <button
+            type="button"
+            id="truthlens-error-close-btn"
+            class="truthlens-close-btn"
+            aria-label="Dismiss more context notice"
+            title="Dismiss"
+         >
+            &times;
+         </button>
+      </div>
+
+      <div
+         class="truthlens-result-body"
+         role="status"
+         aria-label="More context needed"
+         tabindex="0"
+      >
+         <section class="truthlens-verdict-hero" aria-label="More context needed">
+            <span class="truthlens-verdict-icon" aria-hidden="true">${iconHelp}</span>
+            <div class="truthlens-verdict-copy">
+               <span class="truthlens-verdict-kicker">MORE CONTEXT</span>
+               <strong class="truthlens-verdict-label">More context needed</strong>
+               <p class="truthlens-verdict-description">
+                  TruthLens needs more detail before it can reliably identify the factual claim.
+               </p>
+            </div>
+         </section>
+
+         <section class="truthlens-summary-box truthlens-result-summary">
+            <div class="truthlens-summary-title">
+               ${iconSparkles} WHAT THIS MEANS
+            </div>
+            <div class="truthlens-summary-text">
+               ${escapeHtml(
+                  nonblankText(message) ||
+                     "TruthLens cannot reliably identify the exact factual claim yet.",
+               )}
+            </div>
+         </section>
+
+         <section class="truthlens-context-guidance" aria-labelledby="truthlens-context-guidance-title">
+            <div id="truthlens-context-guidance-title" class="truthlens-context-guidance-title">
+               What to add
+            </div>
+            <p>
+               Add identifying details such as the full person or organization name and, when relevant,
+               the event, amount, date, or location.
+            </p>
+         </section>
+
+         <aside class="truthlens-terminal-note">
+            <span aria-hidden="true">${iconShield}</span>
+            <p>
+               Verification stopped before evidence retrieval so TruthLens would not guess what the claim meant.
+            </p>
+         </aside>
+      </div>
+   `;
+
+   document.body.appendChild(card);
+   const cleanupScrollShadows = initializeScrollPositionShadows(
+      card.querySelector(".truthlens-result-body"),
+   );
+   void card.offsetWidth;
+   const showTimer = setTimeout(() => card.classList.add("show"), 100);
+
+   card.querySelector("#truthlens-error-close-btn").addEventListener("click", () => {
+      clearTimeout(showTimer);
+      card.classList.remove("show");
+      setTimeout(() => {
+         cleanupScrollShadows();
+         card.remove();
+      }, 300);
+   });
+}
+
 export function displayErrorCard(message, { kind = "service" } = {}) {
+   if (kind === "needs_context") {
+      displayNeedsContextCard(message);
+      return;
+   }
+
    const presentation = {
       security_threat: {
          badge: "SECURITY ALERT",
