@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "./useAuth";
+import { userFacingErrorMessage } from "../utils/userFacingError";
 
 export function useManagementRequest(url) {
    const { authFetch } = useAuth();
@@ -22,7 +23,12 @@ export function useManagementRequest(url) {
                setResult({
                   key: requestKey,
                   data: null,
-                  error: requestError.message || "The management data could not be loaded.",
+                  error: userFacingErrorMessage(requestError, {
+                     fallback: "We couldn't load this management information. Try again.",
+                     authMessage: "Your session has expired. Sign in again to load Management Console data.",
+                     permissionMessage: "Your account doesn't have permission to view this management information.",
+                     serviceMessage: "Management Console data is temporarily unavailable. Try again shortly.",
+                  }),
                });
             }
          });
