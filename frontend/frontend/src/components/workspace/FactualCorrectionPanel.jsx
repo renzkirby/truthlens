@@ -3,7 +3,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
-import { userFacingErrorMessage } from "../../utils/userFacingError";
+import {
+   safeUserFacingDetail,
+   userFacingErrorMessage,
+} from "../../utils/userFacingError";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
 import { showWorkspaceSuccess, WORKSPACE_LONG_TOAST_DURATION } from "../../utils/workspaceToast";
 import Icons from "../Icons.jsx";
@@ -1402,11 +1405,21 @@ function FactualCorrectionContent({
             if (kind === "prepare-proposal" || kind === "publish-correction") {
                setDialog(null);
             }
-            setFieldErrors(error?.errors || {});
-            setActionError(
-               `${error?.code || "INVALID_INPUT"}: ${error?.message || "Review the highlighted fields and try again."}`,
+            const safeFieldErrors = Object.fromEntries(
+               Object.entries(error?.errors || {})
+                  .map(([name, value]) => {
+                     const detail = Array.isArray(value)
+                        ? value.map(safeUserFacingDetail).filter(Boolean).join(" ")
+                        : safeUserFacingDetail(value);
+                     return [name, detail];
+                  })
+                  .filter(([, value]) => Boolean(value)),
             );
-            const firstInvalid = Object.keys(error?.errors || {}).find((name) => proposalRefs[name]);
+            setFieldErrors(safeFieldErrors);
+            setActionError(userFacingErrorMessage(error, {
+               validationMessage: "Review the highlighted fields and try again.",
+            }));
+            const firstInvalid = Object.keys(safeFieldErrors).find((name) => proposalRefs[name]);
             if (firstInvalid) {
                requestAnimationFrame(() => focusProposalField(firstInvalid));
             }
@@ -1427,7 +1440,9 @@ function FactualCorrectionContent({
             }
             setConflict({
                code: error?.code || "CONFLICT",
-               detail: error?.message || "The correction changed before this action completed.",
+               detail: userFacingErrorMessage(error, {
+                  conflictMessage: "The correction changed before this action completed. Refresh it and review the latest status.",
+               }),
                blockers: error?.blockers,
                current: error?.current,
             });
@@ -1438,7 +1453,10 @@ function FactualCorrectionContent({
          if (kind === "prepare-proposal" || kind === "publish-correction" || kind === "cancel-correction") {
             setDialog(null);
          }
-         setActionError(error?.message || "The factual-correction action could not be completed.");
+         setActionError(userFacingErrorMessage(error, {
+            fallback: "We couldn't complete this factual-correction action. Refresh the correction and try again.",
+            serviceMessage: "Factual-correction actions are temporarily unavailable. Try again shortly.",
+         }));
       } finally {
          if (mountedRef.current && mutationRequestIdRef.current === operation.sequence) {
             setMutation(null);
