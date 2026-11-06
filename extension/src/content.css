@@ -1041,7 +1041,9 @@
    border: 1px solid #e5e7eb;
    border-radius: 14px;
    padding-top: 24px;
-   box-shadow: 0 10px 28px rgba(15, 23, 42, 0.14);
+   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
+   font-size: 13px;
+   line-height: 1.5;
 }
 
 .truthlens-result-card-shell:not(.truthlens-institutional-card) .truthlens-result-body {
@@ -1075,7 +1077,7 @@
    display: flex;
    align-items: center;
    gap: 12px;
-   padding: 13px 12px;
+   padding: 12px;
    margin-bottom: 16px;
    border: 1px solid color-mix(
       in srgb,
@@ -1124,7 +1126,7 @@
 .truthlens-verdict-label {
    display: block;
    color: var(--truthlens-verdict-ink, #374151);
-   font-size: 21px;
+   font-size: 20px;
    line-height: 1.15;
    font-weight: 800;
    letter-spacing: -0.01em;
@@ -1190,6 +1192,11 @@
 
 .truthlens-result-card-shell:not(.truthlens-institutional-card) .truthlens-confidence-fill {
    background: var(--truthlens-verdict-accent, #9ca3af);
+   box-shadow: inset 0 0 0 1px color-mix(
+      in srgb,
+      var(--truthlens-verdict-ink, #374151) 35%,
+      transparent
+   );
    transition: width 1s ease-in-out;
 }
 
@@ -1199,11 +1206,25 @@
 }
 
 .truthlens-result-card-shell:not(.truthlens-institutional-card) .truthlens-source-list {
-   gap: 6px;
+   gap: 5px;
 }
 
 .truthlens-result-card-shell:not(.truthlens-institutional-card) .truthlens-source-more {
    margin-top: 7px;
+}
+
+
+.truthlens-result-card-shell:not(.truthlens-institutional-card) .truthlens-primary-btn {
+   border-radius: 10px;
+   padding: 12px;
+   font-size: 13px;
+   font-weight: 800;
+}
+
+.truthlens-result-card-shell:not(.truthlens-institutional-card) .truthlens-dashboard-link {
+   margin-top: 11px;
+   font-size: 11.5px;
+   font-weight: 650;
 }
 
 .truthlens-ai-reminder {
