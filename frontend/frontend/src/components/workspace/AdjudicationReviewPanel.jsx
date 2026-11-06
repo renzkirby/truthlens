@@ -6,6 +6,10 @@ import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
+import {
+   safeUserFacingDetail,
+   userFacingErrorMessage,
+} from "../../utils/userFacingError";
 import { showWorkspaceSuccess, WORKSPACE_LONG_TOAST_DURATION } from "../../utils/workspaceToast";
 import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
@@ -431,10 +435,10 @@ function normalizeServerMessage(value) {
       return value.map(normalizeServerMessage).filter(Boolean).join(" ");
    }
    if (typeof value === "string") {
-      return value;
+      return safeUserFacingDetail(value);
    }
-   if (value && typeof value === "object" && typeof value.detail === "string") {
-      return value.detail;
+   if (value && typeof value === "object") {
+      return safeUserFacingDetail(value.detail);
    }
    return "";
 }
@@ -457,8 +461,13 @@ function getActionValidationErrors(error) {
    const generalMessage =
       normalizeServerMessage(error?.expected_revision) ||
       normalizeServerMessage(error?.non_field_errors) ||
-      error?.message ||
-      "The decision could not be submitted. Review the fields and try again.";
+      userFacingErrorMessage(error, {
+         fallback: "The decision could not be submitted. Review the fields and try again.",
+         authMessage: "Your session has expired. Sign in again before submitting this decision.",
+         permissionMessage: "You no longer have Adjudication permission for this organization.",
+         conflictMessage: "This Adjudication case changed while you were reviewing it. Refresh the case before continuing.",
+         serviceMessage: "Adjudication is temporarily unavailable. Try again shortly.",
+      });
 
    return { fieldErrors, generalMessage };
 }
@@ -818,7 +827,12 @@ function AdjudicationReviewContent({
             setQueueError(
                error?.status === 404
                   ? "The Adjudication queue is unavailable for the selected organization."
-                  : (error?.message || "Unable to load the Adjudication queue."),
+                  : userFacingErrorMessage(error, {
+                       fallback: "We couldn't load the Adjudication queue. Try again.",
+                       authMessage: "Your session has expired. Sign in again to load Adjudication.",
+                       permissionMessage: "You no longer have Adjudication permission for this organization.",
+                       serviceMessage: "Adjudication is temporarily unavailable. Try again shortly.",
+                    }),
             );
             setQueueLoading(false);
          });
@@ -943,7 +957,12 @@ function AdjudicationReviewContent({
             setDetailError(
                unavailable
                   ? "This Adjudication case is no longer available for the selected organization."
-                  : (error?.message || "Unable to load the selected Adjudication case."),
+                  : userFacingErrorMessage(error, {
+                       fallback: "We couldn't load the selected Adjudication case. Try again.",
+                       authMessage: "Your session has expired. Sign in again to load this Adjudication case.",
+                       permissionMessage: "You no longer have Adjudication permission for this organization.",
+                       serviceMessage: "This Adjudication case is temporarily unavailable. Try again shortly.",
+                    }),
             );
             setDetailUnavailable(unavailable);
             setDetailLoading(false);
@@ -1279,7 +1298,13 @@ function AdjudicationReviewContent({
             setDetailError(
                error?.status === 404
                   ? "The submitted Adjudication case is no longer available in this organization."
-                  : (error?.message || "Unable to confirm the submitted decision against the latest case details."),
+                  : userFacingErrorMessage(error, {
+                       fallback: "We couldn't confirm the submitted decision against the latest case details. Refresh and try again.",
+                       authMessage: "Your session has expired. Sign in again before confirming this decision.",
+                       permissionMessage: "You no longer have Adjudication permission for this organization.",
+                       conflictMessage: "This Adjudication case changed before the decision could be confirmed. Refresh the case and review the latest details.",
+                       serviceMessage: "Adjudication confirmation is temporarily unavailable. Try again shortly.",
+                    }),
             );
          }
 
@@ -1469,9 +1494,17 @@ function AdjudicationReviewContent({
                requestQueueRefresh();
             }
          } else if (error?.status === 409) {
-            await reconcileDecisionOperation(operation, "conflict", error?.message);
+            await reconcileDecisionOperation(
+               operation,
+               "conflict",
+               safeUserFacingDetail(error?.detail) || safeUserFacingDetail(error?.message),
+            );
          } else {
-            await reconcileDecisionOperation(operation, "ambiguous", error?.message);
+            await reconcileDecisionOperation(
+               operation,
+               "ambiguous",
+               safeUserFacingDetail(error?.detail) || safeUserFacingDetail(error?.message),
+            );
          }
       } finally {
          if (isOperationContextCurrent(operation)) {
