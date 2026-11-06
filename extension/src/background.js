@@ -9,6 +9,13 @@ import {
 import { state } from "./modules/state.js";
 import { extensionErrorPresentation } from "./modules/userFacingError.js";
 
+if (import.meta.env.DEV) {
+   console.info("[TruthLens Local] Background endpoints", {
+      apiBaseUrl: state.API_BASE_URL,
+      webAppBaseUrl: state.WEB_APP_BASE_URL,
+   });
+}
+
 const GUEST_SCANS_STORAGE_KEY = "guest_scans";
 const GUEST_SCANS_CAP = 3;
 const GUEST_SCAN_SYNC_ENDPOINT = "auth/guest-scan-sync/";
