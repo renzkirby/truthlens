@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
+import { userFacingErrorMessage } from "../../utils/userFacingError";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
 import { showWorkspaceSuccess, WORKSPACE_LONG_TOAST_DURATION } from "../../utils/workspaceToast";
 import Icons from "../Icons.jsx";
@@ -1188,7 +1189,12 @@ function FactualCorrectionContent({
                revokeAuthority();
                return;
             }
-            setQueueError(error?.message || "Unable to load this organization's factual corrections.");
+            setQueueError(userFacingErrorMessage(error, {
+               fallback: "We couldn't load this organization's factual corrections. Try again.",
+               authMessage: "Your session has expired. Sign in again to load factual corrections.",
+               permissionMessage: "You don't have permission to view this organization's factual corrections.",
+               serviceMessage: "Factual corrections are temporarily unavailable. Try again shortly.",
+            }));
             setQueueLoading(false);
             setQueueRefreshing(false);
          });
@@ -1290,7 +1296,12 @@ function FactualCorrectionContent({
             setDetailError(
                error?.status === 404
                   ? "This correction request is unavailable in the selected organization."
-                  : error?.message || "Unable to load this factual correction.",
+                  : userFacingErrorMessage(error, {
+                       fallback: "We couldn't load this factual correction. Try again.",
+                       authMessage: "Your session has expired. Sign in again to load this factual correction.",
+                       permissionMessage: "You don't have permission to view this factual correction.",
+                       serviceMessage: "This factual correction is temporarily unavailable. Try again shortly.",
+                    }),
             );
          });
 
