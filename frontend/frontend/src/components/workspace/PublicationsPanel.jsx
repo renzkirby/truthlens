@@ -3,7 +3,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
-import { userFacingErrorMessage } from "../../utils/userFacingError";
+import {
+   safeUserFacingDetail,
+   userFacingErrorMessage,
+} from "../../utils/userFacingError";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
 import { showWorkspaceSuccess } from "../../utils/workspaceToast";
 import Icons from "../Icons.jsx";
@@ -992,28 +995,43 @@ function PublicationsContent({
          }
          if (error?.status === 400) {
             const reasonErrors = error?.errors?.correction_reason;
+            const safeReasonError = Array.isArray(reasonErrors)
+               ? reasonErrors.map(safeUserFacingDetail).filter(Boolean).join(" ")
+               : safeUserFacingDetail(reasonErrors);
             const validationDetails = Object.entries(error?.errors || {})
-               .map(([name, value]) => `${formatLabel(name)}: ${Array.isArray(value) ? value.join(" ") : String(value)}`)
+               .map(([name, value]) => {
+                  const detail = Array.isArray(value)
+                     ? value.map(safeUserFacingDetail).filter(Boolean).join(" ")
+                     : safeUserFacingDetail(value);
+                  return detail ? `${formatLabel(name)}: ${detail}` : "";
+               })
+               .filter(Boolean)
                .join(" ");
-            if (reasonErrors) {
-               setCorrectionReasonError(Array.isArray(reasonErrors) ? reasonErrors.join(" ") : String(reasonErrors));
+            if (safeReasonError) {
+               setCorrectionReasonError(safeReasonError);
                requestAnimationFrame(() => correctionReasonRef.current?.focus());
             } else {
                setActionError(
-                  `${error?.code || "INVALID_INPUT"}: ${validationDetails || error?.message || "Review the request and try again."}`,
+                  validationDetails ||
+                     userFacingErrorMessage(error, {
+                        validationMessage: "Review the correction request and try again.",
+                     }),
                );
             }
             return;
          }
          if (error?.status === 409) {
+            const conflictMessage = userFacingErrorMessage(error, {
+               conflictMessage: "The publication changed before the correction request was created.",
+            });
             setCorrectionConflict({
                code: error?.code || "CONFLICT",
-               detail: error?.message || "The publication changed before the correction request was created.",
+               detail: conflictMessage,
                blockers: error?.blockers,
                current: error?.current,
             });
             setActionError(
-               `${error?.code || "CONFLICT"}: ${error?.message || "The publication changed before the correction request was created."} The correction reason is preserved; review the refreshed publication state before submitting again.`,
+               `${conflictMessage} The correction reason is preserved; review the refreshed publication state before submitting again.`,
             );
             refreshLibrary();
             setDetailRequestVersion((current) => current + 1);
@@ -1025,7 +1043,10 @@ function PublicationsContent({
             setDetailRequestVersion((current) => current + 1);
             return;
          }
-         setActionError(error?.message || "Unable to request this factual correction.");
+         setActionError(userFacingErrorMessage(error, {
+            fallback: "We couldn't request this factual correction. Review the publication and try again.",
+            serviceMessage: "Factual correction requests are temporarily unavailable. Try again shortly.",
+         }));
       } finally {
          if (mountedRef.current && mutationRequestIdRef.current === operation.requestId) {
             setMutation(null);
@@ -1102,10 +1123,11 @@ function PublicationsContent({
             return;
          }
          if (error?.status === 409) {
+            const conflictMessage = userFacingErrorMessage(error, {
+               conflictMessage: "The publication changed before the revision could be created.",
+            });
             setActionError(
-               `${error?.code || "CONFLICT"}: ${
-                  error?.message || "The publication changed before the revision could be created."
-               } Your revision reason is preserved; review the refreshed publication state before trying again.`,
+               `${conflictMessage} Your revision reason is preserved; review the refreshed publication state before trying again.`,
             );
             refreshLibrary();
             setDetailRequestVersion((current) => current + 1);
@@ -1117,7 +1139,10 @@ function PublicationsContent({
             setDetailRequestVersion((current) => current + 1);
             return;
          }
-         setActionError(error?.message || "Unable to create this editorial revision.");
+         setActionError(userFacingErrorMessage(error, {
+            fallback: "We couldn't create this editorial revision. Review the publication and try again.",
+            serviceMessage: "Editorial revision creation is temporarily unavailable. Try again shortly.",
+         }));
       } finally {
          if (mountedRef.current && mutationRequestIdRef.current === operation.requestId) {
             setMutation(null);
