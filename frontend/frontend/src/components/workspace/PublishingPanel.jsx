@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
+import { userFacingErrorMessage } from "../../utils/userFacingError";
 import { getAuthSessionIdentity } from "../../utils/authIdentity";
 import { showWorkspaceSuccess, WORKSPACE_LONG_TOAST_DURATION } from "../../utils/workspaceToast";
 import Icons from "../Icons.jsx";
@@ -729,7 +730,12 @@ function PublishingContent({
             }
 
             setAuthorityRetrying(false);
-            setQueueError(error?.message || "Unable to load the publication Review queue.");
+            setQueueError(userFacingErrorMessage(error, {
+               fallback: "We couldn't load the publication Review queue. Try again.",
+               authMessage: "Your session has expired. Sign in again to load publication Review.",
+               permissionMessage: "You don't have permission to access publication Review for this organization.",
+               serviceMessage: "Publication Review is temporarily unavailable. Try again shortly.",
+            }));
             setQueueLoading(false);
             setQueueRefreshing(false);
          });
@@ -811,7 +817,12 @@ function PublishingContent({
             setDetailError(
                unavailable
                   ? "This publication review item is no longer available."
-                  : error?.message || "Unable to load this publication review item.",
+                  : userFacingErrorMessage(error, {
+                       fallback: "We couldn't load this publication review item. Try again.",
+                       authMessage: "Your session has expired. Sign in again to load this publication review item.",
+                       permissionMessage: "You don't have permission to review this publication.",
+                       serviceMessage: "This publication review item is temporarily unavailable. Try again shortly.",
+                    }),
             );
 
             if (unavailable) {
