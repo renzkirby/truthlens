@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "build:local": "vite build --mode development",
     "build:production": "vite build --mode production",
-    "test:verdict-ui": "node --test src/modules/verdictPresentation.test.js"
+    "test:verdict-ui": "node --test src/modules/verdictPresentation.test.js",
+    "test:text-verify": "node --test src/pages/textVerifyKeyboard.test.js"
   },
   "dependencies": {
     "@fontsource-variable/mona-sans": "^5.3.0",
