@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 import uuid
+from collections.abc import Mapping
 from copy import deepcopy
 
 from django.conf import settings
@@ -31,11 +32,31 @@ def _safe_cache_set(key, value, *, timeout):
         return False
 
 
+def _safe_cache_add(key, value, *, timeout):
+    try:
+        return cache.add(key, value, timeout=timeout)
+    except Exception:
+        logger.exception("Cache add failed for key %s.", key)
+        return False
+
+
 def _generation(key):
     value = _safe_cache_get(key)
     if isinstance(value, str) and value:
         return value
-    return "base"
+
+    candidate = uuid.uuid4().hex
+    if _safe_cache_add(key, candidate, timeout=None):
+        return candidate
+
+    value = _safe_cache_get(key)
+    if isinstance(value, str) and value:
+        return value
+
+    # If the backend is unavailable, use a one-off generation so application
+    # requests continue through the authoritative database path without
+    # accidentally reusing an old cache generation.
+    return uuid.uuid4().hex
 
 
 def _rotate_generation(key):
@@ -60,10 +81,21 @@ def _publication_generation_key(organization_id):
     return f"{_PUBLICATION_GENERATION_PREFIX}:{organization_id}"
 
 
+def _plain_payload(value):
+    if isinstance(value, Mapping):
+        return {
+            str(key): _plain_payload(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_plain_payload(item) for item in value]
+    return deepcopy(value)
+
+
 def _copy_cached_payload(value):
     if value is None:
         return None
-    return deepcopy(value)
+    return _plain_payload(value)
 
 
 def get_public_partner_directory_payload(*, search, organization_type):
@@ -88,7 +120,7 @@ def set_public_partner_directory_payload(
     )
     return _safe_cache_set(
         key,
-        deepcopy(payload),
+        _plain_payload(payload),
         timeout=settings.PUBLIC_PARTNER_DIRECTORY_CACHE_SECONDS,
     )
 
