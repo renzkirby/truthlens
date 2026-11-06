@@ -55,5 +55,8 @@ export default defineConfig(({ mode }) => {
 
    return {
       plugins: [react(), crx({ manifest: buildManifest })],
+      build: {
+         outDir: isLocalBuild ? "dist-local" : "dist",
+      },
    };
 });
