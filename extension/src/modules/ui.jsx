@@ -536,6 +536,7 @@ export function displayResultCard(claim) {
       final_verdict,
       sources,
       source_url,
+      source_type,
       resolution_source,
       score_context,
       adjudication_review,
@@ -607,15 +608,24 @@ export function displayResultCard(claim) {
             </section>
          `;
 
-   const sourceMetadataHTML = isAdjudicated
-      ? `
-         <div class="truthlens-result-source-meta" aria-label="Review provenance">
-            ${reviewOrganizationName
-               ? `<div><strong>Reviewed by</strong><span>${escapeHtml(reviewOrganizationName)}</span></div>`
-               : `<div><strong>Partner Reviewed</strong></div>`}
-         </div>
-      `
-      : "";
+   const sourceTypeText = nonblankText(source_type);
+   const sourceMetadataHTML = isOutOfScope
+      ? ""
+      : isAdjudicated
+        ? `
+           <div class="truthlens-result-source-meta" aria-label="Review provenance">
+              ${reviewOrganizationName
+                 ? `<div><strong>Reviewed by</strong><span>${escapeHtml(reviewOrganizationName)}</span></div>`
+                 : `<div><strong>Partner Reviewed</strong></div>`}
+           </div>
+        `
+        : sourceTypeText
+          ? `
+             <div class="truthlens-result-source-meta" aria-label="Source type">
+                <div><strong>Source Type</strong><span>${escapeHtml(sourceTypeText)}</span></div>
+             </div>
+          `
+          : "";
 
    const aiReminderHTML =
       shouldShowAiResultReminder({ isAdjudicated, isOutOfScope })
@@ -658,10 +668,9 @@ export function displayResultCard(claim) {
    }
 
    const footerHTML =
-      aiReminderHTML || primaryButtonHTML || secondaryLinkHTML
+      primaryButtonHTML || secondaryLinkHTML
          ? `
          <div class="truthlens-result-footer">
-            ${aiReminderHTML}
             ${primaryButtonHTML}
             ${secondaryLinkHTML}
          </div>
@@ -741,9 +750,10 @@ export function displayResultCard(claim) {
 
          ${confidenceHTML}
          ${sourcesHTML}
-         ${sourceMetadataHTML}
          ${outOfScopeGuidanceHTML}
          ${isOutOfScope ? "" : relatedPublicationsHTML(claim)}
+         ${sourceMetadataHTML}
+         ${aiReminderHTML}
       </div>
 
       ${footerHTML}
