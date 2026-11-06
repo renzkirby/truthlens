@@ -1,5 +1,6 @@
 import logging
 
+from redis.exceptions import RedisError
 from rest_framework.throttling import (
     AnonRateThrottle,
     SimpleRateThrottle,
@@ -21,7 +22,7 @@ class FailSoftThrottleMixin:
     def allow_request(self, request, view):
         try:
             return super().allow_request(request, view)
-        except Exception:
+        except (RedisError, OSError):
             logger.exception(
                 "Throttle cache unavailable for %s.",
                 self.__class__.__name__,
