@@ -670,8 +670,10 @@ function EvidenceReviewContent({
       if (selectedCaseIdRef.current === caseId) {
          focusActionErrorRef.current = true;
          setActionError(
-            error?.message ||
-               "This case changed before your decision was submitted. Review its current state before continuing.",
+            userFacingErrorMessage(error, {
+               conflictMessage:
+                  "This case changed before your decision was submitted. Review its current state before continuing.",
+            }),
          );
          requestDetailRefresh(caseId);
       } else {
@@ -778,7 +780,10 @@ function EvidenceReviewContent({
             }
          } else {
             focusActionErrorRef.current = true;
-            setActionError(error?.message || `Unable to ${DECISION_COPY[operation.decision].label.toLowerCase()}.`);
+            setActionError(userFacingErrorMessage(error, {
+               fallback: `We couldn't ${DECISION_COPY[operation.decision].label.toLowerCase()}. Review the case and try again.`,
+               serviceMessage: "Evidence Review actions are temporarily unavailable. Try again shortly.",
+            }));
          }
       } finally {
          if (
