@@ -4,7 +4,9 @@ import "@fontsource-variable/mona-sans/wght.css";
 import {
    Sparkles,
    ShieldCheck,
+   Check,
    CheckCircle,
+   X,
    XCircle,
    AlertTriangle,
    HelpCircle,
@@ -29,6 +31,8 @@ const iconSparkles = renderToString(React.createElement(Sparkles, { size: 14 }))
 const iconShield = renderToString(React.createElement(ShieldCheck, { size: 16 }));
 const iconCheck = renderToString(React.createElement(CheckCircle, { size: 16 }));
 const iconX = renderToString(React.createElement(XCircle, { size: 16 }));
+const iconHeroCheck = renderToString(React.createElement(Check, { size: 24, strokeWidth: 2.5 }));
+const iconHeroX = renderToString(React.createElement(X, { size: 24, strokeWidth: 2.5 }));
 const iconAlert = renderToString(React.createElement(AlertTriangle, { size: 16 }));
 const iconHelp = renderToString(React.createElement(HelpCircle, { size: 16 }));
 const iconActivity = renderToString(React.createElement(Activity, { size: 12 }));
@@ -42,6 +46,14 @@ function getVerdictUI(verdict) {
    const icons = {
       fact: iconCheck,
       fake: iconX,
+      misleading: iconAlert,
+      satire: iconSparkles,
+      "out-of-scope": iconHelp,
+      unverified: iconHelp,
+   };
+   const heroIcons = {
+      fact: iconHeroCheck,
+      fake: iconHeroX,
       misleading: iconAlert,
       satire: iconSparkles,
       "out-of-scope": iconHelp,
@@ -63,6 +75,7 @@ function getVerdictUI(verdict) {
       class: presentation.className,
       text: presentation.label,
       icon: icons[presentation.className] || iconHelp,
+      heroIcon: heroIcons[presentation.className] || iconHelp,
    };
 }
 
@@ -139,13 +152,27 @@ function normalizeEvidenceSources(sources, sourceUrl) {
          }
       }
 
-      normalized.push({ url, title });
+      let hostname = "";
+      try {
+         hostname = new URL(url).hostname.replace(/^www\./i, "");
+      } catch {
+         hostname = "";
+      }
+
+      normalized.push({ url, title, hostname });
    }
 
    return normalized;
 }
 
-function compactSourcesHTML({ sources, sourceUrl, moreUrl = null, moreLabel = "full report" }) {
+function compactSourcesHTML({
+   sources,
+   sourceUrl,
+   moreUrl = null,
+   moreLabel = "full report",
+   showHeading = true,
+   showDomain = false,
+}) {
    const normalizedSources = normalizeEvidenceSources(sources, sourceUrl);
    if (!normalizedSources.length) return "";
 
@@ -163,7 +190,10 @@ function compactSourcesHTML({ sources, sourceUrl, moreUrl = null, moreLabel = "f
                rel="noopener noreferrer"
                title="${escapeHtml(source.url)}"
             >
-               <span>${escapeHtml(source.title)}</span>
+               <span class="truthlens-source-copy">
+                  <strong>${escapeHtml(source.title)}</strong>
+                  ${showDomain && source.hostname ? `<span class="truthlens-source-domain"> · ${escapeHtml(source.hostname)}</span>` : ""}
+               </span>
                ${iconExternal}
             </a>
          `,
@@ -180,7 +210,7 @@ function compactSourcesHTML({ sources, sourceUrl, moreUrl = null, moreLabel = "f
 
    return `
       <section class="truthlens-compact-sources" aria-label="Sources">
-         <strong class="truthlens-source-heading">Sources</strong>
+         ${showHeading ? '<strong class="truthlens-source-heading">Sources</strong>' : ""}
          <div class="truthlens-source-list">
             ${sourceLinks}
          </div>
@@ -505,6 +535,8 @@ export function displayResultCard(claim) {
               sourceUrl: source_url,
               moreUrl: deepAnalysisUrl,
               moreLabel: "full report",
+              showHeading: false,
+              showDomain: true,
            });
 
    const confidenceHTML =
@@ -628,7 +660,7 @@ export function displayResultCard(claim) {
 
       <div class="truthlens-result-body" role="region" aria-label="Verification result details" tabindex="0">
          <section class="truthlens-verdict-hero" aria-label="${escapeHtml(verdictKicker)}: ${escapeHtml(ui.text)}">
-            <span class="truthlens-verdict-icon" aria-hidden="true">${ui.icon}</span>
+            <span class="truthlens-verdict-icon" aria-hidden="true">${ui.heroIcon || ui.icon}</span>
             <div class="truthlens-verdict-copy">
                <span class="truthlens-verdict-kicker">${escapeHtml(verdictKicker)}</span>
                <strong class="truthlens-verdict-label">${escapeHtml(ui.text)}</strong>
