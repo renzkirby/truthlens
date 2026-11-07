@@ -1,12 +1,15 @@
 import monaSansInlineUrl from "@fontsource-variable/mona-sans/files/mona-sans-latin-wght-normal.woff2?inline";
+import {
+   TRUTHLENS_CONTENT_FONT_FAMILY,
+   findLoadedTruthLensFontFace,
+} from "./fontRegistration.js";
 
-const TRUTHLENS_FONT_FAMILY = "Mona Sans Variable";
 let fontLoadPromise = null;
 
-function fontIsLoaded() {
+function fontIsRegistered() {
    return Boolean(
-      document.fonts?.check &&
-      document.fonts.check(`13px "${TRUTHLENS_FONT_FAMILY}"`),
+      document.fonts &&
+         findLoadedTruthLensFontFace(document.fonts),
    );
 }
 
@@ -22,7 +25,7 @@ async function inlineFontBytes() {
 }
 
 export function loadTruthLensFont() {
-   if (fontIsLoaded()) {
+   if (fontIsRegistered()) {
       return Promise.resolve(true);
    }
 
@@ -40,7 +43,7 @@ export function loadTruthLensFont() {
    fontLoadPromise = inlineFontBytes()
       .then((fontBytes) =>
          new FontFace(
-            TRUTHLENS_FONT_FAMILY,
+            TRUTHLENS_CONTENT_FONT_FAMILY,
             fontBytes,
             {
                style: "normal",
@@ -50,23 +53,31 @@ export function loadTruthLensFont() {
       )
       .then((fontFace) => {
          document.fonts.add(fontFace);
-         const loaded = fontIsLoaded();
+
+         const registered =
+            fontFace.status === "loaded" &&
+            (typeof document.fonts.has === "function"
+               ? document.fonts.has(fontFace)
+               : fontIsRegistered());
 
          if (import.meta.env.DEV) {
-            console.info("[TruthLens Local] Mona Sans loaded:", loaded);
+            console.info("[TruthLens Local] Mona Sans registered:", registered, {
+               family: TRUTHLENS_CONTENT_FONT_FAMILY,
+               status: fontFace.status,
+            });
          }
 
-         if (!loaded) {
+         if (!registered) {
             fontLoadPromise = null;
          }
 
-         return loaded;
+         return registered;
       })
       .catch((error) => {
          fontLoadPromise = null;
 
          if (import.meta.env.DEV) {
-            console.warn("[TruthLens Local] Mona Sans failed to load", error);
+            console.warn("[TruthLens Local] Mona Sans failed to register", error);
          }
 
          return false;
