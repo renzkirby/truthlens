@@ -692,7 +692,7 @@ export function displayResultCard(claim) {
 
          <section class="truthlens-summary-box truthlens-result-summary">
             <div class="truthlens-summary-title">
-               ${isAdjudicated ? `${iconShield} ` : isOutOfScope ? `${iconSparkles} ` : ""}${summaryHeading}
+               ${isAdjudicated ? `${iconShield} ` : ""}${summaryHeading}
             </div>
             <div class="truthlens-summary-text">${escapeHtml(
                isAdjudicated
@@ -900,7 +900,7 @@ function displayNeedsContextCard(message) {
 
          <section class="truthlens-summary-box truthlens-result-summary">
             <div class="truthlens-summary-title">
-               ${iconSparkles} WHAT THIS MEANS
+               WHAT THIS MEANS
             </div>
             <div class="truthlens-summary-text">${escapeHtml(
                nonblankText(message) ||
