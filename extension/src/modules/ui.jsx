@@ -692,7 +692,7 @@ export function displayResultCard(claim) {
 
          <section class="truthlens-summary-box truthlens-result-summary">
             <div class="truthlens-summary-title">
-               ${isAdjudicated ? iconShield : iconSparkles} ${summaryHeading}
+               ${isAdjudicated ? `${iconShield} ` : isOutOfScope ? `${iconSparkles} ` : ""}${summaryHeading}
             </div>
             <div class="truthlens-summary-text">${escapeHtml(
                isAdjudicated
@@ -902,12 +902,10 @@ function displayNeedsContextCard(message) {
             <div class="truthlens-summary-title">
                ${iconSparkles} WHAT THIS MEANS
             </div>
-            <div class="truthlens-summary-text">
-               ${escapeHtml(
-                  nonblankText(message) ||
-                     "TruthLens cannot reliably identify the exact factual claim yet.",
-               )}
-            </div>
+            <div class="truthlens-summary-text">${escapeHtml(
+               nonblankText(message) ||
+                  "TruthLens cannot reliably identify the exact factual claim yet.",
+            )}</div>
          </section>
 
          <section class="truthlens-context-guidance" aria-labelledby="truthlens-context-guidance-title">
