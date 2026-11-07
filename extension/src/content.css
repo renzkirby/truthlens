@@ -1,7 +1,7 @@
 /* content.css - Wireframe Accurate Design */
 
 .truthlens-card {
-   --tl-font-sans: "Mona Sans Variable", ui-sans-serif, system-ui, -apple-system,
+   --tl-font-sans: "TruthLens Mona Sans", ui-sans-serif, system-ui, -apple-system,
       BlinkMacSystemFont, "Segoe UI", sans-serif;
    position: fixed;
    top: 24px;
