@@ -287,6 +287,7 @@ def enforce_noneditable_fallback_evidence_support(
     evidence_groups: Iterable[ReasoningEvidenceGroup],
     *,
     required_anchor_tokens=(),
+    assertion_complete=True,
 ) -> dict:
     """Fail closed when an ambiguity fallback lacks assessed verdict evidence.
 
@@ -300,6 +301,24 @@ def enforce_noneditable_fallback_evidence_support(
     result = dict(verdict_result)
     verdict = result.get("verdict")
     evidence_groups = tuple(evidence_groups)
+
+    if not assertion_complete:
+        result.update({
+            "verdict": "UNVERIFIED",
+            "summary": (
+                "The submitted content identifies a topic, but does not state a "
+                "complete factual proposition that can be verified without adding "
+                "meaning not present in the submission."
+            ),
+            "confidence_score": 0,
+            "score_context": (
+                "The submitted fallback text lacks an explicit factual action, state, "
+                "or relation required for a decisive verdict."
+            ),
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        })
+        return result
 
     if verdict == "UNVERIFIED":
         return result
