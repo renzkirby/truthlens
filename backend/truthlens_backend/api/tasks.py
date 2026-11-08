@@ -584,6 +584,37 @@ def _apply_noneditable_fallback_verdict_policy(
     )
 
 
+def _save_context_limited_unverified(claim_id, source_text, *, source_kind):
+    """Persist a non-editable fallback abstention without exposing More Context."""
+    excerpt = " ".join(str(source_text or "").split())[:1000]
+    _set_claimability_status(
+        claim_id,
+        Claim.ClaimabilityStatus.CLAIMABLE,
+    )
+    _save_claim(
+        claim_id,
+        {
+            "reasoning": (
+                "The submitted content contains an in-scope factual assertion, "
+                "but a source-bounded claim/query could not be formed without "
+                "adding material context absent from the submission."
+            ),
+            "verdict": "UNVERIFIED",
+            "summary": (
+                "The submitted content could not be verified because the available "
+                "context was not specific enough to support a safe evidence search."
+            ),
+            "confidence_score": 0,
+            "score_context": (
+                "No safe source-bounded retrieval query was available for verification."
+            ),
+        },
+        "Context-Limited Verification",
+        excerpt or f"{source_kind.title()} content with unresolved context",
+        [],
+    )
+
+
 def _claim_gate_retrieval_queries(cleaned):
     if not isinstance(cleaned, dict):
         return []
@@ -1345,6 +1376,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
 
     selected_verdict = None
     published_resolution = False
+    noneditable_context_fallback = False
     pipeline_error = None
     runtime_error_propagating = False
     try:
@@ -1419,14 +1451,62 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 return
 
             if cleaned_claim == "INSUFFICIENT_CONTEXT":
-                logger.info("Claim %s needs more context.", claim_id)
-                _set_claimability_status(
-                    claim_id,
-                    Claim.ClaimabilityStatus.INSUFFICIENT_CONTEXT,
+                if not is_image_claim:
+                    logger.info("Claim %s needs more context.", claim_id)
+                    _set_claimability_status(
+                        claim_id,
+                        Claim.ClaimabilityStatus.INSUFFICIENT_CONTEXT,
+                    )
+                    outcome = "abstained_insufficient_context"
+                    selected_verdict = "INSUFFICIENT_CONTEXT"
+                    return
+
+                fallback_started_at = time.perf_counter()
+                fallback_result = extract_source_bounded_noneditable_claim(
+                    raw_text,
+                    source_kind="IMAGE",
                 )
-                outcome = "abstained_insufficient_context"
-                selected_verdict = "INSUFFICIENT_CONTEXT"
-                return
+                noneditable_context_fallback = True
+                cleaned_claim = fallback_result.get("cleaned_claim")
+                search_query = fallback_result.get("search_query")
+                search_queries = _claim_gate_retrieval_queries(fallback_result)
+                article_stance = fallback_result.get(
+                    "article_stance",
+                    article_stance,
+                )
+                _log_stage(
+                    claim_id,
+                    "image_context_fallback",
+                    fallback_started_at,
+                    outcome=cleaned_claim,
+                    query_count=len(search_queries),
+                )
+
+                if cleaned_claim == "OUT_OF_SCOPE":
+                    logger.info(
+                        "Claim %s was gated as out of scope by image fallback.",
+                        claim_id,
+                    )
+                    _set_claimability_status(
+                        claim_id,
+                        Claim.ClaimabilityStatus.OUT_OF_SCOPE,
+                    )
+                    outcome = "abstained_out_of_scope"
+                    selected_verdict = "OUT_OF_SCOPE"
+                    return
+
+                if (
+                    cleaned_claim == "INSUFFICIENT_CONTEXT"
+                    or not search_queries
+                ):
+                    _save_context_limited_unverified(
+                        claim_id,
+                        raw_text,
+                        source_kind="IMAGE",
+                    )
+                    outcome = "context_fallback_unverified"
+                    selected_verdict = "UNVERIFIED"
+                    return
 
             _set_claimability_status(
                 claim_id,
@@ -1496,7 +1576,11 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         )
                     vault_match = None
 
-                if is_image_claim and has_second_chance_match:
+                if (
+                    is_image_claim
+                    and has_second_chance_match
+                    and not noneditable_context_fallback
+                ):
                     selected_verdict = _reuse_second_chance_ai_analysis(
                         matched_claim,
                         claim_id,
@@ -2202,6 +2286,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
 
     selected_verdict = None
     published_resolution = False
+    noneditable_context_fallback = False
     pipeline_error = None
     runtime_error_propagating = False
     try:
@@ -2240,15 +2325,66 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
             return
 
         if cleaned_claim == "INSUFFICIENT_CONTEXT":
-            logger.info("URL claim %s needs more context.", claim_id)
-            _set_claimability_status(
-                claim_id,
-                Claim.ClaimabilityStatus.INSUFFICIENT_CONTEXT,
+            fallback_started_at = time.perf_counter()
+            initial_stance = article_stance
+            fallback_result = extract_source_bounded_noneditable_claim(
+                cleaned_text,
+                source_kind="URL",
             )
-            outcome = "abstained_insufficient_context"
-            selected_verdict = "INSUFFICIENT_CONTEXT"
-            _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
-            return
+            noneditable_context_fallback = True
+            cleaned_claim = fallback_result.get("cleaned_claim")
+            search_query = fallback_result.get("search_query")
+            search_queries = _claim_gate_retrieval_queries(fallback_result)
+            article_stance = (
+                "SATIRE"
+                if initial_stance == "SATIRE"
+                else fallback_result.get("article_stance", initial_stance)
+            )
+            _log_stage(
+                claim_id,
+                "url_context_fallback",
+                fallback_started_at,
+                outcome=cleaned_claim,
+                query_count=len(search_queries),
+            )
+
+            if cleaned_claim == "OUT_OF_SCOPE":
+                logger.info(
+                    "URL claim %s was gated as out of scope by fallback.",
+                    claim_id,
+                )
+                _set_claimability_status(
+                    claim_id,
+                    Claim.ClaimabilityStatus.OUT_OF_SCOPE,
+                )
+                outcome = "abstained_out_of_scope"
+                selected_verdict = "OUT_OF_SCOPE"
+                _log_stage(
+                    claim_id,
+                    "url_task_total",
+                    pipeline_started_at,
+                    outcome=outcome,
+                )
+                return
+
+            if (
+                cleaned_claim == "INSUFFICIENT_CONTEXT"
+                or not search_queries
+            ):
+                _save_context_limited_unverified(
+                    claim_id,
+                    cleaned_text,
+                    source_kind="URL",
+                )
+                outcome = "context_fallback_unverified"
+                selected_verdict = "UNVERIFIED"
+                _log_stage(
+                    claim_id,
+                    "url_task_total",
+                    pipeline_started_at,
+                    outcome=outcome,
+                )
+                return
 
         _set_claimability_status(
             claim_id,
