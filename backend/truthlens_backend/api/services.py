@@ -1080,6 +1080,51 @@ def _material_entity_anchor_tokens(value):
     return anchors
 
 
+def _has_explicit_predicate_cue(value):
+    """Conservatively detect whether source-bounded text states a relation/action.
+
+    This is used only after the strict ClaimGate has already returned
+    INSUFFICIENT_CONTEXT. False negatives therefore abstain to UNVERIFIED rather
+    than blocking normal verification.
+    """
+    tokens = _source_bounded_tokens(value)
+    if not tokens:
+        return False
+
+    explicit_predicates = {
+        # English auxiliaries/copulas and common factual verbs.
+        "am", "is", "are", "was", "were", "be", "been", "being",
+        "has", "have", "had", "does", "do", "did", "will", "would",
+        "can", "could", "may", "might", "must", "shall", "should",
+        "stole", "steal", "stolen", "built", "build", "made", "make",
+        "led", "lead", "said", "say", "says", "gave", "give", "given",
+        "took", "take", "taken", "won", "win", "lost", "lose",
+        "died", "die", "killed", "kill", "arrested", "arrest",
+        "convicted", "convict", "launched", "launch", "opened", "open",
+        "signed", "sign", "approved", "approve", "banned", "ban",
+        "claimed", "claim", "announced", "announce", "reported", "report",
+        "owns", "own", "received", "receive", "paid", "pay",
+        # Filipino/Tagalog relation words commonly present in news claims.
+        "ay", "may", "mayroon", "nasa", "naging", "ginawa", "gumawa",
+        "gumagawa", "sinabi", "inanunsyo", "inilunsad", "pinangunahan",
+        "nagtayo", "magtayo", "nagpatayo", "pinatayo", "dumaan",
+        "dumadaan", "nagbigay", "ibinigay", "kinuha", "ninakaw",
+        "inaresto", "hinatulan",
+    }
+    if any(token in explicit_predicates for token in tokens):
+        return True
+
+    # Conservative morphology for common English and Filipino verb forms.
+    for token in tokens:
+        if len(token) >= 5 and token.endswith(("ed", "ing")):
+            return True
+        if re.match(r"^(?:nag|mag|pinag|ipinag|naka|maka|pina|ipa)[a-z]+$", token):
+            return True
+        if re.match(r"^[bcdfghjklmnpqrstvwxyz](?:um|in)[a-z]+$", token):
+            return True
+    return False
+
+
 def _bound_noneditable_fallback_to_source(result, source_text):
     """Reject invented identifiers and keep fallback retrieval source-bounded."""
     normalized = _normalize_claim_gate_queries(result)
@@ -1089,6 +1134,20 @@ def _bound_noneditable_fallback_to_source(result, source_text):
 
     source_tokens = set(_source_bounded_tokens(source_text))
     if not source_tokens:
+        return {
+            "cleaned_claim": "INSUFFICIENT_CONTEXT",
+            "search_query": "",
+            "search_queries": [],
+            "article_stance": normalized.get("article_stance", "NEUTRAL"),
+        }
+
+    cleaned_claim_tokens = set(_source_bounded_tokens(cleaned_claim))
+    invented_claim_tokens = cleaned_claim_tokens - source_tokens
+    if invented_claim_tokens:
+        logger.warning(
+            "Source-bounded fallback rejected invented claim tokens: %s",
+            sorted(invented_claim_tokens),
+        )
         return {
             "cleaned_claim": "INSUFFICIENT_CONTEXT",
             "search_query": "",
@@ -1169,8 +1228,9 @@ def extract_source_bounded_noneditable_claim(text, *, source_kind):
       guessed identity.
     - Preserve unresolved references literally. Ambiguity is allowed in the
       extracted claim; invented specificity is not.
-    - Prefer wording copied or minimally reordered from the source. Do not add
-      explanatory facts merely to make the sentence sound complete.
+    - Preserve the source's original wording and language as much as possible.
+      Do not translate the fallback claim. Do not add any word that is absent
+      from the supplied source merely to make the sentence sound complete.
     - Select ONE independently verifiable factual proposition. If the source has
       multiple claims, choose the single proposition that best represents its
       central narrative. Do not merge separate claims.
@@ -1180,8 +1240,15 @@ def extract_source_bounded_noneditable_claim(text, *, source_kind):
     - Do not return INSUFFICIENT_CONTEXT merely because a referent remains
       ambiguous. Preserve the ambiguous wording and allow downstream evidence
       matching to decide whether a conclusion is supportable.
+    - Decide whether the preserved wording itself contains a COMPLETE ASSERTED
+      PROPOSITION: an explicit subject/topic plus an explicit action, state, or
+      relation. Topic labels and keyword fragments are NOT complete assertions.
+      Examples: "PBBM subway underground", "Trump election fraud", and
+      "COVID vaccine deaths" are incomplete topic fragments. "He stole P50
+      million" is a complete assertion even though its actor is unresolved.
     - If even a literal atomic proposition cannot be extracted without adding a
-      material fact absent from the source, return INSUFFICIENT_CONTEXT.
+      material fact absent from the source, the cleaned claim may preserve the
+      fragment for retrieval, but assertion_complete MUST be false.
 
     SEARCH QUERY RULES:
     - Produce exactly ONE retrieval query.
@@ -1198,11 +1265,14 @@ def extract_source_bounded_noneditable_claim(text, *, source_kind):
         "cleaned_claim": "One source-bounded factual proposition, or exactly OUT_OF_SCOPE or INSUFFICIENT_CONTEXT",
         "search_query": "One source-bounded retrieval query",
         "search_queries": ["The same single retrieval query"],
-        "article_stance": "DEBUNKING, REPORTING, or NEUTRAL"
+        "article_stance": "DEBUNKING, REPORTING, or NEUTRAL",
+        "assertion_complete": true
     }}
 
+    assertion_complete MUST be a JSON boolean. It is true only when the source
+    itself explicitly states the factual action/state/relation being checked.
     For OUT_OF_SCOPE or INSUFFICIENT_CONTEXT, search_query and search_queries
-    MUST be empty.
+    MUST be empty and assertion_complete MUST be false.
     """
 
     try:
@@ -1212,6 +1282,11 @@ def extract_source_bounded_noneditable_claim(text, *, source_kind):
             operation="claim_gate",
         )
         result = _parse_llm_json(response_text)
+        assertion_complete = result.get("assertion_complete")
+        if type(assertion_complete) is not bool:
+            raise ValueError(
+                "Source-bounded ClaimGate fallback returned no assertion_complete boolean"
+            )
         result = _bound_noneditable_fallback_to_source(result, text)
         result = _normalize_claim_gate_stance(
             result,
@@ -1220,10 +1295,15 @@ def extract_source_bounded_noneditable_claim(text, *, source_kind):
         cleaned_claim = result.get("cleaned_claim")
         if cleaned_claim in CLAIM_GATE_NON_RETRIEVAL_SENTINELS:
             result["_material_anchor_tokens"] = []
+            result["_assertion_complete"] = False
         else:
             source_tokens = set(_source_bounded_tokens(text))
             result["_material_anchor_tokens"] = sorted(
                 _material_entity_anchor_tokens(cleaned_claim) & source_tokens
+            )
+            result["_assertion_complete"] = (
+                assertion_complete
+                and _has_explicit_predicate_cue(cleaned_claim)
             )
         return result
     except Exception as exc:
