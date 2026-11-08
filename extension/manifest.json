@@ -1,7 +1,7 @@
 {
    "manifest_version": 3,
    "name": "TruthLens",
-   "version": "0.1.7",
+   "version": "0.1.8",
    "description": "AI-driven misinformation detection",
    "icons": {
       "16": "truthlens_logo.png",
@@ -18,23 +18,15 @@
          "128": "truthlens_logo.png"
       }
    },
-   "permissions": [
-      "activeTab",
-      "tabs",
-      "storage"
-   ],
-   "host_permissions": [
-      "https://api.truthlens.social/*"
-   ],
+   "permissions": ["activeTab", "tabs", "storage"],
+   "host_permissions": ["https://api.truthlens.social/*"],
    "background": {
       "service_worker": "src/background.js",
       "type": "module"
    },
    "web_accessible_resources": [
       {
-         "resources": [
-            "auth-bridge.js"
-         ],
+         "resources": ["auth-bridge.js"],
          "matches": [
             "http://localhost:5174/*",
             "http://127.0.0.1:5174/*",
@@ -44,22 +36,14 @@
          ]
       },
       {
-         "resources": [
-            "truthlens_logo.png"
-         ],
-         "matches": [
-            "<all_urls>"
-         ]
+         "resources": ["truthlens_logo.png"],
+         "matches": ["<all_urls>"]
       }
    ],
    "content_scripts": [
       {
-         "matches": [
-            "<all_urls>"
-         ],
-         "js": [
-            "src/content.js"
-         ],
+         "matches": ["<all_urls>"],
+         "js": ["src/content.js"],
          "run_at": "document_start"
       }
    ]
