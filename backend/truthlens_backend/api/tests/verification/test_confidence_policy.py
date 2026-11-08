@@ -446,6 +446,7 @@ class NoneditableFallbackEvidencePolicyTests(SimpleTestCase):
         self.assertEqual(result["verdict"], "UNVERIFIED")
         self.assertEqual(result["confidence_score"], 0)
         self.assertIn("complete factual proposition", result["summary"])
+        self.assertIn("will not use that evidence to invent", result["reasoning"])
 
     def test_actorless_amount_match_cannot_become_fact(self):
         result = enforce_noneditable_fallback_evidence_support(
@@ -459,6 +460,10 @@ class NoneditableFallbackEvidencePolicyTests(SimpleTestCase):
 
         self.assertEqual(result["verdict"], "UNVERIFIED")
         self.assertEqual(result["confidence_score"], 0)
+        self.assertIn(
+            "abstains rather than attaching unrelated evidence",
+            result["reasoning"],
+        )
 
     def test_support_without_submitted_anchor_cannot_become_fact(self):
         result = enforce_noneditable_fallback_evidence_support(
