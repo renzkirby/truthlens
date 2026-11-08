@@ -432,6 +432,21 @@ class NoneditableFallbackEvidencePolicyTests(SimpleTestCase):
         self.assertEqual(result["contextual_basis_kind"], "NONE")
         self.assertEqual(result["contextual_basis_evidence_ids"], [])
 
+    def test_anchored_topic_fragment_cannot_become_fact(self):
+        result = enforce_noneditable_fallback_evidence_support(
+            _verdict("FACT", 93),
+            [_group(_item(
+                stance=VerificationEvidence.Stance.SUPPORTS,
+                content="PBBM led work on the Metro Manila Subway underground project.",
+            ))],
+            required_anchor_tokens=["pbbm"],
+            assertion_complete=False,
+        )
+
+        self.assertEqual(result["verdict"], "UNVERIFIED")
+        self.assertEqual(result["confidence_score"], 0)
+        self.assertIn("complete factual proposition", result["summary"])
+
     def test_actorless_amount_match_cannot_become_fact(self):
         result = enforce_noneditable_fallback_evidence_support(
             _verdict("FACT", 90),
