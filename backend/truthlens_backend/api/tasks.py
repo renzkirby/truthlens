@@ -29,6 +29,7 @@ from .services import (
     clean_ocr_text,
     clean_extracted_text,
     extract_search_query,
+    extract_source_bounded_noneditable_claim,
     is_fact_check_relevant,
     evaluate_claim_with_persisted_evidence,
     evaluate_image_claim_with_gfc,
@@ -60,7 +61,10 @@ from .verification.evidence_dossier import (
     render_compact_reasoning_evidence_dossier,
     render_shared_metadata_reasoning_evidence_dossier,
 )
-from .verification.confidence_policy import calibrate_verdict_confidence
+from .verification.confidence_policy import (
+    calibrate_verdict_confidence,
+    enforce_noneditable_fallback_evidence_support,
+)
 from .verification.cloudflare_pilot import (
     PILOT_MAX_INPUT_CHARS,
     cloudflare_pilot_enabled,
@@ -563,6 +567,21 @@ DEFAULT_HTTP_TIMEOUT_SEC = _float_env("DEFAULT_HTTP_TIMEOUT_SEC", 12.0)
 SUPABASE_MEDIA_FETCH_TIMEOUT_SEC = _float_env("SUPABASE_MEDIA_FETCH_TIMEOUT_SEC", 15.0)
 GFC_HTTP_TIMEOUT_SEC = _float_env("GFC_HTTP_TIMEOUT_SEC", DEFAULT_HTTP_TIMEOUT_SEC)
 TAVILY_EXTRACT_TIMEOUT_SEC = _float_env("TAVILY_EXTRACT_TIMEOUT_SEC", 20.0)
+
+
+def _apply_noneditable_fallback_verdict_policy(
+    verdict_result,
+    evidence_groups,
+    *,
+    fallback_active,
+):
+    """Require assessed evidence before a context-limited IMAGE/URL conclusion."""
+    if not fallback_active:
+        return verdict_result
+    return enforce_noneditable_fallback_evidence_support(
+        verdict_result,
+        evidence_groups or (),
+    )
 
 
 def _claim_gate_retrieval_queries(cleaned):
