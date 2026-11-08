@@ -11,6 +11,7 @@ from api.services import (
     _normalize_claim_gate_stance,
     clean_ocr_text,
     extract_search_query,
+    extract_source_bounded_noneditable_claim,
 )
 
 
@@ -208,6 +209,68 @@ class ClaimGateSatireRegressionTests(SimpleTestCase):
             result["article_stance"],
             "NEUTRAL",
         )
+
+
+class NoneditableClaimFallbackTests(SimpleTestCase):
+    @patch("api.services.call_llm_with_fallback")
+    def test_fallback_keeps_ambiguous_identifier_and_bounds_query_to_source(
+        self,
+        mock_llm,
+    ):
+        mock_llm.return_value = json.dumps({
+            "cleaned_claim": "PBBM built a subway train underground.",
+            "search_query": "PBBM subway Ferdinand Marcos underground",
+            "search_queries": ["PBBM subway Ferdinand Marcos underground"],
+            "article_stance": "NEUTRAL",
+        })
+
+        result = extract_source_bounded_noneditable_claim(
+            "TOP PROJECT PBBM built a subway train underground",
+            source_kind="IMAGE",
+        )
+
+        self.assertEqual(
+            result["cleaned_claim"],
+            "PBBM built a subway train underground.",
+        )
+        self.assertEqual(
+            result["search_query"],
+            "pbbm subway underground",
+        )
+        self.assertEqual(
+            result["search_queries"],
+            ["pbbm subway underground"],
+        )
+        self.assertNotIn("ferdinand", result["search_query"])
+        self.assertNotIn("marcos", result["search_query"])
+
+    @patch("api.services.call_llm_with_fallback")
+    def test_fallback_rejects_invented_material_identifier_in_claim(
+        self,
+        mock_llm,
+    ):
+        mock_llm.return_value = json.dumps({
+            "cleaned_claim": "Ferdinand Marcos Jr built a subway.",
+            "search_query": "PBBM subway",
+            "search_queries": ["PBBM subway"],
+            "article_stance": "NEUTRAL",
+        })
+
+        result = extract_source_bounded_noneditable_claim(
+            "PBBM built a subway",
+            source_kind="IMAGE",
+        )
+
+        self.assertEqual(result["cleaned_claim"], "INSUFFICIENT_CONTEXT")
+        self.assertEqual(result["search_query"], "")
+        self.assertEqual(result["search_queries"], [])
+
+    def test_fallback_rejects_unsupported_source_kind(self):
+        with self.assertRaises(ValueError):
+            extract_source_bounded_noneditable_claim(
+                "Example claim",
+                source_kind="TEXT",
+            )
 
 
 class ClaimGateFailureRegressionTests(SimpleTestCase):
