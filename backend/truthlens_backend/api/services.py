@@ -1016,20 +1016,25 @@ def _material_identifier_tokens(value):
         if token.strip("'’-")
     ]
     identifiers = set()
-    for index, token in enumerate(raw_tokens):
+    low_risk_sentence_starters = {
+        "a", "an", "the", "this", "that", "these", "those",
+        "he", "she", "they", "it", "we", "i",
+    }
+    for token in raw_tokens:
         has_alpha = any(character.isalpha() for character in token)
+        normalized = token.casefold()
         if any(character.isdigit() for character in token):
-            identifiers.add(token.casefold())
+            identifiers.add(normalized)
         elif len(token) >= 2 and has_alpha and token.isupper():
-            identifiers.add(token.casefold())
+            identifiers.add(normalized)
         elif (
-            index > 0
-            and len(token) >= 2
+            len(token) >= 2
             and has_alpha
             and token[0].isupper()
             and token[1:].islower()
+            and normalized not in low_risk_sentence_starters
         ):
-            identifiers.add(token.casefold())
+            identifiers.add(normalized)
     return identifiers
 
 
