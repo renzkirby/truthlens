@@ -574,6 +574,7 @@ def _apply_noneditable_fallback_verdict_policy(
     evidence_groups,
     *,
     fallback_active,
+    required_anchor_tokens=(),
 ):
     """Require assessed evidence before a context-limited IMAGE/URL conclusion."""
     if not fallback_active:
@@ -581,6 +582,7 @@ def _apply_noneditable_fallback_verdict_policy(
     return enforce_noneditable_fallback_evidence_support(
         verdict_result,
         evidence_groups or (),
+        required_anchor_tokens=required_anchor_tokens,
     )
 
 
@@ -1377,6 +1379,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
     selected_verdict = None
     published_resolution = False
     noneditable_context_fallback = False
+    noneditable_fallback_anchor_tokens = ()
     pipeline_error = None
     runtime_error_propagating = False
     try:
@@ -1467,6 +1470,9 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     source_kind="IMAGE",
                 )
                 noneditable_context_fallback = True
+                noneditable_fallback_anchor_tokens = tuple(
+                    fallback_result.get("_material_anchor_tokens") or ()
+                )
                 cleaned_claim = fallback_result.get("cleaned_claim")
                 search_query = fallback_result.get("search_query")
                 search_queries = _claim_gate_retrieval_queries(fallback_result)
@@ -1724,6 +1730,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         ai_verdict,
                         (),
                         fallback_active=noneditable_context_fallback,
+                        required_anchor_tokens=noneditable_fallback_anchor_tokens,
                     )
                     has_persisted_evidence = True
                 else:
@@ -1766,6 +1773,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                                 ai_verdict,
                                 fact_check_groups,
                                 fallback_active=noneditable_context_fallback,
+                        required_anchor_tokens=noneditable_fallback_anchor_tokens,
                             )
                         except LLMProviderUnavailableError:
                             raise
@@ -1921,6 +1929,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         ai_verdict,
                         (),
                         fallback_active=noneditable_context_fallback,
+                        required_anchor_tokens=noneditable_fallback_anchor_tokens,
                     )
                 else:
                     evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
@@ -1958,6 +1967,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             ai_verdict,
                             secondary_groups,
                             fallback_active=noneditable_context_fallback,
+                        required_anchor_tokens=noneditable_fallback_anchor_tokens,
                         )
                     else:
                         _log_stage(
@@ -2307,6 +2317,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
     selected_verdict = None
     published_resolution = False
     noneditable_context_fallback = False
+    noneditable_fallback_anchor_tokens = ()
     pipeline_error = None
     runtime_error_propagating = False
     try:
@@ -2352,6 +2363,9 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                 source_kind="URL",
             )
             noneditable_context_fallback = True
+            noneditable_fallback_anchor_tokens = tuple(
+                fallback_result.get("_material_anchor_tokens") or ()
+            )
             cleaned_claim = fallback_result.get("cleaned_claim")
             search_query = fallback_result.get("search_query")
             search_queries = _claim_gate_retrieval_queries(fallback_result)
@@ -2568,6 +2582,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         ai_verdict,
                         (),
                         fallback_active=noneditable_context_fallback,
+                        required_anchor_tokens=noneditable_fallback_anchor_tokens,
                     )
                 except Exception as e:
                     _log_stage(
@@ -2618,6 +2633,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                             ai_verdict,
                             fact_check_groups,
                             fallback_active=noneditable_context_fallback,
+                        required_anchor_tokens=noneditable_fallback_anchor_tokens,
                         )
                     except LLMProviderUnavailableError:
                         raise
@@ -2770,6 +2786,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         ai_verdict,
                         (),
                         fallback_active=noneditable_context_fallback,
+                        required_anchor_tokens=noneditable_fallback_anchor_tokens,
                     )
                 except Exception as e:
                     _log_stage(
@@ -2832,6 +2849,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         ai_verdict,
                         secondary_groups,
                         fallback_active=noneditable_context_fallback,
+                        required_anchor_tokens=noneditable_fallback_anchor_tokens,
                     )
                 else:
                     _log_stage(
