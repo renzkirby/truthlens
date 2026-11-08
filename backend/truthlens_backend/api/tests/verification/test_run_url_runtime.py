@@ -87,11 +87,12 @@ class VerificationRunURLRuntimeTests(TestCase):
                 "search_query": "pbbm subway underground",
                 "search_queries": ["pbbm subway underground"],
                 "article_stance": "NEUTRAL",
+                "_material_anchor_tokens": ["pbbm"],
             },
         )
         self.enforce_fallback_evidence = self._patch(
             "api.tasks.enforce_noneditable_fallback_evidence_support",
-            side_effect=lambda verdict, _groups: verdict,
+            side_effect=lambda verdict, _groups, **_kwargs: verdict,
         )
         self.vault = self._patch("api.tasks.search_official_vault", return_value=None)
         self.real_bridge = tasks._retrieve_and_ingest_gfc
