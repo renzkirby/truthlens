@@ -305,6 +305,12 @@ def enforce_noneditable_fallback_evidence_support(
     if not assertion_complete:
         result.update({
             "verdict": "UNVERIFIED",
+            "reasoning": (
+                "The submitted content identifies a topic, but it does not state "
+                "the specific factual action, state, or relation to verify. The "
+                "retrieved evidence may provide related background, but TruthLens "
+                "will not use that evidence to invent the missing proposition."
+            ),
             "summary": (
                 "The submitted content identifies a topic, but does not state a "
                 "complete factual proposition that can be verified without adding "
@@ -381,6 +387,12 @@ def enforce_noneditable_fallback_evidence_support(
 
     result.update({
         "verdict": "UNVERIFIED",
+        "reasoning": (
+            "The retrieved evidence did not provide a usable, source-aligned basis "
+            "for a decisive conclusion while preserving the identity information "
+            "explicitly present in the submitted content. TruthLens therefore "
+            "abstains rather than attaching unrelated evidence to the claim."
+        ),
         "summary": (
             "The available evidence did not directly support a decisive conclusion "
             "for the context-limited submitted claim."
