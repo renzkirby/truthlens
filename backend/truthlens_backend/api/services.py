@@ -1038,6 +1038,48 @@ def _material_identifier_tokens(value):
     return identifiers
 
 
+def _material_entity_anchor_tokens(value):
+    """Return explicit non-numeric identity anchors from source-bounded text.
+
+    The ambiguity fallback may search on generic actions/amounts, but a decisive
+    attribution needs at least one actor/entity/location-style token that was
+    actually present in the submission. Sentence-initial title-case words are
+    ignored unless they are acronyms so generic verbs such as "Stole" cannot
+    accidentally become identity anchors.
+    """
+    if not isinstance(value, str):
+        return set()
+
+    raw_tokens = [
+        token.strip("'’-")
+        for token in re.findall(r"\b[\w'’.-]+\b", value, flags=re.UNICODE)
+        if token.strip("'’-")
+    ]
+    generic_titles = {
+        "president", "senator", "governor", "mayor", "minister", "secretary",
+        "congressman", "congresswoman", "representative", "official",
+        "mr", "mrs", "ms", "dr",
+    }
+    anchors = set()
+    for index, token in enumerate(raw_tokens):
+        has_alpha = any(character.isalpha() for character in token)
+        normalized = token.casefold()
+        if not has_alpha or any(character.isdigit() for character in token):
+            continue
+        if len(token) >= 2 and token.isupper():
+            anchors.add(normalized)
+            continue
+        if (
+            index > 0
+            and len(token) >= 2
+            and token[0].isupper()
+            and token[1:].islower()
+            and normalized not in generic_titles
+        ):
+            anchors.add(normalized)
+    return anchors
+
+
 def _bound_noneditable_fallback_to_source(result, source_text):
     """Reject invented identifiers and keep fallback retrieval source-bounded."""
     normalized = _normalize_claim_gate_queries(result)
@@ -1171,10 +1213,19 @@ def extract_source_bounded_noneditable_claim(text, *, source_kind):
         )
         result = _parse_llm_json(response_text)
         result = _bound_noneditable_fallback_to_source(result, text)
-        return _normalize_claim_gate_stance(
+        result = _normalize_claim_gate_stance(
             result,
             has_known_satire_provenance=False,
         )
+        cleaned_claim = result.get("cleaned_claim")
+        if cleaned_claim in CLAIM_GATE_NON_RETRIEVAL_SENTINELS:
+            result["_material_anchor_tokens"] = []
+        else:
+            source_tokens = set(_source_bounded_tokens(text))
+            result["_material_anchor_tokens"] = sorted(
+                _material_entity_anchor_tokens(cleaned_claim) & source_tokens
+            )
+        return result
     except Exception as exc:
         logger.error(
             "Source-bounded non-editable ClaimGate fallback failed (%s).",
