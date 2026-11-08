@@ -994,6 +994,192 @@ def clean_ocr_text(raw_text):
         ) from exc
 
 
+def _source_bounded_tokens(value):
+    """Return normalized word-like tokens without interpreting their meaning."""
+    if not isinstance(value, str):
+        return []
+    return [
+        token.strip("'’-").casefold()
+        for token in re.findall(r"\b[\w'’.-]+\b", value, flags=re.UNICODE)
+        if token.strip("'’-")
+    ]
+
+
+def _material_identifier_tokens(value):
+    """Extract high-risk identifiers that a fallback must not invent."""
+    if not isinstance(value, str):
+        return set()
+
+    raw_tokens = [
+        token.strip("'’-")
+        for token in re.findall(r"\b[\w'’.-]+\b", value, flags=re.UNICODE)
+        if token.strip("'’-")
+    ]
+    identifiers = set()
+    for index, token in enumerate(raw_tokens):
+        has_alpha = any(character.isalpha() for character in token)
+        if any(character.isdigit() for character in token):
+            identifiers.add(token.casefold())
+        elif len(token) >= 2 and has_alpha and token.isupper():
+            identifiers.add(token.casefold())
+        elif (
+            index > 0
+            and len(token) >= 2
+            and has_alpha
+            and token[0].isupper()
+            and token[1:].islower()
+        ):
+            identifiers.add(token.casefold())
+    return identifiers
+
+
+def _bound_noneditable_fallback_to_source(result, source_text):
+    """Reject invented identifiers and keep fallback retrieval source-bounded."""
+    normalized = _normalize_claim_gate_queries(result)
+    cleaned_claim = normalized["cleaned_claim"]
+    if cleaned_claim in CLAIM_GATE_NON_RETRIEVAL_SENTINELS:
+        return normalized
+
+    source_tokens = set(_source_bounded_tokens(source_text))
+    if not source_tokens:
+        return {
+            "cleaned_claim": "INSUFFICIENT_CONTEXT",
+            "search_query": "",
+            "search_queries": [],
+            "article_stance": normalized.get("article_stance", "NEUTRAL"),
+        }
+
+    invented_identifiers = (
+        _material_identifier_tokens(cleaned_claim) - source_tokens
+    )
+    if invented_identifiers:
+        logger.warning(
+            "Source-bounded fallback rejected invented identifiers: %s",
+            sorted(invented_identifiers),
+        )
+        return {
+            "cleaned_claim": "INSUFFICIENT_CONTEXT",
+            "search_query": "",
+            "search_queries": [],
+            "article_stance": normalized.get("article_stance", "NEUTRAL"),
+        }
+
+    candidate_tokens = _source_bounded_tokens(normalized.get("search_query", ""))
+    bounded_tokens = []
+    seen = set()
+    for token in candidate_tokens:
+        if token not in source_tokens or token in seen:
+            continue
+        seen.add(token)
+        bounded_tokens.append(token)
+        if len(bounded_tokens) >= 12:
+            break
+
+    if len(bounded_tokens) < 2:
+        return {
+            "cleaned_claim": "INSUFFICIENT_CONTEXT",
+            "search_query": "",
+            "search_queries": [],
+            "article_stance": normalized.get("article_stance", "NEUTRAL"),
+        }
+
+    bounded_query = " ".join(bounded_tokens)
+    normalized["search_query"] = bounded_query
+    normalized["search_queries"] = [bounded_query]
+    return normalized
+
+
+def extract_source_bounded_noneditable_claim(text, *, source_kind):
+    """Second-pass claim extraction for IMAGE/URL content the user cannot rewrite.
+
+    This deliberately preserves unresolved references instead of resolving them
+    from model knowledge. Retrieval is limited to terms literally present in the
+    submitted source so the fallback can improve recall without inventing context.
+    """
+    normalized_source_kind = str(source_kind or "").strip().upper()
+    if normalized_source_kind not in {"IMAGE", "URL"}:
+        raise ValueError("source_kind must be IMAGE or URL")
+
+    system_instructions = f"""
+    Role: You are a conservative extraction tool for a fact-checking pipeline.
+
+    This is a SECOND-PASS fallback for {normalized_source_kind} content that the
+    user did not author and cannot simply rewrite. The first strict ClaimGate
+    already detected a public factual assertion but considered a material
+    reference ambiguous.
+
+    Your job is NOT to solve that ambiguity. Your job is to preserve the best
+    atomic factual proposition that is literally present in the submitted source
+    so evidence retrieval may be attempted safely.
+
+    SOURCE-BOUND RULES:
+    - Use only information present in the supplied source text.
+    - Never use pretrained/world knowledge to identify a person, organization,
+      acronym, title, event, place, date, amount, object, or pronoun.
+    - Never expand an acronym or abbreviation to a real-world name unless that
+      expansion is explicitly written in the source.
+    - Never replace "he", "she", "they", a surname, first name, or title with a
+      guessed identity.
+    - Preserve unresolved references literally. Ambiguity is allowed in the
+      extracted claim; invented specificity is not.
+    - Prefer wording copied or minimally reordered from the source. Do not add
+      explanatory facts merely to make the sentence sound complete.
+    - Select ONE independently verifiable factual proposition. If the source has
+      multiple claims, choose the single proposition that best represents its
+      central narrative. Do not merge separate claims.
+    - Preserve negation, quantities, dates, locations, attribution, and other
+      material qualifiers exactly when they are present.
+    - If there is NO public factual claim or rumor, return OUT_OF_SCOPE.
+    - Do not return INSUFFICIENT_CONTEXT merely because a referent remains
+      ambiguous. Preserve the ambiguous wording and allow downstream evidence
+      matching to decide whether a conclusion is supportable.
+    - If even a literal atomic proposition cannot be extracted without adding a
+      material fact absent from the source, return INSUFFICIENT_CONTEXT.
+
+    SEARCH QUERY RULES:
+    - Produce exactly ONE retrieval query.
+    - Use only words, names, acronyms, numbers, and quoted phrases that literally
+      occur in the supplied source text.
+    - Do not translate, expand, substitute, or resolve ambiguous identifiers in
+      the query.
+    - Prefer the most discriminative source terms tied to the selected claim.
+    - The query must not introduce any entity, date, location, amount, or event
+      that is absent from the source.
+
+    JSON Schema:
+    {{
+        "cleaned_claim": "One source-bounded factual proposition, or exactly OUT_OF_SCOPE or INSUFFICIENT_CONTEXT",
+        "search_query": "One source-bounded retrieval query",
+        "search_queries": ["The same single retrieval query"],
+        "article_stance": "DEBUNKING, REPORTING, or NEUTRAL"
+    }}
+
+    For OUT_OF_SCOPE or INSUFFICIENT_CONTEXT, search_query and search_queries
+    MUST be empty.
+    """
+
+    try:
+        response_text = call_llm_with_fallback(
+            system_instructions,
+            f"Source kind: {normalized_source_kind}\n\nSource text:\n{text}",
+            operation="claim_gate",
+        )
+        result = _parse_llm_json(response_text)
+        result = _bound_noneditable_fallback_to_source(result, text)
+        return _normalize_claim_gate_stance(
+            result,
+            has_known_satire_provenance=False,
+        )
+    except Exception as exc:
+        logger.error(
+            "Source-bounded non-editable ClaimGate fallback failed (%s).",
+            _provider_error_label(exc),
+        )
+        raise ClaimGateError(
+            "Source-bounded ClaimGate fallback could not complete reliably."
+        ) from exc
+
+
 def assess_claim_equivalence(incoming_claim, published_canonical_claim):
     """Classify proposition identity only; provider exhaustion remains distinguishable."""
     rejected = {
