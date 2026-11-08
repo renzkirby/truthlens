@@ -281,6 +281,70 @@ def _calibrate_contextual_verdict(verdict_result, verdict, confidence, evidence_
     return result
 
 
+def enforce_noneditable_fallback_evidence_support(
+    verdict_result: dict,
+    evidence_groups: Iterable[ReasoningEvidenceGroup],
+) -> dict:
+    """Fail closed when an ambiguity fallback lacks assessed verdict evidence.
+
+    IMAGE/URL submissions that only proceed after a strict insufficient-context
+    gate are allowed broader recall, but not weaker conclusion standards. A
+    decisive verdict must be tied to usable current-run assessed evidence.
+    """
+    if not isinstance(verdict_result, dict):
+        raise TypeError("verdict_result must be a dictionary")
+
+    result = dict(verdict_result)
+    verdict = result.get("verdict")
+    evidence_groups = tuple(evidence_groups)
+
+    if verdict == "UNVERIFIED":
+        return result
+
+    supported = False
+    consistent_stances = _CONSISTENT_STANCES.get(verdict)
+    if consistent_stances is not None:
+        for group in evidence_groups:
+            for item in group.evidence:
+                quality = _item_quality(item)
+                if (
+                    quality is not None
+                    and quality >= _USABLE_SCORE_FLOOR
+                    and item.stance in consistent_stances
+                ):
+                    supported = True
+                    break
+            if supported:
+                break
+    elif verdict in _CONTEXTUAL_VERDICTS:
+        supported = (
+            _contextual_basis_qualities(
+                result,
+                verdict,
+                evidence_groups,
+            )
+            is not None
+        )
+
+    if supported:
+        return result
+
+    result.update({
+        "verdict": "UNVERIFIED",
+        "summary": (
+            "The available evidence did not directly support a decisive conclusion "
+            "for the context-limited submitted claim."
+        ),
+        "confidence_score": 0,
+        "score_context": (
+            "No usable assessed evidence directly supports a decisive fallback verdict."
+        ),
+        "contextual_basis_kind": "NONE",
+        "contextual_basis_evidence_ids": [],
+    })
+    return result
+
+
 def calibrate_verdict_confidence(
     verdict_result: dict,
     evidence_groups: Iterable[ReasoningEvidenceGroup],
