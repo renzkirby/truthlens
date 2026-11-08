@@ -1,4 +1,5 @@
 import math
+import re
 from collections.abc import Iterable
 from numbers import Real
 
@@ -284,6 +285,8 @@ def _calibrate_contextual_verdict(verdict_result, verdict, confidence, evidence_
 def enforce_noneditable_fallback_evidence_support(
     verdict_result: dict,
     evidence_groups: Iterable[ReasoningEvidenceGroup],
+    *,
+    required_anchor_tokens=(),
 ) -> dict:
     """Fail closed when an ambiguity fallback lacks assessed verdict evidence.
 
@@ -301,30 +304,58 @@ def enforce_noneditable_fallback_evidence_support(
     if verdict == "UNVERIFIED":
         return result
 
+    anchors = {
+        str(token).strip().casefold()
+        for token in required_anchor_tokens
+        if str(token).strip()
+    }
+
+    def evidence_has_anchor(item):
+        content = getattr(item, "content", None)
+        if not isinstance(content, str):
+            return False
+        evidence_tokens = {
+            token.casefold()
+            for token in re.findall(r"\b[\w'’.-]+\b", content, flags=re.UNICODE)
+        }
+        return bool(anchors & evidence_tokens)
+
+    # A fallback that still has no explicit actor/entity anchor may retrieve
+    # potentially useful context, but must never turn an amount/action match
+    # into a factual attribution.
     supported = False
-    consistent_stances = _CONSISTENT_STANCES.get(verdict)
-    if consistent_stances is not None:
-        for group in evidence_groups:
-            for item in group.evidence:
-                quality = _item_quality(item)
-                if (
-                    quality is not None
-                    and quality >= _USABLE_SCORE_FLOOR
-                    and item.stance in consistent_stances
-                ):
-                    supported = True
+    if anchors:
+        consistent_stances = _CONSISTENT_STANCES.get(verdict)
+        if consistent_stances is not None:
+            for group in evidence_groups:
+                for item in group.evidence:
+                    quality = _item_quality(item)
+                    if (
+                        quality is not None
+                        and quality >= _USABLE_SCORE_FLOOR
+                        and item.stance in consistent_stances
+                        and evidence_has_anchor(item)
+                    ):
+                        supported = True
+                        break
+                if supported:
                     break
-            if supported:
-                break
-    elif verdict in _CONTEXTUAL_VERDICTS:
-        supported = (
-            _contextual_basis_qualities(
+        elif verdict in _CONTEXTUAL_VERDICTS:
+            basis_qualities = _contextual_basis_qualities(
                 result,
                 verdict,
                 evidence_groups,
             )
-            is not None
-        )
+            basis_ids = {
+                str(value)
+                for value in result.get("contextual_basis_evidence_ids", [])
+                if value
+            }
+            supported = basis_qualities is not None and any(
+                str(item.evidence_link_id) in basis_ids and evidence_has_anchor(item)
+                for group in evidence_groups
+                for item in group.evidence
+            )
 
     if supported:
         return result
@@ -337,7 +368,7 @@ def enforce_noneditable_fallback_evidence_support(
         ),
         "confidence_score": 0,
         "score_context": (
-            "No usable assessed evidence directly supports a decisive fallback verdict."
+            "No usable assessed evidence both supports the verdict and preserves an explicit submitted identity anchor."
         ),
         "contextual_basis_kind": "NONE",
         "contextual_basis_evidence_ids": [],
