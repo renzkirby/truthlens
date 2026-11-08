@@ -88,6 +88,7 @@ class VerificationRunURLRuntimeTests(TestCase):
                 "search_queries": ["pbbm subway underground"],
                 "article_stance": "NEUTRAL",
                 "_material_anchor_tokens": ["pbbm"],
+                "_assertion_complete": True,
             },
         )
         self.enforce_fallback_evidence = self._patch(
