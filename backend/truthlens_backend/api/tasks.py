@@ -1720,6 +1720,11 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         gfc_data,
                         article_stance,
                     )
+                    ai_verdict = _apply_noneditable_fallback_verdict_policy(
+                        ai_verdict,
+                        (),
+                        fallback_active=noneditable_context_fallback,
+                    )
                     has_persisted_evidence = True
                 else:
                     fact_check_groups = precheck_fact_check_groups
@@ -1756,6 +1761,11 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             ai_verdict = calibrate_verdict_confidence(
                                 ai_verdict,
                                 fact_check_groups,
+                            )
+                            ai_verdict = _apply_noneditable_fallback_verdict_policy(
+                                ai_verdict,
+                                fact_check_groups,
+                                fallback_active=noneditable_context_fallback,
                             )
                         except LLMProviderUnavailableError:
                             raise
@@ -1907,6 +1917,11 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         combined_context,
                         article_stance,
                     )
+                    ai_verdict = _apply_noneditable_fallback_verdict_policy(
+                        ai_verdict,
+                        (),
+                        fallback_active=noneditable_context_fallback,
+                    )
                 else:
                     evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
                     secondary_groups = filter_reasoning_evidence_dossier_by_role(
@@ -1938,6 +1953,11 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         ai_verdict = calibrate_verdict_confidence(
                             ai_verdict,
                             secondary_groups,
+                        )
+                        ai_verdict = _apply_noneditable_fallback_verdict_policy(
+                            ai_verdict,
+                            secondary_groups,
+                            fallback_active=noneditable_context_fallback,
                         )
                     else:
                         _log_stage(
@@ -2544,6 +2564,11 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         gfc_data,
                         article_stance,
                     )
+                    ai_verdict = _apply_noneditable_fallback_verdict_policy(
+                        ai_verdict,
+                        (),
+                        fallback_active=noneditable_context_fallback,
+                    )
                 except Exception as e:
                     _log_stage(
                         claim_id,
@@ -2588,6 +2613,11 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         ai_verdict = calibrate_verdict_confidence(
                             ai_verdict,
                             fact_check_groups,
+                        )
+                        ai_verdict = _apply_noneditable_fallback_verdict_policy(
+                            ai_verdict,
+                            fact_check_groups,
+                            fallback_active=noneditable_context_fallback,
                         )
                     except LLMProviderUnavailableError:
                         raise
@@ -2736,6 +2766,11 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         combined_context,
                         article_stance,
                     )
+                    ai_verdict = _apply_noneditable_fallback_verdict_policy(
+                        ai_verdict,
+                        (),
+                        fallback_active=noneditable_context_fallback,
+                    )
                 except Exception as e:
                     _log_stage(
                         claim_id,
@@ -2792,6 +2827,11 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     ai_verdict = calibrate_verdict_confidence(
                         ai_verdict,
                         secondary_groups,
+                    )
+                    ai_verdict = _apply_noneditable_fallback_verdict_policy(
+                        ai_verdict,
+                        secondary_groups,
+                        fallback_active=noneditable_context_fallback,
                     )
                 else:
                     _log_stage(
