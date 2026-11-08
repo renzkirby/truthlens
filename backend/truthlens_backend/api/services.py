@@ -1240,15 +1240,15 @@ def extract_source_bounded_noneditable_claim(text, *, source_kind):
     - Do not return INSUFFICIENT_CONTEXT merely because a referent remains
       ambiguous. Preserve the ambiguous wording and allow downstream evidence
       matching to decide whether a conclusion is supportable.
-    - Decide whether the preserved wording itself contains a COMPLETE ASSERTED
-      PROPOSITION: an explicit subject/topic plus an explicit action, state, or
-      relation. Topic labels and keyword fragments are NOT complete assertions.
-      Examples: "PBBM subway underground", "Trump election fraud", and
-      "COVID vaccine deaths" are incomplete topic fragments. "He stole P50
-      million" is a complete assertion even though its actor is unresolved.
+    - Topic labels and keyword fragments are not complete assertions. Examples:
+      "PBBM subway underground", "Trump election fraud", and "COVID vaccine
+      deaths" are topic fragments. Preserve such wording literally for retrieval;
+      never add a missing action, state, or relation just to make it a sentence.
+    - "He stole P50 million" is a complete assertion even though its actor is
+      unresolved. Preserve that unresolved wording literally.
     - If even a literal atomic proposition cannot be extracted without adding a
-      material fact absent from the source, the cleaned claim may preserve the
-      fragment for retrieval, but assertion_complete MUST be false.
+      material fact absent from the source, preserve only the source-bounded
+      fragment for retrieval; do not manufacture the missing proposition.
 
     SEARCH QUERY RULES:
     - Produce exactly ONE retrieval query.
@@ -1265,14 +1265,11 @@ def extract_source_bounded_noneditable_claim(text, *, source_kind):
         "cleaned_claim": "One source-bounded factual proposition, or exactly OUT_OF_SCOPE or INSUFFICIENT_CONTEXT",
         "search_query": "One source-bounded retrieval query",
         "search_queries": ["The same single retrieval query"],
-        "article_stance": "DEBUNKING, REPORTING, or NEUTRAL",
-        "assertion_complete": true
+        "article_stance": "DEBUNKING, REPORTING, or NEUTRAL"
     }}
 
-    assertion_complete MUST be a JSON boolean. It is true only when the source
-    itself explicitly states the factual action/state/relation being checked.
     For OUT_OF_SCOPE or INSUFFICIENT_CONTEXT, search_query and search_queries
-    MUST be empty and assertion_complete MUST be false.
+    MUST be empty.
     """
 
     try:
@@ -1282,11 +1279,6 @@ def extract_source_bounded_noneditable_claim(text, *, source_kind):
             operation="claim_gate",
         )
         result = _parse_llm_json(response_text)
-        assertion_complete = result.get("assertion_complete")
-        if type(assertion_complete) is not bool:
-            raise ValueError(
-                "Source-bounded ClaimGate fallback returned no assertion_complete boolean"
-            )
         result = _bound_noneditable_fallback_to_source(result, text)
         result = _normalize_claim_gate_stance(
             result,
@@ -1301,9 +1293,10 @@ def extract_source_bounded_noneditable_claim(text, *, source_kind):
             result["_material_anchor_tokens"] = sorted(
                 _material_entity_anchor_tokens(cleaned_claim) & source_tokens
             )
-            result["_assertion_complete"] = (
-                assertion_complete
-                and _has_explicit_predicate_cue(cleaned_claim)
+            # Safety-critical completeness is derived locally rather than trusted
+            # from provider output, preserving the shared claim_gate contract.
+            result["_assertion_complete"] = _has_explicit_predicate_cue(
+                cleaned_claim
             )
         return result
     except Exception as exc:
