@@ -222,7 +222,6 @@ class NoneditableClaimFallbackTests(SimpleTestCase):
             "search_query": "PBBM subway Ferdinand Marcos underground",
             "search_queries": ["PBBM subway Ferdinand Marcos underground"],
             "article_stance": "NEUTRAL",
-            "assertion_complete": True,
         })
 
         result = extract_source_bounded_noneditable_claim(
@@ -257,7 +256,6 @@ class NoneditableClaimFallbackTests(SimpleTestCase):
             "search_query": "PBBM subway",
             "search_queries": ["PBBM subway"],
             "article_stance": "NEUTRAL",
-            "assertion_complete": True,
         })
 
         result = extract_source_bounded_noneditable_claim(
@@ -279,7 +277,6 @@ class NoneditableClaimFallbackTests(SimpleTestCase):
             "search_query": "stole P58 million",
             "search_queries": ["stole P58 million"],
             "article_stance": "NEUTRAL",
-            "assertion_complete": True,
         })
 
         result = extract_source_bounded_noneditable_claim(
@@ -301,7 +298,6 @@ class NoneditableClaimFallbackTests(SimpleTestCase):
             "search_query": "PBBM subway underground",
             "search_queries": ["PBBM subway underground"],
             "article_stance": "NEUTRAL",
-            "assertion_complete": True,
         })
 
         result = extract_source_bounded_noneditable_claim(
@@ -323,7 +319,6 @@ class NoneditableClaimFallbackTests(SimpleTestCase):
             "search_query": "PBBM gumawa subway tren",
             "search_queries": ["PBBM gumawa subway tren"],
             "article_stance": "NEUTRAL",
-            "assertion_complete": True,
         })
 
         result = extract_source_bounded_noneditable_claim(
@@ -345,7 +340,6 @@ class NoneditableClaimFallbackTests(SimpleTestCase):
             "search_query": "PBBM subway",
             "search_queries": ["PBBM subway"],
             "article_stance": "NEUTRAL",
-            "assertion_complete": True,
         })
 
         result = extract_source_bounded_noneditable_claim(
