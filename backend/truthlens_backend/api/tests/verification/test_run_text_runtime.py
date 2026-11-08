@@ -68,6 +68,21 @@ class VerificationRunTextRuntimeTests(TestCase):
             "api.claim_matching.find_matching_claim", return_value=None
         )
         self.clean = self._patch("api.tasks.clean_ocr_text", return_value=self.cleaned)
+        self.noneditable_fallback = self._patch(
+            "api.tasks.extract_source_bounded_noneditable_claim",
+            return_value={
+                "cleaned_claim": "PBBM built a subway train underground.",
+                "search_query": "pbbm subway underground",
+                "search_queries": ["pbbm subway underground"],
+                "article_stance": "NEUTRAL",
+                "_material_anchor_tokens": ["pbbm"],
+                "_assertion_complete": True,
+            },
+        )
+        self.enforce_fallback_evidence = self._patch(
+            "api.tasks.enforce_noneditable_fallback_evidence_support",
+            side_effect=lambda verdict, _groups, **_kwargs: verdict,
+        )
         self.vault = self._patch("api.tasks.search_official_vault", return_value=None)
         self.retrieve_gfc = self._patch(
             "api.tasks._retrieve_and_ingest_gfc", return_value=self.gfc_payload
@@ -470,6 +485,7 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.retrieve_tavily.assert_not_called()
         self.evaluate_persisted.assert_not_called()
         self.assess_evidence.assert_not_called()
+        self.noneditable_fallback.assert_not_called()
         core_total_calls = [
             call
             for call in self.log_stage.call_args_list
@@ -480,6 +496,94 @@ class VerificationRunTextRuntimeTests(TestCase):
             core_total_calls[0].kwargs.get("outcome"),
             "abstained_insufficient_context",
         )
+
+    def test_image_insufficient_context_uses_source_bounded_fallback(self):
+        self.claim.claim_type = Claim.ClaimType.IMAGE
+        self.claim.save(update_fields=["claim_type"])
+        self.cleaned = {
+            "cleaned_claim": "INSUFFICIENT_CONTEXT",
+            "search_query": "",
+            "search_queries": [],
+            "article_stance": "NEUTRAL",
+        }
+        self.clean.return_value = self.cleaned
+
+        run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        self.assertIsNone(run.abstention_reason)
+        self.noneditable_fallback.assert_called_once_with(
+            self.claim.context_text,
+            source_kind="IMAGE",
+        )
+        self.claim.refresh_from_db()
+        self.assertEqual(
+            self.claim.claimability_status,
+            Claim.ClaimabilityStatus.CLAIMABLE,
+        )
+        self.assertEqual(self.claim.ai_verdict, "FAKE")
+        self.assertNotEqual(
+            self.claim.claimability_status,
+            Claim.ClaimabilityStatus.INSUFFICIENT_CONTEXT,
+        )
+        self.retrieve_gfc.assert_called()
+        self.enforce_fallback_evidence.assert_called()
+
+    def test_image_context_fallback_does_not_reuse_prior_automated_verdict(self):
+        self.claim.claim_type = Claim.ClaimType.IMAGE
+        self.claim.save(update_fields=["claim_type"])
+        cached = self._cached_claim("FACT")
+        self.match.return_value = cached
+        self.cleaned = {
+            "cleaned_claim": "INSUFFICIENT_CONTEXT",
+            "search_query": "",
+            "search_queries": [],
+            "article_stance": "NEUTRAL",
+        }
+        self.clean.return_value = self.cleaned
+
+        run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "FAKE")
+        self.assertNotEqual(
+            self.claim.score_context,
+            "This result was matched from a prior analysis of the same claim.",
+        )
+        self.noneditable_fallback.assert_called_once()
+        self.retrieve_gfc.assert_called()
+
+    def test_image_fallback_that_cannot_form_safe_query_becomes_unverified(self):
+        self.claim.claim_type = Claim.ClaimType.IMAGE
+        self.claim.save(update_fields=["claim_type"])
+        self.cleaned = {
+            "cleaned_claim": "INSUFFICIENT_CONTEXT",
+            "search_query": "",
+            "search_queries": [],
+            "article_stance": "NEUTRAL",
+        }
+        self.clean.return_value = self.cleaned
+        self.noneditable_fallback.return_value = {
+            "cleaned_claim": "INSUFFICIENT_CONTEXT",
+            "search_query": "",
+            "search_queries": [],
+            "article_stance": "NEUTRAL",
+        }
+
+        run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.ABSTAINED)
+        self.assertIsNone(run.abstention_reason)
+        self.claim.refresh_from_db()
+        self.assertEqual(
+            self.claim.claimability_status,
+            Claim.ClaimabilityStatus.CLAIMABLE,
+        )
+        self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
+        self.vault.assert_not_called()
+        self.retrieve_gfc.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
 
     def test_out_of_scope_abstains_without_persisting_verdict(self):
         self.cleaned["cleaned_claim"] = "OUT_OF_SCOPE"

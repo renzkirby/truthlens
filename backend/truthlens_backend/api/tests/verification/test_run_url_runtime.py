@@ -80,6 +80,21 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.query = self._patch(
             "api.tasks.extract_search_query", return_value=self.cleaned
         )
+        self.noneditable_fallback = self._patch(
+            "api.tasks.extract_source_bounded_noneditable_claim",
+            return_value={
+                "cleaned_claim": "PBBM built a subway train underground.",
+                "search_query": "pbbm subway underground",
+                "search_queries": ["pbbm subway underground"],
+                "article_stance": "NEUTRAL",
+                "_material_anchor_tokens": ["pbbm"],
+                "_assertion_complete": True,
+            },
+        )
+        self.enforce_fallback_evidence = self._patch(
+            "api.tasks.enforce_noneditable_fallback_evidence_support",
+            side_effect=lambda verdict, _groups, **_kwargs: verdict,
+        )
         self.vault = self._patch("api.tasks.search_official_vault", return_value=None)
         self.real_bridge = tasks._retrieve_and_ingest_gfc
         self.bridge = self._patch(
@@ -510,7 +525,7 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.assertNotEqual(first.pk, second.pk)
         self.assertEqual(self.claim.verification_runs.count(), 2)
 
-    def test_insufficient_context_abstains_before_any_evidence_retrieval(self):
+    def test_insufficient_context_uses_source_bounded_url_fallback(self):
         self.cleaned = {
             "cleaned_claim": "INSUFFICIENT_CONTEXT",
             "search_query": "",
@@ -521,19 +536,46 @@ class VerificationRunURLRuntimeTests(TestCase):
 
         run = self._execute()
 
-        self._assert_terminal(run, VerificationRun.Status.ABSTAINED)
-        self.assertEqual(
-            run.abstention_reason,
-            VerificationRun.AbstentionReason.INSUFFICIENT_CONTEXT,
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        self.assertIsNone(run.abstention_reason)
+        self.noneditable_fallback.assert_called_once_with(
+            self.cleaned_text,
+            source_kind="URL",
         )
         self.claim.refresh_from_db()
         self.assertEqual(
             self.claim.claimability_status,
-            Claim.ClaimabilityStatus.INSUFFICIENT_CONTEXT,
+            Claim.ClaimabilityStatus.CLAIMABLE,
         )
-        self.assertIsNone(self.claim.ai_verdict)
-        self.assertIsNone(self.claim.final_verdict)
-        self.save_claim.assert_not_called()
+        self.assertEqual(self.claim.ai_verdict, "FAKE")
+        self.bridge.assert_called()
+        self.enforce_fallback_evidence.assert_called()
+
+    def test_url_fallback_without_safe_query_becomes_unverified(self):
+        self.cleaned = {
+            "cleaned_claim": "INSUFFICIENT_CONTEXT",
+            "search_query": "",
+            "search_queries": [],
+            "article_stance": "NEUTRAL",
+        }
+        self.query.return_value = self.cleaned
+        self.noneditable_fallback.return_value = {
+            "cleaned_claim": "INSUFFICIENT_CONTEXT",
+            "search_query": "",
+            "search_queries": [],
+            "article_stance": "NEUTRAL",
+        }
+
+        run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.ABSTAINED)
+        self.assertIsNone(run.abstention_reason)
+        self.claim.refresh_from_db()
+        self.assertEqual(
+            self.claim.claimability_status,
+            Claim.ClaimabilityStatus.CLAIMABLE,
+        )
+        self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
         self.vault.assert_not_called()
         self.bridge.assert_not_called()
         self.retrieve_tavily.assert_not_called()

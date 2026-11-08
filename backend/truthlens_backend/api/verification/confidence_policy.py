@@ -1,4 +1,5 @@
 import math
+import re
 from collections.abc import Iterable
 from numbers import Real
 
@@ -278,6 +279,131 @@ def _calibrate_contextual_verdict(verdict_result, verdict, confidence, evidence_
         source_identity_count,
         complete=True,
     )
+    return result
+
+
+def enforce_noneditable_fallback_evidence_support(
+    verdict_result: dict,
+    evidence_groups: Iterable[ReasoningEvidenceGroup],
+    *,
+    required_anchor_tokens=(),
+    assertion_complete=True,
+) -> dict:
+    """Fail closed when an ambiguity fallback lacks assessed verdict evidence.
+
+    IMAGE/URL submissions that only proceed after a strict insufficient-context
+    gate are allowed broader recall, but not weaker conclusion standards. A
+    decisive verdict must be tied to usable current-run assessed evidence.
+    """
+    if not isinstance(verdict_result, dict):
+        raise TypeError("verdict_result must be a dictionary")
+
+    result = dict(verdict_result)
+    verdict = result.get("verdict")
+    evidence_groups = tuple(evidence_groups)
+
+    if not assertion_complete:
+        result.update({
+            "verdict": "UNVERIFIED",
+            "reasoning": (
+                "The submitted content identifies a topic, but it does not state "
+                "the specific factual action, state, or relation to verify. The "
+                "retrieved evidence may provide related background, but TruthLens "
+                "will not use that evidence to invent the missing proposition."
+            ),
+            "summary": (
+                "The submitted content identifies a topic, but does not state a "
+                "complete factual proposition that can be verified without adding "
+                "meaning not present in the submission."
+            ),
+            "confidence_score": 0,
+            "score_context": (
+                "The submitted fallback text lacks an explicit factual action, state, "
+                "or relation required for a decisive verdict."
+            ),
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        })
+        return result
+
+    if verdict == "UNVERIFIED":
+        return result
+
+    anchors = {
+        str(token).strip().casefold()
+        for token in required_anchor_tokens
+        if str(token).strip()
+    }
+
+    def evidence_has_anchor(item):
+        content = getattr(item, "content", None)
+        if not isinstance(content, str):
+            return False
+        evidence_tokens = {
+            token.casefold()
+            for token in re.findall(r"\b[\w'’.-]+\b", content, flags=re.UNICODE)
+        }
+        return bool(anchors & evidence_tokens)
+
+    # A fallback that still has no explicit actor/entity anchor may retrieve
+    # potentially useful context, but must never turn an amount/action match
+    # into a factual attribution.
+    supported = False
+    if anchors:
+        consistent_stances = _CONSISTENT_STANCES.get(verdict)
+        if consistent_stances is not None:
+            for group in evidence_groups:
+                for item in group.evidence:
+                    quality = _item_quality(item)
+                    if (
+                        quality is not None
+                        and quality >= _USABLE_SCORE_FLOOR
+                        and item.stance in consistent_stances
+                        and evidence_has_anchor(item)
+                    ):
+                        supported = True
+                        break
+                if supported:
+                    break
+        elif verdict in _CONTEXTUAL_VERDICTS:
+            basis_qualities = _contextual_basis_qualities(
+                result,
+                verdict,
+                evidence_groups,
+            )
+            basis_ids = {
+                str(value)
+                for value in result.get("contextual_basis_evidence_ids", [])
+                if value
+            }
+            supported = basis_qualities is not None and any(
+                str(item.evidence_link_id) in basis_ids and evidence_has_anchor(item)
+                for group in evidence_groups
+                for item in group.evidence
+            )
+
+    if supported:
+        return result
+
+    result.update({
+        "verdict": "UNVERIFIED",
+        "reasoning": (
+            "The retrieved evidence did not provide a usable, source-aligned basis "
+            "for a decisive conclusion while preserving the identity information "
+            "explicitly present in the submitted content. TruthLens therefore "
+            "abstains rather than attaching unrelated evidence to the claim."
+        ),
+        "summary": (
+            "The available evidence did not directly support a decisive conclusion "
+            "for the context-limited submitted claim."
+        ),
+        "confidence_score": 0,
+        "score_context": (
+            "No usable assessed evidence both supports the verdict and preserves an explicit submitted identity anchor."
+        ),
+        "contextual_basis_kind": "NONE",
+        "contextual_basis_evidence_ids": [],
+    })
     return result
 
 
