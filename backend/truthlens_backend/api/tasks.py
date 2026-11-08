@@ -575,6 +575,7 @@ def _apply_noneditable_fallback_verdict_policy(
     *,
     fallback_active,
     required_anchor_tokens=(),
+    assertion_complete=True,
 ):
     """Require assessed evidence before a context-limited IMAGE/URL conclusion."""
     if not fallback_active:
@@ -583,6 +584,7 @@ def _apply_noneditable_fallback_verdict_policy(
         verdict_result,
         evidence_groups or (),
         required_anchor_tokens=required_anchor_tokens,
+        assertion_complete=assertion_complete,
     )
 
 
@@ -1380,6 +1382,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
     published_resolution = False
     noneditable_context_fallback = False
     noneditable_fallback_anchor_tokens = ()
+    noneditable_fallback_assertion_complete = True
     pipeline_error = None
     runtime_error_propagating = False
     try:
@@ -1472,6 +1475,9 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 noneditable_context_fallback = True
                 noneditable_fallback_anchor_tokens = tuple(
                     fallback_result.get("_material_anchor_tokens") or ()
+                )
+                noneditable_fallback_assertion_complete = bool(
+                    fallback_result.get("_assertion_complete")
                 )
                 cleaned_claim = fallback_result.get("cleaned_claim")
                 search_query = fallback_result.get("search_query")
@@ -1731,6 +1737,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         (),
                         fallback_active=noneditable_context_fallback,
                         required_anchor_tokens=noneditable_fallback_anchor_tokens,
+                        assertion_complete=noneditable_fallback_assertion_complete,
                     )
                     has_persisted_evidence = True
                 else:
@@ -1774,6 +1781,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                                 fact_check_groups,
                                 fallback_active=noneditable_context_fallback,
                                 required_anchor_tokens=noneditable_fallback_anchor_tokens,
+                        assertion_complete=noneditable_fallback_assertion_complete,
                             )
                         except LLMProviderUnavailableError:
                             raise
@@ -1930,6 +1938,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         (),
                         fallback_active=noneditable_context_fallback,
                         required_anchor_tokens=noneditable_fallback_anchor_tokens,
+                        assertion_complete=noneditable_fallback_assertion_complete,
                     )
                 else:
                     evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
@@ -1968,6 +1977,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             secondary_groups,
                             fallback_active=noneditable_context_fallback,
                         required_anchor_tokens=noneditable_fallback_anchor_tokens,
+                        assertion_complete=noneditable_fallback_assertion_complete,
                         )
                     else:
                         _log_stage(
@@ -2318,6 +2328,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
     published_resolution = False
     noneditable_context_fallback = False
     noneditable_fallback_anchor_tokens = ()
+    noneditable_fallback_assertion_complete = True
     pipeline_error = None
     runtime_error_propagating = False
     try:
@@ -2365,6 +2376,9 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
             noneditable_context_fallback = True
             noneditable_fallback_anchor_tokens = tuple(
                 fallback_result.get("_material_anchor_tokens") or ()
+            )
+            noneditable_fallback_assertion_complete = bool(
+                fallback_result.get("_assertion_complete")
             )
             cleaned_claim = fallback_result.get("cleaned_claim")
             search_query = fallback_result.get("search_query")
@@ -2583,6 +2597,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         (),
                         fallback_active=noneditable_context_fallback,
                         required_anchor_tokens=noneditable_fallback_anchor_tokens,
+                        assertion_complete=noneditable_fallback_assertion_complete,
                     )
                 except Exception as e:
                     _log_stage(
@@ -2634,6 +2649,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                             fact_check_groups,
                             fallback_active=noneditable_context_fallback,
                         required_anchor_tokens=noneditable_fallback_anchor_tokens,
+                        assertion_complete=noneditable_fallback_assertion_complete,
                         )
                     except LLMProviderUnavailableError:
                         raise
@@ -2787,6 +2803,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         (),
                         fallback_active=noneditable_context_fallback,
                         required_anchor_tokens=noneditable_fallback_anchor_tokens,
+                        assertion_complete=noneditable_fallback_assertion_complete,
                     )
                 except Exception as e:
                     _log_stage(
@@ -2850,6 +2867,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         secondary_groups,
                         fallback_active=noneditable_context_fallback,
                         required_anchor_tokens=noneditable_fallback_anchor_tokens,
+                        assertion_complete=noneditable_fallback_assertion_complete,
                     )
                 else:
                     _log_stage(
