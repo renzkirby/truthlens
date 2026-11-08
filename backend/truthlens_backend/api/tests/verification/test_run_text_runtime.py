@@ -524,7 +524,7 @@ class VerificationRunTextRuntimeTests(TestCase):
             self.claim.claimability_status,
             Claim.ClaimabilityStatus.INSUFFICIENT_CONTEXT,
         )
-        self.bridge.assert_called()
+        self.retrieve_gfc.assert_called()
         self.enforce_fallback_evidence.assert_called()
 
     def test_image_context_fallback_does_not_reuse_prior_automated_verdict(self):
@@ -550,7 +550,7 @@ class VerificationRunTextRuntimeTests(TestCase):
             "This result was matched from a prior analysis of the same claim.",
         )
         self.noneditable_fallback.assert_called_once()
-        self.bridge.assert_called()
+        self.retrieve_gfc.assert_called()
 
     def test_image_fallback_that_cannot_form_safe_query_becomes_unverified(self):
         self.claim.claim_type = Claim.ClaimType.IMAGE
