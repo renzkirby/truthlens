@@ -1773,7 +1773,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                                 ai_verdict,
                                 fact_check_groups,
                                 fallback_active=noneditable_context_fallback,
-                        required_anchor_tokens=noneditable_fallback_anchor_tokens,
+                                required_anchor_tokens=noneditable_fallback_anchor_tokens,
                             )
                         except LLMProviderUnavailableError:
                             raise
