@@ -314,6 +314,28 @@ class NoneditableClaimFallbackTests(SimpleTestCase):
         self.assertFalse(result["_assertion_complete"])
 
     @patch("api.services.call_llm_with_fallback")
+    def test_source_bounded_filipino_predicate_can_be_complete(
+        self,
+        mock_llm,
+    ):
+        mock_llm.return_value = json.dumps({
+            "cleaned_claim": "PBBM gumawa subway tren",
+            "search_query": "PBBM gumawa subway tren",
+            "search_queries": ["PBBM gumawa subway tren"],
+            "article_stance": "NEUTRAL",
+            "assertion_complete": True,
+        })
+
+        result = extract_source_bounded_noneditable_claim(
+            "PBBM gumawa subway tren",
+            source_kind="IMAGE",
+        )
+
+        self.assertEqual(result["_material_anchor_tokens"], ["pbbm"])
+        self.assertTrue(result["_assertion_complete"])
+        self.assertEqual(result["search_query"], "pbbm gumawa subway tren")
+
+    @patch("api.services.call_llm_with_fallback")
     def test_fallback_rejects_translated_or_invented_predicate(
         self,
         mock_llm,
