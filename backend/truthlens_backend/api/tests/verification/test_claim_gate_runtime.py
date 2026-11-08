@@ -241,6 +241,7 @@ class NoneditableClaimFallbackTests(SimpleTestCase):
             result["search_queries"],
             ["pbbm subway underground"],
         )
+        self.assertEqual(result["_material_anchor_tokens"], ["pbbm"])
         self.assertNotIn("ferdinand", result["search_query"])
         self.assertNotIn("marcos", result["search_query"])
 
@@ -264,6 +265,26 @@ class NoneditableClaimFallbackTests(SimpleTestCase):
         self.assertEqual(result["cleaned_claim"], "INSUFFICIENT_CONTEXT")
         self.assertEqual(result["search_query"], "")
         self.assertEqual(result["search_queries"], [])
+
+    @patch("api.services.call_llm_with_fallback")
+    def test_fallback_amount_only_claim_has_no_identity_anchor(
+        self,
+        mock_llm,
+    ):
+        mock_llm.return_value = json.dumps({
+            "cleaned_claim": "stole P58 million",
+            "search_query": "stole P58 million",
+            "search_queries": ["stole P58 million"],
+            "article_stance": "NEUTRAL",
+        })
+
+        result = extract_source_bounded_noneditable_claim(
+            "stole P58 million",
+            source_kind="IMAGE",
+        )
+
+        self.assertEqual(result["cleaned_claim"], "stole P58 million")
+        self.assertEqual(result["_material_anchor_tokens"], [])
 
     def test_fallback_rejects_unsupported_source_kind(self):
         with self.assertRaises(ValueError):
