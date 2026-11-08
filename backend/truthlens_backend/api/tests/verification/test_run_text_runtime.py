@@ -483,6 +483,7 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.retrieve_tavily.assert_not_called()
         self.evaluate_persisted.assert_not_called()
         self.assess_evidence.assert_not_called()
+        self.noneditable_fallback.assert_not_called()
         core_total_calls = [
             call
             for call in self.log_stage.call_args_list
@@ -525,6 +526,31 @@ class VerificationRunTextRuntimeTests(TestCase):
         )
         self.bridge.assert_called()
         self.enforce_fallback_evidence.assert_called()
+
+    def test_image_context_fallback_does_not_reuse_prior_automated_verdict(self):
+        self.claim.claim_type = Claim.ClaimType.IMAGE
+        self.claim.save(update_fields=["claim_type"])
+        cached = self._cached_claim("FACT")
+        self.match.return_value = cached
+        self.cleaned = {
+            "cleaned_claim": "INSUFFICIENT_CONTEXT",
+            "search_query": "",
+            "search_queries": [],
+            "article_stance": "NEUTRAL",
+        }
+        self.clean.return_value = self.cleaned
+
+        run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "FAKE")
+        self.assertNotEqual(
+            self.claim.score_context,
+            "This result was matched from a prior analysis of the same claim.",
+        )
+        self.noneditable_fallback.assert_called_once()
+        self.bridge.assert_called()
 
     def test_image_fallback_that_cannot_form_safe_query_becomes_unverified(self):
         self.claim.claim_type = Claim.ClaimType.IMAGE
