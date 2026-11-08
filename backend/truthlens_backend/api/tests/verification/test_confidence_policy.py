@@ -3,7 +3,10 @@ import uuid
 from django.test import SimpleTestCase
 
 from api.models import VerificationEvidence
-from api.verification.confidence_policy import calibrate_verdict_confidence
+from api.verification.confidence_policy import (
+    calibrate_verdict_confidence,
+    enforce_noneditable_fallback_evidence_support,
+)
 from api.verification.evidence_dossier import (
     ReasoningEvidenceGroup,
     ReasoningEvidenceItem,
@@ -413,3 +416,67 @@ class ConfidencePolicyTests(SimpleTestCase):
         context = result["score_context"].lower()
         self.assertNotIn("independent", context)
         self.assertNotIn("editorial", context)
+
+
+
+class NoneditableFallbackEvidencePolicyTests(SimpleTestCase):
+    def test_fact_without_usable_support_is_downgraded_to_unverified(self):
+        result = enforce_noneditable_fallback_evidence_support(
+            _verdict("FACT", 90),
+            [_group(_item(stance=VerificationEvidence.Stance.CONTEXT))],
+        )
+
+        self.assertEqual(result["verdict"], "UNVERIFIED")
+        self.assertEqual(result["confidence_score"], 0)
+        self.assertEqual(result["contextual_basis_kind"], "NONE")
+        self.assertEqual(result["contextual_basis_evidence_ids"], [])
+
+    def test_fact_with_usable_support_is_preserved(self):
+        verdict = _verdict("FACT", 88)
+        result = enforce_noneditable_fallback_evidence_support(
+            verdict,
+            [_group(_item(stance=VerificationEvidence.Stance.SUPPORTS))],
+        )
+
+        self.assertEqual(result, verdict)
+
+    def test_fake_with_usable_refutation_is_preserved(self):
+        verdict = _verdict("FAKE", 88)
+        result = enforce_noneditable_fallback_evidence_support(
+            verdict,
+            [_group(_item(stance=VerificationEvidence.Stance.REFUTES))],
+        )
+
+        self.assertEqual(result, verdict)
+
+    def test_misleading_requires_evidence_tied_contextual_basis(self):
+        item = _item(stance=VerificationEvidence.Stance.CONTEXT)
+        verdict = _verdict(
+            "MISLEADING",
+            80,
+            contextual_basis_kind="MISSING_CONTEXT",
+            contextual_basis_evidence_ids=[],
+        )
+
+        result = enforce_noneditable_fallback_evidence_support(
+            verdict,
+            [_group(item)],
+        )
+
+        self.assertEqual(result["verdict"], "UNVERIFIED")
+
+    def test_misleading_with_usable_tied_basis_is_preserved(self):
+        item = _item(stance=VerificationEvidence.Stance.CONTEXT)
+        verdict = _verdict(
+            "MISLEADING",
+            80,
+            contextual_basis_kind="MISSING_CONTEXT",
+            contextual_basis_evidence_ids=[str(item.evidence_link_id)],
+        )
+
+        result = enforce_noneditable_fallback_evidence_support(
+            verdict,
+            [_group(item)],
+        )
+
+        self.assertEqual(result, verdict)
