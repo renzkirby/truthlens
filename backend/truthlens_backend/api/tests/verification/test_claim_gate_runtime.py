@@ -222,6 +222,7 @@ class NoneditableClaimFallbackTests(SimpleTestCase):
             "search_query": "PBBM subway Ferdinand Marcos underground",
             "search_queries": ["PBBM subway Ferdinand Marcos underground"],
             "article_stance": "NEUTRAL",
+            "assertion_complete": True,
         })
 
         result = extract_source_bounded_noneditable_claim(
@@ -242,6 +243,7 @@ class NoneditableClaimFallbackTests(SimpleTestCase):
             ["pbbm subway underground"],
         )
         self.assertEqual(result["_material_anchor_tokens"], ["pbbm"])
+        self.assertTrue(result["_assertion_complete"])
         self.assertNotIn("ferdinand", result["search_query"])
         self.assertNotIn("marcos", result["search_query"])
 
@@ -255,6 +257,7 @@ class NoneditableClaimFallbackTests(SimpleTestCase):
             "search_query": "PBBM subway",
             "search_queries": ["PBBM subway"],
             "article_stance": "NEUTRAL",
+            "assertion_complete": True,
         })
 
         result = extract_source_bounded_noneditable_claim(
@@ -276,6 +279,7 @@ class NoneditableClaimFallbackTests(SimpleTestCase):
             "search_query": "stole P58 million",
             "search_queries": ["stole P58 million"],
             "article_stance": "NEUTRAL",
+            "assertion_complete": True,
         })
 
         result = extract_source_bounded_noneditable_claim(
@@ -285,6 +289,50 @@ class NoneditableClaimFallbackTests(SimpleTestCase):
 
         self.assertEqual(result["cleaned_claim"], "stole P58 million")
         self.assertEqual(result["_material_anchor_tokens"], [])
+        self.assertTrue(result["_assertion_complete"])
+
+    @patch("api.services.call_llm_with_fallback")
+    def test_topic_fragment_cannot_be_marked_complete_without_predicate(
+        self,
+        mock_llm,
+    ):
+        mock_llm.return_value = json.dumps({
+            "cleaned_claim": "PBBM subway underground",
+            "search_query": "PBBM subway underground",
+            "search_queries": ["PBBM subway underground"],
+            "article_stance": "NEUTRAL",
+            "assertion_complete": True,
+        })
+
+        result = extract_source_bounded_noneditable_claim(
+            "PBBM subway underground",
+            source_kind="IMAGE",
+        )
+
+        self.assertEqual(result["cleaned_claim"], "PBBM subway underground")
+        self.assertEqual(result["_material_anchor_tokens"], ["pbbm"])
+        self.assertFalse(result["_assertion_complete"])
+
+    @patch("api.services.call_llm_with_fallback")
+    def test_fallback_rejects_translated_or_invented_predicate(
+        self,
+        mock_llm,
+    ):
+        mock_llm.return_value = json.dumps({
+            "cleaned_claim": "PBBM built subway",
+            "search_query": "PBBM subway",
+            "search_queries": ["PBBM subway"],
+            "article_stance": "NEUTRAL",
+            "assertion_complete": True,
+        })
+
+        result = extract_source_bounded_noneditable_claim(
+            "PBBM gumawa subway",
+            source_kind="IMAGE",
+        )
+
+        self.assertEqual(result["cleaned_claim"], "INSUFFICIENT_CONTEXT")
+        self.assertEqual(result["search_queries"], [])
 
     def test_fallback_rejects_unsupported_source_kind(self):
         with self.assertRaises(ValueError):
