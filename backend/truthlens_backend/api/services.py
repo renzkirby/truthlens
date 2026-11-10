@@ -73,6 +73,7 @@ DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_GEMINI_REASONING_MODEL = DEFAULT_GEMINI_MODEL
 DEFAULT_GEMINI_ROUTINE_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
+DEFAULT_GROQ_VISION_MODEL = "qwen/qwen3.8-27b"
 
 # Bound verdict-sensitive Gemini stages so an overridden slower reasoning model
 # cannot consume the entire interactive verification window before fallbacks run.
@@ -2452,7 +2453,10 @@ def generate_deepfake_explanation(base64_string, fake_category):
                     ],
                 },
             ],
-            model="meta-llama/llama-4-scout-17b-16e-instruct",  # Updated Groq Model!
+            model=_model_from_env(
+                "GROQ_VISION_MODEL",
+                DEFAULT_GROQ_VISION_MODEL,
+            ),
             temperature=0.3,
             max_tokens=150,
         )
