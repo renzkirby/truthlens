@@ -167,3 +167,94 @@
   --tl-color-status-critical-border: #fecaca;
   --tl-color-status-critical-text: #991b1b;
 }
+
+
+/* Theme compatibility aliases used by older TruthLens surfaces. */
+:root {
+  --tl-color-bg-elevated: #ffffff;
+  --tl-color-border-soft: rgba(15, 23, 42, 0.08);
+  --tl-color-brand-soft: #eef2ff;
+  --tl-color-brand-fill: #4f46e5;
+  --tl-color-brand-fill-hover: #4338ca;
+
+  --background: var(--tl-color-bg-surface);
+  --bg-primary: var(--tl-color-bg-app);
+  --primary-brand: var(--tl-color-brand-primary);
+  --primary-dark: var(--tl-color-brand-dark);
+  --brand-soft: var(--tl-color-brand-soft);
+  --tl-color-brand: var(--tl-color-brand-primary);
+  --tl-surface: var(--tl-color-bg-surface);
+  --tl-color-text-primary: var(--tl-color-text-main);
+}
+
+/* Dark palette. Tokenized components inherit these values automatically. */
+html[data-theme="dark"] {
+  --tl-color-brand-primary: #818cf8;
+  --tl-color-brand-primary-hover: #a5b4fc;
+  --tl-color-brand-dark: #0b1020;
+  --tl-color-brand-soft: #1f2332;
+  --tl-color-brand-fill: #4f46e5;
+  --tl-color-brand-fill-hover: #4338ca;
+
+  --tl-color-bg-app: #0f1115;
+  --tl-color-bg-surface: #18191c;
+  --tl-color-bg-subtle: #1f2126;
+  --tl-color-bg-elevated: #171a20;
+
+  --tl-color-text-main: #f5f7fb;
+  --tl-color-text-body: #d2d7e0;
+  --tl-color-text-muted: #9aa4b2;
+  --tl-color-text-inverse: #ffffff;
+
+  --tl-color-border-default: #3a3f47;
+  --tl-color-border-light: #282c32;
+  --tl-color-border-soft: rgba(255, 255, 255, 0.055);
+
+  --tl-color-fact-border: #18c58c;
+  --tl-color-fact-bg: #103227;
+  --tl-color-fact-text: #7bf1be;
+
+  --tl-color-fake-border: #ff6666;
+  --tl-color-fake-bg: #3a1515;
+  --tl-color-fake-text: #ffb7b7;
+
+  --tl-color-misleading-border: #f6b24e;
+  --tl-color-misleading-bg: #40260f;
+  --tl-color-misleading-text: #ffd485;
+
+  --tl-color-unverified-border: #ebc454;
+  --tl-color-unverified-bg: #3a2d10;
+  --tl-color-unverified-text: #ffe47b;
+
+  --tl-color-outofscope-border: #64748b;
+  --tl-color-outofscope-bg: #25282e;
+  --tl-color-outofscope-text: #cbd5e1;
+
+  --tl-color-satire-border: #a78bfa;
+  --tl-color-satire-bg: #2b1c48;
+  --tl-color-satire-text: #d8c9ff;
+
+  --tl-color-status-neutral-bg: #25282e;
+  --tl-color-status-neutral-border: #454b55;
+  --tl-color-status-neutral-text: #d2d7e0;
+
+  --tl-color-status-info-bg: #1f2332;
+  --tl-color-status-info-border: #444b7a;
+  --tl-color-status-info-text: #c7d2fe;
+
+  --tl-color-status-success-bg: #102d29;
+  --tl-color-status-success-border: #216e64;
+  --tl-color-status-success-text: #99f6e4;
+
+  --tl-color-status-warning-bg: #352713;
+  --tl-color-status-warning-border: #785b22;
+  --tl-color-status-warning-text: #fde68a;
+
+  --tl-color-status-critical-bg: #351718;
+  --tl-color-status-critical-border: #7f3033;
+  --tl-color-status-critical-text: #fecaca;
+
+  --tl-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.26);
+  --tl-shadow-md: 0 8px 24px rgba(0, 0, 0, 0.24);
+  --tl-shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.4);
+}

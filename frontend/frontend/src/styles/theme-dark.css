@@ -1,0 +1,345 @@
+/*
+ * Dark-theme compatibility layer.
+ *
+ * Newer TruthLens surfaces inherit semantic tokens from tokens.css. This file
+ * only adapts legacy areas that still contain fixed light colors. It does not
+ * alter uploaded images, videos, screenshots, avatars, or partner logos.
+ */
+
+html[data-theme="dark"] body,
+html[data-theme="dark"] #root {
+   background: var(--tl-color-bg-app);
+   color: var(--tl-color-text-main);
+}
+
+html[data-theme="dark"] :is(
+   .tl-button--primary,
+   .verify-header-icon,
+   .verify-tab-btn.active,
+   .feed-filter-count,
+   .tl-notifications-page__filter.active,
+   .thread-detail-evidence-cta,
+   .thread-detail-comment-submit,
+   .account-status__action--primary
+) {
+   background: var(--tl-color-brand-fill);
+   border-color: var(--tl-color-brand-fill);
+   color: #ffffff;
+}
+
+html[data-theme="dark"] :is(
+   .tl-button--primary:not(:disabled):hover,
+   .thread-detail-evidence-cta:hover,
+   .account-status__action--primary:hover
+) {
+   background: var(--tl-color-brand-fill-hover);
+   border-color: var(--tl-color-brand-fill-hover);
+}
+
+/* Large reading surfaces use soft separation rather than strong outlines. */
+html[data-theme="dark"] :is(
+   .feed-card,
+   .settings-content,
+   .user-profile__profile-card,
+   .tl-notifications-list,
+   .partner-directory-card,
+   .management-pipeline-metrics
+) {
+   border-color: var(--tl-color-border-soft);
+}
+
+/* Thread detail: preserve the existing layout while replacing fixed light
+   surfaces and text with semantic dark equivalents. */
+html[data-theme="dark"] .thread-detail-page {
+   color: var(--tl-color-text-main);
+   background: var(--tl-color-bg-app);
+}
+
+html[data-theme="dark"] .thread-detail-topbar {
+   border-bottom-color: var(--tl-color-border-soft);
+   background: color-mix(in srgb, var(--tl-color-bg-elevated) 96%, transparent);
+}
+
+html[data-theme="dark"] .thread-detail-page :is(
+   .thread-detail-breadcrumb-left,
+   .thread-detail-metadata,
+   .thread-detail-counts,
+   .thread-detail-assessment-copy,
+   .thread-detail-assessment-source time,
+   .thread-detail-comment-header time,
+   .thread-detail-reply-context,
+   .thread-detail-inline-reply-heading,
+   .thread-detail-post-author small
+) {
+   color: var(--tl-color-text-muted);
+}
+
+html[data-theme="dark"] .thread-detail-page :is(
+   .thread-detail-breadcrumb-left strong,
+   .thread-detail-assessment-kicker,
+   .thread-detail-assessment-metric strong,
+   .thread-detail-post-author,
+   .thread-detail-hero h1,
+   .thread-detail-comment-text
+) {
+   color: var(--tl-color-text-main);
+}
+
+html[data-theme="dark"] .thread-detail-page :is(
+   .thread-detail-status,
+   .thread-detail-verdict,
+   .thread-detail-post-kind,
+   .thread-detail-tabs,
+   .thread-detail-composer textarea,
+   .thread-detail-inline-reply textarea,
+   .thread-detail-inline-edit textarea,
+   .thread-detail-field input,
+   .thread-detail-field select,
+   .thread-detail-field textarea,
+   .thread-detail-evidence-form input,
+   .thread-detail-evidence-form select,
+   .thread-detail-evidence-form textarea
+) {
+   border-color: var(--tl-color-border-default);
+   color: var(--tl-color-text-body);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .thread-detail-page :is(
+   .thread-detail-assessment--classic,
+   .thread-detail-post-card--classic,
+   .thread-detail-discussion--classic,
+   .thread-detail-community-context-strip,
+   .thread-detail-inline-reply
+) {
+   border-color: var(--tl-color-border-soft);
+   background: var(--tl-color-bg-surface);
+   box-shadow: var(--tl-shadow-sm);
+}
+
+html[data-theme="dark"] .thread-detail-page :is(
+   .thread-detail-post-header,
+   .thread-detail-discussion-focus,
+   .thread-detail-post-media,
+   .thread-detail-media,
+   .thread-detail-comment-content,
+   .thread-detail-comment--reply .thread-detail-comment-content
+) {
+   border-color: var(--tl-color-border-light);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .thread-detail-page .thread-detail-tabs button[aria-selected="true"] {
+   color: var(--tl-color-brand-primary);
+   background: var(--tl-color-bg-surface);
+}
+
+html[data-theme="dark"] .thread-detail-page .thread-detail-hero {
+   border-bottom-color: color-mix(in srgb, var(--tl-color-fact-border) 30%, transparent);
+   background: color-mix(in srgb, var(--tl-color-fact-bg) 58%, var(--tl-color-bg-app));
+}
+
+html[data-theme="dark"] .thread-detail-page .thread-detail-hero--fake {
+   border-bottom-color: color-mix(in srgb, var(--tl-color-fake-border) 30%, transparent);
+   background: color-mix(in srgb, var(--tl-color-fake-bg) 58%, var(--tl-color-bg-app));
+}
+
+html[data-theme="dark"] .thread-detail-page .thread-detail-hero--misleading {
+   border-bottom-color: color-mix(in srgb, var(--tl-color-misleading-border) 30%, transparent);
+   background: color-mix(in srgb, var(--tl-color-misleading-bg) 58%, var(--tl-color-bg-app));
+}
+
+html[data-theme="dark"] .thread-detail-page .thread-detail-hero--satire {
+   border-bottom-color: color-mix(in srgb, var(--tl-color-satire-border) 30%, transparent);
+   background: color-mix(in srgb, var(--tl-color-satire-bg) 58%, var(--tl-color-bg-app));
+}
+
+html[data-theme="dark"] .thread-detail-page .thread-detail-hero--unverified {
+   border-bottom-color: color-mix(in srgb, var(--tl-color-unverified-border) 30%, transparent);
+   background: color-mix(in srgb, var(--tl-color-unverified-bg) 58%, var(--tl-color-bg-app));
+}
+
+html[data-theme="dark"] .thread-detail-page .thread-detail-verdict--fact {
+   color: var(--tl-color-fact-text);
+   border-color: color-mix(in srgb, var(--tl-color-fact-border) 55%, transparent);
+   background: var(--tl-color-fact-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .thread-detail-verdict--fake {
+   color: var(--tl-color-fake-text);
+   border-color: color-mix(in srgb, var(--tl-color-fake-border) 55%, transparent);
+   background: var(--tl-color-fake-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .thread-detail-verdict--misleading {
+   color: var(--tl-color-misleading-text);
+   border-color: color-mix(in srgb, var(--tl-color-misleading-border) 55%, transparent);
+   background: var(--tl-color-misleading-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .thread-detail-verdict--satire {
+   color: var(--tl-color-satire-text);
+   border-color: color-mix(in srgb, var(--tl-color-satire-border) 55%, transparent);
+   background: var(--tl-color-satire-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .thread-detail-verdict--unverified {
+   color: var(--tl-color-unverified-text);
+   border-color: color-mix(in srgb, var(--tl-color-unverified-border) 55%, transparent);
+   background: var(--tl-color-unverified-bg);
+}
+
+/* Evidence cards and source previews. */
+html[data-theme="dark"] .thread-detail-page .evidence-card {
+   border-color: var(--tl-color-border-soft);
+   background: linear-gradient(
+      180deg,
+      var(--tl-color-bg-surface) 0%,
+      color-mix(in srgb, var(--tl-color-bg-subtle) 78%, var(--tl-color-bg-surface)) 100%
+   );
+   box-shadow: var(--tl-shadow-sm);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card :is(
+   .evidence-card-contributor,
+   .evidence-card-contributor strong,
+   .evidence-card-explanation
+) {
+   color: var(--tl-color-text-main);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card :is(
+   .evidence-card-header-actions button,
+   .evidence-card-edit button
+) {
+   border-color: var(--tl-color-border-default);
+   color: var(--tl-color-text-body);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .evidence-source-preview {
+   border-color: var(--tl-color-border-soft);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .evidence-source-preview__mark,
+html[data-theme="dark"] .evidence-source-preview__open,
+html[data-theme="dark"] .evidence-source-preview--workspace {
+   background: var(--tl-color-bg-surface);
+}
+
+html[data-theme="dark"] .evidence-source-preview :is(
+   .evidence-source-preview__identity,
+   .evidence-source-preview__site,
+   .evidence-source-preview__path,
+   .evidence-source-preview__state
+) {
+   color: var(--tl-color-text-muted);
+}
+
+html[data-theme="dark"] .evidence-source-preview :is(
+   .evidence-source-preview__body strong,
+   .evidence-source-preview__body p
+) {
+   color: var(--tl-color-text-main);
+}
+
+/* Dashboard/User Hub legacy palette. */
+html[data-theme="dark"] .hub-page-layout {
+   color: var(--tl-color-text-main);
+   background: var(--tl-color-bg-app);
+}
+
+html[data-theme="dark"] .hub-page-layout :is(
+   .hub-overview,
+   .box-panel,
+   .hub-impact-card
+) {
+   border-color: var(--tl-color-border-soft);
+   background: var(--tl-color-bg-surface);
+   box-shadow: var(--tl-shadow-sm);
+}
+
+html[data-theme="dark"] .hub-page-layout :is(
+   .hub-title,
+   .hub-impact-value,
+   .section-title
+) {
+   color: var(--tl-color-text-main);
+}
+
+html[data-theme="dark"] .hub-page-layout :is(
+   .hub-subtitle,
+   .hub-confidence-label,
+   .hub-section-description,
+   .hub-impact-description,
+   .library-description
+) {
+   color: var(--tl-color-text-muted);
+}
+
+html[data-theme="dark"] .hub-page-layout :is(
+   .hub-action-secondary,
+   .library-tabs
+) {
+   border-color: var(--tl-color-border-default);
+   color: var(--tl-color-text-body);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-progress-bar {
+   background: var(--tl-color-border-default);
+}
+
+/* Toasts preserve status hue without flashing large light surfaces. */
+html[data-theme="dark"] .toast {
+   color: var(--tl-color-text-main);
+   background: var(--tl-color-bg-elevated);
+   box-shadow: var(--tl-shadow-lg);
+}
+
+html[data-theme="dark"] .toast-success { background: var(--tl-color-status-success-bg); }
+html[data-theme="dark"] .toast-error { background: var(--tl-color-status-critical-bg); }
+html[data-theme="dark"] .toast-info { background: var(--tl-color-status-info-bg); }
+html[data-theme="dark"] .toast-warning { background: var(--tl-color-status-warning-bg); }
+html[data-theme="dark"] .toast-title { color: var(--tl-color-text-main); }
+html[data-theme="dark"] .toast-message { color: var(--tl-color-text-body); }
+html[data-theme="dark"] .toast-close { color: var(--tl-color-text-muted); }
+html[data-theme="dark"] .toast-close:hover {
+   color: var(--tl-color-text-main);
+   background: color-mix(in srgb, var(--tl-color-bg-subtle) 82%, transparent);
+}
+
+/* Auth and account shells use legacy aliases; preserve the branded left panel
+   and darken only the form/account surface. */
+html[data-theme="dark"] .auth-shell,
+html[data-theme="dark"] .auth-form-panel,
+html[data-theme="dark"] .account-surface,
+html[data-theme="dark"] .account-action-shell {
+   background: var(--tl-color-bg-app);
+   color: var(--tl-color-text-main);
+}
+
+html[data-theme="dark"] .auth-form-panel :is(input, textarea, select),
+html[data-theme="dark"] .account-surface :is(input, textarea, select) {
+   color: var(--tl-color-text-main);
+}
+
+/* Keep partner-logo canvases light. Transparent organization marks are often
+   authored for white backgrounds and must not be inverted automatically. */
+html[data-theme="dark"] .partner-logo img,
+html[data-theme="dark"] .partner-directory-card__logo,
+html[data-theme="dark"] .partner-profile__logo {
+   color-scheme: light;
+}
+
+/* Soft dark surfaces for popovers and menus. */
+html[data-theme="dark"] :is(
+   .feed-popup-menu,
+   .tl-global-search__disclosure,
+   .tl-notification-popover__panel
+) {
+   border-color: var(--tl-color-border-soft);
+   background: var(--tl-color-bg-elevated);
+   box-shadow: var(--tl-shadow-lg);
+}
