@@ -185,6 +185,7 @@
   --tl-color-brand: var(--tl-color-brand-primary);
   --tl-surface: var(--tl-color-bg-surface);
   --tl-color-text-primary: var(--tl-color-text-main);
+  --tl-color-text-secondary: var(--tl-color-text-muted);
 }
 
 /* Dark palette. Tokenized components inherit these values automatically. */

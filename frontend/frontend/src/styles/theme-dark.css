@@ -20,7 +20,18 @@ html[data-theme="dark"] :is(
    .tl-notifications-page__filter.active,
    .thread-detail-evidence-cta,
    .thread-detail-comment-submit,
-   .account-status__action--primary
+   .account-status__action--primary,
+   .partners-state button,
+   .create-thread-submit,
+   .create-thread-cancel,
+   .create-thread-existing-link,
+   .verify-submit-btn,
+   .result-action--primary,
+   .user-profile__primary-button,
+   .management-shell__nav-link.active,
+   .bottom-tab__verify-icon,
+   .public-site-header__primary-action,
+   .account-remember input:checked + .account-remember__control
 ) {
    background: var(--tl-color-brand-fill);
    border-color: var(--tl-color-brand-fill);
@@ -30,7 +41,12 @@ html[data-theme="dark"] :is(
 html[data-theme="dark"] :is(
    .tl-button--primary:not(:disabled):hover,
    .thread-detail-evidence-cta:hover,
-   .account-status__action--primary:hover
+   .account-status__action--primary:hover,
+   .partners-state button:hover,
+   .verify-submit-btn:hover:not(:disabled),
+   .result-action--primary:hover,
+   .user-profile__primary-button:hover:not(:disabled),
+   .public-site-header__primary-action:hover
 ) {
    background: var(--tl-color-brand-fill-hover);
    border-color: var(--tl-color-brand-fill-hover);
@@ -415,4 +431,16 @@ html[data-theme="dark"] .org-scope-error {
    on a light canvas; it is illustrative content, not an unthemed app panel. */
 html[data-theme="dark"] .landing-page .extension-window {
    color-scheme: light;
+}
+
+
+/* Legacy uses of brand-dark as foreground text are too dark on dark surfaces. */
+html[data-theme="dark"] :is(
+   .user-profile__avatar,
+   .user-profile__trust-compact-value span,
+   .user-profile__contribution-type.is-evidence,
+   .partner-profile__role,
+   .public-site-header__skip-link
+) {
+   color: var(--tl-color-brand-primary);
 }
