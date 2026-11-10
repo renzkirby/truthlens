@@ -8,6 +8,7 @@ from .models import (
     FactualCorrectionRequest,
     ModerationCase,
     Organization,
+    OrganizationGovernanceSupportingBasis,
     OrganizationInvitation,
     OrganizationMembership,
     VerificationAssignment,
@@ -66,6 +67,19 @@ PARTNERSHIP_ENDING_GROUND_CHOICES = (
     ("REPEATED_SYSTEMIC_VIOLATIONS", "Repeated or Systemic Serious Violations"),
     ("FAILED_REMEDIATION", "Failed Remediation"),
 )
+PARTNERSHIP_REINSTATEMENT_BASIS_CHOICES = (
+    ("REMEDIATION_COMPLETED", "Required Remediation Completed"),
+    ("UNDERLYING_RISK_RESOLVED", "Underlying Risk Resolved"),
+    (
+        "INVESTIGATION_DID_NOT_JUSTIFY_CONTINUED_SUSPENSION",
+        "Investigation Did Not Justify Continued Suspension",
+    ),
+    ("OPERATIONAL_REQUIREMENTS_RESTORED", "Operational Requirements Restored"),
+    (
+        "CONTINUED_RESTRICTION_NO_LONGER_PROPORTIONATE",
+        "Continued Restriction No Longer Proportionate",
+    ),
+)
 
 _PARTNERSHIP_FACTORS = {value for value, _label in PARTNERSHIP_FACTOR_CHOICES}
 _PARTNERSHIP_SEVERITIES = {value for value, _label in PARTNERSHIP_SEVERITY_CHOICES}
@@ -77,6 +91,17 @@ _PARTNERSHIP_ENDING_TYPES = {
 }
 _PARTNERSHIP_ENDING_GROUNDS = {
     value for value, _label in PARTNERSHIP_ENDING_GROUND_CHOICES
+}
+_PARTNERSHIP_REINSTATEMENT_BASES = {
+    value for value, _label in PARTNERSHIP_REINSTATEMENT_BASIS_CHOICES
+}
+_PROHIBITED_RATIONALE_PLACEHOLDERS = {
+    "policy violation",
+    "bad organization",
+    "admin decision",
+    "failed verification",
+    "failed standards",
+    "other issues",
 }
 _ADMINISTRATIVE_ENDING_GROUNDS = {
     "PERMANENT_LOSS_ELIGIBILITY",
@@ -124,6 +149,62 @@ def _normalize_optional_text(value):
     return str(value or "").strip()
 
 
+def _normalize_rationale(value, *, field_name):
+    rationale = _normalize_required_text(value, field_name=field_name)
+    normalized_placeholder = " ".join(rationale.lower().rstrip(".:;").split())
+    if len(rationale) < 20 or normalized_placeholder in _PROHIBITED_RATIONALE_PLACEHOLDERS:
+        raise OrganizationPartnershipLifecycleConflict(
+            f"{field_name} must provide a specific factual explanation."
+        )
+    return rationale
+
+
+def _normalize_supporting_references(references):
+    if references is None:
+        return []
+    if not isinstance(references, (list, tuple)):
+        raise OrganizationPartnershipLifecycleConflict(
+            "Supporting references must be provided as a list."
+        )
+    if len(references) > 10:
+        raise OrganizationPartnershipLifecycleConflict(
+            "No more than 10 supporting references may be recorded."
+        )
+
+    normalized = []
+    for reference in references:
+        value = str(reference or "").strip()
+        if not value:
+            continue
+        if len(value) > 500:
+            raise OrganizationPartnershipLifecycleConflict(
+                "Each supporting reference must be 500 characters or fewer."
+            )
+        if value not in normalized:
+            normalized.append(value)
+    return normalized
+
+
+def _normalize_other_factor_explanation(*, factors, explanation):
+    explanation = _normalize_optional_text(explanation)
+    if "OTHER" in factors:
+        if not explanation:
+            raise OrganizationPartnershipLifecycleConflict(
+                "Explain the underlying standard and why the established factors do not fit."
+            )
+        if len(explanation) < 20:
+            raise OrganizationPartnershipLifecycleConflict(
+                "Other-factor explanation must be specific enough to understand the standard used."
+            )
+        return explanation
+
+    if explanation:
+        raise OrganizationPartnershipLifecycleConflict(
+            "Other-factor explanation is only valid when Other is selected."
+        )
+    return ""
+
+
 def _normalize_factors(factors, *, required):
     if factors is None:
         factors = []
@@ -154,9 +235,17 @@ def _validate_suspension_governance_metadata(
     suspension_type,
     factors,
     severity,
-    reason,
-    policy_basis="",
-    required_remediation="",
+    rationale,
+    policy_basis,
+    supporting_basis,
+    supporting_references=None,
+    other_factor_explanation="",
+    remediation_problem="",
+    remediation_required_action="",
+    remediation_evidence_required="",
+    remediation_deadline=None,
+    remediation_review_method="",
+    remediation_failure_consequence="",
     review_date=None,
 ):
     suspension_type = str(suspension_type or "").strip()
@@ -172,12 +261,72 @@ def _validate_suspension_governance_metadata(
         )
 
     factors = _normalize_factors(factors, required=True)
-    reason = _normalize_required_text(reason, field_name="Suspension reason")
-    policy_basis = _normalize_optional_text(policy_basis)
-    required_remediation = _normalize_optional_text(required_remediation)
-    if suspension_type == "REMEDIAL" and not required_remediation:
+    rationale = _normalize_rationale(
+        rationale,
+        field_name="Suspension rationale",
+    )
+    policy_basis = _normalize_required_text(
+        policy_basis,
+        field_name="Policy basis",
+    )
+    supporting_basis = _normalize_required_text(
+        supporting_basis,
+        field_name="Internal supporting basis",
+    )
+    supporting_references = _normalize_supporting_references(
+        supporting_references
+    )
+    other_factor_explanation = _normalize_other_factor_explanation(
+        factors=factors,
+        explanation=other_factor_explanation,
+    )
+
+    remediation = None
+    remediation_values = {
+        "problem": _normalize_optional_text(remediation_problem),
+        "required_action": _normalize_optional_text(remediation_required_action),
+        "evidence_required": _normalize_optional_text(remediation_evidence_required),
+        "deadline": (
+            remediation_deadline.isoformat()
+            if remediation_deadline is not None
+            else None
+        ),
+        "review_method": _normalize_optional_text(remediation_review_method),
+        "failure_consequence": _normalize_optional_text(
+            remediation_failure_consequence
+        ),
+    }
+    has_remediation_values = any(
+        value for value in remediation_values.values()
+    )
+
+    if suspension_type == "REMEDIAL":
+        missing = [
+            label
+            for key, label in (
+                ("problem", "Remediation problem"),
+                ("required_action", "Required remediation action"),
+                ("evidence_required", "Evidence of compliance"),
+                ("review_method", "Remediation review method"),
+                ("failure_consequence", "Consequence of remediation failure"),
+            )
+            if not remediation_values[key]
+        ]
+        if remediation_values["deadline"] is None:
+            missing.append("Remediation deadline")
+        if missing:
+            raise OrganizationPartnershipLifecycleConflict(
+                f"{', '.join(missing)} must be recorded for a remedial suspension."
+            )
+        remediation = remediation_values
+    elif has_remediation_values:
         raise OrganizationPartnershipLifecycleConflict(
-            "Required remediation must be recorded for a remedial suspension."
+            "Structured remediation fields are only valid for a remedial suspension."
+        )
+
+    if suspension_type == "PRECAUTIONARY" and review_date is None:
+        raise OrganizationPartnershipLifecycleConflict(
+            "A review date is required for a precautionary suspension."
         )
 
     return {
@@ -185,9 +334,10 @@ def _validate_suspension_governance_metadata(
         "factors": factors,
         "severity": severity,
         "policy_basis": policy_basis,
-        "required_remediation": required_remediation,
+        "other_factor_explanation": other_factor_explanation,
+        "remediation": remediation,
         "review_date": review_date.isoformat() if review_date is not None else None,
-    }, reason
+    }, rationale, supporting_basis, supporting_references
 
 
 def _validate_partnership_ending_governance_metadata(
@@ -196,8 +346,11 @@ def _validate_partnership_ending_governance_metadata(
     ground,
     factors,
     severity,
-    reason,
-    policy_basis="",
+    rationale,
+    policy_basis,
+    supporting_basis,
+    supporting_references=None,
+    other_factor_explanation="",
 ):
     ending_type = str(ending_type or "").strip()
     if ending_type not in _PARTNERSHIP_ENDING_TYPES:
@@ -241,8 +394,25 @@ def _validate_partnership_ending_governance_metadata(
                 "Termination for cause requires High or Critical severity."
             )
 
-    reason = _normalize_required_text(reason, field_name="Partnership ending reason")
-    policy_basis = _normalize_optional_text(policy_basis)
+    rationale = _normalize_rationale(
+        rationale,
+        field_name="Partnership-ending rationale",
+    )
+    policy_basis = _normalize_required_text(
+        policy_basis,
+        field_name="Policy basis",
+    )
+    supporting_basis = _normalize_required_text(
+        supporting_basis,
+        field_name="Internal supporting basis",
+    )
+    supporting_references = _normalize_supporting_references(
+        supporting_references
+    )
+    other_factor_explanation = _normalize_other_factor_explanation(
+        factors=factors,
+        explanation=other_factor_explanation,
+    )
 
     return {
         "ending_type": ending_type,
@@ -250,8 +420,84 @@ def _validate_partnership_ending_governance_metadata(
         "factors": factors,
         "severity": severity or None,
         "policy_basis": policy_basis,
-    }, reason
+        "other_factor_explanation": other_factor_explanation,
+    }, rationale, supporting_basis, supporting_references
 
+
+def _validate_reinstatement_governance_metadata(
+    *,
+    basis,
+    rationale,
+    supporting_basis,
+    supporting_references=None,
+    completed_remediation="",
+    continuing_conditions="",
+    monitoring_end_date=None,
+    monitoring_success_criteria="",
+    monitoring_recurrence_consequence="",
+):
+    basis = str(basis or "").strip()
+    if basis not in _PARTNERSHIP_REINSTATEMENT_BASES:
+        raise OrganizationPartnershipLifecycleConflict(
+            "Select a valid reinstatement basis."
+        )
+
+    rationale = _normalize_rationale(
+        rationale,
+        field_name="Reinstatement rationale",
+    )
+    supporting_basis = _normalize_required_text(
+        supporting_basis,
+        field_name="Internal supporting basis",
+    )
+    supporting_references = _normalize_supporting_references(
+        supporting_references
+    )
+    completed_remediation = _normalize_optional_text(completed_remediation)
+    if basis == "REMEDIATION_COMPLETED" and not completed_remediation:
+        raise OrganizationPartnershipLifecycleConflict(
+            "Completed remediation must be recorded for this reinstatement basis."
+        )
+
+    continuing_conditions = _normalize_optional_text(continuing_conditions)
+    monitoring_success_criteria = _normalize_optional_text(
+        monitoring_success_criteria
+    )
+    monitoring_recurrence_consequence = _normalize_optional_text(
+        monitoring_recurrence_consequence
+    )
+    monitoring_values = (
+        monitoring_end_date,
+        monitoring_success_criteria,
+        monitoring_recurrence_consequence,
+    )
+    if continuing_conditions:
+        if (
+            monitoring_end_date is None
+            or not monitoring_success_criteria
+            or not monitoring_recurrence_consequence
+        ):
+            raise OrganizationPartnershipLifecycleConflict(
+                "Monitoring end date, success criteria, and recurrence consequence "
+                "are required when continuing conditions apply."
+            )
+    elif any(monitoring_values):
+        raise OrganizationPartnershipLifecycleConflict(
+            "Monitoring details require continuing conditions."
+        )
+
+    return {
+        "basis": basis,
+        "completed_remediation": completed_remediation,
+        "continuing_conditions": continuing_conditions,
+        "monitoring_end_date": (
+            monitoring_end_date.isoformat()
+            if monitoring_end_date is not None
+            else None
+        ),
+        "monitoring_success_criteria": monitoring_success_criteria,
+        "monitoring_recurrence_consequence": monitoring_recurrence_consequence,
+    }, rationale, supporting_basis, supporting_references
 
 def _require_platform_management_authority(actor):
     if not (
@@ -292,6 +538,21 @@ def _record_platform_event(
         reason_code=reason_code,
         notes=notes,
         context=context or {},
+    )
+
+
+def _record_governance_supporting_basis(
+    *,
+    governance_event,
+    actor,
+    summary,
+    references,
+):
+    return OrganizationGovernanceSupportingBasis.objects.create(
+        governance_event=governance_event,
+        summary=summary,
+        references=references,
+        created_by=actor,
     )
 
 
@@ -405,11 +666,7 @@ def get_partner_organization_lifecycle_projection(organization):
         organization.partner_status == Organization.PartnerStatus.ACTIVE
     )
     can_reinstate_partnership = (
-        organization.partner_status
-        in {
-            Organization.PartnerStatus.SUSPENDED,
-            Organization.PartnerStatus.FORMER,
-        }
+        organization.partner_status == Organization.PartnerStatus.SUSPENDED
         and organization.verification_status == Organization.VerificationStatus.VERIFIED
     )
 
@@ -589,19 +846,40 @@ def suspend_partner_organization_partnership(
     suspension_type,
     factors,
     severity,
-    reason,
-    policy_basis="",
-    required_remediation="",
+    rationale,
+    policy_basis,
+    supporting_basis,
+    supporting_references=None,
+    other_factor_explanation="",
+    remediation_problem="",
+    remediation_required_action="",
+    remediation_evidence_required="",
+    remediation_deadline=None,
+    remediation_review_method="",
+    remediation_failure_consequence="",
     review_date=None,
 ):
     _require_platform_management_authority(actor)
-    governance_metadata, reason = _validate_suspension_governance_metadata(
+    (
+        governance_metadata,
+        rationale,
+        supporting_basis,
+        supporting_references,
+    ) = _validate_suspension_governance_metadata(
         suspension_type=suspension_type,
         factors=factors,
         severity=severity,
-        reason=reason,
+        rationale=rationale,
         policy_basis=policy_basis,
-        required_remediation=required_remediation,
+        supporting_basis=supporting_basis,
+        supporting_references=supporting_references,
+        other_factor_explanation=other_factor_explanation,
+        remediation_problem=remediation_problem,
+        remediation_required_action=remediation_required_action,
+        remediation_evidence_required=remediation_evidence_required,
+        remediation_deadline=remediation_deadline,
+        remediation_review_method=remediation_review_method,
+        remediation_failure_consequence=remediation_failure_consequence,
         review_date=review_date,
     )
     organization = Organization.objects.select_for_update(of=("self",)).get(
@@ -615,43 +893,95 @@ def suspend_partner_organization_partnership(
     previous_state = _organization_status_state(organization)
     organization.partner_status = Organization.PartnerStatus.SUSPENDED
     organization.save(update_fields=["partner_status", "updated_at"])
-    _record_organization_transition(
+    event = _record_organization_transition(
         organization=organization,
         actor=actor,
         previous_state=previous_state,
         reason_code=PARTNERSHIP_SUSPENDED_REASON,
-        notes=reason,
+        notes=rationale,
         context={"governance": governance_metadata},
+    )
+    _record_governance_supporting_basis(
+        governance_event=event,
+        actor=actor,
+        summary=supporting_basis,
+        references=supporting_references,
     )
     return organization
 
 
 @transaction.atomic
-def reinstate_partner_organization_partnership(*, organization_id, actor):
+def reinstate_partner_organization_partnership(
+    *,
+    organization_id,
+    actor,
+    basis,
+    rationale,
+    supporting_basis,
+    supporting_references=None,
+    completed_remediation="",
+    continuing_conditions="",
+    monitoring_end_date=None,
+    monitoring_success_criteria="",
+    monitoring_recurrence_consequence="",
+):
     _require_platform_management_authority(actor)
+    (
+        governance_metadata,
+        rationale,
+        supporting_basis,
+        supporting_references,
+    ) = _validate_reinstatement_governance_metadata(
+        basis=basis,
+        rationale=rationale,
+        supporting_basis=supporting_basis,
+        supporting_references=supporting_references,
+        completed_remediation=completed_remediation,
+        continuing_conditions=continuing_conditions,
+        monitoring_end_date=monitoring_end_date,
+        monitoring_success_criteria=monitoring_success_criteria,
+        monitoring_recurrence_consequence=monitoring_recurrence_consequence,
+    )
     organization = Organization.objects.select_for_update(of=("self",)).get(
         pk=organization_id
     )
-    if organization.partner_status not in {
-        Organization.PartnerStatus.SUSPENDED,
-        Organization.PartnerStatus.FORMER,
-    }:
+    if organization.partner_status != Organization.PartnerStatus.SUSPENDED:
         raise OrganizationPartnershipLifecycleConflict(
-            "Only suspended or former Partner Organizations can be reinstated."
+            "Only a suspended Partner Organization can be reinstated."
         )
     if organization.verification_status != Organization.VerificationStatus.VERIFIED:
         raise OrganizationPartnershipLifecycleConflict(
             "Verify this organization before reinstating its partnership."
         )
 
+    prior_suspension = (
+        AccountabilityEvent.objects.filter(
+            subject_organization=organization,
+            reason_code=PARTNERSHIP_SUSPENDED_REASON,
+        )
+        .order_by("-created_at", "-id")
+        .first()
+    )
+    governance_metadata["prior_suspension_event_id"] = (
+        str(prior_suspension.pk) if prior_suspension is not None else None
+    )
+
     previous_state = _organization_status_state(organization)
     organization.partner_status = Organization.PartnerStatus.ACTIVE
     organization.save(update_fields=["partner_status", "updated_at"])
-    _record_organization_transition(
+    event = _record_organization_transition(
         organization=organization,
         actor=actor,
         previous_state=previous_state,
         reason_code=PARTNERSHIP_REINSTATED_REASON,
+        notes=rationale,
+        context={"governance": governance_metadata},
+    )
+    _record_governance_supporting_basis(
+        governance_event=event,
+        actor=actor,
+        summary=supporting_basis,
+        references=supporting_references,
     )
     return organization
 
@@ -893,8 +1223,11 @@ def end_partner_organization_partnership(
     ground,
     factors,
     severity,
-    reason,
-    policy_basis="",
+    rationale,
+    policy_basis,
+    supporting_basis,
+    supporting_references=None,
+    other_factor_explanation="",
 ):
     """
     End a current partnership without deleting institutional history.
@@ -909,13 +1242,21 @@ def end_partner_organization_partnership(
     """
 
     _require_platform_management_authority(actor)
-    governance_metadata, reason = _validate_partnership_ending_governance_metadata(
+    (
+        governance_metadata,
+        rationale,
+        supporting_basis,
+        supporting_references,
+    ) = _validate_partnership_ending_governance_metadata(
         ending_type=ending_type,
         ground=ground,
         factors=factors,
         severity=severity,
-        reason=reason,
+        rationale=rationale,
         policy_basis=policy_basis,
+        supporting_basis=supporting_basis,
+        supporting_references=supporting_references,
+        other_factor_explanation=other_factor_explanation,
     )
 
     organization = Organization.objects.select_for_update(of=("self",)).get(
@@ -948,7 +1289,7 @@ def end_partner_organization_partnership(
     organization.partner_status = Organization.PartnerStatus.FORMER
     organization.save(update_fields=["partner_status", "updated_at"])
 
-    _record_platform_event(
+    event = _record_platform_event(
         action_type=AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED,
         resource_type=AccountabilityEvent.ResourceType.ORGANIZATION,
         resource_id=organization.pk,
@@ -966,7 +1307,13 @@ def end_partner_organization_partnership(
             "requeued_investigations": len(replacements),
             "governance": governance_metadata,
         },
-        notes=reason,
+        notes=rationale,
+    )
+    _record_governance_supporting_basis(
+        governance_event=event,
+        actor=actor,
+        summary=supporting_basis,
+        references=supporting_references,
     )
 
     return {
