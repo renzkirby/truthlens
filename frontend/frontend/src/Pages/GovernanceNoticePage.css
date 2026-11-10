@@ -105,6 +105,21 @@
    font-size: var(--tl-text-base);
 }
 
+.tl-governance-policy-link {
+   margin: 0 0 var(--tl-space-4);
+}
+
+.tl-governance-policy-link a {
+   color: var(--tl-color-brand-primary);
+   font-size: var(--tl-text-sm);
+   font-weight: 650;
+   text-decoration: none;
+}
+
+.tl-governance-policy-link a:hover {
+   text-decoration: underline;
+}
+
 .tl-governance-rationale p,
 .tl-governance-member-message,
 .tl-governance-helper,
