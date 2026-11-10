@@ -757,15 +757,21 @@ class ManagementOrganizationGovernanceNoticeRetryView(APIView):
             .values_list("id", flat=True)
         )
 
-        enqueue_governance_notice_delivery(recipient_ids)
+        queue_result = enqueue_governance_notice_delivery(recipient_ids)
+        if not recipient_ids:
+            detail = "No pending or failed governance notice deliveries."
+        elif queue_result["queue_failed"]:
+            detail = (
+                "Some governance notice retries could not be queued. "
+                "Pending rows remain available for another retry."
+            )
+        else:
+            detail = "Governance notice delivery retry queued."
+
         return Response(
             {
-                "queued": len(recipient_ids),
-                "detail": (
-                    "Governance notice delivery retry queued."
-                    if recipient_ids
-                    else "No pending or failed governance notice deliveries."
-                ),
+                **queue_result,
+                "detail": detail,
             },
             status=status.HTTP_200_OK,
         )
