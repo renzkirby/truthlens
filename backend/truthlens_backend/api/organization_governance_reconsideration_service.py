@@ -90,15 +90,19 @@ def _record_reconsideration_event(
     actor,
     reason_code,
     notes="",
+    authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+    authority_organization=None,
+    capability=MANAGE_PARTNER_ORGANIZATION,
 ):
     return record_accountability_event(
         action_type=AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED,
         resource_type=AccountabilityEvent.ResourceType.ORGANIZATION,
         resource_id=reconsideration.organization_id,
-        authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+        authority_scope=authority_scope,
         actor=actor,
+        authority_organization=authority_organization,
         subject_organization=reconsideration.organization,
-        capability=MANAGE_PARTNER_ORGANIZATION,
+        capability=capability,
         previous_state={},
         new_state={
             "reconsideration_status": reconsideration.status,
@@ -221,7 +225,10 @@ def submit_reconsideration(
 
     _record_reconsideration_event(
         reconsideration=reconsideration,
-        actor=None,
+        actor=actor,
+        authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+        authority_organization=reconsideration.organization,
+        capability="MANAGE_ORGANIZATION",
         reason_code="PARTNERSHIP_RECONSIDERATION_SUBMITTED",
         notes="The Organization Admin submitted a suspension reconsideration request.",
     )
