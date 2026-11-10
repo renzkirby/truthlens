@@ -1044,6 +1044,273 @@ function OrganizationGovernanceSection({
    );
 }
 
+
+function GovernanceContactSection({
+   organization,
+   onRefresh,
+   onFeedback,
+}) {
+   const delivery = organization.governance_notice_delivery || {};
+   const fallback = delivery.fallback;
+   const [editing, setEditing] = useState(false);
+   const [email, setEmail] = useState(organization.governance_contact_email || "");
+   const [outOfBandOpen, setOutOfBandOpen] = useState(false);
+   const [outOfBandMethod, setOutOfBandMethod] = useState("");
+   const [outOfBandDetails, setOutOfBandDetails] = useState("");
+   const { mutate, pending, error, reset } = useManagementMutation();
+
+   useEffect(() => {
+      setEmail(organization.governance_contact_email || "");
+   }, [organization.governance_contact_email]);
+
+   const saveContact = async (event) => {
+      event.preventDefault();
+      const result = await mutate(
+         resolveApiEndpoint("MANAGEMENT_ORGANIZATION_GOVERNANCE_CONTACT", organization.id),
+         {
+            method: "PATCH",
+            body: { governance_contact_email: email.trim() },
+         },
+      );
+      if (!result.ok) return;
+
+      setEditing(false);
+      onFeedback(
+         email.trim()
+            ? "Private governance contact updated."
+            : "Private governance contact cleared.",
+      );
+      onRefresh();
+   };
+
+   const recordOutOfBand = async (event) => {
+      event.preventDefault();
+      if (!fallback?.id) return;
+
+      const result = await mutate(
+         resolveApiEndpoint("MANAGEMENT_ORGANIZATION_GOVERNANCE_OUT_OF_BAND", organization.id),
+         {
+            method: "POST",
+            body: {
+               fallback_delivery_id: fallback.id,
+               method: outOfBandMethod.trim(),
+               details: outOfBandDetails.trim(),
+            },
+         },
+      );
+      if (!result.ok) return;
+
+      setOutOfBandOpen(false);
+      setOutOfBandMethod("");
+      setOutOfBandDetails("");
+      onFeedback("Out-of-band governance notice recorded.");
+      onRefresh();
+   };
+
+   const retryDelivery = async () => {
+      const result = await mutate(
+         resolveApiEndpoint("MANAGEMENT_ORGANIZATION_GOVERNANCE_NOTICE_RETRY", organization.id),
+         { method: "POST", body: {} },
+      );
+      if (!result.ok) return;
+      onFeedback(result.data.detail || "Governance notice retry queued.");
+      onRefresh();
+   };
+
+   const fallbackStatusLabels = {
+      PENDING: "Pending",
+      SENT: "Sent",
+      FAILED: "Failed",
+      NOT_DELIVERABLE: "Not deliverable",
+      OUT_OF_BAND_RECORDED: "Out-of-band notice recorded",
+   };
+   const canRecordOutOfBand = fallback
+      && ["NOT_DELIVERABLE", "FAILED"].includes(fallback.status);
+
+   return (
+      <section className="management-detail-section">
+         <div className="management-section__title-row">
+            <div>
+               <h2>Governance contact and notice delivery</h2>
+               <p className="management-section__description">
+                  This private contact is used only when no active Organization Admin can receive a secure governance notice. It is never shown on the public organization profile.
+               </p>
+            </div>
+         </div>
+
+         {delivery.no_active_admin ? (
+            <ManagementFeedback tone="error">
+               No active Organization Admin is currently available to receive a detailed secure governance notice.
+               {organization.governance_contact_email
+                  ? " TruthLens will use the private governance contact for a minimal fallback alert."
+                  : " Configure a private governance contact or record any out-of-band notice after the governance action."}
+            </ManagementFeedback>
+         ) : null}
+
+         {!editing ? (
+            <>
+               <DetailList items={[
+                  {
+                     label: "Private governance contact",
+                     value: organization.governance_contact_email || "Not configured",
+                  },
+                  {
+                     label: "Latest fallback delivery",
+                     value: fallback
+                        ? (fallbackStatusLabels[fallback.status] || fallback.status)
+                        : "Not required",
+                  },
+                  fallback?.contact_email
+                     ? { label: "Fallback address used", value: fallback.contact_email }
+                     : null,
+                  fallback?.recorded_at
+                     ? {
+                        label: "Out-of-band notice recorded",
+                        node: formatManagementDate(fallback.recorded_at),
+                     }
+                     : null,
+               ].filter(Boolean)} />
+               <div className="management-inline-actions">
+                  <Button
+                     variant="secondary"
+                     disabled={pending}
+                     onClick={() => {
+                        reset();
+                        setEditing(true);
+                     }}
+                  >
+                     Edit private governance contact
+                  </Button>
+                  {delivery.retry_available || fallback?.status === "FAILED" || fallback?.status === "PENDING" ? (
+                     <Button
+                        variant="secondary"
+                        disabled={pending}
+                        onClick={retryDelivery}
+                     >
+                        Retry notice delivery
+                     </Button>
+                  ) : null}
+                  {canRecordOutOfBand ? (
+                     <Button
+                        variant="secondary"
+                        disabled={pending}
+                        onClick={() => {
+                           reset();
+                           setOutOfBandOpen(true);
+                        }}
+                     >
+                        Record out-of-band notice
+                     </Button>
+                  ) : null}
+               </div>
+            </>
+         ) : (
+            <form className="management-provision-form" onSubmit={saveContact}>
+               <label className="management-form-field">
+                  <span>Private governance contact email</span>
+                  <Input
+                     type="email"
+                     value={email}
+                     onChange={(event) => {
+                        reset();
+                        setEmail(event.target.value);
+                     }}
+                     invalid={Boolean(error?.fields.governance_contact_email)}
+                     disabled={pending}
+                     autoComplete="email"
+                     placeholder="governance@example.org"
+                  />
+                  <small>
+                     Leave blank only when the organization has no suitable fallback address.
+                  </small>
+                  <FieldError id="governance-contact-email-error">
+                     {error?.fields.governance_contact_email}
+                  </FieldError>
+               </label>
+               <div className="management-inline-actions">
+                  <Button
+                     variant="secondary"
+                     disabled={pending}
+                     onClick={() => {
+                        reset();
+                        setEmail(organization.governance_contact_email || "");
+                        setEditing(false);
+                     }}
+                  >
+                     Cancel
+                  </Button>
+                  <Button type="submit" loading={pending} loadingLabel="Saving…">
+                     Save contact
+                  </Button>
+               </div>
+            </form>
+         )}
+
+         {outOfBandOpen && fallback ? (
+            <form className="management-provision-form" onSubmit={recordOutOfBand}>
+               <div className="management-provision-form__intro">
+                  <strong>Record out-of-band governance notice</strong>
+                  <p>
+                     Use this only to document a real communication that occurred outside TruthLens. It does not change the governance decision itself.
+                  </p>
+               </div>
+               <label className="management-form-field">
+                  <span>Method</span>
+                  <Input
+                     value={outOfBandMethod}
+                     onChange={(event) => {
+                        reset();
+                        setOutOfBandMethod(event.target.value);
+                     }}
+                     disabled={pending}
+                     required
+                     placeholder="e.g. Official organization email"
+                  />
+               </label>
+               <label className="management-form-field">
+                  <span>Details</span>
+                  <textarea
+                     value={outOfBandDetails}
+                     onChange={(event) => {
+                        reset();
+                        setOutOfBandDetails(event.target.value);
+                     }}
+                     rows={3}
+                     disabled={pending}
+                     required
+                     placeholder="Record when and how the organization was informed. Do not place confidential supporting evidence here."
+                  />
+               </label>
+               <div className="management-inline-actions">
+                  <Button
+                     variant="secondary"
+                     disabled={pending}
+                     onClick={() => {
+                        reset();
+                        setOutOfBandOpen(false);
+                        setOutOfBandMethod("");
+                        setOutOfBandDetails("");
+                     }}
+                  >
+                     Cancel
+                  </Button>
+                  <Button type="submit" loading={pending} loadingLabel="Recording…">
+                     Record notice
+                  </Button>
+               </div>
+            </form>
+         ) : null}
+
+         {fallback?.last_error ? (
+            <ManagementFeedback tone="error">
+               {fallback.last_error}
+            </ManagementFeedback>
+         ) : null}
+         {error ? <ManagementFeedback tone="error">{error.message}</ManagementFeedback> : null}
+      </section>
+   );
+}
+
 function VerificationScopeSection({ organization }) {
    const specializations = organization.verification_specializations || [];
    return (
@@ -1348,6 +1615,11 @@ function ManagementOrganizationDetailPage() {
             {data ? (
                <div className="management-detail-sections">
                   <OrganizationGovernanceSection
+                     organization={data}
+                     onRefresh={retry}
+                     onFeedback={showFeedback}
+                  />
+                  <GovernanceContactSection
                      organization={data}
                      onRefresh={retry}
                      onFeedback={showFeedback}

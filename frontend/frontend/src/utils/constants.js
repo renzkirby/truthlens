@@ -108,6 +108,12 @@ export const API_ENDPOINTS = {
       `management/organizations/${encodeURIComponent(organizationId)}/`,
    MANAGEMENT_ORGANIZATION_PLATFORM_TRUST: (organizationId) =>
       `management/organizations/${encodeURIComponent(organizationId)}/platform-trust/`,
+   MANAGEMENT_ORGANIZATION_GOVERNANCE_CONTACT: (organizationId) =>
+      `management/organizations/${encodeURIComponent(organizationId)}/governance-contact/`,
+   MANAGEMENT_ORGANIZATION_GOVERNANCE_OUT_OF_BAND: (organizationId) =>
+      `management/organizations/${encodeURIComponent(organizationId)}/governance-notices/fallback/out-of-band/`,
+   MANAGEMENT_ORGANIZATION_GOVERNANCE_NOTICE_RETRY: (organizationId) =>
+      `management/organizations/${encodeURIComponent(organizationId)}/governance-notices/retry/`,
    MANAGEMENT_ORGANIZATION_VERIFY: (organizationId) =>
       `management/organizations/${encodeURIComponent(organizationId)}/verification/verify/`,
    MANAGEMENT_ORGANIZATION_REJECT_VERIFICATION: (organizationId) =>
