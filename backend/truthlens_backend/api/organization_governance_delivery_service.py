@@ -7,6 +7,7 @@ from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 
 from .models import (
+    OrganizationGovernanceFallbackDelivery,
     OrganizationGovernanceNoticeRecipient,
     UserProfile,
 )
@@ -290,6 +291,135 @@ def enqueue_governance_notice_delivery(notice_recipient_ids):
 
     return {
         "requested": len(recipient_ids),
+        "queued": queued,
+        "queue_failed": queue_failed,
+    }
+
+
+def send_governance_fallback_email(fallback):
+    """Send a minimal external alert when no active Organization Admin exists."""
+
+    email_address = (fallback.contact_email or "").strip()
+    if not email_address:
+        return 0
+
+    action_label = _action_label(fallback)
+    organization_name = _organization_name(fallback)
+    effective_at = fallback.governance_event.created_at
+
+    subject = "TruthLens Partner governance notice"
+    text_body = (
+        "TruthLens Partner governance notice\n\n"
+        f"TruthLens issued a governance decision affecting {organization_name}.\n\n"
+        f"Action: {action_label}\n"
+        f"Effective: {effective_at:%Y-%m-%d %H:%M UTC}\n\n"
+        "No active Organization Admin account was available to receive the secure "
+        "governance notice. Please contact TruthLens Platform Governance through "
+        "your usual official channel to restore an authorized organization contact "
+        "and review the decision.\n\n"
+        "This email intentionally does not include confidential governance details."
+    )
+    message = EmailMultiAlternatives(
+        subject=subject,
+        body=text_body,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[email_address],
+    )
+    delivered_count = message.send(fail_silently=False)
+    if delivered_count != 1:
+        raise RuntimeError(
+            "The fallback governance email was not accepted by the configured email backend."
+        )
+    return delivered_count
+
+
+def deliver_governance_fallback_email(fallback_delivery_id):
+    """Deliver a no-Admin fallback email while keeping governance state authoritative."""
+
+    from django.utils import timezone
+
+    fallback = (
+        OrganizationGovernanceFallbackDelivery.objects.select_related(
+            "governance_event",
+            "governance_event__subject_organization",
+        )
+        .filter(pk=fallback_delivery_id)
+        .first()
+    )
+    if fallback is None:
+        return {"missing": True}
+
+    if fallback.status in {
+        OrganizationGovernanceFallbackDelivery.Status.SENT,
+        OrganizationGovernanceFallbackDelivery.Status.OUT_OF_BAND_RECORDED,
+    }:
+        return {"missing": False, "status": fallback.status}
+
+    if not (fallback.contact_email or "").strip():
+        fallback.status = OrganizationGovernanceFallbackDelivery.Status.NOT_DELIVERABLE
+        fallback.last_attempt_at = timezone.now()
+        fallback.save(update_fields=["status", "last_attempt_at"])
+        return {"missing": False, "status": fallback.status}
+
+    fallback.attempts += 1
+    fallback.last_attempt_at = timezone.now()
+    try:
+        send_governance_fallback_email(fallback)
+    except Exception as error:
+        fallback.status = OrganizationGovernanceFallbackDelivery.Status.FAILED
+        fallback.last_error = f"Fallback email delivery failed: {error}"[:2000]
+        fallback.save(
+            update_fields=[
+                "attempts",
+                "last_attempt_at",
+                "status",
+                "last_error",
+            ]
+        )
+        logger.exception(
+            "Governance fallback email delivery failed for fallback=%s",
+            fallback.pk,
+        )
+        raise GovernanceNoticeDeliveryError(
+            "Governance fallback email delivery failed."
+        ) from error
+
+    fallback.status = OrganizationGovernanceFallbackDelivery.Status.SENT
+    fallback.last_error = ""
+    fallback.delivered_at = timezone.now()
+    fallback.save(
+        update_fields=[
+            "attempts",
+            "last_attempt_at",
+            "status",
+            "last_error",
+            "delivered_at",
+        ]
+    )
+    return {"missing": False, "status": fallback.status}
+
+
+def enqueue_governance_fallback_delivery(fallback_delivery_ids):
+    """Best-effort queueing for no-Admin fallback email delivery."""
+
+    from .tasks import deliver_organization_governance_fallback_task
+
+    fallback_ids = list(fallback_delivery_ids)
+    queued = 0
+    queue_failed = 0
+    for fallback_id in fallback_ids:
+        try:
+            deliver_organization_governance_fallback_task.delay(str(fallback_id))
+            queued += 1
+        except Exception:
+            queue_failed += 1
+            logger.exception(
+                "Could not queue governance fallback delivery for fallback=%s",
+                fallback_id,
+            )
+
+    return {
+        "requested": len(fallback_ids),
         "queued": queued,
         "queue_failed": queue_failed,
     }

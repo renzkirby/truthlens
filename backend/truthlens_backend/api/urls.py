@@ -113,6 +113,19 @@ urlpatterns = [
         name="management_organization_platform_trust",
     ),
     path(
+        "management/organizations/<uuid:organization_id>/governance-contact/",
+        management_views.ManagementOrganizationGovernanceContactView.as_view(),
+        name="management_organization_governance_contact",
+    ),
+    path(
+        (
+            "management/organizations/<uuid:organization_id>/"
+            "governance-notices/fallback/out-of-band/"
+        ),
+        management_views.ManagementOrganizationGovernanceOutOfBandNoticeView.as_view(),
+        name="management_organization_governance_out_of_band_notice",
+    ),
+    path(
         (
             "management/organizations/<uuid:organization_id>/"
             "governance-notices/retry/"

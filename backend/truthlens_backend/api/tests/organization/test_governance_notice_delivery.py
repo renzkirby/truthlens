@@ -14,6 +14,7 @@ from api.models import (
     AccountabilityEvent,
     Notification,
     Organization,
+    OrganizationGovernanceFallbackDelivery,
     OrganizationGovernanceNoticeRecipient,
     OrganizationMembership,
     UserProfile,
@@ -21,6 +22,7 @@ from api.models import (
 from api.notification_service import notification_destination
 from api.organization_governance_delivery_service import (
     GovernanceNoticeDeliveryError,
+    deliver_governance_fallback_email,
     deliver_governance_notice_channels,
     enqueue_governance_notice_delivery,
 )
@@ -359,3 +361,132 @@ class GovernanceNoticeDeliveryTests(APITestCase):
         self.assertEqual(retry.data["queued"], 1)
         self.assertEqual(retry.data["queue_failed"], 0)
         delay.assert_called_once_with(str(recipient.pk))
+
+    def test_no_admin_uses_private_governance_contact_fallback(self):
+        organization = Organization.objects.create(
+            name="No Admin Fallback Partner",
+            slug="no-admin-fallback-partner",
+            governance_contact_email="governance-contact@example.com",
+            verification_status=Organization.VerificationStatus.VERIFIED,
+            partner_status=Organization.PartnerStatus.ACTIVE,
+        )
+        payload = {
+            "suspension_type": "ADMINISTRATIVE",
+            "factors": ["GOVERNANCE_CAPACITY"],
+            "severity": "HIGH",
+            "rationale": (
+                "The organization currently lacks accountable administration for "
+                "continued professional access."
+            ),
+            "policy_basis": "Partnership Enforcement Policy §13.3",
+            "supporting_basis": "Internal organization-contact review.",
+            "supporting_references": ["NO-ADMIN-001"],
+        }
+
+        with patch("api.tasks.deliver_organization_governance_fallback_task.delay") as delay:
+            with self.captureOnCommitCallbacks(execute=True):
+                suspend_partner_organization_partnership(
+                    organization_id=organization.pk,
+                    actor=self.platform_admin,
+                    **payload,
+                )
+
+        fallback = OrganizationGovernanceFallbackDelivery.objects.get(
+            governance_event__subject_organization=organization,
+        )
+        self.assertEqual(fallback.status, "PENDING")
+        self.assertEqual(fallback.contact_email, "governance-contact@example.com")
+        delay.assert_called_once_with(str(fallback.pk))
+
+        deliver_governance_fallback_email(fallback.pk)
+        fallback.refresh_from_db()
+        self.assertEqual(fallback.status, "SENT")
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("Partnership Suspended", mail.outbox[0].body)
+        self.assertNotIn("Internal organization-contact review", mail.outbox[0].body)
+
+    def test_no_admin_without_contact_is_visible_and_can_record_out_of_band_notice(self):
+        organization = Organization.objects.create(
+            name="Undeliverable Governance Partner",
+            slug="undeliverable-governance-partner",
+            verification_status=Organization.VerificationStatus.VERIFIED,
+            partner_status=Organization.PartnerStatus.ACTIVE,
+        )
+        payload = {
+            "suspension_type": "ADMINISTRATIVE",
+            "factors": ["GOVERNANCE_CAPACITY"],
+            "severity": "HIGH",
+            "rationale": (
+                "The organization currently lacks accountable administration for "
+                "continued professional access."
+            ),
+            "policy_basis": "Partnership Enforcement Policy §13.3",
+            "supporting_basis": "Internal organization-contact review.",
+            "supporting_references": ["NO-CONTACT-001"],
+        }
+
+        with self.captureOnCommitCallbacks(execute=True):
+            suspend_partner_organization_partnership(
+                organization_id=organization.pk,
+                actor=self.platform_admin,
+                **payload,
+            )
+
+        fallback = OrganizationGovernanceFallbackDelivery.objects.get(
+            governance_event__subject_organization=organization,
+        )
+        self.assertEqual(fallback.status, "NOT_DELIVERABLE")
+
+        detail = self.client_for(self.platform_admin).get(
+            reverse(
+                "management_organization_detail",
+                kwargs={"organization_id": organization.pk},
+            )
+        )
+        self.assertEqual(detail.status_code, status.HTTP_200_OK)
+        self.assertTrue(detail.data["governance_notice_delivery"]["no_active_admin"])
+        self.assertEqual(
+            detail.data["governance_notice_delivery"]["fallback"]["status"],
+            "NOT_DELIVERABLE",
+        )
+
+        record = self.client_for(self.platform_admin).post(
+            reverse(
+                "management_organization_governance_out_of_band_notice",
+                kwargs={"organization_id": organization.pk},
+            ),
+            {
+                "fallback_delivery_id": str(fallback.pk),
+                "method": "Official organization email",
+                "details": (
+                    "Platform Governance contacted the designated organization "
+                    "representative through the established external channel."
+                ),
+            },
+            format="json",
+        )
+        self.assertEqual(record.status_code, status.HTTP_200_OK)
+        fallback.refresh_from_db()
+        self.assertEqual(fallback.status, "OUT_OF_BAND_RECORDED")
+        self.assertEqual(fallback.recorded_by, self.platform_admin)
+
+    def test_platform_admin_can_update_private_governance_contact(self):
+        response = self.client_for(self.platform_admin).patch(
+            reverse(
+                "management_organization_governance_contact",
+                kwargs={"organization_id": self.organization.pk},
+            ),
+            {"governance_contact_email": "private-governance@example.com"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.organization.refresh_from_db()
+        self.assertEqual(
+            self.organization.governance_contact_email,
+            "private-governance@example.com",
+        )
+        self.assertEqual(
+            response.data["governance_contact_email"],
+            "private-governance@example.com",
+        )
+

@@ -36,6 +36,7 @@ from .management_governance_service import (
     create_partner_organization,
 )
 from .organization_governance_delivery_service import (
+    enqueue_governance_fallback_delivery,
     enqueue_governance_notice_delivery,
 )
 from .organization_partnership_lifecycle_service import (
@@ -62,6 +63,8 @@ from .management_serializers import (
     ManagementEmptyMutationSerializer,
     ManagementGovernanceAuditDetailQuerySerializer,
     ManagementGovernanceAuditQuerySerializer,
+    ManagementGovernanceContactSerializer,
+    ManagementGovernanceOutOfBandNoticeSerializer,
     ManagementInstitutionAffiliationUpdateSerializer,
     ManagementInstitutionCreateSerializer,
     ManagementInstitutionSerializer,
@@ -89,6 +92,7 @@ from .models import (
     ClaimInvestigationClassification,
     Institution,
     Organization,
+    OrganizationGovernanceFallbackDelivery,
     OrganizationGovernanceNoticeRecipient,
     OrganizationInstitutionAffiliation,
     OrganizationInvitation,
@@ -736,6 +740,66 @@ class ManagementOrganizationDetailView(generics.RetrieveAPIView):
         return {**super().get_serializer_context(), "now": timezone.now()}
 
 
+class ManagementOrganizationGovernanceContactView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def patch(self, request, organization_id):
+        organization = get_object_or_404(Organization, pk=organization_id)
+        serializer = ManagementGovernanceContactSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        organization.governance_contact_email = serializer.validated_data[
+            "governance_contact_email"
+        ]
+        organization.save(update_fields=["governance_contact_email", "updated_at"])
+        return Response(
+            _serialize_management_organization(organization),
+            status=status.HTTP_200_OK,
+        )
+
+
+class ManagementOrganizationGovernanceOutOfBandNoticeView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def post(self, request, organization_id):
+        serializer = ManagementGovernanceOutOfBandNoticeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        fallback = get_object_or_404(
+            OrganizationGovernanceFallbackDelivery.objects.select_related(
+                "governance_event",
+            ),
+            pk=serializer.validated_data["fallback_delivery_id"],
+            governance_event__subject_organization_id=organization_id,
+        )
+        fallback.status = OrganizationGovernanceFallbackDelivery.Status.OUT_OF_BAND_RECORDED
+        fallback.out_of_band_method = serializer.validated_data["method"]
+        fallback.out_of_band_details = serializer.validated_data["details"]
+        fallback.recorded_by = request.user
+        fallback.recorded_at = timezone.now()
+        fallback.last_error = ""
+        fallback.save(
+            update_fields=[
+                "status",
+                "out_of_band_method",
+                "out_of_band_details",
+                "recorded_by",
+                "recorded_at",
+                "last_error",
+            ]
+        )
+        return Response(
+            {
+                "id": str(fallback.pk),
+                "status": fallback.status,
+                "method": fallback.out_of_band_method,
+                "details": fallback.out_of_band_details,
+                "recorded_at": fallback.recorded_at,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
 class ManagementOrganizationGovernanceNoticeRetryView(APIView):
     permission_classes = [IsPlatformManagementAdmin]
 
@@ -757,8 +821,28 @@ class ManagementOrganizationGovernanceNoticeRetryView(APIView):
             .values_list("id", flat=True)
         )
 
-        queue_result = enqueue_governance_notice_delivery(recipient_ids)
-        if not recipient_ids:
+        fallback_ids = list(
+            OrganizationGovernanceFallbackDelivery.objects.filter(
+                governance_event__subject_organization=organization,
+                status__in=[
+                    OrganizationGovernanceFallbackDelivery.Status.PENDING,
+                    OrganizationGovernanceFallbackDelivery.Status.FAILED,
+                ],
+            )
+            .order_by("created_at", "id")
+            .values_list("id", flat=True)
+        )
+
+        recipient_result = enqueue_governance_notice_delivery(recipient_ids)
+        fallback_result = enqueue_governance_fallback_delivery(fallback_ids)
+        queue_result = {
+            "requested": recipient_result["requested"] + fallback_result["requested"],
+            "queued": recipient_result["queued"] + fallback_result["queued"],
+            "queue_failed": recipient_result["queue_failed"] + fallback_result["queue_failed"],
+            "recipient_requested": recipient_result["requested"],
+            "fallback_requested": fallback_result["requested"],
+        }
+        if not recipient_ids and not fallback_ids:
             detail = "No pending or failed governance notice deliveries."
         elif queue_result["queue_failed"]:
             detail = (

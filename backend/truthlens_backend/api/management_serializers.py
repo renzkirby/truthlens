@@ -17,6 +17,7 @@ from .models import (
     ClaimInstitutionAssociation,
     Institution,
     Organization,
+    OrganizationGovernanceFallbackDelivery,
     OrganizationGovernanceNoticeRecipient,
     OrganizationInstitutionAffiliation,
     OrganizationInvitation,
@@ -114,6 +115,30 @@ ManagementPrimaryAdminProvisionSerializer = ManagementOrganizationAdminProvision
 
 class ManagementEmptyMutationSerializer(StrictFieldsSerializer):
     pass
+
+
+class ManagementGovernanceContactSerializer(StrictFieldsSerializer):
+    governance_contact_email = serializers.EmailField(
+        required=True,
+        allow_blank=True,
+        trim_whitespace=True,
+    )
+
+
+class ManagementGovernanceOutOfBandNoticeSerializer(StrictFieldsSerializer):
+    fallback_delivery_id = serializers.UUIDField()
+    method = serializers.CharField(
+        min_length=2,
+        max_length=80,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    details = serializers.CharField(
+        min_length=10,
+        max_length=3000,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
 
 
 class ManagementPartnershipSuspensionSerializer(StrictFieldsSerializer):
@@ -1016,9 +1041,48 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
             queryset.select_related("user", "governance_event")
             .order_by("-created_at", "-id")[:20]
         )
+        fallback = (
+            OrganizationGovernanceFallbackDelivery.objects.filter(
+                governance_event__subject_organization=obj,
+            )
+            .select_related("recorded_by", "governance_event")
+            .order_by("-created_at", "-id")
+            .first()
+        )
+        has_active_admin = obj.memberships.filter(
+            role__in=[
+                OrganizationMembership.Role.ADMIN,
+                OrganizationMembership.Role.OWNER,
+            ],
+            status=OrganizationMembership.Status.ACTIVE,
+            user__isnull=False,
+        ).exists()
 
         return {
             "total_recipients": queryset.count(),
+            "no_active_admin": not has_active_admin,
+            "fallback": (
+                {
+                    "id": str(fallback.pk),
+                    "event_id": str(fallback.governance_event_id),
+                    "contact_email": fallback.contact_email,
+                    "status": fallback.status,
+                    "attempts": fallback.attempts,
+                    "last_error": fallback.last_error,
+                    "last_attempt_at": fallback.last_attempt_at,
+                    "delivered_at": fallback.delivered_at,
+                    "out_of_band_method": fallback.out_of_band_method,
+                    "out_of_band_details": fallback.out_of_band_details,
+                    "recorded_at": fallback.recorded_at,
+                    "recorded_by": (
+                        fallback.recorded_by.username
+                        if fallback.recorded_by_id
+                        else None
+                    ),
+                }
+                if fallback is not None
+                else None
+            ),
             "retry_available": queryset.filter(
                 Q(in_app_status__in=retryable)
                 | Q(email_status__in=retryable)
@@ -1111,6 +1175,7 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
         fields = ManagementOrganizationListSerializer.Meta.fields + (
             "description",
             "website",
+            "governance_contact_email",
             "logo_url",
             "expertise_areas",
             "verification_specializations",

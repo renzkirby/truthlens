@@ -3,6 +3,7 @@
 from django.db import transaction
 
 from .models import (
+    OrganizationGovernanceFallbackDelivery,
     OrganizationGovernanceNoticeRecipient,
     OrganizationMembership,
 )
@@ -89,18 +90,45 @@ def persist_governance_notice_recipients(*, governance_event, recipients):
         )
         for recipient in recipients
     ]
-    if not rows:
-        return []
-
     created = OrganizationGovernanceNoticeRecipient.objects.bulk_create(rows)
     recipient_ids = [row.pk for row in created]
 
+    has_admin_recipient = any(
+        recipient["audience"] == OrganizationGovernanceNoticeRecipient.Audience.ADMIN
+        for recipient in recipients
+    )
+    fallback_delivery = None
+    if not has_admin_recipient:
+        organization = governance_event.subject_organization
+        contact_email = (
+            (organization.governance_contact_email or "").strip()
+            if organization is not None
+            else ""
+        )
+        fallback_delivery = OrganizationGovernanceFallbackDelivery.objects.create(
+            governance_event=governance_event,
+            contact_email=contact_email,
+            status=(
+                OrganizationGovernanceFallbackDelivery.Status.PENDING
+                if contact_email
+                else OrganizationGovernanceFallbackDelivery.Status.NOT_DELIVERABLE
+            ),
+        )
+
     def enqueue_after_commit():
         from .organization_governance_delivery_service import (
+            enqueue_governance_fallback_delivery,
             enqueue_governance_notice_delivery,
         )
 
-        enqueue_governance_notice_delivery(recipient_ids)
+        if recipient_ids:
+            enqueue_governance_notice_delivery(recipient_ids)
+        if (
+            fallback_delivery is not None
+            and fallback_delivery.status
+            == OrganizationGovernanceFallbackDelivery.Status.PENDING
+        ):
+            enqueue_governance_fallback_delivery([fallback_delivery.pk])
 
     transaction.on_commit(enqueue_after_commit)
     return created

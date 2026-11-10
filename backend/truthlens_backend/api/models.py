@@ -329,6 +329,16 @@ class Organization(models.Model):
         null=True,
     )
 
+    governance_contact_email = models.EmailField(
+        max_length=254,
+        blank=True,
+        default="",
+        help_text=(
+            "Private fallback address for material Partner governance communication "
+            "when no active Organization Admin can receive a secure notice."
+        ),
+    )
+
     logo_url = models.URLField(
         max_length=2000,
         blank=True,
@@ -2948,6 +2958,57 @@ class OrganizationGovernanceNoticeRecipient(models.Model):
 
     def __str__(self):
         return f"Governance notice recipient {self.pk}"
+
+
+class OrganizationGovernanceFallbackDelivery(models.Model):
+    """Durable no-Admin fallback communication record for a governance event."""
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        SENT = "SENT", "Sent"
+        FAILED = "FAILED", "Failed"
+        NOT_DELIVERABLE = "NOT_DELIVERABLE", "Not deliverable"
+        OUT_OF_BAND_RECORDED = "OUT_OF_BAND_RECORDED", "Out-of-band notice recorded"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    governance_event = models.OneToOneField(
+        AccountabilityEvent,
+        on_delete=models.PROTECT,
+        related_name="governance_fallback_delivery",
+    )
+    contact_email = models.EmailField(max_length=254, blank=True, default="")
+    status = models.CharField(
+        max_length=32,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+    attempts = models.PositiveSmallIntegerField(default=0)
+    last_error = models.TextField(blank=True, default="")
+    last_attempt_at = models.DateTimeField(null=True, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    out_of_band_method = models.CharField(max_length=80, blank=True, default="")
+    out_of_band_details = models.TextField(blank=True, default="")
+    recorded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recorded_organization_governance_fallback_deliveries",
+    )
+    recorded_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(
+                fields=["status", "-created_at"],
+                name="org_gov_fallback_status_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Governance fallback delivery {self.pk}"
 
 
 class AdjudicationDecision(models.Model):
