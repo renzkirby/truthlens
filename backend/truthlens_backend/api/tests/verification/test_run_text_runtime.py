@@ -958,6 +958,65 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.evaluate_gfc.assert_not_called()
         self.retrieve_tavily.assert_called_once()
 
+    def test_partial_gfc_coverage_continues_to_tavily_with_combined_evidence(self):
+        self.relevance.return_value = {
+            "candidate_count": 1,
+            "relevant_candidate_count": 1,
+            "covered_candidate_count": 0,
+            "terminally_sufficient": False,
+            "reason_code": "RELATED_BUT_INCOMPLETE",
+            "candidates": [],
+        }
+
+        run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        self.retrieve_tavily.assert_called_once()
+        self.assertEqual(self.evaluate_persisted.call_count, 2)
+        self.filter_dossier_roles.assert_called()
+        self.assertEqual(self.save_claim.call_args.args[2], "Live Web Search")
+        self.claim.refresh_from_db()
+        self.assertEqual(
+            [source["url"] for source in self.claim.ai_sources],
+            [
+                "https://example.com/fact-check",
+                "https://example.com/web",
+            ],
+        )
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("gfc_proposition_coverage_check", stages)
+        self.assertIn("gfc_continued_to_tavily", stages)
+
+    def test_coverage_assessor_receives_all_returned_gfc_claims(self):
+        self.gfc_payload["claims"].append({
+            "text": "A later exact reviewed claim.",
+            "claimReview": [{
+                "publisher": {"name": "Second Checker"},
+                "url": "https://example.com/second-fact-check",
+                "textualRating": "False",
+            }],
+        })
+        self.retrieve_gfc.return_value = self.gfc_payload
+        self.relevance.return_value = {
+            "candidate_count": 2,
+            "relevant_candidate_count": 1,
+            "covered_candidate_count": 1,
+            "terminally_sufficient": True,
+            "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
+            "candidates": [],
+        }
+
+        self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
+
+        self.relevance.assert_called_once_with(
+            self.cleaned["cleaned_claim"],
+            [
+                self.cleaned["cleaned_claim"],
+                "A later exact reviewed claim.",
+            ],
+        )
+        self.retrieve_tavily.assert_not_called()
+
     def test_gfc_evaluation_failure_continues_to_tavily(self):
         self.evaluate_persisted.side_effect = [
             RuntimeError("GFC evaluation unavailable"),
