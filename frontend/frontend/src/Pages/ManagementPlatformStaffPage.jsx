@@ -450,7 +450,7 @@ function ManagementPlatformStaffPage() {
             title="Revoke Platform Safety access?"
             description={
                revokeTarget
-                  ? `@${revokeTarget.username} will no longer be able to access Safety Review or Safety Audit through this platform role.`
+                  ? `@${revokeTarget.username} will no longer be able to access Safety Review or Safety Action History through this platform role.`
                   : ""
             }
             warning="This changes only the Platform Safety role. Any legitimate Partner Organization membership remains unchanged."
