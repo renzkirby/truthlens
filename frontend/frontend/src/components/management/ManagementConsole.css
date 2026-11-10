@@ -1445,6 +1445,11 @@
   font-weight: 650;
 }
 
+.management-required-indicator {
+  color: var(--tl-color-status-critical-text);
+  font-weight: 800;
+}
+
 .management-form-field small {
   color: var(--tl-color-text-muted);
   font-size: var(--tl-text-xs);
