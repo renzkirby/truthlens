@@ -8,6 +8,7 @@ import "./NavigationBar.css";
 import Button from "./ui/Button.jsx";
 import { useAuth } from "../hooks/useAuth";
 import { useNotificationInbox } from "../hooks/useNotificationInbox";
+import { useTheme } from "../hooks/useTheme";
 import { canAccessWorkspace } from "../utils/workspace";
 import {
    canAccessManagementConsole,
@@ -19,6 +20,7 @@ const ACCOUNT_PANEL_ID = "tl-app-nav-account-panel";
 function NavigationBar() {
    const { user, logout } = useAuth();
    const { unreadCount } = useNotificationInbox();
+   const { resolvedTheme, themePreference, toggleDarkMode } = useTheme();
    const [isOpen, setIsOpen] = useState(false);
    const [notificationsOpen, setNotificationsOpen] = useState(false);
    const dropdownRef = useRef(null);
@@ -248,6 +250,34 @@ function NavigationBar() {
                               <Icons name="settings" />
                               Settings
                            </Link>
+
+                           <div className="tl-app-nav__account-divider" role="presentation" />
+
+                           <div className="tl-app-nav__theme-row">
+                              <span className="tl-app-nav__theme-copy">
+                                 <Icons name="palette" />
+                                 <span>
+                                    <strong>Dark mode</strong>
+                                    <small>
+                                       {themePreference === "system"
+                                          ? `System · ${resolvedTheme === "dark" ? "Dark" : "Light"}`
+                                          : resolvedTheme === "dark"
+                                             ? "On"
+                                             : "Off"}
+                                    </small>
+                                 </span>
+                              </span>
+                              <button
+                                 type="button"
+                                 role="switch"
+                                 aria-checked={resolvedTheme === "dark"}
+                                 className={`tl-app-nav__theme-switch ${resolvedTheme === "dark" ? "is-on" : ""}`}
+                                 onClick={toggleDarkMode}
+                                 aria-label={`Turn dark mode ${resolvedTheme === "dark" ? "off" : "on"}`}
+                              >
+                                 <span aria-hidden="true" />
+                              </button>
+                           </div>
                         </div>
 
                         <div className="tl-app-nav__account-action">
