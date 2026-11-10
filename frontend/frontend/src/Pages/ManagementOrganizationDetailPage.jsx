@@ -41,18 +41,40 @@ function OrganizationGovernanceSection({
       suspension_type: "",
       factors: [],
       severity: "",
-      reason: "",
+      rationale: "",
       policy_basis: "",
-      required_remediation: "",
+      supporting_basis: "",
+      supporting_references: "",
+      other_factor_explanation: "",
+      remediation_problem: "",
+      remediation_required_action: "",
+      remediation_evidence_required: "",
+      remediation_deadline: "",
+      remediation_review_method: "",
+      remediation_failure_consequence: "",
       review_date: "",
+   });
+   const [reinstatementForm, setReinstatementForm] = useState({
+      basis: "",
+      rationale: "",
+      supporting_basis: "",
+      supporting_references: "",
+      completed_remediation: "",
+      continuing_conditions: "",
+      monitoring_end_date: "",
+      monitoring_success_criteria: "",
+      monitoring_recurrence_consequence: "",
    });
    const [endingForm, setEndingForm] = useState({
       ending_type: "",
       ground: "",
       factors: [],
       severity: "",
-      reason: "",
+      rationale: "",
       policy_basis: "",
+      supporting_basis: "",
+      supporting_references: "",
+      other_factor_explanation: "",
    });
    const { mutate, pending, error, reset } = useManagementMutation();
 
@@ -120,12 +142,8 @@ function OrganizationGovernanceSection({
          allowed: actions.can_reinstate_partnership,
          label: "Reinstate partnership",
          endpoint: "MANAGEMENT_ORGANIZATION_REINSTATE_PARTNERSHIP",
-         description: isFormerPartner
-            ? "Restore active Partner status after a former partnership."
-            : "Restore active Partner authority after a suspension.",
-         warning: isFormerPartner
-            ? "Historical memberships remain historical and are not reactivated automatically. Current members must be provisioned or invited through the normal organization workflow."
-            : "Existing current memberships remain unchanged and eligible role capabilities become active again.",
+         description: "Restore active Partner authority after a suspension when continued restriction is no longer justified.",
+         warning: "Reinstatement is a new governance decision. The historical suspension remains preserved and existing current memberships remain unchanged.",
          success: "Partnership reinstated.",
          variant: "primary",
       },
@@ -143,12 +161,32 @@ function OrganizationGovernanceSection({
             suspension_type: suspensionForm.suspension_type,
             factors: suspensionForm.factors,
             severity: suspensionForm.severity,
-            reason: suspensionForm.reason,
+            rationale: suspensionForm.rationale,
             policy_basis: suspensionForm.policy_basis,
-            required_remediation: suspensionForm.required_remediation,
+            supporting_basis: suspensionForm.supporting_basis,
+            supporting_references: parseSupportingReferences(suspensionForm.supporting_references),
+            other_factor_explanation: suspensionForm.other_factor_explanation,
+            remediation_problem: suspensionForm.remediation_problem,
+            remediation_required_action: suspensionForm.remediation_required_action,
+            remediation_evidence_required: suspensionForm.remediation_evidence_required,
+            remediation_deadline: suspensionForm.remediation_deadline || null,
+            remediation_review_method: suspensionForm.remediation_review_method,
+            remediation_failure_consequence: suspensionForm.remediation_failure_consequence,
             review_date: suspensionForm.review_date || null,
          }
-         : {};
+         : selectedAction.key === "reinstate"
+            ? {
+               basis: reinstatementForm.basis,
+               rationale: reinstatementForm.rationale,
+               supporting_basis: reinstatementForm.supporting_basis,
+               supporting_references: parseSupportingReferences(reinstatementForm.supporting_references),
+               completed_remediation: reinstatementForm.completed_remediation,
+               continuing_conditions: reinstatementForm.continuing_conditions,
+               monitoring_end_date: reinstatementForm.monitoring_end_date || null,
+               monitoring_success_criteria: reinstatementForm.monitoring_success_criteria,
+               monitoring_recurrence_consequence: reinstatementForm.monitoring_recurrence_consequence,
+            }
+            : {};
 
       const result = await mutate(
          resolveApiEndpoint(selectedAction.endpoint, organization.id),
@@ -191,8 +229,11 @@ function OrganizationGovernanceSection({
                ground: endingForm.ground,
                factors: endingForm.factors,
                severity: endingForm.severity,
-               reason: endingForm.reason,
+               rationale: endingForm.rationale,
                policy_basis: endingForm.policy_basis,
+               supporting_basis: endingForm.supporting_basis,
+               supporting_references: parseSupportingReferences(endingForm.supporting_references),
+               other_factor_explanation: endingForm.other_factor_explanation,
             },
          },
       );
@@ -229,6 +270,20 @@ function OrganizationGovernanceSection({
       ["HIGH", "High"],
       ["CRITICAL", "Critical"],
    ];
+   const reinstatementBasisOptions = [
+      ["REMEDIATION_COMPLETED", "Required Remediation Completed"],
+      ["UNDERLYING_RISK_RESOLVED", "Underlying Risk Resolved"],
+      ["INVESTIGATION_DID_NOT_JUSTIFY_CONTINUED_SUSPENSION", "Investigation Did Not Justify Continued Suspension"],
+      ["OPERATIONAL_REQUIREMENTS_RESTORED", "Operational Requirements Restored"],
+      ["CONTINUED_RESTRICTION_NO_LONGER_PROPORTIONATE", "Continued Restriction No Longer Proportionate"],
+   ];
+   const parseSupportingReferences = (value) => (
+      value
+         .split("\n")
+         .map((reference) => reference.trim())
+         .filter(Boolean)
+         .slice(0, 10)
+   );
    const endingGroundOptions = {
       VOLUNTARY_WITHDRAWAL: [
          ["VOLUNTARY_WITHDRAWAL", "Voluntary Withdrawal"],
@@ -246,6 +301,9 @@ function OrganizationGovernanceSection({
    };
    const updateSuspensionForm = (field, value) => {
       setSuspensionForm((current) => ({ ...current, [field]: value }));
+   };
+   const updateReinstatementForm = (field, value) => {
+      setReinstatementForm((current) => ({ ...current, [field]: value }));
    };
    const updateEndingForm = (field, value) => {
       setEndingForm((current) => {
@@ -278,20 +336,49 @@ function OrganizationGovernanceSection({
             : [...current.factors, factor],
       }));
    };
+   const suspensionHasOther = suspensionForm.factors.includes("OTHER");
+   const suspensionRemediationReady = suspensionForm.suspension_type !== "REMEDIAL" || Boolean(
+      suspensionForm.remediation_problem.trim()
+      && suspensionForm.remediation_required_action.trim()
+      && suspensionForm.remediation_evidence_required.trim()
+      && suspensionForm.remediation_deadline
+      && suspensionForm.remediation_review_method.trim()
+      && suspensionForm.remediation_failure_consequence.trim()
+   );
    const suspensionReady = Boolean(
       suspensionForm.suspension_type
       && suspensionForm.factors.length
       && suspensionForm.severity
-      && suspensionForm.reason.trim()
-      && (
-         suspensionForm.suspension_type !== "REMEDIAL"
-         || suspensionForm.required_remediation.trim()
-      )
+      && suspensionForm.rationale.trim().length >= 20
+      && suspensionForm.policy_basis.trim()
+      && suspensionForm.supporting_basis.trim()
+      && (!suspensionHasOther || suspensionForm.other_factor_explanation.trim())
+      && suspensionRemediationReady
+      && (suspensionForm.suspension_type !== "PRECAUTIONARY" || suspensionForm.review_date)
    );
+   const reinstatementMonitoringReady = !reinstatementForm.continuing_conditions.trim() || Boolean(
+      reinstatementForm.monitoring_end_date
+      && reinstatementForm.monitoring_success_criteria.trim()
+      && reinstatementForm.monitoring_recurrence_consequence.trim()
+   );
+   const reinstatementReady = Boolean(
+      reinstatementForm.basis
+      && reinstatementForm.rationale.trim().length >= 20
+      && reinstatementForm.supporting_basis.trim()
+      && (
+         reinstatementForm.basis !== "REMEDIATION_COMPLETED"
+         || reinstatementForm.completed_remediation.trim()
+      )
+      && reinstatementMonitoringReady
+   );
+   const endingHasOther = endingForm.factors.includes("OTHER");
    const endingReady = Boolean(
       endingForm.ending_type
       && endingForm.ground
-      && endingForm.reason.trim()
+      && endingForm.rationale.trim().length >= 20
+      && endingForm.policy_basis.trim()
+      && endingForm.supporting_basis.trim()
+      && (!endingHasOther || endingForm.other_factor_explanation.trim())
       && (
          endingForm.ending_type !== "TERMINATION_FOR_CAUSE"
          || (
@@ -466,7 +553,10 @@ function OrganizationGovernanceSection({
             error={error?.message}
             confirmLabel={selectedAction?.label || "Confirm"}
             confirmVariant={selectedAction?.variant || "primary"}
-            confirmDisabled={selectedAction?.key === "suspend" && !suspensionReady}
+            confirmDisabled={
+               (selectedAction?.key === "suspend" && !suspensionReady)
+               || (selectedAction?.key === "reinstate" && !reinstatementReady)
+            }
             processing={pending}
             onConfirm={executeGovernanceAction}
             onClose={() => setConfirmationAction(null)}
