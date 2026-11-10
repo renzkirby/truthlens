@@ -253,13 +253,13 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             patch(
                 "api.tasks.assess_fact_check_proposition_coverage",
                 return_value={
-    "candidate_count": 1,
-    "relevant_candidate_count": 1,
-    "covered_candidate_count": 1,
-    "terminally_sufficient": True,
-    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
-    "candidates": [],
-},
+                    "candidate_count": 1,
+                    "relevant_candidate_count": 1,
+                    "covered_candidate_count": 1,
+                    "terminally_sufficient": True,
+                    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
+                    "candidates": [],
+                },
             ) as relevance_check,
             patch(
                 "api.tasks.evaluate_image_claim_with_gfc",
@@ -611,13 +611,13 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             patch(
                 "api.tasks.assess_fact_check_proposition_coverage",
                 return_value={
-    "candidate_count": 1,
-    "relevant_candidate_count": 1,
-    "covered_candidate_count": 1,
-    "terminally_sufficient": True,
-    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
-    "candidates": [],
-},
+                    "candidate_count": 1,
+                    "relevant_candidate_count": 1,
+                    "covered_candidate_count": 1,
+                    "terminally_sufficient": True,
+                    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
+                    "candidates": [],
+                },
             ) as relevance_check,
             patch(
                 "api.tasks.evaluate_url_claim_with_gfc",
