@@ -4,8 +4,24 @@ from . import views
 from .auth_tokens import SessionTokenRefreshView
 from .notification_stream import notification_stream
 from . import management_views
+from . import organization_governance_notice_views
 
 urlpatterns = [
+    path(
+        "governance/notices/",
+        organization_governance_notice_views.GovernanceNoticeListView.as_view(),
+        name="governance_notice_list",
+    ),
+    path(
+        "governance/notices/<uuid:notice_id>/",
+        organization_governance_notice_views.GovernanceNoticeDetailView.as_view(),
+        name="governance_notice_detail",
+    ),
+    path(
+        "governance/notices/<uuid:notice_id>/viewed/",
+        organization_governance_notice_views.GovernanceNoticeViewedView.as_view(),
+        name="governance_notice_viewed",
+    ),
     path(
         "management/overview/",
         management_views.ManagementOverviewView.as_view(),
