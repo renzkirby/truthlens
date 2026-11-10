@@ -270,6 +270,9 @@ function GovernanceNoticePage() {
                         <h3>Organization-facing rationale</h3>
                         <p>{notice.rationale || "No additional rationale was recorded."}</p>
                      </div>
+                     <p className="tl-governance-policy-link">
+                        <Link to="/partner-guidelines">Read the Partner Organization Guidelines</Link>
+                     </p>
                      {governanceEntries.length ? (
                         <dl className="tl-governance-detail-list">
                            {governanceEntries.map(([key, value]) => (
