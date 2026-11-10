@@ -110,34 +110,6 @@ class ManagementPipelineTelemetryApiTests(APITestCase):
             outcome="success",
             occurred_at=now,
         )
-        VerificationTelemetryEvent.objects.create(
-            verification_run=self.run,
-            sequence=4,
-            event_type=VerificationTelemetryEvent.EventType.LLM_PROVIDER_CALL,
-            name="gfc_proposition_coverage",
-            provider="gemini",
-            provider_call_id=uuid4(),
-            duration_ms=90,
-            outcome="success",
-            occurred_at=now,
-        )
-        VerificationTelemetryEvent.objects.create(
-            verification_run=self.run,
-            sequence=5,
-            event_type=VerificationTelemetryEvent.EventType.PIPELINE_STAGE,
-            name="gfc_proposition_coverage_check",
-            duration_ms=90,
-            outcome="",
-            metadata={
-                "candidate_count": 5,
-                "relevant_candidate_count": 2,
-                "covered_candidate_count": 0,
-                "terminally_sufficient": False,
-                "reason_code": "RELATED_BUT_INCOMPLETE",
-                "reasoning": "DANGEROUS PRIVATE REASONING",
-            },
-            occurred_at=now,
-        )
 
     def client_for(self, user):
         client = APIClient()
@@ -315,6 +287,35 @@ class ManagementPipelineTelemetryApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_detail_orders_events_and_exposes_only_safe_projection(self):
+        now = timezone.now()
+        VerificationTelemetryEvent.objects.create(
+            verification_run=self.run,
+            sequence=4,
+            event_type=VerificationTelemetryEvent.EventType.LLM_PROVIDER_CALL,
+            name="gfc_proposition_coverage",
+            provider="gemini",
+            provider_call_id=uuid4(),
+            duration_ms=90,
+            outcome="success",
+            occurred_at=now,
+        )
+        VerificationTelemetryEvent.objects.create(
+            verification_run=self.run,
+            sequence=5,
+            event_type=VerificationTelemetryEvent.EventType.PIPELINE_STAGE,
+            name="gfc_proposition_coverage_check",
+            duration_ms=90,
+            outcome="",
+            metadata={
+                "candidate_count": 5,
+                "relevant_candidate_count": 2,
+                "covered_candidate_count": 0,
+                "terminally_sufficient": False,
+                "reason_code": "RELATED_BUT_INCOMPLETE",
+                "reasoning": "DANGEROUS PRIVATE REASONING",
+            },
+            occurred_at=now,
+        )
         response = self.client_for(self.superuser).get(
             reverse("management_pipeline_run_detail", kwargs={"run_id": self.run.id})
         )
