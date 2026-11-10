@@ -274,11 +274,22 @@ def enqueue_governance_notice_delivery(notice_recipient_ids):
 
     from .tasks import deliver_organization_governance_notice_task
 
-    for recipient_id in notice_recipient_ids:
+    recipient_ids = list(notice_recipient_ids)
+    queued = 0
+    queue_failed = 0
+    for recipient_id in recipient_ids:
         try:
             deliver_organization_governance_notice_task.delay(str(recipient_id))
+            queued += 1
         except Exception:
+            queue_failed += 1
             logger.exception(
                 "Could not queue governance notice delivery for recipient=%s",
                 recipient_id,
             )
+
+    return {
+        "requested": len(recipient_ids),
+        "queued": queued,
+        "queue_failed": queue_failed,
+    }
