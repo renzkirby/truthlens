@@ -859,3 +859,64 @@ html[data-theme="dark"] :is(
    border-color: var(--tl-color-border-soft);
    box-shadow: var(--tl-shadow-sm);
 }
+
+
+/* Dashboard status/verdict badges: legacy light-only states are mapped to the
+   same semantic dark palette used throughout TruthLens. */
+html[data-theme="dark"] .hub-page-layout .hub-status-badge {
+   color: var(--tl-color-status-info-text);
+   border-color: color-mix(in srgb, var(--tl-color-status-info-border) 58%, transparent);
+   background: var(--tl-color-status-info-bg);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-confidence-label {
+   color: var(--tl-color-text-muted);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-verdict-badge--fact {
+   color: var(--tl-color-fact-text);
+   border-color: color-mix(in srgb, var(--tl-color-fact-border) 58%, transparent);
+   background: var(--tl-color-fact-bg);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-verdict-badge--fake {
+   color: var(--tl-color-fake-text);
+   border-color: color-mix(in srgb, var(--tl-color-fake-border) 58%, transparent);
+   background: var(--tl-color-fake-bg);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-verdict-badge--misleading {
+   color: var(--tl-color-misleading-text);
+   border-color: color-mix(in srgb, var(--tl-color-misleading-border) 58%, transparent);
+   background: var(--tl-color-misleading-bg);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-verdict-badge--satire {
+   color: var(--tl-color-satire-text);
+   border-color: color-mix(in srgb, var(--tl-color-satire-border) 58%, transparent);
+   background: var(--tl-color-satire-bg);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-verdict-badge--unverified {
+   color: var(--tl-color-unverified-text);
+   border-color: color-mix(in srgb, var(--tl-color-unverified-border) 58%, transparent);
+   background: var(--tl-color-unverified-bg);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-verdict-badge--pending {
+   color: var(--tl-color-status-info-text);
+   border-color: color-mix(in srgb, var(--tl-color-status-info-border) 58%, transparent);
+   background: var(--tl-color-status-info-bg);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-verdict-badge--needs-context {
+   color: var(--tl-color-status-warning-text);
+   border-color: color-mix(in srgb, var(--tl-color-status-warning-border) 64%, transparent);
+   background: var(--tl-color-status-warning-bg);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-verdict-badge--out-of-scope {
+   color: var(--tl-color-outofscope-text);
+   border-color: color-mix(in srgb, var(--tl-color-outofscope-border) 58%, transparent);
+   background: var(--tl-color-outofscope-bg);
+}
