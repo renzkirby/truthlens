@@ -670,7 +670,7 @@ class ManagementApiTests(APITestCase):
                 self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
                 self.assertIn(field, response.data)
 
-    def test_platform_trust_compatibility_endpoint_routes_valid_targets_through_lifecycle_actions(self):
+    def test_platform_trust_compatibility_endpoint_cannot_bypass_governed_reinstatement(self):
         url = reverse(
             "management_organization_platform_trust",
             kwargs={"organization_id": self.pending_organization.id},
@@ -686,43 +686,29 @@ class ManagementApiTests(APITestCase):
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertIn(
+            "Use the governed Reinstate Partnership action",
+            response.data["detail"],
+        )
+
         self.pending_organization.refresh_from_db()
         self.assertEqual(
             self.pending_organization.verification_status,
-            Organization.VerificationStatus.VERIFIED,
+            Organization.VerificationStatus.PENDING,
         )
         self.assertEqual(
             self.pending_organization.partner_status,
-            Organization.PartnerStatus.ACTIVE,
+            Organization.PartnerStatus.SUSPENDED,
         )
-        events = AccountabilityEvent.objects.filter(
-            action_type=(
-                AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED
-            ),
-            subject_organization=self.pending_organization,
-        ).order_by("created_at")
-        self.assertEqual(events.count(), 2)
-        self.assertEqual(
-            [event.reason_code for event in events],
-            ["ORGANIZATION_VERIFIED", "PARTNERSHIP_REINSTATED"],
+        self.assertFalse(
+            AccountabilityEvent.objects.filter(
+                action_type=(
+                    AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED
+                ),
+                subject_organization=self.pending_organization,
+            ).exists()
         )
-        self.assertTrue(
-            all(event.capability == MANAGE_PARTNER_ORGANIZATION for event in events)
-        )
-
-        suspended = client.patch(
-            url,
-            {"partner_status": Organization.PartnerStatus.SUSPENDED},
-            format="json",
-        )
-        self.assertEqual(suspended.status_code, status.HTTP_409_CONFLICT)
-        self.pending_organization.refresh_from_db()
-        self.assertEqual(
-            self.pending_organization.partner_status,
-            Organization.PartnerStatus.ACTIVE,
-        )
-        self.assertIn("governed Suspend Partnership action", suspended.data["detail"])
 
     def test_platform_trust_compatibility_endpoint_activates_true_onboarding_organization(
         self,
