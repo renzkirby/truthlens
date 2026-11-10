@@ -2017,10 +2017,19 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     )
                     if evidence_context:
                         evaluator_invoked = True
-                        ai_verdict = evaluate_claim_with_persisted_evidence(
-                            cleaned_claim,
-                            evidence_context,
-                            article_stance,
+                        ai_verdict = (
+                            _evaluate_persisted_with_official_rating_policy(
+                                cleaned_claim,
+                                evidence_context,
+                                article_stance,
+                                official_rating_policy,
+                            )
+                            if gfc_evidence_assessed
+                            else evaluate_claim_with_persisted_evidence(
+                                cleaned_claim,
+                                evidence_context,
+                                article_stance,
+                            )
                         )
                         ai_verdict = calibrate_verdict_confidence(
                             ai_verdict,
@@ -2970,10 +2979,19 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                 )
                 if evidence_context:
                     evaluator_invoked = True
-                    ai_verdict = evaluate_claim_with_persisted_evidence(
-                        cleaned_claim,
-                        evidence_context,
-                        article_stance,
+                    ai_verdict = (
+                        _evaluate_persisted_with_official_rating_policy(
+                            cleaned_claim,
+                            evidence_context,
+                            article_stance,
+                            official_rating_policy,
+                        )
+                        if gfc_evidence_assessed
+                        else evaluate_claim_with_persisted_evidence(
+                            cleaned_claim,
+                            evidence_context,
+                            article_stance,
+                        )
                     )
                     ai_verdict = calibrate_verdict_confidence(
                         ai_verdict,
