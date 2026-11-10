@@ -117,6 +117,10 @@ class VerificationRunTextRuntimeTests(TestCase):
             "api.tasks.filter_reasoning_evidence_dossier_by_role",
             return_value=["selected evidence"],
         )
+        self.filter_dossier_roles = self._patch(
+            "api.tasks.filter_reasoning_evidence_dossier_by_roles",
+            return_value=["selected evidence"],
+        )
         self.render_dossier = self._patch(
             "api.tasks.render_reasoning_evidence_dossier",
             return_value="Persisted evidence context.",
@@ -795,7 +799,14 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.filter_dossier.return_value = [
             SimpleNamespace(evidence=(evidence,))
         ]
-        self.relevance.return_value = False
+        self.relevance.return_value = {
+            "candidate_count": 1,
+            "relevant_candidate_count": 0,
+            "covered_candidate_count": 0,
+            "terminally_sufficient": False,
+            "reason_code": "MATERIAL_DIFFERENCE",
+            "candidates": [],
+        }
         satire_verdict = {
             **self.verdict,
             "verdict": "SATIRE",
@@ -935,7 +946,14 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.assertEqual(self.save_claim.call_args.args[2], "Live Web Search")
 
     def test_irrelevant_gfc_results_continue_to_tavily(self):
-        self.relevance.return_value = False
+        self.relevance.return_value = {
+            "candidate_count": 1,
+            "relevant_candidate_count": 0,
+            "covered_candidate_count": 0,
+            "terminally_sufficient": False,
+            "reason_code": "MATERIAL_DIFFERENCE",
+            "candidates": [],
+        }
         self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
         self.evaluate_gfc.assert_not_called()
         self.retrieve_tavily.assert_called_once()
@@ -1332,7 +1350,14 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
         self.assertEqual(self.assessor.call_args.args[1][0].recency_score, 0.55)
 
     def test_irrelevant_gfc_evidence_remains_linked_before_tavily_fallback(self):
-        self.relevance.return_value = False
+        self.relevance.return_value = {
+            "candidate_count": 1,
+            "relevant_candidate_count": 0,
+            "covered_candidate_count": 0,
+            "terminally_sufficient": False,
+            "reason_code": "MATERIAL_DIFFERENCE",
+            "candidates": [],
+        }
         self.retrieve_tavily.side_effect = self._record_links_at_fallback
         run = self._execute()
         self.retrieve_tavily.assert_called_once()
