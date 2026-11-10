@@ -397,6 +397,25 @@ def _mark_gemini_model_degraded(model):
         _gemini_degraded_models.set(degraded_models | {model})
 
 
+def _provider_status_code(error):
+    """Return a safe HTTP-like provider status code when one is available."""
+    code = getattr(error, "code", None)
+    if type(code) is int and 400 <= code <= 599:
+        return code
+    status = getattr(error, "status_code", None)
+    if type(status) is int and 400 <= status <= 599:
+        return status
+    return None
+
+
+def _is_transient_gemini_server_error(error):
+    return _provider_status_code(error) in {500, 502, 503, 504}
+
+
+def _is_groq_request_too_large(error):
+    return _provider_status_code(error) == 413
+
+
 def _provider_error_label(error):
     """Return useful error metadata without including provider secrets."""
     if isinstance(error, CloudflareEvaluationError):
@@ -474,8 +493,10 @@ def call_llm_with_fallback(
     )
 
     gemini_model = _gemini_model_for_operation(operation)
+    last_gemini_error = None
 
     def _try_gemini():
+        nonlocal last_gemini_error
         if not _gemini_model_is_degraded(gemini_model):
             gemini_config = {
                 "system_instruction": system_instructions,
@@ -492,6 +513,7 @@ def call_llm_with_fallback(
                     )
                 request_config = types.GenerateContentConfig(**gemini_config)
             except Exception as gemini_err:
+                last_gemini_error = gemini_err
                 logger.warning(
                     "Gemini API failed (%s); continuing fallback routing.",
                     _provider_error_label(gemini_err),
@@ -515,6 +537,7 @@ def call_llm_with_fallback(
                     ):
                         raise ValueError("INVALID_PILOT_FALLBACK_JSON")
                 except Exception as gemini_err:
+                    last_gemini_error = gemini_err
                     # Billing, model-availability, and quota failures are job-scoped.
                     # Do not repeatedly call a provider that cannot serve this job.
                     if (
@@ -537,6 +560,7 @@ def call_llm_with_fallback(
                         _provider_error_label(gemini_err),
                     )
                 else:
+                    last_gemini_error = None
                     _log_llm_provider_call(
                         operation,
                         "gemini",
@@ -698,6 +722,27 @@ def call_llm_with_fallback(
             "Groq fallback failed (%s).",
             _provider_error_label(groq_err),
         )
+
+        # Persisted evidence can legitimately exceed a fallback provider's
+        # per-request/free-tier token budget while remaining valid for Gemini.
+        # If Gemini's first attempt failed only because of a transient server
+        # error and Groq explicitly rejects the unchanged request as too large,
+        # give Gemini one final chance instead of truncating or dropping evidence.
+        if (
+            operation == "persisted_evidence_evaluation"
+            and _is_groq_request_too_large(groq_err)
+            and _is_transient_gemini_server_error(last_gemini_error)
+            and not _gemini_model_is_degraded(gemini_model)
+        ):
+            logger.warning(
+                "Groq rejected the persisted-evidence request as too large; "
+                "retrying Gemini once after transient server failure."
+            )
+            time.sleep(1.0)
+            recovery_response = _try_gemini()
+            if recovery_response is not None:
+                return recovery_response
+
         raise LLMProviderUnavailableError(
             "No configured LLM provider successfully completed this request."
         ) from groq_err
