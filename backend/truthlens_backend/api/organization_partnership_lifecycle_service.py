@@ -1420,13 +1420,15 @@ def apply_legacy_platform_trust_transition(
                     organization_id=organization.pk,
                     actor=actor,
                 )
-            elif organization.partner_status in {
-                Organization.PartnerStatus.SUSPENDED,
-                Organization.PartnerStatus.FORMER,
-            }:
-                organization = reinstate_partner_organization_partnership(
-                    organization_id=organization.pk,
-                    actor=actor,
+            elif organization.partner_status == Organization.PartnerStatus.SUSPENDED:
+                raise OrganizationPartnershipLifecycleConflict(
+                    "Use the governed Reinstate Partnership action so the reinstatement "
+                    "basis and supporting record are documented."
+                )
+            elif organization.partner_status == Organization.PartnerStatus.FORMER:
+                raise OrganizationPartnershipLifecycleConflict(
+                    "A former partnership cannot be reinstated. A future partnership "
+                    "requires a fresh eligibility and activation process."
                 )
             else:
                 raise OrganizationPartnershipLifecycleConflict(
