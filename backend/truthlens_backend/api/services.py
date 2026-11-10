@@ -1384,6 +1384,200 @@ Never include a factual verdict."""
     return result
 
 
+
+_GFC_PROPOSITION_RELATIONSHIPS = frozenset({
+    "EQUIVALENT_OR_COVERS",
+    "PARTIAL_OR_RELATED",
+    "DIFFERENT",
+    "UNDETERMINED",
+})
+
+
+def _gfc_coverage_result(candidate_rows, *, reason_code):
+    covered_count = sum(
+        row["relationship"] == "EQUIVALENT_OR_COVERS"
+        for row in candidate_rows
+    )
+    relevant_count = sum(
+        row["relationship"] in {"EQUIVALENT_OR_COVERS", "PARTIAL_OR_RELATED"}
+        for row in candidate_rows
+    )
+    return {
+        "candidate_count": len(candidate_rows),
+        "relevant_candidate_count": relevant_count,
+        "covered_candidate_count": covered_count,
+        "terminally_sufficient": covered_count > 0,
+        "reason_code": reason_code,
+        "candidates": candidate_rows,
+    }
+
+
+def assess_fact_check_proposition_coverage(original_text, fact_check_texts):
+    """Assess bounded GFC reviewed claims for proposition-level terminal coverage.
+
+    Retrieval relevance and terminal sufficiency are deliberately distinct. A
+    related ClaimReview may remain useful evidence without being allowed to end
+    retrieval. Provider/schema uncertainty fails closed: the caller may retain
+    persisted GFC evidence, but GFC cannot become terminal on an uncertain match.
+    """
+    if not isinstance(original_text, str) or not original_text.strip():
+        return _gfc_coverage_result([], reason_code="ASSESSMENT_FAILED")
+    if not isinstance(fact_check_texts, (list, tuple)):
+        return _gfc_coverage_result([], reason_code="ASSESSMENT_FAILED")
+
+    candidates = []
+    seen = set()
+    for value in fact_check_texts:
+        if not isinstance(value, str):
+            continue
+        cleaned = " ".join(value.split())
+        if not cleaned:
+            continue
+        identity = cleaned.casefold()
+        if identity in seen:
+            continue
+        seen.add(identity)
+        candidates.append(cleaned)
+        if len(candidates) >= 5:
+            break
+
+    if not candidates:
+        return _gfc_coverage_result([], reason_code="NO_RELEVANT_CANDIDATE")
+
+    uncertain_rows = [
+        {
+            "candidate_index": index,
+            "relationship": "UNDETERMINED",
+            "reasoning": "Proposition coverage could not be established safely.",
+            "material_differences": [],
+        }
+        for index in range(len(candidates))
+    ]
+
+    system_instructions = """You are a strict proposition-coverage classifier for Google Fact Check ClaimReview metadata.
+Compare the submitted claim with EACH reviewed-claim candidate. Do not fact-check
+either statement, use outside knowledge, infer author intent, or transfer a rating
+between merely related propositions.
+
+For every candidate choose exactly one relationship:
+- EQUIVALENT_OR_COVERS: the candidate expresses the same proposition, or explicitly
+  covers every material assertion in the submitted claim. Paraphrases are allowed.
+- PARTIAL_OR_RELATED: same topic/event/person or useful overlap, but one or more
+  material submitted assertions are absent, narrower/broader in a truth-changing
+  way, or otherwise not fully covered.
+- DIFFERENT: materially different proposition.
+- UNDETERMINED: the relationship cannot be established safely from the supplied text.
+
+Compare all truth-relevant slots: actor/subject, predicate/action, object/target,
+date/time period, location, quantity/statistic, attribution/speaker,
+polarity/negation, causal relationship, certainty, and other material qualifiers.
+A difference is material whenever it could change the truth value of the submitted
+claim. Topical similarity or the same real-world event is never enough by itself.
+
+Return ONLY a JSON object with exactly this shape:
+{"candidates":[
+  {"candidate_index":0,
+   "relationship":"EQUIVALENT_OR_COVERS|PARTIAL_OR_RELATED|DIFFERENT|UNDETERMINED",
+   "reasoning":"nonempty evidence-free comparison explanation",
+   "material_differences":["each missing or conflicting material detail"]}
+]}
+Return exactly one row for every supplied candidate_index, with no duplicates or
+extra fields. EQUIVALENT_OR_COVERS requires material_differences=[].
+Never output a factual verdict."""
+
+    try:
+        response_text = call_llm_with_fallback(
+            system_instructions,
+            json.dumps(
+                {
+                    "submitted_claim": " ".join(original_text.split()),
+                    "reviewed_claim_candidates": [
+                        {"candidate_index": index, "text": text}
+                        for index, text in enumerate(candidates)
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            operation="gfc_proposition_coverage",
+        )
+        result = _parse_llm_json(response_text)
+        if not isinstance(result, dict) or set(result) != {"candidates"}:
+            raise ValueError("Invalid GFC proposition coverage root")
+        rows = result["candidates"]
+        if not isinstance(rows, list) or len(rows) != len(candidates):
+            raise ValueError("Incomplete GFC proposition coverage")
+        by_index = {}
+        required_keys = {
+            "candidate_index",
+            "relationship",
+            "reasoning",
+            "material_differences",
+        }
+        for row in rows:
+            if not isinstance(row, dict) or set(row) != required_keys:
+                raise ValueError("Invalid GFC proposition coverage row")
+            index = row["candidate_index"]
+            relationship = row["relationship"]
+            reasoning = row["reasoning"]
+            differences = row["material_differences"]
+            if (
+                type(index) is not int
+                or index < 0
+                or index >= len(candidates)
+                or index in by_index
+                or relationship not in _GFC_PROPOSITION_RELATIONSHIPS
+                or not isinstance(reasoning, str)
+                or not reasoning.strip()
+                or not isinstance(differences, list)
+                or any(
+                    not isinstance(detail, str) or not detail.strip()
+                    for detail in differences
+                )
+                or (
+                    relationship == "EQUIVALENT_OR_COVERS"
+                    and differences
+                )
+            ):
+                raise ValueError("Invalid GFC proposition coverage fields")
+            by_index[index] = {
+                "candidate_index": index,
+                "relationship": relationship,
+                "reasoning": reasoning.strip(),
+                "material_differences": [detail.strip() for detail in differences],
+            }
+        if set(by_index) != set(range(len(candidates))):
+            raise ValueError("Missing GFC proposition coverage candidate")
+
+        normalized_rows = [by_index[index] for index in range(len(candidates))]
+        if any(
+            row["relationship"] == "EQUIVALENT_OR_COVERS"
+            for row in normalized_rows
+        ):
+            reason_code = "EXACT_OR_EQUIVALENT_COVERAGE"
+        elif any(
+            row["relationship"] == "PARTIAL_OR_RELATED"
+            for row in normalized_rows
+        ):
+            reason_code = "RELATED_BUT_INCOMPLETE"
+        elif any(
+            row["relationship"] == "UNDETERMINED"
+            for row in normalized_rows
+        ):
+            reason_code = "ASSESSMENT_UNCERTAIN"
+        else:
+            reason_code = "MATERIAL_DIFFERENCE"
+        return _gfc_coverage_result(normalized_rows, reason_code=reason_code)
+    except Exception as exc:
+        logger.warning(
+            "GFC proposition coverage could not be established (%s).",
+            type(exc).__name__,
+        )
+        return _gfc_coverage_result(
+            uncertain_rows,
+            reason_code="ASSESSMENT_FAILED",
+        )
+
+
 def is_fact_check_relevant(original_text, fact_check_text):
     """Check if a fact check result is relevant to the original claim or article."""
     system_instructions = (
