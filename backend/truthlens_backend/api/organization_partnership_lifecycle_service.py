@@ -17,6 +17,10 @@ from .organization_invitation_service import (
     generate_invitation_token,
     hash_invitation_token,
 )
+from .organization_governance_notice_service import (
+    persist_governance_notice_recipients,
+    snapshot_governance_notice_recipients,
+)
 from .organization_partnership_policy import (
     get_organization_admin_onboarding_policy,
     organization_has_prior_partner_work,
@@ -826,6 +830,7 @@ def activate_partner_organization_partnership(*, organization_id, actor):
             "the governed retirement flow before any later reinstatement."
         )
 
+    notice_recipients = snapshot_governance_notice_recipients(organization)
     previous_state = _organization_status_state(organization)
     organization.partner_status = Organization.PartnerStatus.ACTIVE
     organization.save(update_fields=["partner_status", "updated_at"])
@@ -890,6 +895,7 @@ def suspend_partner_organization_partnership(
             "Only an active Partner Organization can be suspended."
         )
 
+    notice_recipients = snapshot_governance_notice_recipients(organization)
     previous_state = _organization_status_state(organization)
     organization.partner_status = Organization.PartnerStatus.SUSPENDED
     organization.save(update_fields=["partner_status", "updated_at"])
@@ -906,6 +912,10 @@ def suspend_partner_organization_partnership(
         actor=actor,
         summary=supporting_basis,
         references=supporting_references,
+    )
+    persist_governance_notice_recipients(
+        governance_event=event,
+        recipients=notice_recipients,
     )
     return organization
 
@@ -982,6 +992,10 @@ def reinstate_partner_organization_partnership(
         actor=actor,
         summary=supporting_basis,
         references=supporting_references,
+    )
+    persist_governance_notice_recipients(
+        governance_event=event,
+        recipients=notice_recipients,
     )
     return organization
 
@@ -1265,6 +1279,7 @@ def end_partner_organization_partnership(
     _ensure_endable_partnership(organization)
     _ensure_no_active_factual_correction(organization)
 
+    notice_recipients = snapshot_governance_notice_recipients(organization)
     previous_state = {
         "verification_status": organization.verification_status,
         "partner_status": organization.partner_status,
@@ -1314,6 +1329,11 @@ def end_partner_organization_partnership(
         actor=actor,
         summary=supporting_basis,
         references=supporting_references,
+    )
+
+    persist_governance_notice_recipients(
+        governance_event=event,
+        recipients=notice_recipients,
     )
 
     return {
