@@ -28,7 +28,7 @@ function ManagementGovernanceAuditDetailPage() {
       resolveApiEndpoint("MANAGEMENT_GOVERNANCE_AUDIT_DETAIL", eventId),
    );
    const actionLabel = data
-      ? formatManagementGovernanceAction(data.action_type, data.action_label)
+      ? formatManagementGovernanceAction(data.action_type, data.action_label, data.reason_code)
       : "Governance history record";
 
    return (
