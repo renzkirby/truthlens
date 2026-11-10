@@ -102,7 +102,14 @@ class VerificationRunURLRuntimeTests(TestCase):
             return_value=self.payload,
         )
         self.relevance = self._patch(
-            "api.tasks.is_fact_check_relevant", return_value=True
+            "api.tasks.assess_fact_check_proposition_coverage", return_value={
+    "candidate_count": 1,
+    "relevant_candidate_count": 1,
+    "covered_candidate_count": 1,
+    "terminally_sufficient": True,
+    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
+    "candidates": [],
+}
         )
         self.evaluate_gfc = self._patch(
             "api.tasks.evaluate_url_claim_with_gfc",
@@ -1288,8 +1295,15 @@ class VerificationEvidenceURLRuntimeTests(TestCase):
         self.log_stage = self.enterContext(patch("api.tasks._log_stage"))
         self.relevance = self.enterContext(
             patch(
-                "api.tasks.is_fact_check_relevant",
-                return_value=True,
+                "api.tasks.assess_fact_check_proposition_coverage",
+                return_value={
+    "candidate_count": 1,
+    "relevant_candidate_count": 1,
+    "covered_candidate_count": 1,
+    "terminally_sufficient": True,
+    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
+    "candidates": [],
+},
             )
         )
         self.evaluate_legacy_gfc = self.enterContext(
