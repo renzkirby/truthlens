@@ -561,13 +561,13 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         self.real_gfc_bridge = tasks._retrieve_and_ingest_gfc
         self.gfc = self._patch("api.tasks._retrieve_and_ingest_gfc", return_value={"claims": []})
         self.relevance = self._patch("api.tasks.assess_fact_check_proposition_coverage", return_value={
-    "candidate_count": 1,
-    "relevant_candidate_count": 0,
-    "covered_candidate_count": 0,
-    "terminally_sufficient": False,
-    "reason_code": "MATERIAL_DIFFERENCE",
-    "candidates": [],
-})
+                    "candidate_count": 1,
+                    "relevant_candidate_count": 0,
+                    "covered_candidate_count": 0,
+                    "terminally_sufficient": False,
+                    "reason_code": "MATERIAL_DIFFERENCE",
+                    "candidates": [],
+                })
         self.evaluate_gfc = self._patch("api.tasks.evaluate_image_claim_with_gfc")
         self.evaluate_tavily = self._patch(
             "api.tasks.evaluate_image_claim_with_tavily", return_value=self.verdict,
