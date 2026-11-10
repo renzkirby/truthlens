@@ -30,6 +30,65 @@ PARTNERSHIP_ACTIVATED_REASON = "PARTNERSHIP_ACTIVATED"
 PARTNERSHIP_SUSPENDED_REASON = "PARTNERSHIP_SUSPENDED"
 PARTNERSHIP_REINSTATED_REASON = "PARTNERSHIP_REINSTATED"
 
+PARTNERSHIP_FACTOR_CHOICES = (
+    ("VERIFICATION_STANDARDS", "Verification Standards Violation"),
+    ("IMPARTIALITY_CONFLICT", "Impartiality or Conflict-of-Interest Violation"),
+    ("TRANSPARENCY_MISREPRESENTATION", "Transparency or Misrepresentation Violation"),
+    ("CORRECTIONS_ACCOUNTABILITY", "Correction or Accountability Failure"),
+    ("PLATFORM_PARTNERSHIP", "Platform or Partnership Policy Violation"),
+    ("GOVERNANCE_CAPACITY", "Organizational Governance or Capacity Concern"),
+    ("SECURITY_INTEGRITY", "Security, Legal, or Institutional Integrity Risk"),
+    ("INACTIVITY_RESPONSIVENESS", "Inactivity or Non-responsiveness"),
+    ("OTHER", "Other"),
+)
+PARTNERSHIP_SEVERITY_CHOICES = (
+    ("LOW", "Low"),
+    ("MODERATE", "Moderate"),
+    ("HIGH", "High"),
+    ("CRITICAL", "Critical"),
+)
+PARTNERSHIP_SUSPENSION_TYPE_CHOICES = (
+    ("REMEDIAL", "Remedial Suspension"),
+    ("PRECAUTIONARY", "Precautionary Suspension"),
+    ("ADMINISTRATIVE", "Administrative Suspension"),
+)
+PARTNERSHIP_ENDING_TYPE_CHOICES = (
+    ("VOLUNTARY_WITHDRAWAL", "Voluntary Withdrawal"),
+    ("ADMINISTRATIVE_CONCLUSION", "Administrative Conclusion"),
+    ("TERMINATION_FOR_CAUSE", "Termination for Cause"),
+)
+PARTNERSHIP_ENDING_GROUND_CHOICES = (
+    ("VOLUNTARY_WITHDRAWAL", "Voluntary Withdrawal"),
+    ("PERMANENT_LOSS_ELIGIBILITY", "Permanent Loss of Eligibility or Capacity"),
+    ("ORGANIZATION_DISSOLVED", "Organization Dissolved or Ceased Relevant Operations"),
+    ("PROLONGED_ABANDONMENT", "Prolonged Inactivity or Partnership Abandonment"),
+    ("SEVERE_NON_REMEDIABLE_VIOLATION", "Severe Non-remediable Violation"),
+    ("REPEATED_SYSTEMIC_VIOLATIONS", "Repeated or Systemic Serious Violations"),
+    ("FAILED_REMEDIATION", "Failed Remediation"),
+)
+
+_PARTNERSHIP_FACTORS = {value for value, _label in PARTNERSHIP_FACTOR_CHOICES}
+_PARTNERSHIP_SEVERITIES = {value for value, _label in PARTNERSHIP_SEVERITY_CHOICES}
+_PARTNERSHIP_SUSPENSION_TYPES = {
+    value for value, _label in PARTNERSHIP_SUSPENSION_TYPE_CHOICES
+}
+_PARTNERSHIP_ENDING_TYPES = {
+    value for value, _label in PARTNERSHIP_ENDING_TYPE_CHOICES
+}
+_PARTNERSHIP_ENDING_GROUNDS = {
+    value for value, _label in PARTNERSHIP_ENDING_GROUND_CHOICES
+}
+_ADMINISTRATIVE_ENDING_GROUNDS = {
+    "PERMANENT_LOSS_ELIGIBILITY",
+    "ORGANIZATION_DISSOLVED",
+    "PROLONGED_ABANDONMENT",
+}
+_FOR_CAUSE_ENDING_GROUNDS = {
+    "SEVERE_NON_REMEDIABLE_VIOLATION",
+    "REPEATED_SYSTEMIC_VIOLATIONS",
+    "FAILED_REMEDIATION",
+}
+
 ACTIVE_FACTUAL_CASE_STATUSES = {
     ModerationCase.Status.OPEN,
     ModerationCase.Status.IN_REVIEW,
@@ -50,6 +109,148 @@ class OrganizationPartnershipLifecycleAuthorizationError(
 
 class OrganizationPartnershipLifecycleConflict(OrganizationPartnershipLifecycleError):
     pass
+
+
+def _normalize_required_text(value, *, field_name):
+    normalized = str(value or "").strip()
+    if not normalized:
+        raise OrganizationPartnershipLifecycleConflict(
+            f"{field_name} is required."
+        )
+    return normalized
+
+
+def _normalize_optional_text(value):
+    return str(value or "").strip()
+
+
+def _normalize_factors(factors, *, required):
+    if factors is None:
+        factors = []
+    if not isinstance(factors, (list, tuple)):
+        raise OrganizationPartnershipLifecycleConflict(
+            "Partnership factors must be provided as a list."
+        )
+
+    normalized = []
+    for factor in factors:
+        value = str(factor or "").strip()
+        if value not in _PARTNERSHIP_FACTORS:
+            raise OrganizationPartnershipLifecycleConflict(
+                "Select a valid partnership factor."
+            )
+        if value not in normalized:
+            normalized.append(value)
+
+    if required and not normalized:
+        raise OrganizationPartnershipLifecycleConflict(
+            "At least one partnership factor is required."
+        )
+    return normalized
+
+
+def _validate_suspension_governance_metadata(
+    *,
+    suspension_type,
+    factors,
+    severity,
+    reason,
+    policy_basis="",
+    required_remediation="",
+    review_date=None,
+):
+    suspension_type = str(suspension_type or "").strip()
+    if suspension_type not in _PARTNERSHIP_SUSPENSION_TYPES:
+        raise OrganizationPartnershipLifecycleConflict(
+            "Select a valid suspension type."
+        )
+
+    severity = str(severity or "").strip()
+    if severity not in _PARTNERSHIP_SEVERITIES:
+        raise OrganizationPartnershipLifecycleConflict(
+            "Select a valid suspension severity."
+        )
+
+    factors = _normalize_factors(factors, required=True)
+    reason = _normalize_required_text(reason, field_name="Suspension reason")
+    policy_basis = _normalize_optional_text(policy_basis)
+    required_remediation = _normalize_optional_text(required_remediation)
+    if suspension_type == "REMEDIAL" and not required_remediation:
+        raise OrganizationPartnershipLifecycleConflict(
+            "Required remediation must be recorded for a remedial suspension."
+        )
+
+    return {
+        "suspension_type": suspension_type,
+        "factors": factors,
+        "severity": severity,
+        "policy_basis": policy_basis,
+        "required_remediation": required_remediation,
+        "review_date": review_date.isoformat() if review_date is not None else None,
+    }, reason
+
+
+def _validate_partnership_ending_governance_metadata(
+    *,
+    ending_type,
+    ground,
+    factors,
+    severity,
+    reason,
+    policy_basis="",
+):
+    ending_type = str(ending_type or "").strip()
+    if ending_type not in _PARTNERSHIP_ENDING_TYPES:
+        raise OrganizationPartnershipLifecycleConflict(
+            "Select a valid partnership ending type."
+        )
+
+    ground = str(ground or "").strip()
+    if ground not in _PARTNERSHIP_ENDING_GROUNDS:
+        raise OrganizationPartnershipLifecycleConflict(
+            "Select a valid partnership ending ground."
+        )
+
+    if ending_type == "VOLUNTARY_WITHDRAWAL":
+        if ground != "VOLUNTARY_WITHDRAWAL":
+            raise OrganizationPartnershipLifecycleConflict(
+                "Voluntary withdrawal must use the voluntary-withdrawal ground."
+            )
+        factors = _normalize_factors(factors, required=False)
+        if factors:
+            raise OrganizationPartnershipLifecycleConflict(
+                "Voluntary withdrawal must not be classified as a policy violation."
+            )
+        severity = ""
+    elif ending_type == "ADMINISTRATIVE_CONCLUSION":
+        if ground not in _ADMINISTRATIVE_ENDING_GROUNDS:
+            raise OrganizationPartnershipLifecycleConflict(
+                "Select an administrative partnership-ending ground."
+            )
+        factors = _normalize_factors(factors, required=False)
+        severity = ""
+    else:
+        if ground not in _FOR_CAUSE_ENDING_GROUNDS:
+            raise OrganizationPartnershipLifecycleConflict(
+                "Select a termination-for-cause ground."
+            )
+        factors = _normalize_factors(factors, required=True)
+        severity = str(severity or "").strip()
+        if severity not in {"HIGH", "CRITICAL"}:
+            raise OrganizationPartnershipLifecycleConflict(
+                "Termination for cause requires High or Critical severity."
+            )
+
+    reason = _normalize_required_text(reason, field_name="Partnership ending reason")
+    policy_basis = _normalize_optional_text(policy_basis)
+
+    return {
+        "ending_type": ending_type,
+        "ground": ground,
+        "factors": factors,
+        "severity": severity or None,
+        "policy_basis": policy_basis,
+    }, reason
 
 
 def _require_platform_management_authority(actor):
@@ -75,6 +276,7 @@ def _record_platform_event(
     new_state=None,
     context=None,
     reason_code=PARTNERSHIP_ENDED_REASON,
+    notes="",
 ):
     return record_accountability_event(
         action_type=action_type,
@@ -88,6 +290,7 @@ def _record_platform_event(
         previous_state=previous_state or {},
         new_state=new_state or {},
         reason_code=reason_code,
+        notes=notes,
         context=context or {},
     )
 
@@ -253,7 +456,18 @@ def _organization_status_state(organization):
     }
 
 
-def _record_organization_transition(*, organization, actor, previous_state, reason_code):
+def _record_organization_transition(
+    *,
+    organization,
+    actor,
+    previous_state,
+    reason_code,
+    notes="",
+    context=None,
+):
+    event_context = {"transition": reason_code}
+    if context:
+        event_context.update(context)
     return _record_platform_event(
         action_type=AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED,
         resource_type=AccountabilityEvent.ResourceType.ORGANIZATION,
@@ -263,7 +477,8 @@ def _record_organization_transition(*, organization, actor, previous_state, reas
         previous_state=previous_state,
         new_state=_organization_status_state(organization),
         reason_code=reason_code,
-        context={"transition": reason_code},
+        notes=notes,
+        context=event_context,
     )
 
 
@@ -367,8 +582,28 @@ def activate_partner_organization_partnership(*, organization_id, actor):
 
 
 @transaction.atomic
-def suspend_partner_organization_partnership(*, organization_id, actor):
+def suspend_partner_organization_partnership(
+    *,
+    organization_id,
+    actor,
+    suspension_type,
+    factors,
+    severity,
+    reason,
+    policy_basis="",
+    required_remediation="",
+    review_date=None,
+):
     _require_platform_management_authority(actor)
+    governance_metadata, reason = _validate_suspension_governance_metadata(
+        suspension_type=suspension_type,
+        factors=factors,
+        severity=severity,
+        reason=reason,
+        policy_basis=policy_basis,
+        required_remediation=required_remediation,
+        review_date=review_date,
+    )
     organization = Organization.objects.select_for_update(of=("self",)).get(
         pk=organization_id
     )
@@ -385,6 +620,8 @@ def suspend_partner_organization_partnership(*, organization_id, actor):
         actor=actor,
         previous_state=previous_state,
         reason_code=PARTNERSHIP_SUSPENDED_REASON,
+        notes=reason,
+        context={"governance": governance_metadata},
     )
     return organization
 
@@ -648,7 +885,17 @@ def _cancel_pending_invitations(*, organization, actor, now):
 
 
 @transaction.atomic
-def end_partner_organization_partnership(*, organization_id, actor):
+def end_partner_organization_partnership(
+    *,
+    organization_id,
+    actor,
+    ending_type,
+    ground,
+    factors,
+    severity,
+    reason,
+    policy_basis="",
+):
     """
     End a current partnership without deleting institutional history.
 
@@ -662,6 +909,14 @@ def end_partner_organization_partnership(*, organization_id, actor):
     """
 
     _require_platform_management_authority(actor)
+    governance_metadata, reason = _validate_partnership_ending_governance_metadata(
+        ending_type=ending_type,
+        ground=ground,
+        factors=factors,
+        severity=severity,
+        reason=reason,
+        policy_basis=policy_basis,
+    )
 
     organization = Organization.objects.select_for_update(of=("self",)).get(
         pk=organization_id
@@ -709,7 +964,9 @@ def end_partner_organization_partnership(*, organization_id, actor):
             "ended_memberships": len(ended_memberships),
             "cancelled_invitations": len(cancelled_invitations),
             "requeued_investigations": len(replacements),
+            "governance": governance_metadata,
         },
+        notes=reason,
     )
 
     return {
