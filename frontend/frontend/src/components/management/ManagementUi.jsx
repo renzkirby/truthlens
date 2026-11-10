@@ -153,6 +153,7 @@ export function ManagementConfirmDialog({
    children,
    confirmLabel,
    processing = false,
+   confirmDisabled = false,
    confirmVariant = "primary",
    returnFocusRef,
    onConfirm,
@@ -237,6 +238,7 @@ export function ManagementConfirmDialog({
                </Button>
                <Button
                   variant={confirmVariant}
+                  disabled={processing || confirmDisabled}
                   loading={processing}
                   loadingLabel="Working…"
                   onClick={onConfirm}
