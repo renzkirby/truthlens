@@ -1960,8 +1960,19 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             evidence_dossier,
                             VerificationEvidence.EvidenceRole.SECONDARY,
                         )
+                    evaluation_groups = (
+                        filter_reasoning_evidence_dossier_by_roles(
+                            evidence_dossier,
+                            (
+                                VerificationEvidence.EvidenceRole.FACT_CHECK,
+                                VerificationEvidence.EvidenceRole.SECONDARY,
+                            ),
+                        )
+                        if gfc_evidence_assessed
+                        else secondary_groups
+                    )
                     evidence_context = _render_bounded_persisted_evidence_context(
-                        secondary_groups, cleaned_claim, article_stance
+                        evaluation_groups, cleaned_claim, article_stance
                     )
                     if evidence_context:
                         evaluator_invoked = True
@@ -1972,14 +1983,14 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         )
                         ai_verdict = calibrate_verdict_confidence(
                             ai_verdict,
-                            secondary_groups,
+                            evaluation_groups,
                         )
                         ai_verdict = _apply_noneditable_fallback_verdict_policy(
                             ai_verdict,
-                            secondary_groups,
+                            evaluation_groups,
                             fallback_active=noneditable_context_fallback,
-                        required_anchor_tokens=noneditable_fallback_anchor_tokens,
-                        assertion_complete=noneditable_fallback_assertion_complete,
+                            required_anchor_tokens=noneditable_fallback_anchor_tokens,
+                            assertion_complete=noneditable_fallback_assertion_complete,
                         )
                     else:
                         _log_stage(
@@ -2009,15 +2020,23 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         tavily_eval_started_at,
                         verdict=ai_verdict.get("verdict"),
                     )
-                # Keep the visible source cards aligned with the persisted
-                # SECONDARY evidence used by the evaluator. This mirrors the
-                # URL pipeline and prevents top-three retrieval cards from
-                # masquerading as the complete evaluated provenance.
-                report_sources = (
-                    persisted_evidence_source_previews(
-                        run, VerificationEvidence.EvidenceRole.SECONDARY,
-                    ) if run is not None else source_urls
-                )
+                # Keep visible source cards aligned with every persisted role
+                # that reached the final evaluator.
+                if run is not None:
+                    report_sources = []
+                    if gfc_evidence_assessed:
+                        report_sources.extend(
+                            persisted_evidence_source_previews(
+                                run, VerificationEvidence.EvidenceRole.FACT_CHECK,
+                            )
+                        )
+                    report_sources.extend(
+                        persisted_evidence_source_previews(
+                            run, VerificationEvidence.EvidenceRole.SECONDARY,
+                        )
+                    )
+                else:
+                    report_sources = source_urls
                 save_started_at = time.perf_counter()
                 _save_claim(
                     claim_id,
@@ -2895,8 +2914,19 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         evidence_dossier,
                         VerificationEvidence.EvidenceRole.SECONDARY,
                     )
+                evaluation_groups = (
+                    filter_reasoning_evidence_dossier_by_roles(
+                        evidence_dossier,
+                        (
+                            VerificationEvidence.EvidenceRole.FACT_CHECK,
+                            VerificationEvidence.EvidenceRole.SECONDARY,
+                        ),
+                    )
+                    if gfc_evidence_assessed
+                    else secondary_groups
+                )
                 evidence_context = _render_bounded_persisted_evidence_context(
-                    secondary_groups, cleaned_claim, article_stance
+                    evaluation_groups, cleaned_claim, article_stance
                 )
                 if evidence_context:
                     evaluator_invoked = True
@@ -2907,11 +2937,11 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     )
                     ai_verdict = calibrate_verdict_confidence(
                         ai_verdict,
-                        secondary_groups,
+                        evaluation_groups,
                     )
                     ai_verdict = _apply_noneditable_fallback_verdict_policy(
                         ai_verdict,
-                        secondary_groups,
+                        evaluation_groups,
                         fallback_active=noneditable_context_fallback,
                         required_anchor_tokens=noneditable_fallback_anchor_tokens,
                         assertion_complete=noneditable_fallback_assertion_complete,
@@ -2944,13 +2974,22 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     tavily_eval_started_at,
                     verdict=ai_verdict.get("verdict"),
                 )
-            # A report source card must reference persisted SECONDARY
-            # evidence; the first three Tavily hits are not the dossier.
-            report_sources = (
-                persisted_evidence_source_previews(
-                    run, VerificationEvidence.EvidenceRole.SECONDARY,
-                ) if run is not None else source_urls
-            )
+            # Project the persisted roles that actually reached final evaluation.
+            if run is not None:
+                report_sources = []
+                if gfc_evidence_assessed:
+                    report_sources.extend(
+                        persisted_evidence_source_previews(
+                            run, VerificationEvidence.EvidenceRole.FACT_CHECK,
+                        )
+                    )
+                report_sources.extend(
+                    persisted_evidence_source_previews(
+                        run, VerificationEvidence.EvidenceRole.SECONDARY,
+                    )
+                )
+            else:
+                report_sources = source_urls
             save_started_at = time.perf_counter()
             _save_claim(
                 claim_id, ai_verdict, "Live Web Search", cleaned_claim,
