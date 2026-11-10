@@ -1,7 +1,17 @@
+from django.db.models import Count, Q
 from rest_framework import serializers
 
 from .accountability_query_service import MANAGEMENT_GOVERNANCE_ACTIONS
+from .organization_governance_reconsideration_service import (
+    management_reconsideration_projection,
+)
 from .organization_partnership_lifecycle_service import (
+    PARTNERSHIP_ENDING_GROUND_CHOICES,
+    PARTNERSHIP_ENDING_TYPE_CHOICES,
+    PARTNERSHIP_FACTOR_CHOICES,
+    PARTNERSHIP_REINSTATEMENT_BASIS_CHOICES,
+    PARTNERSHIP_SEVERITY_CHOICES,
+    PARTNERSHIP_SUSPENSION_TYPE_CHOICES,
     get_partner_organization_lifecycle_projection,
 )
 from .models import (
@@ -10,6 +20,9 @@ from .models import (
     ClaimInstitutionAssociation,
     Institution,
     Organization,
+    OrganizationGovernanceFallbackDelivery,
+    OrganizationGovernanceNoticeRecipient,
+    OrganizationGovernanceReconsideration,
     OrganizationInstitutionAffiliation,
     OrganizationInvitation,
     OrganizationMembership,
@@ -106,6 +119,411 @@ ManagementPrimaryAdminProvisionSerializer = ManagementOrganizationAdminProvision
 
 class ManagementEmptyMutationSerializer(StrictFieldsSerializer):
     pass
+
+
+class ManagementGovernanceContactSerializer(StrictFieldsSerializer):
+    governance_contact_email = serializers.EmailField(
+        required=True,
+        allow_blank=True,
+        trim_whitespace=True,
+    )
+
+
+class ManagementGovernanceOutOfBandNoticeSerializer(StrictFieldsSerializer):
+    fallback_delivery_id = serializers.UUIDField()
+    method = serializers.CharField(
+        min_length=2,
+        max_length=80,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    details = serializers.CharField(
+        min_length=10,
+        max_length=3000,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+
+
+class ManagementPartnershipSuspensionSerializer(StrictFieldsSerializer):
+    suspension_type = serializers.ChoiceField(
+        choices=PARTNERSHIP_SUSPENSION_TYPE_CHOICES,
+    )
+    factors = serializers.ListField(
+        child=serializers.ChoiceField(choices=PARTNERSHIP_FACTOR_CHOICES),
+        allow_empty=False,
+        max_length=8,
+    )
+    severity = serializers.ChoiceField(
+        choices=PARTNERSHIP_SEVERITY_CHOICES,
+    )
+    rationale = serializers.CharField(
+        min_length=20,
+        max_length=4000,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    policy_basis = serializers.CharField(
+        max_length=1000,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    supporting_basis = serializers.CharField(
+        max_length=6000,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    supporting_references = serializers.ListField(
+        child=serializers.CharField(
+            max_length=500,
+            allow_blank=False,
+            trim_whitespace=True,
+        ),
+        required=False,
+        allow_empty=True,
+        max_length=10,
+        default=list,
+    )
+    other_factor_explanation = serializers.CharField(
+        max_length=2000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+    remediation_problem = serializers.CharField(
+        max_length=3000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+    remediation_required_action = serializers.CharField(
+        max_length=3000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+    remediation_evidence_required = serializers.CharField(
+        max_length=3000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+    remediation_deadline = serializers.DateField(
+        required=False,
+        allow_null=True,
+    )
+    remediation_review_method = serializers.CharField(
+        max_length=3000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+    remediation_failure_consequence = serializers.CharField(
+        max_length=3000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+    review_date = serializers.DateField(
+        required=False,
+        allow_null=True,
+    )
+
+    def validate(self, attrs):
+        factors = attrs.get("factors", [])
+        other_explanation = attrs.get("other_factor_explanation", "").strip()
+        if "OTHER" in factors and not other_explanation:
+            raise serializers.ValidationError(
+                {
+                    "other_factor_explanation": (
+                        "Explain the underlying standard and why the established factors do not fit."
+                    )
+                }
+            )
+        if "OTHER" not in factors and other_explanation:
+            raise serializers.ValidationError(
+                {
+                    "other_factor_explanation": (
+                        "Other-factor explanation is only valid when Other is selected."
+                    )
+                }
+            )
+
+        remediation_fields = {
+            "remediation_problem": attrs.get("remediation_problem", "").strip(),
+            "remediation_required_action": attrs.get(
+                "remediation_required_action", ""
+            ).strip(),
+            "remediation_evidence_required": attrs.get(
+                "remediation_evidence_required", ""
+            ).strip(),
+            "remediation_review_method": attrs.get(
+                "remediation_review_method", ""
+            ).strip(),
+            "remediation_failure_consequence": attrs.get(
+                "remediation_failure_consequence", ""
+            ).strip(),
+        }
+        has_remediation = any(remediation_fields.values()) or bool(
+            attrs.get("remediation_deadline")
+        )
+
+        if attrs.get("suspension_type") == "REMEDIAL":
+            errors = {
+                field: "This field is required for a remedial suspension."
+                for field, value in remediation_fields.items()
+                if not value
+            }
+            if not attrs.get("remediation_deadline"):
+                errors["remediation_deadline"] = (
+                    "A remediation deadline is required for a remedial suspension."
+                )
+            if errors:
+                raise serializers.ValidationError(errors)
+        elif has_remediation:
+            raise serializers.ValidationError(
+                {
+                    "remediation_problem": (
+                        "Structured remediation fields are only valid for a remedial suspension."
+                    )
+                }
+            )
+
+        if (
+            attrs.get("suspension_type") == "PRECAUTIONARY"
+            and not attrs.get("review_date")
+        ):
+            raise serializers.ValidationError(
+                {
+                    "review_date": (
+                        "A review date is required for a precautionary suspension."
+                    )
+                }
+            )
+        return attrs
+
+
+class ManagementPartnershipEndingSerializer(StrictFieldsSerializer):
+    ending_type = serializers.ChoiceField(
+        choices=PARTNERSHIP_ENDING_TYPE_CHOICES,
+    )
+    ground = serializers.ChoiceField(
+        choices=PARTNERSHIP_ENDING_GROUND_CHOICES,
+    )
+    factors = serializers.ListField(
+        child=serializers.ChoiceField(choices=PARTNERSHIP_FACTOR_CHOICES),
+        required=False,
+        allow_empty=True,
+        max_length=8,
+        default=list,
+    )
+    severity = serializers.ChoiceField(
+        choices=PARTNERSHIP_SEVERITY_CHOICES,
+        required=False,
+        allow_blank=True,
+        default="",
+    )
+    rationale = serializers.CharField(
+        min_length=20,
+        max_length=4000,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    policy_basis = serializers.CharField(
+        max_length=1000,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    supporting_basis = serializers.CharField(
+        max_length=6000,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    supporting_references = serializers.ListField(
+        child=serializers.CharField(
+            max_length=500,
+            allow_blank=False,
+            trim_whitespace=True,
+        ),
+        required=False,
+        allow_empty=True,
+        max_length=10,
+        default=list,
+    )
+    other_factor_explanation = serializers.CharField(
+        max_length=2000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+
+    def validate(self, attrs):
+        ending_type = attrs["ending_type"]
+        ground = attrs["ground"]
+        factors = attrs.get("factors", [])
+        severity = attrs.get("severity", "")
+        other_explanation = attrs.get("other_factor_explanation", "").strip()
+
+        if ending_type == "VOLUNTARY_WITHDRAWAL":
+            if ground != "VOLUNTARY_WITHDRAWAL":
+                raise serializers.ValidationError(
+                    {"ground": "Voluntary withdrawal requires the voluntary-withdrawal ground."}
+                )
+            if factors:
+                raise serializers.ValidationError(
+                    {"factors": "Voluntary withdrawal must not be classified as a policy violation."}
+                )
+            attrs["severity"] = ""
+        elif ending_type == "ADMINISTRATIVE_CONCLUSION":
+            if ground not in {
+                "PERMANENT_LOSS_ELIGIBILITY",
+                "ORGANIZATION_DISSOLVED",
+                "PROLONGED_ABANDONMENT",
+            }:
+                raise serializers.ValidationError(
+                    {"ground": "Select an administrative partnership-ending ground."}
+                )
+            attrs["severity"] = ""
+        else:
+            if ground not in {
+                "SEVERE_NON_REMEDIABLE_VIOLATION",
+                "REPEATED_SYSTEMIC_VIOLATIONS",
+                "FAILED_REMEDIATION",
+            }:
+                raise serializers.ValidationError(
+                    {"ground": "Select a termination-for-cause ground."}
+                )
+            if not factors:
+                raise serializers.ValidationError(
+                    {"factors": "At least one partnership factor is required."}
+                )
+            if severity not in {"HIGH", "CRITICAL"}:
+                raise serializers.ValidationError(
+                    {"severity": "Termination for cause requires High or Critical severity."}
+                )
+
+        if "OTHER" in factors and not other_explanation:
+            raise serializers.ValidationError(
+                {
+                    "other_factor_explanation": (
+                        "Explain the underlying standard and why the established factors do not fit."
+                    )
+                }
+            )
+        if "OTHER" not in factors and other_explanation:
+            raise serializers.ValidationError(
+                {
+                    "other_factor_explanation": (
+                        "Other-factor explanation is only valid when Other is selected."
+                    )
+                }
+            )
+        return attrs
+
+
+class ManagementPartnershipReinstatementSerializer(StrictFieldsSerializer):
+    basis = serializers.ChoiceField(
+        choices=PARTNERSHIP_REINSTATEMENT_BASIS_CHOICES,
+    )
+    rationale = serializers.CharField(
+        min_length=20,
+        max_length=4000,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    supporting_basis = serializers.CharField(
+        max_length=6000,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    supporting_references = serializers.ListField(
+        child=serializers.CharField(
+            max_length=500,
+            allow_blank=False,
+            trim_whitespace=True,
+        ),
+        required=False,
+        allow_empty=True,
+        max_length=10,
+        default=list,
+    )
+    completed_remediation = serializers.CharField(
+        max_length=4000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+    continuing_conditions = serializers.CharField(
+        max_length=4000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+    monitoring_end_date = serializers.DateField(
+        required=False,
+        allow_null=True,
+    )
+    monitoring_success_criteria = serializers.CharField(
+        max_length=3000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+    monitoring_recurrence_consequence = serializers.CharField(
+        max_length=3000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+
+    def validate(self, attrs):
+        if (
+            attrs.get("basis") == "REMEDIATION_COMPLETED"
+            and not attrs.get("completed_remediation", "").strip()
+        ):
+            raise serializers.ValidationError(
+                {
+                    "completed_remediation": (
+                        "Completed remediation is required for this reinstatement basis."
+                    )
+                }
+            )
+
+        continuing_conditions = attrs.get("continuing_conditions", "").strip()
+        monitoring_values = (
+            attrs.get("monitoring_end_date"),
+            attrs.get("monitoring_success_criteria", "").strip(),
+            attrs.get("monitoring_recurrence_consequence", "").strip(),
+        )
+        if continuing_conditions and not all(monitoring_values):
+            raise serializers.ValidationError(
+                {
+                    "continuing_conditions": (
+                        "Monitoring end date, success criteria, and recurrence consequence "
+                        "are required when continuing conditions apply."
+                    )
+                }
+            )
+        if not continuing_conditions and any(monitoring_values):
+            raise serializers.ValidationError(
+                {
+                    "continuing_conditions": (
+                        "Continuing conditions are required when monitoring details are provided."
+                    )
+                }
+            )
+        return attrs
 
 
 class ManagementGovernanceAuditQuerySerializer(StrictFieldsSerializer):
@@ -590,6 +1008,8 @@ class ManagementOrganizationAdminInvitationSerializer(serializers.ModelSerialize
 
 class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerializer):
     lifecycle = serializers.SerializerMethodField()
+    governance_notice_delivery = serializers.SerializerMethodField()
+    governance_reconsiderations = serializers.SerializerMethodField()
     institution_affiliation = serializers.SerializerMethodField()
     verification_specializations = serializers.ListField(
         child=serializers.CharField(), read_only=True
@@ -606,6 +1026,114 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
 
     def get_lifecycle(self, obj):
         return get_partner_organization_lifecycle_projection(obj)
+
+    def get_governance_notice_delivery(self, obj):
+        queryset = OrganizationGovernanceNoticeRecipient.objects.filter(
+            governance_event__subject_organization=obj,
+        )
+        statuses = OrganizationGovernanceNoticeRecipient.DeliveryStatus
+        retryable = {statuses.PENDING, statuses.FAILED}
+
+        in_app_counts = {
+            row["in_app_status"]: row["count"]
+            for row in queryset.values("in_app_status").annotate(count=Count("id"))
+        }
+        email_counts = {
+            row["email_status"]: row["count"]
+            for row in queryset.values("email_status").annotate(count=Count("id"))
+        }
+        rows = list(
+            queryset.select_related("user", "governance_event")
+            .order_by("-created_at", "-id")[:20]
+        )
+        fallback = (
+            OrganizationGovernanceFallbackDelivery.objects.filter(
+                governance_event__subject_organization=obj,
+            )
+            .select_related("recorded_by", "governance_event")
+            .order_by("-created_at", "-id")
+            .first()
+        )
+        has_active_admin = obj.memberships.filter(
+            role__in=[
+                OrganizationMembership.Role.ADMIN,
+                OrganizationMembership.Role.OWNER,
+            ],
+            status=OrganizationMembership.Status.ACTIVE,
+            user__isnull=False,
+        ).exists()
+
+        return {
+            "total_recipients": queryset.count(),
+            "no_active_admin": not has_active_admin,
+            "fallback": (
+                {
+                    "id": str(fallback.pk),
+                    "event_id": str(fallback.governance_event_id),
+                    "contact_email": fallback.contact_email,
+                    "status": fallback.status,
+                    "attempts": fallback.attempts,
+                    "last_error": fallback.last_error,
+                    "last_attempt_at": fallback.last_attempt_at,
+                    "delivered_at": fallback.delivered_at,
+                    "out_of_band_method": fallback.out_of_band_method,
+                    "out_of_band_details": fallback.out_of_band_details,
+                    "recorded_at": fallback.recorded_at,
+                    "recorded_by": (
+                        fallback.recorded_by.username
+                        if fallback.recorded_by_id
+                        else None
+                    ),
+                }
+                if fallback is not None
+                else None
+            ),
+            "retry_available": queryset.filter(
+                Q(in_app_status__in=retryable)
+                | Q(email_status__in=retryable)
+            ).exists(),
+            "in_app": {
+                value: in_app_counts.get(value, 0)
+                for value, _label in statuses.choices
+            },
+            "email": {
+                value: email_counts.get(value, 0)
+                for value, _label in statuses.choices
+            },
+            "recent": [
+                {
+                    "id": str(row.pk),
+                    "event_id": str(row.governance_event_id),
+                    "username": row.user.username if row.user_id else None,
+                    "audience": row.audience,
+                    "in_app_status": row.in_app_status,
+                    "email_status": row.email_status,
+                    "in_app_attempts": row.in_app_attempts,
+                    "email_attempts": row.email_attempts,
+                    "last_delivery_error": row.last_delivery_error,
+                    "last_delivery_attempt_at": row.last_delivery_attempt_at,
+                    "created_at": row.created_at,
+                }
+                for row in rows
+            ],
+        }
+
+    def get_governance_reconsiderations(self, obj):
+        rows = (
+            OrganizationGovernanceReconsideration.objects.filter(
+                organization=obj,
+            )
+            .select_related(
+                "requested_by",
+                "reviewer",
+                "suspension_event",
+            )
+            .order_by("-submitted_at", "-id")[:10]
+        )
+        return [
+            management_reconsideration_projection(row)
+            for row in rows
+        ]
 
     def get_organization_admin(self, obj):
         current_admins = (
@@ -669,6 +1197,7 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
         fields = ManagementOrganizationListSerializer.Meta.fields + (
             "description",
             "website",
+            "governance_contact_email",
             "logo_url",
             "expertise_areas",
             "verification_specializations",
@@ -684,6 +1213,8 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
             "organization_admin",
             "primary_admin",
             "lifecycle",
+            "governance_notice_delivery",
+            "governance_reconsiderations",
             "created_at",
         )
         read_only_fields = fields

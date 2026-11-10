@@ -73,6 +73,51 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
         client.force_authenticate(user=self.platform_admin)
         return client
 
+    def suspension_payload(self):
+        return {
+            "suspension_type": "REMEDIAL",
+            "factors": ["VERIFICATION_STANDARDS"],
+            "severity": "HIGH",
+            "rationale": "Repeated sourcing failures require temporary remediation before professional access resumes.",
+            "policy_basis": "Partnership Enforcement Policy §13.1",
+            "supporting_basis": "Internal review of affected investigations and prior corrective guidance.",
+            "supporting_references": ["INV-API-001"],
+            "other_factor_explanation": "",
+            "remediation_problem": "Repeated sourcing failures in completed verification work.",
+            "remediation_required_action": "Review affected investigations and correct the sourcing process.",
+            "remediation_evidence_required": "Updated evidence-review procedure and corrected investigation records.",
+            "remediation_deadline": str(timezone.localdate() + timedelta(days=30)),
+            "remediation_review_method": "Platform Governance will review the submitted procedure and corrected records.",
+            "remediation_failure_consequence": "TruthLens may continue the suspension or consider a stronger proportionate governance action.",
+            "review_date": None,
+        }
+
+    def reinstatement_payload(self):
+        return {
+            "basis": "OPERATIONAL_REQUIREMENTS_RESTORED",
+            "rationale": "The organization has restored the operational requirements needed for active Partner participation.",
+            "supporting_basis": "Internal review confirms accountable administration and operational capacity are restored.",
+            "supporting_references": ["GOV-REINSTATE-API-001"],
+            "completed_remediation": "",
+            "continuing_conditions": "",
+            "monitoring_end_date": None,
+            "monitoring_success_criteria": "",
+            "monitoring_recurrence_consequence": "",
+        }
+
+    def ending_payload(self):
+        return {
+            "ending_type": "ADMINISTRATIVE_CONCLUSION",
+            "ground": "PROLONGED_ABANDONMENT",
+            "factors": ["INACTIVITY_RESPONSIVENESS"],
+            "severity": "",
+            "rationale": "The organization can no longer maintain an active partnership because required operations have ceased.",
+            "policy_basis": "Partnership Enforcement Policy §19.2",
+            "supporting_basis": "Internal administrative record confirming prolonged inactivity and loss of operational capacity.",
+            "supporting_references": ["GOV-ENDING-API-001"],
+            "other_factor_explanation": "",
+        }
+
     def detail_url(self, organization=None):
         return reverse(
             "management_organization_detail",
@@ -127,7 +172,7 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
         )
 
     def test_end_partnership_returns_transition_summary_and_refreshed_projection(self):
-        response = self.authenticated_client().post(self.end_url(), {}, format="json")
+        response = self.authenticated_client().post(self.end_url(), self.ending_payload(), format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(
@@ -156,7 +201,7 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
                     "can_reject_verification": False,
                     "can_activate_partnership": False,
                     "can_suspend_partnership": False,
-                    "can_reinstate_partnership": True,
+                    "can_reinstate_partnership": False,
                     "can_end_partnership": False,
                     "can_provision_organization_admin": False,
                 },
@@ -164,8 +209,9 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
                     "allowed": False,
                     "code": "FORMER_PARTNER",
                     "message": (
-                        "This organization is a Former Partner. Reinstate the partnership "
-                        "before provisioning or accepting a new Organization Admin."
+                        "This organization is a Former Partner. A future partnership requires "
+                        "a fresh eligibility and activation process before Organization Admin "
+                        "onboarding can resume."
                     ),
                 },
                 "can_end_partnership": False,
@@ -279,7 +325,11 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
                 "this organization's partnership."
             ),
         ):
-            response = self.authenticated_client().post(self.end_url(), {}, format="json")
+            response = self.authenticated_client().post(
+                self.end_url(),
+                self.ending_payload(),
+                format="json",
+            )
 
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
         self.assertEqual(
@@ -292,10 +342,35 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
             },
         )
 
+    def test_suspend_requires_governance_reason(self):
+        response = self.authenticated_client().post(
+            self.action_url("management_organization_suspend_partnership"),
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.organization.refresh_from_db()
+        self.assertEqual(self.organization.partner_status, Organization.PartnerStatus.ACTIVE)
+
+    def test_end_partnership_requires_governance_reason(self):
+        response = self.authenticated_client().post(
+            self.end_url(),
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.organization.refresh_from_db()
+        self.assertEqual(self.organization.partner_status, Organization.PartnerStatus.ACTIVE)
+
     def test_end_partnership_rejects_unexpected_payload_fields(self):
         response = self.authenticated_client().post(
             self.end_url(),
-            {"partner_status": Organization.PartnerStatus.FORMER},
+            {
+                **self.ending_payload(),
+                "partner_status": Organization.PartnerStatus.FORMER,
+            },
             format="json",
         )
 
@@ -312,7 +387,7 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
                 "management_organization_end_partnership",
                 kwargs={"organization_id": uuid4()},
             ),
-            {},
+            self.ending_payload(),
             format="json",
         )
 
@@ -382,7 +457,7 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
                 "management_organization_suspend_partnership",
                 onboarding,
             ),
-            {},
+            self.suspension_payload(),
             format="json",
         )
         self.assertEqual(suspend_response.status_code, status.HTTP_200_OK)
@@ -401,7 +476,7 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
                 "management_organization_reinstate_partnership",
                 onboarding,
             ),
-            {},
+            self.reinstatement_payload(),
             format="json",
         )
         self.assertEqual(reinstate_response.status_code, status.HTTP_200_OK)

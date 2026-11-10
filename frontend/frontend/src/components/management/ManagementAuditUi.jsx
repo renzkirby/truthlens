@@ -10,6 +10,8 @@ const STATE_FIELDS = [
    ["invitation_purpose", "Invitation purpose"],
    ["invited_role", "Invited role"],
    ["send_count", "Delivery count"],
+   ["reconsideration_status", "Reconsideration status"],
+   ["outcome", "Reconsideration outcome"],
 ];
 
 const CONTEXT_FIELDS = [
@@ -17,7 +19,60 @@ const CONTEXT_FIELDS = [
    ["request_source", "Request source"],
    ["operation", "Operation"],
    ["delivery_status", "Delivery status"],
+   ["transition", "Lifecycle transition"],
+   ["reconsideration_id", "Reconsideration ID"],
+   ["target_suspension_event_id", "Target suspension event"],
+   ["grounds", "Reconsideration grounds"],
 ];
+
+const GOVERNANCE_FIELD_LABELS = {
+   suspension_type: "Suspension type",
+   ending_type: "Ending type",
+   ground: "Ending ground",
+   factors: "Factor(s)",
+   severity: "Severity",
+   policy_basis: "Policy basis",
+   required_remediation: "Required remediation",
+   review_date: "Review date",
+};
+
+const GOVERNANCE_VALUE_LABELS = {
+   REMEDIAL: "Remedial Suspension",
+   PRECAUTIONARY: "Precautionary Suspension",
+   ADMINISTRATIVE: "Administrative Suspension",
+   VOLUNTARY_WITHDRAWAL: "Voluntary Withdrawal",
+   ADMINISTRATIVE_CONCLUSION: "Administrative Conclusion",
+   TERMINATION_FOR_CAUSE: "Termination for Cause",
+   PERMANENT_LOSS_ELIGIBILITY: "Permanent Loss of Eligibility or Capacity",
+   ORGANIZATION_DISSOLVED: "Organization Dissolved or Ceased Relevant Operations",
+   PROLONGED_ABANDONMENT: "Prolonged Inactivity or Partnership Abandonment",
+   SEVERE_NON_REMEDIABLE_VIOLATION: "Severe Non-remediable Violation",
+   REPEATED_SYSTEMIC_VIOLATIONS: "Repeated or Systemic Serious Violations",
+   FAILED_REMEDIATION: "Failed Remediation",
+   VERIFICATION_STANDARDS: "Verification Standards Violation",
+   IMPARTIALITY_CONFLICT: "Impartiality or Conflict-of-Interest Violation",
+   TRANSPARENCY_MISREPRESENTATION: "Transparency or Misrepresentation Violation",
+   CORRECTIONS_ACCOUNTABILITY: "Correction or Accountability Failure",
+   PLATFORM_PARTNERSHIP: "Platform or Partnership Policy Violation",
+   GOVERNANCE_CAPACITY: "Organizational Governance or Capacity Concern",
+   SECURITY_INTEGRITY: "Security, Legal, or Institutional Integrity Risk",
+   INACTIVITY_RESPONSIVENESS: "Inactivity or Non-responsiveness",
+   OTHER: "Other",
+   LOW: "Low",
+   MODERATE: "Moderate",
+   HIGH: "High",
+   CRITICAL: "Critical",
+};
+
+function formatGovernanceValue(value) {
+   if (Array.isArray(value)) {
+      return value.length
+         ? value.map((entry) => GOVERNANCE_VALUE_LABELS[entry] || entry).join(", ")
+         : "None";
+   }
+   if (value === null || value === undefined || value === "") return "Not set";
+   return GOVERNANCE_VALUE_LABELS[value] || String(value);
+}
 
 const CREATION_ACTIONS = new Set([
    "ORGANIZATION_CREATED",
@@ -91,7 +146,16 @@ export function ManagementAuditStateTransition({
 
 export function ManagementAuditSecondaryContext({ notes, context = {} }) {
    const contextEntries = CONTEXT_FIELDS.filter(([key]) => Object.hasOwn(context, key));
-   if (!notes && !contextEntries.length) return null;
+   const governance = (
+      context.governance
+      && typeof context.governance === "object"
+      && !Array.isArray(context.governance)
+   ) ? context.governance : null;
+   const governanceEntries = governance
+      ? Object.entries(GOVERNANCE_FIELD_LABELS)
+         .filter(([key]) => Object.hasOwn(governance, key))
+      : [];
+   if (!notes && !contextEntries.length && !governanceEntries.length) return null;
 
    return (
       <details className="management-audit-context">
@@ -107,6 +171,12 @@ export function ManagementAuditSecondaryContext({ notes, context = {} }) {
                <div key={key}>
                   <dt>{label}</dt>
                   <dd>{formatManagementAuditValue(context[key])}</dd>
+               </div>
+            ))}
+            {governanceEntries.map(([key, label]) => (
+               <div key={key}>
+                  <dt>{label}</dt>
+                  <dd>{formatGovernanceValue(governance[key])}</dd>
                </div>
             ))}
          </dl>

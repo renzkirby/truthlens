@@ -121,6 +121,10 @@ class Notification(models.Model):
         FACT_CHECK_PUBLISHED = "FACT_CHECK_PUBLISHED", "Fact-check published"
         FACTUAL_CORRECTION_PUBLISHED = "FACTUAL_CORRECTION_PUBLISHED", "Factual correction published"
         ORGANIZATION_MEMBERSHIP_CHANGED = "ORGANIZATION_MEMBERSHIP_CHANGED", "Membership changed"
+        ORGANIZATION_GOVERNANCE_CHANGED = (
+            "ORGANIZATION_GOVERNANCE_CHANGED",
+            "Organization governance changed",
+        )
         THREAD_COMMENTED = "THREAD_COMMENTED", "Thread commented"
         EVIDENCE_REVIEWED = "EVIDENCE_REVIEWED", "Evidence reviewed"
         USER_FOLLOWED = "USER_FOLLOWED", "User followed"
@@ -131,6 +135,7 @@ class Notification(models.Model):
         OFFICIAL_FACT_CHECK = "OFFICIAL_FACT_CHECK", "Official fact-check"
         WORKSPACE = "WORKSPACE", "Workspace"
         ORGANIZATION = "ORGANIZATION", "Organization"
+        GOVERNANCE_NOTICE = "GOVERNANCE_NOTICE", "Governance notice"
         USER_PROFILE = "USER_PROFILE", "User profile"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -155,11 +160,12 @@ class Notification(models.Model):
                 "PARTNER_FACT_CHECK_PUBLISHED", "PARTNER_FACT_CHECK_CORRECTED",
                 "ARTICLE_RETURNED_FOR_REWORK", "FACT_CHECK_PUBLISHED",
                 "FACTUAL_CORRECTION_PUBLISHED", "ORGANIZATION_MEMBERSHIP_CHANGED",
-                "THREAD_COMMENTED", "EVIDENCE_REVIEWED", "USER_FOLLOWED",
+                "ORGANIZATION_GOVERNANCE_CHANGED", "THREAD_COMMENTED",
+                "EVIDENCE_REVIEWED", "USER_FOLLOWED",
             ]), name="notification_type_valid"),
             models.CheckConstraint(condition=Q(target_type__in=[
                 "CLAIM", "THREAD", "OFFICIAL_FACT_CHECK", "WORKSPACE", "ORGANIZATION",
-                "USER_PROFILE",
+                "GOVERNANCE_NOTICE", "USER_PROFILE",
             ]), name="notification_target_valid"),
         ]
         indexes = [
@@ -321,6 +327,16 @@ class Organization(models.Model):
         max_length=2000,
         blank=True,
         null=True,
+    )
+
+    governance_contact_email = models.EmailField(
+        max_length=254,
+        blank=True,
+        default="",
+        help_text=(
+            "Private fallback address for material Partner governance communication "
+            "when no active Organization Admin can receive a secure notice."
+        ),
     )
 
     logo_url = models.URLField(
@@ -2825,6 +2841,260 @@ class AccountabilityEvent(models.Model):
 
     def __str__(self):
         return f"{self.action_type} - {self.resource_type} {self.resource_id}"
+
+
+class OrganizationGovernanceSupportingBasis(models.Model):
+    """
+    Restricted supporting material for a formal Partner Organization governance
+    decision.
+
+    AccountabilityEvent remains the immutable audit record. This related row is
+    deliberately separate so sensitive internal basis can be redacted later
+    without rewriting the historical fact that a supporting basis existed.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    governance_event = models.OneToOneField(
+        AccountabilityEvent,
+        on_delete=models.PROTECT,
+        related_name="governance_supporting_basis",
+    )
+    summary = models.TextField()
+    references = models.JSONField(default=list, blank=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_organization_governance_supporting_bases",
+    )
+    redacted_at = models.DateTimeField(null=True, blank=True)
+    redacted_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="redacted_organization_governance_supporting_bases",
+    )
+    redaction_reason = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"Supporting basis for accountability event {self.governance_event_id}"
+
+
+class OrganizationGovernanceNoticeRecipient(models.Model):
+    """Durable recipient/access record for a Partner governance notice.
+
+    The linked AccountabilityEvent remains the authoritative governance
+    decision. This row records who was entitled to receive/read the notice at
+    decision time and tracks delivery/view state without duplicating the
+    governance rationale or internal supporting basis.
+    """
+
+    class Audience(models.TextChoices):
+        ADMIN = "ADMIN", "Organization Admin"
+        MEMBER = "MEMBER", "Organization Member"
+
+    class DeliveryStatus(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        SENT = "SENT", "Sent"
+        FAILED = "FAILED", "Failed"
+        SKIPPED = "SKIPPED", "Skipped"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    governance_event = models.ForeignKey(
+        AccountabilityEvent,
+        on_delete=models.PROTECT,
+        related_name="governance_notice_recipients",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="organization_governance_notice_recipients",
+    )
+    audience = models.CharField(max_length=16, choices=Audience.choices)
+    can_read_notice = models.BooleanField(default=True)
+    in_app_status = models.CharField(
+        max_length=16,
+        choices=DeliveryStatus.choices,
+        default=DeliveryStatus.PENDING,
+    )
+    email_status = models.CharField(
+        max_length=16,
+        choices=DeliveryStatus.choices,
+        default=DeliveryStatus.PENDING,
+    )
+    in_app_attempts = models.PositiveSmallIntegerField(default=0)
+    email_attempts = models.PositiveSmallIntegerField(default=0)
+    last_delivery_error = models.TextField(blank=True, default="")
+    last_delivery_attempt_at = models.DateTimeField(null=True, blank=True)
+    viewed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["governance_event", "user"],
+                name="org_gov_notice_event_user_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["user", "-created_at"],
+                name="org_gov_notice_user_idx",
+            ),
+            models.Index(
+                fields=["governance_event", "audience"],
+                name="org_gov_notice_event_aud_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Governance notice recipient {self.pk}"
+
+
+class OrganizationGovernanceFallbackDelivery(models.Model):
+    """Durable no-Admin fallback communication record for a governance event."""
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        SENT = "SENT", "Sent"
+        FAILED = "FAILED", "Failed"
+        NOT_DELIVERABLE = "NOT_DELIVERABLE", "Not deliverable"
+        OUT_OF_BAND_RECORDED = "OUT_OF_BAND_RECORDED", "Out-of-band notice recorded"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    governance_event = models.OneToOneField(
+        AccountabilityEvent,
+        on_delete=models.PROTECT,
+        related_name="governance_fallback_delivery",
+    )
+    contact_email = models.EmailField(max_length=254, blank=True, default="")
+    status = models.CharField(
+        max_length=32,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+    attempts = models.PositiveSmallIntegerField(default=0)
+    last_error = models.TextField(blank=True, default="")
+    last_attempt_at = models.DateTimeField(null=True, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    out_of_band_method = models.CharField(max_length=80, blank=True, default="")
+    out_of_band_details = models.TextField(blank=True, default="")
+    recorded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recorded_organization_governance_fallback_deliveries",
+    )
+    recorded_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(
+                fields=["status", "-created_at"],
+                name="org_gov_fallback_status_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Governance fallback delivery {self.pk}"
+
+
+class OrganizationGovernanceReconsideration(models.Model):
+    """Organization-requested review of a specific Partner suspension."""
+
+    class Status(models.TextChoices):
+        SUBMITTED = "SUBMITTED", "Submitted"
+        UNDER_REVIEW = "UNDER_REVIEW", "Under review"
+        RESOLVED = "RESOLVED", "Resolved"
+        MOOT = "MOOT", "Moot"
+
+    class Outcome(models.TextChoices):
+        UPHELD = "UPHELD", "Upheld"
+        REVOKED = "REVOKED", "Revoked"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.PROTECT,
+        related_name="governance_reconsiderations",
+    )
+    suspension_event = models.ForeignKey(
+        AccountabilityEvent,
+        on_delete=models.PROTECT,
+        related_name="governance_reconsiderations",
+    )
+    notice_recipient = models.ForeignKey(
+        OrganizationGovernanceNoticeRecipient,
+        on_delete=models.PROTECT,
+        related_name="reconsiderations",
+    )
+    requested_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="requested_governance_reconsiderations",
+    )
+    grounds = models.JSONField(default=list)
+    request_statement = models.TextField()
+    supporting_references = models.JSONField(default=list, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.SUBMITTED,
+        db_index=True,
+    )
+    reviewer = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_governance_reconsiderations",
+    )
+    reviewer_independence_note = models.TextField(blank=True, default="")
+    independence_override_rationale = models.TextField(blank=True, default="")
+    outcome = models.CharField(
+        max_length=16,
+        choices=Outcome.choices,
+        blank=True,
+        default="",
+    )
+    resolution_rationale = models.TextField(blank=True, default="")
+    internal_supporting_basis = models.TextField(blank=True, default="")
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    review_started_at = models.DateTimeField(null=True, blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-submitted_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["suspension_event"],
+                condition=Q(status__in=["SUBMITTED", "UNDER_REVIEW"]),
+                name="org_gov_reconsideration_one_open",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["organization", "status", "-submitted_at"],
+                name="org_gov_reconsider_org_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Governance reconsideration {self.pk}"
 
 
 class AdjudicationDecision(models.Model):

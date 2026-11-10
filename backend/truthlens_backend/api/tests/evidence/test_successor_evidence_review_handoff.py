@@ -118,6 +118,14 @@ class SuccessorEvidenceReviewHandoffTests(TestCase):
         end_partner_organization_partnership(
             organization_id=self.org_a.pk,
             actor=self.platform_admin,
+            ending_type="ADMINISTRATIVE_CONCLUSION",
+            ground="PROLONGED_ABANDONMENT",
+            factors=["INACTIVITY_RESPONSIVENESS"],
+            severity="",
+            rationale="The organization is being retired for successor-handoff testing after prolonged inactivity.",
+            policy_basis="Partnership Enforcement Policy §19.2",
+            supporting_basis="Internal test fixture confirms the organization is being retired to exercise successor evidence handoff.",
+            supporting_references=["SUCCESSOR-HANDOFF-TEST"],
         )
         replacement = VerificationAssignment.objects.get(
             claim=self.claim,

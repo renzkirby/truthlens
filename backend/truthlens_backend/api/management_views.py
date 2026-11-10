@@ -35,6 +35,22 @@ from .management_governance_service import (
     ManagementGovernanceValidationError,
     create_partner_organization,
 )
+from .organization_governance_reconsideration_serializers import (
+    ManagementReconsiderationResolveSerializer,
+    ManagementReconsiderationReviewStartSerializer,
+)
+from .organization_governance_reconsideration_service import (
+    GovernanceReconsiderationAuthorizationError,
+    GovernanceReconsiderationConflict,
+    GovernanceReconsiderationValidationError,
+    management_reconsideration_projection,
+    resolve_reconsideration,
+    start_reconsideration_review,
+)
+from .organization_governance_delivery_service import (
+    enqueue_governance_fallback_delivery,
+    enqueue_governance_notice_delivery,
+)
 from .organization_partnership_lifecycle_service import (
     OrganizationPartnershipLifecycleAuthorizationError,
     OrganizationPartnershipLifecycleConflict,
@@ -59,6 +75,8 @@ from .management_serializers import (
     ManagementEmptyMutationSerializer,
     ManagementGovernanceAuditDetailQuerySerializer,
     ManagementGovernanceAuditQuerySerializer,
+    ManagementGovernanceContactSerializer,
+    ManagementGovernanceOutOfBandNoticeSerializer,
     ManagementInstitutionAffiliationUpdateSerializer,
     ManagementInstitutionCreateSerializer,
     ManagementInstitutionSerializer,
@@ -72,6 +90,9 @@ from .management_serializers import (
     ManagementPlatformStaffInvitationPublicSerializer,
     ManagementPlatformStaffInvitationSerializer,
     ManagementPlatformStaffSerializer,
+    ManagementPartnershipEndingSerializer,
+    ManagementPartnershipReinstatementSerializer,
+    ManagementPartnershipSuspensionSerializer,
     ManagementPlatformTrustUpdateSerializer,
     ManagementPrimaryAdminInvitationSerializer,
     ManagementPrimaryAdminProvisionSerializer,
@@ -83,6 +104,9 @@ from .models import (
     ClaimInvestigationClassification,
     Institution,
     Organization,
+    OrganizationGovernanceFallbackDelivery,
+    OrganizationGovernanceNoticeRecipient,
+    OrganizationGovernanceReconsideration,
     OrganizationInstitutionAffiliation,
     OrganizationInvitation,
     OrganizationMembership,
@@ -729,6 +753,223 @@ class ManagementOrganizationDetailView(generics.RetrieveAPIView):
         return {**super().get_serializer_context(), "now": timezone.now()}
 
 
+
+
+def _reconsideration_error_response(error):
+    if isinstance(error, GovernanceReconsiderationAuthorizationError):
+        response_status = status.HTTP_403_FORBIDDEN
+    elif isinstance(error, GovernanceReconsiderationConflict):
+        response_status = status.HTTP_409_CONFLICT
+    else:
+        response_status = status.HTTP_400_BAD_REQUEST
+
+    payload = {"detail": str(error)}
+    if isinstance(error, GovernanceReconsiderationValidationError) and error.field:
+        payload[error.field] = [str(error)]
+    return Response(payload, status=response_status)
+
+
+class ManagementGovernanceReconsiderationReviewView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def post(self, request, organization_id, reconsideration_id):
+        serializer = ManagementReconsiderationReviewStartSerializer(
+            data=request.data
+        )
+        serializer.is_valid(raise_exception=True)
+        try:
+            reconsideration = start_reconsideration_review(
+                reconsideration_id=reconsideration_id,
+                organization_id=organization_id,
+                actor=request.user,
+                **serializer.validated_data,
+            )
+        except OrganizationGovernanceReconsideration.DoesNotExist:
+            return Response(
+                {"detail": "Governance reconsideration not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except (
+            GovernanceReconsiderationAuthorizationError,
+            GovernanceReconsiderationConflict,
+            GovernanceReconsiderationValidationError,
+        ) as error:
+            return _reconsideration_error_response(error)
+
+        return Response(
+            management_reconsideration_projection(reconsideration),
+            status=status.HTTP_200_OK,
+        )
+
+
+class ManagementGovernanceReconsiderationResolveView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def post(self, request, organization_id, reconsideration_id):
+        serializer = ManagementReconsiderationResolveSerializer(
+            data=request.data
+        )
+        serializer.is_valid(raise_exception=True)
+        try:
+            reconsideration = resolve_reconsideration(
+                reconsideration_id=reconsideration_id,
+                organization_id=organization_id,
+                actor=request.user,
+                **serializer.validated_data,
+            )
+        except OrganizationGovernanceReconsideration.DoesNotExist:
+            return Response(
+                {"detail": "Governance reconsideration not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except (
+            GovernanceReconsiderationAuthorizationError,
+            GovernanceReconsiderationConflict,
+            GovernanceReconsiderationValidationError,
+        ) as error:
+            return _reconsideration_error_response(error)
+
+        return Response(
+            management_reconsideration_projection(reconsideration),
+            status=status.HTTP_200_OK,
+        )
+
+
+class ManagementOrganizationGovernanceContactView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def patch(self, request, organization_id):
+        organization = get_object_or_404(Organization, pk=organization_id)
+        serializer = ManagementGovernanceContactSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        organization.governance_contact_email = serializer.validated_data[
+            "governance_contact_email"
+        ]
+        organization.save(update_fields=["governance_contact_email", "updated_at"])
+        return Response(
+            _serialize_management_organization(organization),
+            status=status.HTTP_200_OK,
+        )
+
+
+class ManagementOrganizationGovernanceOutOfBandNoticeView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def post(self, request, organization_id):
+        serializer = ManagementGovernanceOutOfBandNoticeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        fallback = get_object_or_404(
+            OrganizationGovernanceFallbackDelivery.objects.select_related(
+                "governance_event",
+            ),
+            pk=serializer.validated_data["fallback_delivery_id"],
+            governance_event__subject_organization_id=organization_id,
+        )
+        if fallback.status not in {
+            OrganizationGovernanceFallbackDelivery.Status.NOT_DELIVERABLE,
+            OrganizationGovernanceFallbackDelivery.Status.FAILED,
+        }:
+            return Response(
+                {
+                    "detail": (
+                        "Out-of-band notice can only be recorded when fallback "
+                        "delivery is not deliverable or has failed."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        fallback.status = OrganizationGovernanceFallbackDelivery.Status.OUT_OF_BAND_RECORDED
+        fallback.out_of_band_method = serializer.validated_data["method"]
+        fallback.out_of_band_details = serializer.validated_data["details"]
+        fallback.recorded_by = request.user
+        fallback.recorded_at = timezone.now()
+        fallback.last_error = ""
+        fallback.save(
+            update_fields=[
+                "status",
+                "out_of_band_method",
+                "out_of_band_details",
+                "recorded_by",
+                "recorded_at",
+                "last_error",
+            ]
+        )
+        return Response(
+            {
+                "id": str(fallback.pk),
+                "status": fallback.status,
+                "method": fallback.out_of_band_method,
+                "details": fallback.out_of_band_details,
+                "recorded_at": fallback.recorded_at,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ManagementOrganizationGovernanceNoticeRetryView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def post(self, request, organization_id):
+        organization = get_object_or_404(Organization, pk=organization_id)
+        retryable = {
+            OrganizationGovernanceNoticeRecipient.DeliveryStatus.PENDING,
+            OrganizationGovernanceNoticeRecipient.DeliveryStatus.FAILED,
+        }
+        recipient_ids = list(
+            OrganizationGovernanceNoticeRecipient.objects.filter(
+                governance_event__subject_organization=organization,
+            )
+            .filter(
+                Q(in_app_status__in=retryable)
+                | Q(email_status__in=retryable)
+            )
+            .order_by("created_at", "id")
+            .values_list("id", flat=True)
+        )
+
+        fallback_ids = list(
+            OrganizationGovernanceFallbackDelivery.objects.filter(
+                governance_event__subject_organization=organization,
+                status__in=[
+                    OrganizationGovernanceFallbackDelivery.Status.PENDING,
+                    OrganizationGovernanceFallbackDelivery.Status.FAILED,
+                ],
+            )
+            .order_by("created_at", "id")
+            .values_list("id", flat=True)
+        )
+
+        recipient_result = enqueue_governance_notice_delivery(recipient_ids)
+        fallback_result = enqueue_governance_fallback_delivery(fallback_ids)
+        queue_result = {
+            "requested": recipient_result["requested"] + fallback_result["requested"],
+            "queued": recipient_result["queued"] + fallback_result["queued"],
+            "queue_failed": recipient_result["queue_failed"] + fallback_result["queue_failed"],
+            "recipient_requested": recipient_result["requested"],
+            "fallback_requested": fallback_result["requested"],
+        }
+        if not recipient_ids and not fallback_ids:
+            detail = "No pending or failed governance notice deliveries."
+        elif queue_result["queue_failed"]:
+            detail = (
+                "Some governance notice retries could not be queued. "
+                "Pending rows remain available for another retry."
+            )
+        else:
+            detail = "Governance notice delivery retry queued."
+
+        return Response(
+            {
+                **queue_result,
+                "detail": detail,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
 class ManagementOrganizationPlatformTrustView(APIView):
     permission_classes = [IsPlatformManagementAdmin]
 
@@ -776,7 +1017,13 @@ class ManagementOrganizationLifecycleTransitionView(APIView):
     transition = None
 
     def post(self, request, organization_id):
-        serializer = ManagementEmptyMutationSerializer(data=request.data)
+        if self.transition == "suspend_partnership":
+            serializer_class = ManagementPartnershipSuspensionSerializer
+        elif self.transition == "reinstate_partnership":
+            serializer_class = ManagementPartnershipReinstatementSerializer
+        else:
+            serializer_class = ManagementEmptyMutationSerializer
+        serializer = serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         transitions = {
@@ -789,10 +1036,17 @@ class ManagementOrganizationLifecycleTransitionView(APIView):
         transition_function = transitions[self.transition]
 
         try:
-            organization = transition_function(
-                organization_id=organization_id,
-                actor=request.user,
-            )
+            transition_kwargs = {
+                "organization_id": organization_id,
+                "actor": request.user,
+            }
+            if self.transition in {
+                "suspend_partnership",
+                "reinstate_partnership",
+            }:
+                transition_kwargs.update(serializer.validated_data)
+
+            organization = transition_function(**transition_kwargs)
         except Organization.DoesNotExist:
             return Response(
                 {"detail": "Organization not found."},
@@ -894,13 +1148,14 @@ class ManagementOrganizationEndPartnershipView(APIView):
     permission_classes = [IsPlatformManagementAdmin]
 
     def post(self, request, organization_id):
-        serializer = ManagementEmptyMutationSerializer(data=request.data)
+        serializer = ManagementPartnershipEndingSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         try:
             result = end_partner_organization_partnership(
                 organization_id=organization_id,
                 actor=request.user,
+                **serializer.validated_data,
             )
         except Organization.DoesNotExist:
             return Response(

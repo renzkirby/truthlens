@@ -1445,6 +1445,11 @@
   font-weight: 650;
 }
 
+.management-required-indicator {
+  color: var(--tl-color-status-critical-text);
+  font-weight: 800;
+}
+
 .management-form-field small {
   color: var(--tl-color-text-muted);
   font-size: var(--tl-text-xs);
@@ -1568,6 +1573,84 @@
   margin: var(--tl-space-3) 0 0;
   color: var(--tl-color-text-muted);
   line-height: 1.55;
+}
+
+
+.management-governance-form {
+  display: grid;
+  gap: var(--tl-space-4);
+  margin-top: var(--tl-space-5);
+  max-height: min(52vh, 520px);
+  overflow-y: auto;
+  padding-right: var(--tl-space-1);
+}
+
+.management-governance-factor-group {
+  margin: 0;
+  padding: var(--tl-space-4);
+  border: 1px solid var(--tl-color-border-default);
+  border-radius: var(--tl-radius-md);
+}
+
+.management-governance-factor-group legend {
+  padding: 0 var(--tl-space-1);
+  color: var(--tl-color-text-body);
+  font-size: var(--tl-text-sm);
+  font-weight: 650;
+}
+
+.management-governance-factor-group > p {
+  margin: 0 0 var(--tl-space-3);
+  color: var(--tl-color-text-muted);
+  font-size: var(--tl-text-xs);
+  line-height: 1.45;
+}
+
+.management-governance-factor-group > div {
+  display: grid;
+  gap: var(--tl-space-2);
+}
+
+.management-governance-factor-group label {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--tl-space-2);
+  color: var(--tl-color-text-body);
+  font-size: var(--tl-text-sm);
+  line-height: 1.4;
+}
+
+.management-governance-factor-group input {
+  flex: 0 0 auto;
+  margin-top: 0.2em;
+}
+
+.management-governance-form select,
+.management-governance-form textarea {
+  width: 100%;
+  border: 1px solid var(--tl-color-border-default);
+  border-radius: var(--tl-radius-md);
+  color: var(--tl-color-text-main);
+  background: var(--tl-color-bg-surface);
+  font: inherit;
+}
+
+.management-governance-form select {
+  min-height: 42px;
+  padding: 0 var(--tl-space-3);
+}
+
+.management-governance-form textarea {
+  resize: vertical;
+  min-height: 96px;
+  padding: var(--tl-space-3);
+  line-height: 1.5;
+}
+
+.management-governance-form select:focus-visible,
+.management-governance-form textarea:focus-visible {
+  outline: 2px solid var(--tl-color-focus-ring);
+  outline-offset: 2px;
 }
 
 .management-dialog__warning,

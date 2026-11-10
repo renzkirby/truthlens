@@ -4,8 +4,29 @@ from . import views
 from .auth_tokens import SessionTokenRefreshView
 from .notification_stream import notification_stream
 from . import management_views
+from . import organization_governance_notice_views
 
 urlpatterns = [
+    path(
+        "governance/notices/",
+        organization_governance_notice_views.GovernanceNoticeListView.as_view(),
+        name="governance_notice_list",
+    ),
+    path(
+        "governance/notices/<uuid:notice_id>/",
+        organization_governance_notice_views.GovernanceNoticeDetailView.as_view(),
+        name="governance_notice_detail",
+    ),
+    path(
+        "governance/notices/<uuid:notice_id>/viewed/",
+        organization_governance_notice_views.GovernanceNoticeViewedView.as_view(),
+        name="governance_notice_viewed",
+    ),
+    path(
+        "governance/notices/<uuid:notice_id>/reconsideration/",
+        organization_governance_notice_views.GovernanceNoticeReconsiderationView.as_view(),
+        name="governance_notice_reconsideration",
+    ),
     path(
         "management/overview/",
         management_views.ManagementOverviewView.as_view(),
@@ -95,6 +116,43 @@ urlpatterns = [
         "management/organizations/<uuid:organization_id>/platform-trust/",
         management_views.ManagementOrganizationPlatformTrustView.as_view(),
         name="management_organization_platform_trust",
+    ),
+    path(
+        (
+            "management/organizations/<uuid:organization_id>/"
+            "reconsiderations/<uuid:reconsideration_id>/review/"
+        ),
+        management_views.ManagementGovernanceReconsiderationReviewView.as_view(),
+        name="management_governance_reconsideration_review",
+    ),
+    path(
+        (
+            "management/organizations/<uuid:organization_id>/"
+            "reconsiderations/<uuid:reconsideration_id>/resolve/"
+        ),
+        management_views.ManagementGovernanceReconsiderationResolveView.as_view(),
+        name="management_governance_reconsideration_resolve",
+    ),
+    path(
+        "management/organizations/<uuid:organization_id>/governance-contact/",
+        management_views.ManagementOrganizationGovernanceContactView.as_view(),
+        name="management_organization_governance_contact",
+    ),
+    path(
+        (
+            "management/organizations/<uuid:organization_id>/"
+            "governance-notices/fallback/out-of-band/"
+        ),
+        management_views.ManagementOrganizationGovernanceOutOfBandNoticeView.as_view(),
+        name="management_organization_governance_out_of_band_notice",
+    ),
+    path(
+        (
+            "management/organizations/<uuid:organization_id>/"
+            "governance-notices/retry/"
+        ),
+        management_views.ManagementOrganizationGovernanceNoticeRetryView.as_view(),
+        name="management_organization_governance_notice_retry",
     ),
     path(
         "management/organizations/<uuid:organization_id>/verification/verify/",

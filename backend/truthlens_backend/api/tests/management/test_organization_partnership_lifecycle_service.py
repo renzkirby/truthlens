@@ -9,6 +9,7 @@ from api.models import (
     Claim,
     ModerationCase,
     Organization,
+    OrganizationGovernanceSupportingBasis,
     OrganizationInvitation,
     OrganizationMembership,
     VerificationAssignment,
@@ -31,6 +32,41 @@ from api.organization_partnership_lifecycle_service import (
     suspend_partner_organization_partnership,
     verify_partner_organization,
 )
+
+
+TEST_SUSPENSION_GOVERNANCE = {
+    "suspension_type": "REMEDIAL",
+    "factors": ["VERIFICATION_STANDARDS"],
+    "severity": "HIGH",
+    "rationale": "Repeated sourcing failures require temporary remediation before professional access resumes.",
+    "policy_basis": "Partnership Enforcement Policy §13.1",
+    "supporting_basis": "Internal review of the affected investigations and prior corrective guidance.",
+    "supporting_references": ["INV-001", "GOV-001"],
+    "remediation_problem": "Repeated sourcing failures in completed verification work.",
+    "remediation_required_action": "Review affected investigations and correct the sourcing process.",
+    "remediation_evidence_required": "Updated evidence-review procedure and corrected investigation records.",
+    "remediation_deadline": timezone.localdate() + timedelta(days=30),
+    "remediation_review_method": "Platform Governance will review the submitted procedure and corrected records.",
+    "remediation_failure_consequence": "TruthLens may continue the suspension or consider a stronger proportionate governance action.",
+}
+
+TEST_ENDING_GOVERNANCE = {
+    "ending_type": "ADMINISTRATIVE_CONCLUSION",
+    "ground": "PROLONGED_ABANDONMENT",
+    "factors": ["INACTIVITY_RESPONSIVENESS"],
+    "severity": "",
+    "rationale": "The organization can no longer maintain an active partnership because required operations have ceased.",
+    "policy_basis": "Partnership Enforcement Policy §19.2",
+    "supporting_basis": "Internal administrative record confirming prolonged inactivity and loss of operational capacity.",
+    "supporting_references": ["GOV-ENDING-001"],
+}
+
+TEST_REINSTATEMENT_GOVERNANCE = {
+    "basis": "OPERATIONAL_REQUIREMENTS_RESTORED",
+    "rationale": "The organization has restored the operational requirements needed for active Partner participation.",
+    "supporting_basis": "Internal review confirms the required operational capacity and accountable administration are restored.",
+    "supporting_references": ["GOV-REINSTATE-001"],
+}
 
 
 class OrganizationPartnershipLifecycleServiceTests(TestCase):
@@ -136,6 +172,7 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
         result = end_partner_organization_partnership(
             organization_id=self.organization.pk,
             actor=self.platform_admin,
+            **TEST_ENDING_GOVERNANCE,
         )
 
         self.organization.refresh_from_db()
@@ -242,12 +279,24 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
             Organization.PartnerStatus.FORMER,
         )
         self.assertEqual(
+            lifecycle_event.notes,
+            TEST_ENDING_GOVERNANCE["rationale"],
+        )
+        self.assertEqual(
             lifecycle_event.context,
             {
                 "transition": PARTNERSHIP_ENDED_REASON,
                 "ended_memberships": 2,
                 "cancelled_invitations": 1,
                 "requeued_investigations": 1,
+                "governance": {
+                    "ending_type": "ADMINISTRATIVE_CONCLUSION",
+                    "ground": "PROLONGED_ABANDONMENT",
+                    "factors": ["INACTIVITY_RESPONSIVENESS"],
+                    "severity": None,
+                    "policy_basis": "Partnership Enforcement Policy §19.2",
+                    "other_factor_explanation": "",
+                },
             },
         )
 
@@ -285,6 +334,7 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
             end_partner_organization_partnership(
                 organization_id=self.organization.pk,
                 actor=self.ordinary_user,
+                **TEST_ENDING_GOVERNANCE,
             )
 
         self.organization.refresh_from_db()
@@ -303,6 +353,7 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
         end_partner_organization_partnership(
             organization_id=self.organization.pk,
             actor=self.platform_admin,
+            **TEST_ENDING_GOVERNANCE,
         )
 
         self.organization.refresh_from_db()
@@ -332,6 +383,7 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
             end_partner_organization_partnership(
                 organization_id=onboarding.pk,
                 actor=self.platform_admin,
+                **TEST_ENDING_GOVERNANCE,
             )
 
     def test_former_partner_cannot_be_ended_again(self):
@@ -342,6 +394,7 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
             end_partner_organization_partnership(
                 organization_id=self.organization.pk,
                 actor=self.platform_admin,
+                **TEST_ENDING_GOVERNANCE,
             )
 
     def test_suspended_partnership_can_be_ended(self):
@@ -351,6 +404,7 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
         end_partner_organization_partnership(
             organization_id=self.organization.pk,
             actor=self.platform_admin,
+            **TEST_ENDING_GOVERNANCE,
         )
 
         self.organization.refresh_from_db()
@@ -460,6 +514,7 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
         suspend_partner_organization_partnership(
             organization_id=self.organization.pk,
             actor=self.platform_admin,
+            **TEST_SUSPENSION_GOVERNANCE,
         )
 
         self.organization.refresh_from_db()
@@ -482,11 +537,28 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
             self.active_assignment.organization_id,
             self.organization.pk,
         )
-        self.assertTrue(
-            AccountabilityEvent.objects.filter(
-                subject_organization=self.organization,
-                reason_code=PARTNERSHIP_SUSPENDED_REASON,
-            ).exists()
+        suspension_event = AccountabilityEvent.objects.get(
+            subject_organization=self.organization,
+            reason_code=PARTNERSHIP_SUSPENDED_REASON,
+        )
+        self.assertEqual(
+            suspension_event.notes,
+            TEST_SUSPENSION_GOVERNANCE["rationale"],
+        )
+        self.assertEqual(
+            suspension_event.context["governance"]["remediation"]["required_action"],
+            TEST_SUSPENSION_GOVERNANCE["remediation_required_action"],
+        )
+        supporting_basis = OrganizationGovernanceSupportingBasis.objects.get(
+            governance_event=suspension_event,
+        )
+        self.assertEqual(
+            supporting_basis.summary,
+            TEST_SUSPENSION_GOVERNANCE["supporting_basis"],
+        )
+        self.assertEqual(
+            supporting_basis.references,
+            TEST_SUSPENSION_GOVERNANCE["supporting_references"],
         )
 
     def test_reinstate_suspended_partner_preserves_current_memberships(self):
@@ -496,6 +568,7 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
         reinstate_partner_organization_partnership(
             organization_id=self.organization.pk,
             actor=self.platform_admin,
+            **TEST_REINSTATEMENT_GOVERNANCE,
         )
 
         self.organization.refresh_from_db()
@@ -515,37 +588,34 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
             ).exists()
         )
 
-    def test_reinstate_former_partner_never_reactivates_historical_memberships(self):
+    def test_former_partner_cannot_be_reinstated(self):
         end_partner_organization_partnership(
             organization_id=self.organization.pk,
             actor=self.platform_admin,
+            **TEST_ENDING_GOVERNANCE,
         )
 
         self.admin_membership.refresh_from_db()
-        self.lead_membership.refresh_from_db()
         self.assertEqual(
             self.admin_membership.status,
             OrganizationMembership.Status.LEFT,
         )
 
-        reinstate_partner_organization_partnership(
-            organization_id=self.organization.pk,
-            actor=self.platform_admin,
-        )
+        with self.assertRaises(OrganizationPartnershipLifecycleConflict):
+            reinstate_partner_organization_partnership(
+                organization_id=self.organization.pk,
+                actor=self.platform_admin,
+                **TEST_REINSTATEMENT_GOVERNANCE,
+            )
 
         self.organization.refresh_from_db()
         self.admin_membership.refresh_from_db()
-        self.lead_membership.refresh_from_db()
         self.assertEqual(
             self.organization.partner_status,
-            Organization.PartnerStatus.ACTIVE,
+            Organization.PartnerStatus.FORMER,
         )
         self.assertEqual(
             self.admin_membership.status,
-            OrganizationMembership.Status.LEFT,
-        )
-        self.assertEqual(
-            self.lead_membership.status,
             OrganizationMembership.Status.LEFT,
         )
 
@@ -556,6 +626,7 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
             suspend_partner_organization_partnership(
                 organization_id=self.organization.pk,
                 actor=self.ordinary_user,
+                **TEST_SUSPENSION_GOVERNANCE,
             )
 
 

@@ -37,6 +37,45 @@ function OrganizationGovernanceSection({
    const [confirmationAction, setConfirmationAction] = useState(null);
    const [correctionConfirmation, setCorrectionConfirmation] = useState(null);
    const [endConfirmationOpen, setEndConfirmationOpen] = useState(false);
+   const [suspensionForm, setSuspensionForm] = useState({
+      suspension_type: "",
+      factors: [],
+      severity: "",
+      rationale: "",
+      policy_basis: "",
+      supporting_basis: "",
+      supporting_references: "",
+      other_factor_explanation: "",
+      remediation_problem: "",
+      remediation_required_action: "",
+      remediation_evidence_required: "",
+      remediation_deadline: "",
+      remediation_review_method: "",
+      remediation_failure_consequence: "",
+      review_date: "",
+   });
+   const [reinstatementForm, setReinstatementForm] = useState({
+      basis: "",
+      rationale: "",
+      supporting_basis: "",
+      supporting_references: "",
+      completed_remediation: "",
+      continuing_conditions: "",
+      monitoring_end_date: "",
+      monitoring_success_criteria: "",
+      monitoring_recurrence_consequence: "",
+   });
+   const [endingForm, setEndingForm] = useState({
+      ending_type: "",
+      ground: "",
+      factors: [],
+      severity: "",
+      rationale: "",
+      policy_basis: "",
+      supporting_basis: "",
+      supporting_references: "",
+      other_factor_explanation: "",
+   });
    const { mutate, pending, error, reset } = useManagementMutation();
 
    const lifecycleLabels = {
@@ -103,12 +142,8 @@ function OrganizationGovernanceSection({
          allowed: actions.can_reinstate_partnership,
          label: "Reinstate partnership",
          endpoint: "MANAGEMENT_ORGANIZATION_REINSTATE_PARTNERSHIP",
-         description: isFormerPartner
-            ? "Restore active Partner status after a former partnership."
-            : "Restore active Partner authority after a suspension.",
-         warning: isFormerPartner
-            ? "Historical memberships remain historical and are not reactivated automatically. Current members must be provisioned or invited through the normal organization workflow."
-            : "Existing current memberships remain unchanged and eligible role capabilities become active again.",
+         description: "Restore active Partner authority after a suspension when continued restriction is no longer justified.",
+         warning: "Reinstatement is a new governance decision. The historical suspension remains preserved and existing current memberships remain unchanged.",
          success: "Partnership reinstated.",
          variant: "primary",
       },
@@ -121,9 +156,41 @@ function OrganizationGovernanceSection({
    const executeGovernanceAction = async () => {
       if (!selectedAction) return;
 
+      const body = selectedAction.key === "suspend"
+         ? {
+            suspension_type: suspensionForm.suspension_type,
+            factors: suspensionForm.factors,
+            severity: suspensionForm.severity,
+            rationale: suspensionForm.rationale,
+            policy_basis: suspensionForm.policy_basis,
+            supporting_basis: suspensionForm.supporting_basis,
+            supporting_references: parseSupportingReferences(suspensionForm.supporting_references),
+            other_factor_explanation: suspensionForm.other_factor_explanation,
+            remediation_problem: suspensionForm.remediation_problem,
+            remediation_required_action: suspensionForm.remediation_required_action,
+            remediation_evidence_required: suspensionForm.remediation_evidence_required,
+            remediation_deadline: suspensionForm.remediation_deadline || null,
+            remediation_review_method: suspensionForm.remediation_review_method,
+            remediation_failure_consequence: suspensionForm.remediation_failure_consequence,
+            review_date: suspensionForm.review_date || null,
+         }
+         : selectedAction.key === "reinstate"
+            ? {
+               basis: reinstatementForm.basis,
+               rationale: reinstatementForm.rationale,
+               supporting_basis: reinstatementForm.supporting_basis,
+               supporting_references: parseSupportingReferences(reinstatementForm.supporting_references),
+               completed_remediation: reinstatementForm.completed_remediation,
+               continuing_conditions: reinstatementForm.continuing_conditions,
+               monitoring_end_date: reinstatementForm.monitoring_end_date || null,
+               monitoring_success_criteria: reinstatementForm.monitoring_success_criteria,
+               monitoring_recurrence_consequence: reinstatementForm.monitoring_recurrence_consequence,
+            }
+            : {};
+
       const result = await mutate(
          resolveApiEndpoint(selectedAction.endpoint, organization.id),
-         { method: "POST", body: {} },
+         { method: "POST", body },
       );
       if (!result.ok) return;
 
@@ -155,7 +222,20 @@ function OrganizationGovernanceSection({
    const endPartnership = async () => {
       const result = await mutate(
          resolveApiEndpoint("MANAGEMENT_ORGANIZATION_END_PARTNERSHIP", organization.id),
-         { method: "POST", body: {} },
+         {
+            method: "POST",
+            body: {
+               ending_type: endingForm.ending_type,
+               ground: endingForm.ground,
+               factors: endingForm.factors,
+               severity: endingForm.severity,
+               rationale: endingForm.rationale,
+               policy_basis: endingForm.policy_basis,
+               supporting_basis: endingForm.supporting_basis,
+               supporting_references: parseSupportingReferences(endingForm.supporting_references),
+               other_factor_explanation: endingForm.other_factor_explanation,
+            },
+         },
       );
       if (!result.ok) return;
 
@@ -172,6 +252,189 @@ function OrganizationGovernanceSection({
       `${impact.active_investigations ?? 0} active investigation(s) will return to intake`,
       "completed adjudications, published fact-checks, authorship, and provenance will be retained",
    ].join("; ");
+
+   const partnershipFactors = [
+      ["VERIFICATION_STANDARDS", "Verification Standards Violation"],
+      ["IMPARTIALITY_CONFLICT", "Impartiality or Conflict-of-Interest Violation"],
+      ["TRANSPARENCY_MISREPRESENTATION", "Transparency or Misrepresentation Violation"],
+      ["CORRECTIONS_ACCOUNTABILITY", "Correction or Accountability Failure"],
+      ["PLATFORM_PARTNERSHIP", "Platform or Partnership Policy Violation"],
+      ["GOVERNANCE_CAPACITY", "Organizational Governance or Capacity Concern"],
+      ["SECURITY_INTEGRITY", "Security, Legal, or Institutional Integrity Risk"],
+      ["INACTIVITY_RESPONSIVENESS", "Inactivity or Non-responsiveness"],
+      ["OTHER", "Other"],
+   ];
+   const severityOptions = [
+      ["LOW", "Low"],
+      ["MODERATE", "Moderate"],
+      ["HIGH", "High"],
+      ["CRITICAL", "Critical"],
+   ];
+   const reinstatementBasisOptions = [
+      ["REMEDIATION_COMPLETED", "Required Remediation Completed"],
+      ["UNDERLYING_RISK_RESOLVED", "Underlying Risk Resolved"],
+      ["INVESTIGATION_DID_NOT_JUSTIFY_CONTINUED_SUSPENSION", "Investigation Did Not Justify Continued Suspension"],
+      ["OPERATIONAL_REQUIREMENTS_RESTORED", "Operational Requirements Restored"],
+      ["CONTINUED_RESTRICTION_NO_LONGER_PROPORTIONATE", "Continued Restriction No Longer Proportionate"],
+   ];
+   const parseSupportingReferences = (value) => (
+      value
+         .split("\n")
+         .map((reference) => reference.trim())
+         .filter(Boolean)
+         .slice(0, 10)
+   );
+   const endingGroundOptions = {
+      VOLUNTARY_WITHDRAWAL: [
+         ["VOLUNTARY_WITHDRAWAL", "Voluntary Withdrawal"],
+      ],
+      ADMINISTRATIVE_CONCLUSION: [
+         ["PERMANENT_LOSS_ELIGIBILITY", "Permanent Loss of Eligibility or Capacity"],
+         ["ORGANIZATION_DISSOLVED", "Organization Dissolved or Ceased Relevant Operations"],
+         ["PROLONGED_ABANDONMENT", "Prolonged Inactivity or Partnership Abandonment"],
+      ],
+      TERMINATION_FOR_CAUSE: [
+         ["SEVERE_NON_REMEDIABLE_VIOLATION", "Severe Non-remediable Violation"],
+         ["REPEATED_SYSTEMIC_VIOLATIONS", "Repeated or Systemic Serious Violations"],
+         ["FAILED_REMEDIATION", "Failed Remediation"],
+      ],
+   };
+   const updateSuspensionForm = (field, value) => {
+      setSuspensionForm((current) => {
+         if (field === "suspension_type") {
+            return {
+               ...current,
+               suspension_type: value,
+               remediation_problem: value === "REMEDIAL" ? current.remediation_problem : "",
+               remediation_required_action: value === "REMEDIAL" ? current.remediation_required_action : "",
+               remediation_evidence_required: value === "REMEDIAL" ? current.remediation_evidence_required : "",
+               remediation_deadline: value === "REMEDIAL" ? current.remediation_deadline : "",
+               remediation_review_method: value === "REMEDIAL" ? current.remediation_review_method : "",
+               remediation_failure_consequence: value === "REMEDIAL" ? current.remediation_failure_consequence : "",
+            };
+         }
+         return { ...current, [field]: value };
+      });
+   };
+   const updateReinstatementForm = (field, value) => {
+      setReinstatementForm((current) => {
+         if (field === "basis") {
+            return {
+               ...current,
+               basis: value,
+               completed_remediation: value === "REMEDIATION_COMPLETED"
+                  ? current.completed_remediation
+                  : "",
+            };
+         }
+         if (field === "continuing_conditions" && !value.trim()) {
+            return {
+               ...current,
+               continuing_conditions: value,
+               monitoring_end_date: "",
+               monitoring_success_criteria: "",
+               monitoring_recurrence_consequence: "",
+            };
+         }
+         return { ...current, [field]: value };
+      });
+   };
+   const updateEndingForm = (field, value) => {
+      setEndingForm((current) => {
+         if (field === "ending_type") {
+            return {
+               ...current,
+               ending_type: value,
+               ground: "",
+               factors: value === "VOLUNTARY_WITHDRAWAL" ? [] : current.factors,
+               severity: value === "TERMINATION_FOR_CAUSE" ? current.severity : "",
+            };
+         }
+         return { ...current, [field]: value };
+      });
+   };
+
+   const toggleSuspensionFactor = (factor) => {
+      setSuspensionForm((current) => {
+         const removing = current.factors.includes(factor);
+         return {
+            ...current,
+            factors: removing
+               ? current.factors.filter((value) => value !== factor)
+               : [...current.factors, factor],
+            other_factor_explanation:
+               factor === "OTHER" && removing
+                  ? ""
+                  : current.other_factor_explanation,
+         };
+      });
+   };
+   const toggleEndingFactor = (factor) => {
+      setEndingForm((current) => {
+         const removing = current.factors.includes(factor);
+         return {
+            ...current,
+            factors: removing
+               ? current.factors.filter((value) => value !== factor)
+               : [...current.factors, factor],
+            other_factor_explanation:
+               factor === "OTHER" && removing
+                  ? ""
+                  : current.other_factor_explanation,
+         };
+      });
+   };
+   const suspensionHasOther = suspensionForm.factors.includes("OTHER");
+   const suspensionRemediationReady = suspensionForm.suspension_type !== "REMEDIAL" || Boolean(
+      suspensionForm.remediation_problem.trim()
+      && suspensionForm.remediation_required_action.trim()
+      && suspensionForm.remediation_evidence_required.trim()
+      && suspensionForm.remediation_deadline
+      && suspensionForm.remediation_review_method.trim()
+      && suspensionForm.remediation_failure_consequence.trim()
+   );
+   const suspensionReady = Boolean(
+      suspensionForm.suspension_type
+      && suspensionForm.factors.length
+      && suspensionForm.severity
+      && suspensionForm.rationale.trim().length >= 20
+      && suspensionForm.policy_basis.trim()
+      && suspensionForm.supporting_basis.trim()
+      && (!suspensionHasOther || suspensionForm.other_factor_explanation.trim())
+      && suspensionRemediationReady
+      && (suspensionForm.suspension_type !== "PRECAUTIONARY" || suspensionForm.review_date)
+   );
+   const reinstatementMonitoringReady = !reinstatementForm.continuing_conditions.trim() || Boolean(
+      reinstatementForm.monitoring_end_date
+      && reinstatementForm.monitoring_success_criteria.trim()
+      && reinstatementForm.monitoring_recurrence_consequence.trim()
+   );
+   const reinstatementReady = Boolean(
+      reinstatementForm.basis
+      && reinstatementForm.rationale.trim().length >= 20
+      && reinstatementForm.supporting_basis.trim()
+      && (
+         reinstatementForm.basis !== "REMEDIATION_COMPLETED"
+         || reinstatementForm.completed_remediation.trim()
+      )
+      && reinstatementMonitoringReady
+   );
+   const endingHasOther = endingForm.factors.includes("OTHER");
+   const endingReady = Boolean(
+      endingForm.ending_type
+      && endingForm.ground
+      && endingForm.rationale.trim().length >= 20
+      && endingForm.policy_basis.trim()
+      && endingForm.supporting_basis.trim()
+      && (!endingHasOther || endingForm.other_factor_explanation.trim())
+      && (
+         endingForm.ending_type !== "TERMINATION_FOR_CAUSE"
+         || (
+            endingForm.factors.length
+            && ["HIGH", "CRITICAL"].includes(endingForm.severity)
+         )
+      )
+   );
 
    return (
       <section className="management-detail-section management-governance-section">
@@ -338,22 +601,939 @@ function OrganizationGovernanceSection({
             error={error?.message}
             confirmLabel={selectedAction?.label || "Confirm"}
             confirmVariant={selectedAction?.variant || "primary"}
+            confirmDisabled={
+               (selectedAction?.key === "suspend" && !suspensionReady)
+               || (selectedAction?.key === "reinstate" && !reinstatementReady)
+            }
             processing={pending}
             onConfirm={executeGovernanceAction}
             onClose={() => setConfirmationAction(null)}
-         />
+         >
+            {selectedAction?.key === "suspend" ? (
+               <div className="management-governance-form">
+                  <label className="management-form-field">
+                     <span>Suspension type <span className="management-required-indicator" aria-hidden="true">*</span></span>
+                     <select
+                        value={suspensionForm.suspension_type}
+                        onChange={(event) => updateSuspensionForm("suspension_type", event.target.value)}
+                        disabled={pending}
+                        required
+                     >
+                        <option value="">Select suspension type</option>
+                        <option value="REMEDIAL">Remedial Suspension</option>
+                        <option value="PRECAUTIONARY">Precautionary Suspension</option>
+                        <option value="ADMINISTRATIVE">Administrative Suspension</option>
+                     </select>
+                  </label>
+                  <fieldset className="management-governance-factor-group">
+                     <legend>Factor(s) <span className="management-required-indicator" aria-hidden="true">*</span></legend>
+                     <p>Select every factor materially relevant to this suspension.</p>
+                     <div>
+                        {partnershipFactors.map(([value, label]) => (
+                           <label key={value}>
+                              <input
+                                 type="checkbox"
+                                 checked={suspensionForm.factors.includes(value)}
+                                 onChange={() => toggleSuspensionFactor(value)}
+                                 disabled={pending}
+                              />
+                              <span>{label}</span>
+                           </label>
+                        ))}
+                     </div>
+                  </fieldset>
+                  {suspensionHasOther ? (
+                     <label className="management-form-field">
+                        <span>Other factor explanation <span className="management-required-indicator" aria-hidden="true">*</span></span>
+                        <textarea
+                           value={suspensionForm.other_factor_explanation}
+                           onChange={(event) => updateSuspensionForm("other_factor_explanation", event.target.value)}
+                           rows={3}
+                           disabled={pending}
+                           required
+                           placeholder="Identify the underlying Partner standard and explain why the established factors do not fit."
+                        />
+                     </label>
+                  ) : null}
+                  <label className="management-form-field">
+                     <span>Severity <span className="management-required-indicator" aria-hidden="true">*</span></span>
+                     <select
+                        value={suspensionForm.severity}
+                        onChange={(event) => updateSuspensionForm("severity", event.target.value)}
+                        disabled={pending}
+                        required
+                     >
+                        <option value="">Select severity</option>
+                        {severityOptions.map(([value, label]) => (
+                           <option key={value} value={value}>{label}</option>
+                        ))}
+                     </select>
+                  </label>
+                  <label className="management-form-field">
+                     <span>Rationale <span className="management-required-indicator" aria-hidden="true">*</span></span>
+                     <textarea
+                        value={suspensionForm.rationale}
+                        onChange={(event) => updateSuspensionForm("rationale", event.target.value)}
+                        rows={4}
+                        disabled={pending}
+                        required
+                        placeholder="Describe the material facts and context supporting this suspension."
+                     />
+                  </label>
+                  <label className="management-form-field">
+                     <span>Policy basis <span className="management-required-indicator" aria-hidden="true">*</span></span>
+                     <Input
+                        value={suspensionForm.policy_basis}
+                        onChange={(event) => updateSuspensionForm("policy_basis", event.target.value)}
+                        disabled={pending}
+                        required
+                        placeholder="e.g. Partnership Enforcement Policy §13.1"
+                     />
+                  </label>
+                  <label className="management-form-field">
+                     <span>Internal supporting basis <span className="management-required-indicator" aria-hidden="true">*</span></span>
+                     <textarea
+                        value={suspensionForm.supporting_basis}
+                        onChange={(event) => updateSuspensionForm("supporting_basis", event.target.value)}
+                        rows={3}
+                        disabled={pending}
+                        required
+                        placeholder="Internal evidence or records supporting the decision. This is not shown to the organization."
+                     />
+                     <small>Internal Platform Governance only.</small>
+                  </label>
+                  <label className="management-form-field">
+                     <span>Supporting references (optional)</span>
+                     <textarea
+                        value={suspensionForm.supporting_references}
+                        onChange={(event) => updateSuspensionForm("supporting_references", event.target.value)}
+                        rows={2}
+                        disabled={pending}
+                        placeholder="One internal reference per line, up to 10."
+                     />
+                  </label>
+                  {suspensionForm.suspension_type === "REMEDIAL" ? (
+                     <div className="management-governance-form">
+                        <strong>Remediation plan</strong>
+                        <p className="management-section__description">
+                           Record a clear path the organization can follow toward compliance and reinstatement review.
+                        </p>
+                        <label className="management-form-field">
+                           <span>Problem to correct <span className="management-required-indicator" aria-hidden="true">*</span></span>
+                           <textarea
+                              value={suspensionForm.remediation_problem}
+                              onChange={(event) => updateSuspensionForm("remediation_problem", event.target.value)}
+                              rows={2}
+                              disabled={pending}
+                              required
+                           />
+                        </label>
+                        <label className="management-form-field">
+                           <span>Required action <span className="management-required-indicator" aria-hidden="true">*</span></span>
+                           <textarea
+                              value={suspensionForm.remediation_required_action}
+                              onChange={(event) => updateSuspensionForm("remediation_required_action", event.target.value)}
+                              rows={2}
+                              disabled={pending}
+                              required
+                           />
+                        </label>
+                        <label className="management-form-field">
+                           <span>Evidence of compliance <span className="management-required-indicator" aria-hidden="true">*</span></span>
+                           <textarea
+                              value={suspensionForm.remediation_evidence_required}
+                              onChange={(event) => updateSuspensionForm("remediation_evidence_required", event.target.value)}
+                              rows={2}
+                              disabled={pending}
+                              required
+                           />
+                        </label>
+                        <label className="management-form-field">
+                           <span>Remediation deadline <span className="management-required-indicator" aria-hidden="true">*</span></span>
+                           <Input
+                              type="date"
+                              value={suspensionForm.remediation_deadline}
+                              onChange={(event) => updateSuspensionForm("remediation_deadline", event.target.value)}
+                              disabled={pending}
+                              required
+                           />
+                        </label>
+                        <label className="management-form-field">
+                           <span>Review method <span className="management-required-indicator" aria-hidden="true">*</span></span>
+                           <textarea
+                              value={suspensionForm.remediation_review_method}
+                              onChange={(event) => updateSuspensionForm("remediation_review_method", event.target.value)}
+                              rows={2}
+                              disabled={pending}
+                              required
+                           />
+                        </label>
+                        <label className="management-form-field">
+                           <span>Consequence if unresolved <span className="management-required-indicator" aria-hidden="true">*</span></span>
+                           <textarea
+                              value={suspensionForm.remediation_failure_consequence}
+                              onChange={(event) => updateSuspensionForm("remediation_failure_consequence", event.target.value)}
+                              rows={2}
+                              disabled={pending}
+                              required
+                           />
+                        </label>
+                     </div>
+                  ) : null}
+                  <label className="management-form-field">
+                     <span>
+                        Review date{suspensionForm.suspension_type === "PRECAUTIONARY" ? (
+                           <> <span className="management-required-indicator" aria-hidden="true">*</span></>
+                        ) : " (optional)"}
+                     </span>
+                     <Input
+                        type="date"
+                        value={suspensionForm.review_date}
+                        onChange={(event) => updateSuspensionForm("review_date", event.target.value)}
+                        disabled={pending}
+                        required={suspensionForm.suspension_type === "PRECAUTIONARY"}
+                     />
+                  </label>
+               </div>
+            ) : selectedAction?.key === "reinstate" ? (
+               <div className="management-governance-form">
+                  <label className="management-form-field">
+                     <span>Basis for reinstatement</span>
+                     <select
+                        value={reinstatementForm.basis}
+                        onChange={(event) => updateReinstatementForm("basis", event.target.value)}
+                        disabled={pending}
+                        required
+                     >
+                        <option value="">Select reinstatement basis</option>
+                        {reinstatementBasisOptions.map(([value, label]) => (
+                           <option key={value} value={value}>{label}</option>
+                        ))}
+                     </select>
+                  </label>
+                  <label className="management-form-field">
+                     <span>Rationale</span>
+                     <textarea
+                        value={reinstatementForm.rationale}
+                        onChange={(event) => updateReinstatementForm("rationale", event.target.value)}
+                        rows={4}
+                        disabled={pending}
+                        required
+                        placeholder="Explain why continued suspension is no longer justified."
+                     />
+                  </label>
+                  {reinstatementForm.basis === "REMEDIATION_COMPLETED" ? (
+                     <label className="management-form-field">
+                        <span>Completed remediation</span>
+                        <textarea
+                           value={reinstatementForm.completed_remediation}
+                           onChange={(event) => updateReinstatementForm("completed_remediation", event.target.value)}
+                           rows={3}
+                           disabled={pending}
+                           required
+                           placeholder="Describe the remediation completed and accepted by TruthLens."
+                        />
+                     </label>
+                  ) : null}
+                  <label className="management-form-field">
+                     <span>Internal supporting basis</span>
+                     <textarea
+                        value={reinstatementForm.supporting_basis}
+                        onChange={(event) => updateReinstatementForm("supporting_basis", event.target.value)}
+                        rows={3}
+                        disabled={pending}
+                        required
+                        placeholder="Internal evidence supporting reinstatement. This is not shown to the organization."
+                     />
+                     <small>Internal Platform Governance only.</small>
+                  </label>
+                  <label className="management-form-field">
+                     <span>Supporting references (optional)</span>
+                     <textarea
+                        value={reinstatementForm.supporting_references}
+                        onChange={(event) => updateReinstatementForm("supporting_references", event.target.value)}
+                        rows={2}
+                        disabled={pending}
+                        placeholder="One internal reference per line, up to 10."
+                     />
+                  </label>
+                  <label className="management-form-field">
+                     <span>Continuing conditions (optional)</span>
+                     <textarea
+                        value={reinstatementForm.continuing_conditions}
+                        onChange={(event) => updateReinstatementForm("continuing_conditions", event.target.value)}
+                        rows={3}
+                        disabled={pending}
+                        placeholder="Leave blank when no formal monitoring conditions apply."
+                     />
+                  </label>
+                  {reinstatementForm.continuing_conditions.trim() ? (
+                     <>
+                        <label className="management-form-field">
+                           <span>Monitoring end date</span>
+                           <Input
+                              type="date"
+                              value={reinstatementForm.monitoring_end_date}
+                              onChange={(event) => updateReinstatementForm("monitoring_end_date", event.target.value)}
+                              disabled={pending}
+                              required
+                           />
+                        </label>
+                        <label className="management-form-field">
+                           <span>Success criteria</span>
+                           <textarea
+                              value={reinstatementForm.monitoring_success_criteria}
+                              onChange={(event) => updateReinstatementForm("monitoring_success_criteria", event.target.value)}
+                              rows={2}
+                              disabled={pending}
+                              required
+                           />
+                        </label>
+                        <label className="management-form-field">
+                           <span>Consequence if the serious issue recurs</span>
+                           <textarea
+                              value={reinstatementForm.monitoring_recurrence_consequence}
+                              onChange={(event) => updateReinstatementForm("monitoring_recurrence_consequence", event.target.value)}
+                              rows={2}
+                              disabled={pending}
+                              required
+                           />
+                        </label>
+                     </>
+                  ) : null}
+               </div>
+            ) : null}
+         </ManagementConfirmDialog>
          <ManagementConfirmDialog
             open={endConfirmationOpen}
             title="End this Partner Organization’s partnership?"
-            description="This is an operational retirement action. Historical verification records and published work will not be deleted."
+            description="Historical verification records and published work will not be deleted. Record why the active partnership is ending."
             warning={endImpactSummary}
             error={error?.message}
             confirmLabel="End partnership"
             confirmVariant="destructive"
+            confirmDisabled={!endingReady}
             processing={pending}
             onConfirm={endPartnership}
             onClose={() => setEndConfirmationOpen(false)}
-         />
+         >
+            <div className="management-governance-form">
+               <label className="management-form-field">
+                  <span>Ending type <span className="management-required-indicator" aria-hidden="true">*</span></span>
+                  <select
+                     value={endingForm.ending_type}
+                     onChange={(event) => updateEndingForm("ending_type", event.target.value)}
+                     disabled={pending}
+                     required
+                  >
+                     <option value="">Select ending type</option>
+                     <option value="VOLUNTARY_WITHDRAWAL">Voluntary Withdrawal</option>
+                     <option value="ADMINISTRATIVE_CONCLUSION">Administrative Conclusion</option>
+                     <option value="TERMINATION_FOR_CAUSE">Termination for Cause</option>
+                  </select>
+               </label>
+               <label className="management-form-field">
+                  <span>Ground <span className="management-required-indicator" aria-hidden="true">*</span></span>
+                  <select
+                     value={endingForm.ground}
+                     onChange={(event) => updateEndingForm("ground", event.target.value)}
+                     disabled={pending || !endingForm.ending_type}
+                     required
+                  >
+                     <option value="">Select ground</option>
+                     {(endingGroundOptions[endingForm.ending_type] || []).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                     ))}
+                  </select>
+               </label>
+               {endingForm.ending_type !== "VOLUNTARY_WITHDRAWAL" ? (
+                  <fieldset className="management-governance-factor-group">
+                     <legend>
+                        {endingForm.ending_type === "TERMINATION_FOR_CAUSE" ? (
+                           <>Factor(s) <span className="management-required-indicator" aria-hidden="true">*</span></>
+                        ) : "Related factor(s) (optional)"}
+                     </legend>
+                     <p>
+                        {endingForm.ending_type === "TERMINATION_FOR_CAUSE"
+                           ? "Select every factor materially relevant to this termination."
+                           : "Select factors only when they help explain the administrative conclusion."}
+                     </p>
+                     <div>
+                        {partnershipFactors.map(([value, label]) => (
+                           <label key={value}>
+                              <input
+                                 type="checkbox"
+                                 checked={endingForm.factors.includes(value)}
+                                 onChange={() => toggleEndingFactor(value)}
+                                 disabled={pending}
+                              />
+                              <span>{label}</span>
+                           </label>
+                        ))}
+                     </div>
+                  </fieldset>
+               ) : null}
+               {endingForm.ending_type === "TERMINATION_FOR_CAUSE" ? (
+                  <label className="management-form-field">
+                     <span>Severity <span className="management-required-indicator" aria-hidden="true">*</span></span>
+                     <select
+                        value={endingForm.severity}
+                        onChange={(event) => updateEndingForm("severity", event.target.value)}
+                        disabled={pending}
+                        required
+                     >
+                        <option value="">Select severity</option>
+                        <option value="HIGH">High</option>
+                        <option value="CRITICAL">Critical</option>
+                     </select>
+                  </label>
+               ) : null}
+               {endingHasOther ? (
+                  <label className="management-form-field">
+                     <span>Other factor explanation <span className="management-required-indicator" aria-hidden="true">*</span></span>
+                     <textarea
+                        value={endingForm.other_factor_explanation}
+                        onChange={(event) => updateEndingForm("other_factor_explanation", event.target.value)}
+                        rows={3}
+                        disabled={pending}
+                        required
+                        placeholder="Identify the underlying Partner standard and explain why the established factors do not fit."
+                     />
+                  </label>
+               ) : null}
+               <label className="management-form-field">
+                  <span>Rationale <span className="management-required-indicator" aria-hidden="true">*</span></span>
+                  <textarea
+                     value={endingForm.rationale}
+                     onChange={(event) => updateEndingForm("rationale", event.target.value)}
+                     rows={4}
+                     disabled={pending}
+                     required
+                     placeholder="Describe the material facts supporting the conclusion of this partnership."
+                  />
+               </label>
+               <label className="management-form-field">
+                  <span>Policy basis <span className="management-required-indicator" aria-hidden="true">*</span></span>
+                  <Input
+                     value={endingForm.policy_basis}
+                     onChange={(event) => updateEndingForm("policy_basis", event.target.value)}
+                     disabled={pending}
+                     required
+                     placeholder="e.g. Partnership Enforcement Policy §19.3"
+                  />
+               </label>
+               <label className="management-form-field">
+                  <span>Internal supporting basis <span className="management-required-indicator" aria-hidden="true">*</span></span>
+                  <textarea
+                     value={endingForm.supporting_basis}
+                     onChange={(event) => updateEndingForm("supporting_basis", event.target.value)}
+                     rows={3}
+                     disabled={pending}
+                     required
+                     placeholder="Internal evidence or records supporting the decision. This is not shown to the organization."
+                  />
+                  <small>Internal Platform Governance only.</small>
+               </label>
+               <label className="management-form-field">
+                  <span>Supporting references (optional)</span>
+                  <textarea
+                     value={endingForm.supporting_references}
+                     onChange={(event) => updateEndingForm("supporting_references", event.target.value)}
+                     rows={2}
+                     disabled={pending}
+                     placeholder="One internal reference per line, up to 10."
+                  />
+               </label>
+            </div>
+         </ManagementConfirmDialog>
+      </section>
+   );
+}
+
+
+
+function GovernanceReconsiderationCard({
+   organizationId,
+   reconsideration,
+   onRefresh,
+   onFeedback,
+}) {
+   const [independenceNote, setIndependenceNote] = useState("");
+   const [overrideRationale, setOverrideRationale] = useState("");
+   const [outcome, setOutcome] = useState("UPHELD");
+   const [resolutionRationale, setResolutionRationale] = useState("");
+   const [internalBasis, setInternalBasis] = useState("");
+   const { mutate, pending, error, reset } = useManagementMutation();
+
+   const startReview = async (event) => {
+      event.preventDefault();
+      const result = await mutate(
+         resolveApiEndpoint(
+            "MANAGEMENT_GOVERNANCE_RECONSIDERATION_REVIEW",
+            organizationId,
+            reconsideration.id,
+         ),
+         {
+            method: "POST",
+            body: {
+               reviewer_independence_note: independenceNote.trim(),
+               independence_override_rationale: overrideRationale.trim(),
+            },
+         },
+      );
+      if (!result.ok) return;
+      onFeedback("Reconsideration review started.");
+      onRefresh();
+   };
+
+   const resolveReview = async (event) => {
+      event.preventDefault();
+      const result = await mutate(
+         resolveApiEndpoint(
+            "MANAGEMENT_GOVERNANCE_RECONSIDERATION_RESOLVE",
+            organizationId,
+            reconsideration.id,
+         ),
+         {
+            method: "POST",
+            body: {
+               outcome,
+               resolution_rationale: resolutionRationale.trim(),
+               internal_supporting_basis: internalBasis.trim(),
+            },
+         },
+      );
+      if (!result.ok) return;
+      onFeedback(
+         outcome === "REVOKED"
+            ? "Reconsideration resolved and the suspension was revoked through governed reinstatement."
+            : "Reconsideration resolved and the suspension was upheld.",
+      );
+      onRefresh();
+   };
+
+   return (
+      <article className="management-governance-action">
+         <div>
+            <div className="management-section__title-row">
+               <div>
+                  <strong>Suspension reconsideration</strong>
+                  <p>
+                     Target suspension event: {reconsideration.suspension_event_id}
+                  </p>
+               </div>
+               <ManagementStatus value={reconsideration.status} />
+            </div>
+            <DetailList items={[
+               { label: "Requested by", value: reconsideration.requested_by || "Historical user" },
+               { label: "Grounds", value: reconsideration.grounds?.join(", ") || "Not recorded" },
+               { label: "Organization statement", value: reconsideration.request_statement },
+               { label: "Original decision-maker", value: reconsideration.original_decision_maker || "Not recorded" },
+               { label: "Reviewer", value: reconsideration.reviewer || "Not assigned" },
+               { label: "Outcome", value: reconsideration.outcome || "Pending" },
+               reconsideration.resolution_rationale
+                  ? { label: "Organization-facing resolution", value: reconsideration.resolution_rationale }
+                  : null,
+            ].filter(Boolean)} />
+
+            {reconsideration.status === "SUBMITTED" ? (
+               <form className="management-governance-form" onSubmit={startReview}>
+                  <strong>Begin review</strong>
+                  <p className="management-section__description">
+                     Use an independent Platform Admin where practicable. If the original decision-maker must self-review, the backend enforces the required independence record.
+                  </p>
+                  <label className="management-form-field">
+                     <span>Reviewer independence note (optional unless required)</span>
+                     <textarea
+                        rows={3}
+                        value={independenceNote}
+                        onChange={(event) => {
+                           reset();
+                           setIndependenceNote(event.target.value);
+                        }}
+                        disabled={pending}
+                        placeholder="Record how reviewer independence is satisfied, or why independent review is unavailable."
+                     />
+                     <FieldError id={`reconsideration-independence-${reconsideration.id}`}>
+                        {error?.fields.reviewer_independence_note}
+                     </FieldError>
+                  </label>
+                  <label className="management-form-field">
+                     <span>Self-review override rationale (only when necessary)</span>
+                     <textarea
+                        rows={3}
+                        value={overrideRationale}
+                        onChange={(event) => {
+                           reset();
+                           setOverrideRationale(event.target.value);
+                        }}
+                        disabled={pending}
+                        placeholder="Required only when the original decision-maker reviews despite another active Platform Admin being available."
+                     />
+                     <FieldError id={`reconsideration-override-${reconsideration.id}`}>
+                        {error?.fields.independence_override_rationale}
+                     </FieldError>
+                  </label>
+                  <Button type="submit" loading={pending} loadingLabel="Starting review…">
+                     Start review
+                  </Button>
+               </form>
+            ) : null}
+
+            {reconsideration.status === "UNDER_REVIEW" ? (
+               <form className="management-governance-form" onSubmit={resolveReview}>
+                  <strong>Resolve review</strong>
+                  <label className="management-form-field">
+                     <span>Outcome</span>
+                     <select
+                        value={outcome}
+                        onChange={(event) => setOutcome(event.target.value)}
+                        disabled={pending}
+                     >
+                        <option value="UPHELD">Upheld</option>
+                        <option value="REVOKED">Revoked</option>
+                     </select>
+                  </label>
+                  <label className="management-form-field">
+                     <span>Organization-facing resolution rationale</span>
+                     <textarea
+                        rows={4}
+                        value={resolutionRationale}
+                        onChange={(event) => {
+                           reset();
+                           setResolutionRationale(event.target.value);
+                        }}
+                        disabled={pending}
+                        required
+                        minLength={20}
+                        placeholder="Explain why the suspension is upheld or revoked."
+                     />
+                  </label>
+                  <label className="management-form-field">
+                     <span>Internal supporting basis</span>
+                     <textarea
+                        rows={4}
+                        value={internalBasis}
+                        onChange={(event) => {
+                           reset();
+                           setInternalBasis(event.target.value);
+                        }}
+                        disabled={pending}
+                        required
+                        minLength={20}
+                        placeholder="Internal evidence supporting the reconsideration outcome. This is not shown to the organization."
+                     />
+                     <small>Internal Platform Governance only.</small>
+                  </label>
+                  <Button
+                     type="submit"
+                     variant={outcome === "REVOKED" ? "primary" : "secondary"}
+                     loading={pending}
+                     loadingLabel="Resolving…"
+                     disabled={
+                        resolutionRationale.trim().length < 20
+                        || internalBasis.trim().length < 20
+                     }
+                  >
+                     Resolve reconsideration
+                  </Button>
+               </form>
+            ) : null}
+
+            {error ? <ManagementFeedback tone="error">{error.message}</ManagementFeedback> : null}
+         </div>
+      </article>
+   );
+}
+
+function GovernanceReconsiderationSection({
+   organization,
+   onRefresh,
+   onFeedback,
+}) {
+   const reconsiderations = organization.governance_reconsiderations || [];
+   if (!reconsiderations.length) return null;
+
+   return (
+      <section className="management-detail-section">
+         <h2>Suspension reconsideration</h2>
+         <p className="management-section__description">
+            Organization-requested review of a suspension. Submission never restores professional authority; only a revoked outcome uses the governed reinstatement transition.
+         </p>
+         <div className="management-governance-correction-list">
+            {reconsiderations.map((reconsideration) => (
+               <GovernanceReconsiderationCard
+                  key={reconsideration.id}
+                  organizationId={organization.id}
+                  reconsideration={reconsideration}
+                  onRefresh={onRefresh}
+                  onFeedback={onFeedback}
+               />
+            ))}
+         </div>
+      </section>
+   );
+}
+
+function GovernanceContactSection({
+   organization,
+   onRefresh,
+   onFeedback,
+}) {
+   const delivery = organization.governance_notice_delivery || {};
+   const fallback = delivery.fallback;
+   const [editing, setEditing] = useState(false);
+   const [email, setEmail] = useState(organization.governance_contact_email || "");
+   const [outOfBandOpen, setOutOfBandOpen] = useState(false);
+   const [outOfBandMethod, setOutOfBandMethod] = useState("");
+   const [outOfBandDetails, setOutOfBandDetails] = useState("");
+   const { mutate, pending, error, reset } = useManagementMutation();
+
+   const saveContact = async (event) => {
+      event.preventDefault();
+      const result = await mutate(
+         resolveApiEndpoint("MANAGEMENT_ORGANIZATION_GOVERNANCE_CONTACT", organization.id),
+         {
+            method: "PATCH",
+            body: { governance_contact_email: email.trim() },
+         },
+      );
+      if (!result.ok) return;
+
+      setEditing(false);
+      onFeedback(
+         email.trim()
+            ? "Private governance contact updated."
+            : "Private governance contact cleared.",
+      );
+      onRefresh();
+   };
+
+   const recordOutOfBand = async (event) => {
+      event.preventDefault();
+      if (!fallback?.id) return;
+
+      const result = await mutate(
+         resolveApiEndpoint("MANAGEMENT_ORGANIZATION_GOVERNANCE_OUT_OF_BAND", organization.id),
+         {
+            method: "POST",
+            body: {
+               fallback_delivery_id: fallback.id,
+               method: outOfBandMethod.trim(),
+               details: outOfBandDetails.trim(),
+            },
+         },
+      );
+      if (!result.ok) return;
+
+      setOutOfBandOpen(false);
+      setOutOfBandMethod("");
+      setOutOfBandDetails("");
+      onFeedback("Out-of-band governance notice recorded.");
+      onRefresh();
+   };
+
+   const retryDelivery = async () => {
+      const result = await mutate(
+         resolveApiEndpoint("MANAGEMENT_ORGANIZATION_GOVERNANCE_NOTICE_RETRY", organization.id),
+         { method: "POST", body: {} },
+      );
+      if (!result.ok) return;
+      onFeedback(result.data.detail || "Governance notice retry queued.");
+      onRefresh();
+   };
+
+   const fallbackStatusLabels = {
+      PENDING: "Pending",
+      SENT: "Sent",
+      FAILED: "Failed",
+      NOT_DELIVERABLE: "Not deliverable",
+      OUT_OF_BAND_RECORDED: "Out-of-band notice recorded",
+   };
+   const canRecordOutOfBand = fallback
+      && ["NOT_DELIVERABLE", "FAILED"].includes(fallback.status);
+
+   return (
+      <section className="management-detail-section">
+         <div className="management-section__title-row">
+            <div>
+               <h2>Governance contact and notice delivery</h2>
+               <p className="management-section__description">
+                  This private contact is used only when no active Organization Admin can receive a secure governance notice. It is never shown on the public organization profile.
+               </p>
+            </div>
+         </div>
+
+         {delivery.no_active_admin ? (
+            <ManagementFeedback tone="error">
+               No active Organization Admin is currently available to receive a detailed secure governance notice.
+               {organization.governance_contact_email
+                  ? " TruthLens will use the private governance contact for a minimal fallback alert."
+                  : " Configure a private governance contact or record any out-of-band notice after the governance action."}
+            </ManagementFeedback>
+         ) : null}
+
+         {!editing ? (
+            <>
+               <DetailList items={[
+                  {
+                     label: "Private governance contact",
+                     value: organization.governance_contact_email || "Not configured",
+                  },
+                  {
+                     label: "Latest fallback delivery",
+                     value: fallback
+                        ? (fallbackStatusLabels[fallback.status] || fallback.status)
+                        : "Not required",
+                  },
+                  fallback?.contact_email
+                     ? { label: "Fallback address used", value: fallback.contact_email }
+                     : null,
+                  fallback?.recorded_at
+                     ? {
+                        label: "Out-of-band notice recorded",
+                        node: formatManagementDate(fallback.recorded_at),
+                     }
+                     : null,
+               ].filter(Boolean)} />
+               <div className="management-inline-actions">
+                  <Button
+                     variant="secondary"
+                     disabled={pending}
+                     onClick={() => {
+                        reset();
+                        setEmail(organization.governance_contact_email || "");
+                        setEditing(true);
+                     }}
+                  >
+                     Edit private governance contact
+                  </Button>
+                  {delivery.retry_available || fallback?.status === "FAILED" || fallback?.status === "PENDING" ? (
+                     <Button
+                        variant="secondary"
+                        disabled={pending}
+                        onClick={retryDelivery}
+                     >
+                        Retry notice delivery
+                     </Button>
+                  ) : null}
+                  {canRecordOutOfBand ? (
+                     <Button
+                        variant="secondary"
+                        disabled={pending}
+                        onClick={() => {
+                           reset();
+                           setOutOfBandOpen(true);
+                        }}
+                     >
+                        Record out-of-band notice
+                     </Button>
+                  ) : null}
+               </div>
+            </>
+         ) : (
+            <form className="management-provision-form" onSubmit={saveContact}>
+               <label className="management-form-field">
+                  <span>Private governance contact email</span>
+                  <Input
+                     type="email"
+                     value={email}
+                     onChange={(event) => {
+                        reset();
+                        setEmail(event.target.value);
+                     }}
+                     invalid={Boolean(error?.fields.governance_contact_email)}
+                     disabled={pending}
+                     autoComplete="email"
+                     placeholder="governance@example.org"
+                  />
+                  <small>
+                     Leave blank only when the organization has no suitable fallback address.
+                  </small>
+                  <FieldError id="governance-contact-email-error">
+                     {error?.fields.governance_contact_email}
+                  </FieldError>
+               </label>
+               <div className="management-inline-actions">
+                  <Button
+                     variant="secondary"
+                     disabled={pending}
+                     onClick={() => {
+                        reset();
+                        setEmail(organization.governance_contact_email || "");
+                        setEditing(false);
+                     }}
+                  >
+                     Cancel
+                  </Button>
+                  <Button type="submit" loading={pending} loadingLabel="Saving…">
+                     Save contact
+                  </Button>
+               </div>
+            </form>
+         )}
+
+         {outOfBandOpen && fallback ? (
+            <form className="management-provision-form" onSubmit={recordOutOfBand}>
+               <div className="management-provision-form__intro">
+                  <strong>Record out-of-band governance notice</strong>
+                  <p>
+                     Use this only to document a real communication that occurred outside TruthLens. It does not change the governance decision itself.
+                  </p>
+               </div>
+               <label className="management-form-field">
+                  <span>Method</span>
+                  <Input
+                     value={outOfBandMethod}
+                     onChange={(event) => {
+                        reset();
+                        setOutOfBandMethod(event.target.value);
+                     }}
+                     disabled={pending}
+                     required
+                     placeholder="e.g. Official organization email"
+                  />
+               </label>
+               <label className="management-form-field">
+                  <span>Details</span>
+                  <textarea
+                     value={outOfBandDetails}
+                     onChange={(event) => {
+                        reset();
+                        setOutOfBandDetails(event.target.value);
+                     }}
+                     rows={3}
+                     disabled={pending}
+                     required
+                     placeholder="Record when and how the organization was informed. Do not place confidential supporting evidence here."
+                  />
+               </label>
+               <div className="management-inline-actions">
+                  <Button
+                     variant="secondary"
+                     disabled={pending}
+                     onClick={() => {
+                        reset();
+                        setOutOfBandOpen(false);
+                        setOutOfBandMethod("");
+                        setOutOfBandDetails("");
+                     }}
+                  >
+                     Cancel
+                  </Button>
+                  <Button type="submit" loading={pending} loadingLabel="Recording…">
+                     Record notice
+                  </Button>
+               </div>
+            </form>
+         ) : null}
+
+         {fallback?.last_error ? (
+            <ManagementFeedback tone="error">
+               {fallback.last_error}
+            </ManagementFeedback>
+         ) : null}
+         {error ? <ManagementFeedback tone="error">{error.message}</ManagementFeedback> : null}
       </section>
    );
 }
@@ -662,6 +1842,16 @@ function ManagementOrganizationDetailPage() {
             {data ? (
                <div className="management-detail-sections">
                   <OrganizationGovernanceSection
+                     organization={data}
+                     onRefresh={retry}
+                     onFeedback={showFeedback}
+                  />
+                  <GovernanceContactSection
+                     organization={data}
+                     onRefresh={retry}
+                     onFeedback={showFeedback}
+                  />
+                  <GovernanceReconsiderationSection
                      organization={data}
                      onRefresh={retry}
                      onFeedback={showFeedback}

@@ -27,8 +27,9 @@ def get_organization_admin_onboarding_policy(
             "allowed": False,
             "code": "FORMER_PARTNER",
             "message": (
-                "This organization is a Former Partner. Reinstate the partnership "
-                "before provisioning or accepting a new Organization Admin."
+                "This organization is a Former Partner. A future partnership requires "
+                "a fresh eligibility and activation process before Organization Admin "
+                "onboarding can resume."
             ),
         }
 

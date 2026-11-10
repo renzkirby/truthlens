@@ -242,6 +242,16 @@ function NavigationBar() {
                                  My Public Profile
                               </Link>
                            )}
+                           {professionalIdentity && (
+                              <Link
+                                 to="/partner-guidelines"
+                                 className={`tl-app-nav__account-link ${location.pathname === "/partner-guidelines" ? "active" : ""}`}
+                                 onClick={() => setIsOpen(false)}
+                              >
+                                 <Icons name="book-open" />
+                                 Partner Guidelines
+                              </Link>
+                           )}
                            <Link
                               to="/settings"
                               className={`tl-app-nav__account-link ${location.pathname === "/settings" ? "active" : ""}`}
