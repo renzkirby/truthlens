@@ -2827,6 +2827,49 @@ class AccountabilityEvent(models.Model):
         return f"{self.action_type} - {self.resource_type} {self.resource_id}"
 
 
+class OrganizationGovernanceSupportingBasis(models.Model):
+    """
+    Restricted supporting material for a formal Partner Organization governance
+    decision.
+
+    AccountabilityEvent remains the immutable audit record. This related row is
+    deliberately separate so sensitive internal basis can be redacted later
+    without rewriting the historical fact that a supporting basis existed.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    governance_event = models.OneToOneField(
+        AccountabilityEvent,
+        on_delete=models.PROTECT,
+        related_name="governance_supporting_basis",
+    )
+    summary = models.TextField()
+    references = models.JSONField(default=list, blank=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_organization_governance_supporting_bases",
+    )
+    redacted_at = models.DateTimeField(null=True, blank=True)
+    redacted_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="redacted_organization_governance_supporting_bases",
+    )
+    redaction_reason = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"Supporting basis for accountability event {self.governance_event_id}"
+
+
 class AdjudicationDecision(models.Model):
     class Verdict(models.TextChoices):
         FACT = "FACT", "Fact"
