@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 from django.test import SimpleTestCase, override_settings
 
 from api.verification.cloudflare_pilot import (cloudflare_pilot_enabled, validate_pilot_response)
-from api.services import call_llm_with_fallback
+from api.services import LLMProviderUnavailableError, call_llm_with_fallback
 from api.verification.provider_hierarchy import (
     hierarchy_enabled, requires_strict_stage_contract,
 )
@@ -287,6 +287,95 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
                     self.assertEqual(json.loads(result), expected)
                     self.assertEqual(sequence, ["gemini", "cloudflare"])
                     groq.with_options.return_value.chat.completions.create.assert_not_called()
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_legacy_persisted_evidence_retries_gemini_after_groq_413(self):
+        payload = json.dumps({
+            "reasoning": "Grounded in the complete persisted dossier.",
+            "verdict": "FACT",
+            "summary": "The claim is supported.",
+            "confidence_score": 84,
+            "score_context": "Direct persisted evidence supports the claim.",
+        })
+
+        class ProviderError(RuntimeError):
+            pass
+
+        gemini_503 = ProviderError("service unavailable")
+        gemini_503.code = 503
+        groq_413 = ProviderError("request too large")
+        groq_413.status_code = 413
+
+        gemini = Mock()
+        gemini.models.generate_content.side_effect = [
+            gemini_503,
+            SimpleNamespace(text=payload),
+        ]
+        groq = Mock()
+        groq.chat.completions.create.side_effect = groq_413
+
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
+                    "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0",
+                    "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "0",
+                },
+            ),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.time.sleep") as sleep,
+        ):
+            result = call_llm_with_fallback(
+                "Instructions",
+                "Complete persisted evidence dossier.",
+                operation="persisted_evidence_evaluation",
+            )
+
+        self.assertEqual(result, payload)
+        self.assertEqual(gemini.models.generate_content.call_count, 2)
+        groq.chat.completions.create.assert_called_once()
+        sleep.assert_called_once_with(1.0)
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_groq_413_does_not_retry_job_blocking_gemini_error(self):
+        class ProviderError(RuntimeError):
+            pass
+
+        gemini_429 = ProviderError("quota unavailable")
+        gemini_429.code = 429
+        groq_413 = ProviderError("request too large")
+        groq_413.status_code = 413
+
+        gemini = Mock()
+        gemini.models.generate_content.side_effect = gemini_429
+        groq = Mock()
+        groq.chat.completions.create.side_effect = groq_413
+
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
+                    "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0",
+                    "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "0",
+                },
+            ),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.time.sleep") as sleep,
+        ):
+            with self.assertRaises(LLMProviderUnavailableError):
+                call_llm_with_fallback(
+                    "Instructions",
+                    "Complete persisted evidence dossier.",
+                    operation="persisted_evidence_evaluation",
+                )
+
+        gemini.models.generate_content.assert_called_once()
+        groq.chat.completions.create.assert_called_once()
+        sleep.assert_not_called()
 
     @override_settings(APP_ENV="production", DEBUG=False)
     def test_universal_uses_groq_after_cloudflare_failure(self):
