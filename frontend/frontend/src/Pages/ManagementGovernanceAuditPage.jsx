@@ -191,7 +191,7 @@ function ManagementGovernanceAuditPage() {
                         <tr key={event.id}>
                            <td data-label="Action">
                               <strong>
-                                 {formatManagementGovernanceAction(event.action_type, event.action_label)}
+                                 {formatManagementGovernanceAction(event.action_type, event.action_label, event.reason_code)}
                               </strong>
                            </td>
                            <td data-label="Organization">{event.subject_organization?.name || "Organization unavailable"}</td>
