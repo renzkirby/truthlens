@@ -444,3 +444,306 @@ html[data-theme="dark"] :is(
 ) {
    color: var(--tl-color-brand-primary);
 }
+
+
+/* Soft-surface refinement: large passive content areas should read through
+   layered surfaces and subtle shadow, not strong outlines. Interactive controls
+   retain clearer borders elsewhere for affordance and keyboard focus. */
+html[data-theme="dark"] :is(
+   .feed-card,
+   .settings-content,
+   .user-profile__profile-card,
+   .tl-notifications-list,
+   .partner-directory-card,
+   .management-pipeline-metrics,
+   .hub-overview,
+   .hub-page-layout .box-panel,
+   .hub-impact-card,
+   .thread-detail-assessment--classic,
+   .thread-detail-post-card--classic,
+   .thread-detail-discussion--classic,
+   .thread-detail-page .evidence-card
+) {
+   border-color: var(--tl-color-border-soft);
+   box-shadow: var(--tl-shadow-sm);
+}
+
+/* Dashboard / User Hub: convert remaining nested light-only surfaces. */
+html[data-theme="dark"] .hub-page-layout :is(
+   .hub-section-heading,
+   .hub-reputation-rank h3,
+   .hub-trust-breakdown-header h3,
+   .hub-score-total strong,
+   .hub-rank-progress-label,
+   .hub-trust-factor-label,
+   .li-excerpt,
+   .library-empty h3,
+   .library-page-status strong,
+   .br-primary-text
+) {
+   color: var(--tl-color-text-main);
+}
+
+html[data-theme="dark"] .hub-page-layout :is(
+   .hub-impact-label,
+   .hub-reputation-description,
+   .hub-reputation-rank-label,
+   .hub-rank-progress-detail,
+   .hub-rank-progress-meta,
+   .hub-score-total span,
+   .hub-trust-factor-description,
+   .library-loading,
+   .library-page-status,
+   .library-empty p,
+   .li-meta,
+   .li-date,
+   .br-confidence,
+   .br-section-title,
+   .br-secondary-text,
+   .br-empty-text
+) {
+   color: var(--tl-color-text-muted);
+}
+
+html[data-theme="dark"] .hub-page-layout :is(
+   .hub-section-eyebrow,
+   .hub-rank-progress-percent,
+   .li-type,
+   .li-source-link,
+   .library-clear-filters
+) {
+   color: var(--tl-color-brand-primary);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-reputation-card {
+   background: var(--tl-color-bg-surface);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-trust-breakdown {
+   border-left-color: var(--tl-color-border-soft);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-confidence-chip {
+   border-color: var(--tl-color-border-soft);
+   color: var(--tl-color-text-muted);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-rank-progress {
+   border-top-color: var(--tl-color-border-light);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-trust-factor {
+   border-bottom-color: var(--tl-color-border-light);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-trust-factor-icon {
+   border-color: var(--tl-color-border-soft);
+   color: var(--tl-color-text-muted);
+   background: var(--tl-color-bg-surface);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-trust-factor-value--positive {
+   color: var(--tl-color-fact-text);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-trust-factor-value--negative {
+   color: var(--tl-color-fake-text);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-trust-factor-value--neutral {
+   color: var(--tl-color-text-muted);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-trust-note {
+   border-color: var(--tl-color-border-soft);
+   color: var(--tl-color-text-muted);
+   background: var(--tl-color-bg-surface);
+}
+
+/* Dashboard impact cards retain their semantic accent colors on dark surfaces. */
+html[data-theme="dark"] .hub-impact-card--indigo .hub-impact-icon {
+   color: #a5b4fc;
+   background: #242347;
+}
+
+html[data-theme="dark"] .hub-impact-card--blue .hub-impact-icon {
+   color: #93c5fd;
+   background: #172a46;
+}
+
+html[data-theme="dark"] .hub-impact-card--green .hub-impact-icon {
+   color: #6ee7b7;
+   background: #12352c;
+}
+
+/* Library tabs and toolbar. Controls keep enough contrast to remain obviously
+   interactive while dropping the bright white light-theme surfaces. */
+html[data-theme="dark"] .hub-page-layout .library-header {
+   border-bottom-color: var(--tl-color-border-light);
+}
+
+html[data-theme="dark"] .hub-page-layout .library-count {
+   color: var(--tl-color-text-muted);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .hub-page-layout .library-tabs {
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .hub-page-layout .library-tab {
+   color: var(--tl-color-text-muted);
+}
+
+html[data-theme="dark"] .hub-page-layout .library-tab:hover {
+   color: var(--tl-color-text-main);
+}
+
+html[data-theme="dark"] .hub-page-layout .library-tab--active {
+   color: var(--tl-color-brand-primary);
+   background: var(--tl-color-bg-surface);
+   box-shadow: var(--tl-shadow-sm);
+}
+
+html[data-theme="dark"] .hub-page-layout .library-tab-count {
+   color: var(--tl-color-text-muted);
+   background: var(--tl-color-border-default);
+}
+
+html[data-theme="dark"] .hub-page-layout .library-tab--active .library-tab-count {
+   color: var(--tl-color-brand-primary);
+   background: var(--tl-color-status-info-bg);
+}
+
+html[data-theme="dark"] .hub-page-layout .library-search {
+   border-color: var(--tl-color-border-default);
+   color: var(--tl-color-text-muted);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .hub-page-layout .library-search:focus-within {
+   border-color: var(--tl-color-brand-primary);
+   background: var(--tl-color-bg-surface);
+   box-shadow: 0 0 0 3px color-mix(in srgb, var(--tl-color-brand-primary) 16%, transparent);
+}
+
+html[data-theme="dark"] .hub-page-layout .library-search input {
+   color: var(--tl-color-text-main);
+}
+
+html[data-theme="dark"] .hub-page-layout .library-search input::placeholder {
+   color: var(--tl-color-text-muted);
+}
+
+html[data-theme="dark"] .hub-page-layout .library-filter::after {
+   border-color: var(--tl-color-text-muted);
+}
+
+html[data-theme="dark"] .hub-page-layout .library-filter select {
+   border-color: var(--tl-color-border-default);
+   color: var(--tl-color-text-body);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .hub-page-layout .library-filter select:hover {
+   border-color: color-mix(in srgb, var(--tl-color-brand-primary) 48%, var(--tl-color-border-default));
+}
+
+html[data-theme="dark"] .hub-page-layout .library-filter select:focus {
+   border-color: var(--tl-color-brand-primary);
+   box-shadow: 0 0 0 3px color-mix(in srgb, var(--tl-color-brand-primary) 16%, transparent);
+}
+
+html[data-theme="dark"] .hub-page-layout .library-pagination {
+   border-top-color: var(--tl-color-border-light);
+}
+
+html[data-theme="dark"] .hub-page-layout .library-page-button {
+   border-color: var(--tl-color-border-default);
+   color: var(--tl-color-text-body);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .hub-page-layout .library-page-button:hover:not(:disabled) {
+   border-color: color-mix(in srgb, var(--tl-color-brand-primary) 44%, var(--tl-color-border-default));
+   color: var(--tl-color-text-main);
+   background: var(--tl-color-bg-surface);
+}
+
+/* Fact-check history rows. */
+html[data-theme="dark"] .hub-page-layout .library-item {
+   border-color: var(--tl-color-border-soft);
+   background: var(--tl-color-bg-surface);
+   box-shadow: var(--tl-shadow-sm);
+}
+
+html[data-theme="dark"] .hub-page-layout .library-item:hover {
+   border-color: color-mix(in srgb, var(--tl-color-brand-primary) 22%, var(--tl-color-border-soft));
+   background: var(--tl-color-bg-subtle);
+   box-shadow: var(--tl-shadow-md);
+}
+
+html[data-theme="dark"] .hub-page-layout .li-icon,
+html[data-theme="dark"] .hub-page-layout .library-empty-icon {
+   color: var(--tl-color-text-muted);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-btn-report,
+html[data-theme="dark"] .hub-page-layout .hub-btn-save {
+   border-color: var(--tl-color-border-default);
+   color: var(--tl-color-text-body);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-btn-report:hover,
+html[data-theme="dark"] .hub-page-layout .hub-btn-save:hover {
+   border-color: color-mix(in srgb, var(--tl-color-brand-primary) 42%, var(--tl-color-border-default));
+   color: var(--tl-color-text-main);
+   background: var(--tl-color-bg-surface);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-btn-save--saved {
+   border-color: color-mix(in srgb, var(--tl-color-brand-primary) 42%, transparent);
+   color: var(--tl-color-brand-primary);
+   background: var(--tl-color-status-info-bg);
+}
+
+/* Dashboard report modal. */
+html[data-theme="dark"] .hub-modal-content {
+   color: var(--tl-color-text-main);
+   background: var(--tl-color-bg-elevated);
+   box-shadow: var(--tl-shadow-lg);
+}
+
+html[data-theme="dark"] .hub-modal-content .br-modal-header {
+   border-bottom-color: var(--tl-color-border-light);
+}
+
+html[data-theme="dark"] .hub-modal-content .br-close-btn {
+   color: var(--tl-color-text-muted);
+}
+
+html[data-theme="dark"] .hub-modal-content .br-close-btn:hover {
+   color: var(--tl-color-text-main);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .hub-modal-content .br-source-pill {
+   border-color: var(--tl-color-border-soft);
+   color: var(--tl-color-text-body);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .hub-modal-content .br-source-pill:hover {
+   border-color: var(--tl-color-border-default);
+   color: var(--tl-color-text-main);
+   background: var(--tl-color-bg-surface);
+}
+
+html[data-theme="dark"] .hub-modal-content .br-modal-footer {
+   border-top-color: var(--tl-color-border-light);
+   background: var(--tl-color-bg-subtle);
+}

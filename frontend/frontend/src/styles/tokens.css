@@ -209,7 +209,7 @@ html[data-theme="dark"] {
 
   --tl-color-border-default: #3a3f47;
   --tl-color-border-light: #282c32;
-  --tl-color-border-soft: rgba(255, 255, 255, 0.055);
+  --tl-color-border-soft: rgba(255, 255, 255, 0.035);
 
   --tl-color-fact-border: #18c58c;
   --tl-color-fact-bg: #103227;
