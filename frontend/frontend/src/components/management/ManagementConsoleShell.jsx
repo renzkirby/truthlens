@@ -22,6 +22,7 @@ const NAVIGATION_ITEMS = [
    { to: "/management/memberships", label: "Membership Records", icon: "users", access: "admin" },
    { to: "/management/invitations", label: "Invitation Records", icon: "mail", access: "admin" },
    { to: "/management/audit", label: "Governance History", icon: "shield-check", access: "admin" },
+   { to: "/management/partner-guidelines", label: "Partner Guidelines", icon: "book-open", access: "admin" },
 ];
 
 const MOBILE_NAVIGATION_ID = "management-mobile-navigation";
