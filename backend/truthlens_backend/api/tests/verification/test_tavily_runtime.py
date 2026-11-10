@@ -756,7 +756,14 @@ class TavilyTextRuntimeIngestionTests(TestCase):
 
         def reject_gfc(*args):
             events.append("gfc_relevance")
-            return False
+            return {
+                "candidate_count": 1,
+                "relevant_candidate_count": 0,
+                "covered_candidate_count": 0,
+                "terminally_sufficient": False,
+                "reason_code": "MATERIAL_DIFFERENCE",
+                "candidates": [],
+            }
 
         def search_tavily(**kwargs):
             events.append("tavily_search")
@@ -804,7 +811,7 @@ class TavilyTextRuntimeIngestionTests(TestCase):
             4,
         )
         self.relevance.assert_called_once_with(
-            self.cleaned["cleaned_claim"], "Unrelated fact check.",
+            self.cleaned["cleaned_claim"], ["Unrelated fact check."],
         )
         self._assert_persisted_evaluation_and_sources()
 
