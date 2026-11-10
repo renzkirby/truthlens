@@ -138,6 +138,10 @@ class VerificationRunURLRuntimeTests(TestCase):
             "api.tasks.filter_reasoning_evidence_dossier_by_role",
             return_value=["selected evidence"],
         )
+        self.filter_dossier_roles = self._patch(
+            "api.tasks.filter_reasoning_evidence_dossier_by_roles",
+            return_value=["selected evidence"],
+        )
         self.render_dossier = self._patch(
             "api.tasks.render_reasoning_evidence_dossier",
             return_value="Persisted evidence context.",
@@ -767,7 +771,14 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.filter_dossier.return_value = [
             SimpleNamespace(evidence=(evidence,))
         ]
-        self.relevance.return_value = False
+        self.relevance.return_value = {
+            "candidate_count": 1,
+            "relevant_candidate_count": 0,
+            "covered_candidate_count": 0,
+            "terminally_sufficient": False,
+            "reason_code": "MATERIAL_DIFFERENCE",
+            "candidates": [],
+        }
         satire_verdict = {
             **self.verdict,
             "verdict": "SATIRE",
@@ -1480,7 +1491,14 @@ class VerificationEvidenceURLRuntimeTests(TestCase):
         )
 
     def test_url_tavily_report_sources_come_from_persisted_evidence(self):
-        self.relevance.return_value = False
+        self.relevance.return_value = {
+            "candidate_count": 1,
+            "relevant_candidate_count": 0,
+            "covered_candidate_count": 0,
+            "terminally_sufficient": False,
+            "reason_code": "MATERIAL_DIFFERENCE",
+            "candidates": [],
+        }
         self.retrieve_tavily.side_effect = self._record_tavily_link
         self.tavily_response["results"] = [
             {"url": "https://not-persisted.example/first-hit",
@@ -1500,7 +1518,14 @@ class VerificationEvidenceURLRuntimeTests(TestCase):
         ))
 
     def test_irrelevant_gfc_is_not_assessed_and_tavily_is_role_isolated(self):
-        self.relevance.return_value = False
+        self.relevance.return_value = {
+            "candidate_count": 1,
+            "relevant_candidate_count": 0,
+            "covered_candidate_count": 0,
+            "terminally_sufficient": False,
+            "reason_code": "MATERIAL_DIFFERENCE",
+            "candidates": [],
+        }
         self.retrieve_tavily.side_effect = self._record_tavily_link
 
         run = self._execute()
