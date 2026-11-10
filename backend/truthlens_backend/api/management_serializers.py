@@ -1,3 +1,4 @@
+from django.db.models import Count, Q
 from rest_framework import serializers
 
 from .accountability_query_service import MANAGEMENT_GOVERNANCE_ACTIONS
@@ -997,30 +998,40 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
         return get_partner_organization_lifecycle_projection(obj)
 
     def get_governance_notice_delivery(self, obj):
+        queryset = OrganizationGovernanceNoticeRecipient.objects.filter(
+            governance_event__subject_organization=obj,
+        )
+        statuses = OrganizationGovernanceNoticeRecipient.DeliveryStatus
+        retryable = {statuses.PENDING, statuses.FAILED}
+
+        in_app_counts = {
+            row["in_app_status"]: row["count"]
+            for row in queryset.values("in_app_status").annotate(count=Count("id"))
+        }
+        email_counts = {
+            row["email_status"]: row["count"]
+            for row in queryset.values("email_status").annotate(count=Count("id"))
+        }
         rows = list(
-            OrganizationGovernanceNoticeRecipient.objects.filter(
-                governance_event__subject_organization=obj,
-            )
-            .select_related("user", "governance_event")
+            queryset.select_related("user", "governance_event")
             .order_by("-created_at", "-id")[:20]
         )
 
-        statuses = OrganizationGovernanceNoticeRecipient.DeliveryStatus
-        summary = {
-            "total_recipients": len(rows),
-            "retry_available": False,
-            "in_app": {value: 0 for value, _label in statuses.choices},
-            "email": {value: 0 for value, _label in statuses.choices},
-            "recent": [],
-        }
-        retryable = {statuses.PENDING, statuses.FAILED}
-
-        for row in rows:
-            summary["in_app"][row.in_app_status] += 1
-            summary["email"][row.email_status] += 1
-            if row.in_app_status in retryable or row.email_status in retryable:
-                summary["retry_available"] = True
-            summary["recent"].append(
+        return {
+            "total_recipients": queryset.count(),
+            "retry_available": queryset.filter(
+                Q(in_app_status__in=retryable)
+                | Q(email_status__in=retryable)
+            ).exists(),
+            "in_app": {
+                value: in_app_counts.get(value, 0)
+                for value, _label in statuses.choices
+            },
+            "email": {
+                value: email_counts.get(value, 0)
+                for value, _label in statuses.choices
+            },
+            "recent": [
                 {
                     "id": str(row.pk),
                     "event_id": str(row.governance_event_id),
@@ -1034,8 +1045,9 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
                     "last_delivery_attempt_at": row.last_delivery_attempt_at,
                     "created_at": row.created_at,
                 }
-            )
-        return summary
+                for row in rows
+            ],
+        }
 
     def get_organization_admin(self, obj):
         current_admins = (
