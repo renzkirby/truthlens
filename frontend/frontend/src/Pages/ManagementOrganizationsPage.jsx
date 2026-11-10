@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import {
@@ -43,10 +43,6 @@ function ManagementOrganizationsPage() {
    );
    const page = readPage(searchParams);
    const [draftQuery, setDraftQuery] = useState(filters.q);
-
-   useEffect(() => {
-      setDraftQuery(filters.q);
-   }, [filters.q]);
 
    const requestUrl = useMemo(() => {
       const url = new URL(resolveApiEndpoint("MANAGEMENT_ORGANIZATIONS"));
