@@ -867,6 +867,20 @@ class ManagementOrganizationGovernanceOutOfBandNoticeView(APIView):
             pk=serializer.validated_data["fallback_delivery_id"],
             governance_event__subject_organization_id=organization_id,
         )
+        if fallback.status not in {
+            OrganizationGovernanceFallbackDelivery.Status.NOT_DELIVERABLE,
+            OrganizationGovernanceFallbackDelivery.Status.FAILED,
+        }:
+            return Response(
+                {
+                    "detail": (
+                        "Out-of-band notice can only be recorded when fallback "
+                        "delivery is not deliverable or has failed."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
         fallback.status = OrganizationGovernanceFallbackDelivery.Status.OUT_OF_BAND_RECORDED
         fallback.out_of_band_method = serializer.validated_data["method"]
         fallback.out_of_band_details = serializer.validated_data["details"]
