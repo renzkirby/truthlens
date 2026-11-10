@@ -919,7 +919,7 @@ function OrganizationGovernanceSection({
          >
             <div className="management-governance-form">
                <label className="management-form-field">
-                  <span>Ending type</span>
+                  <span>Ending type <span className="management-required-indicator" aria-hidden="true">*</span></span>
                   <select
                      value={endingForm.ending_type}
                      onChange={(event) => updateEndingForm("ending_type", event.target.value)}
@@ -933,7 +933,7 @@ function OrganizationGovernanceSection({
                   </select>
                </label>
                <label className="management-form-field">
-                  <span>Ground</span>
+                  <span>Ground <span className="management-required-indicator" aria-hidden="true">*</span></span>
                   <select
                      value={endingForm.ground}
                      onChange={(event) => updateEndingForm("ground", event.target.value)}
@@ -948,7 +948,11 @@ function OrganizationGovernanceSection({
                </label>
                {endingForm.ending_type !== "VOLUNTARY_WITHDRAWAL" ? (
                   <fieldset className="management-governance-factor-group">
-                     <legend>{endingForm.ending_type === "TERMINATION_FOR_CAUSE" ? "Factor(s)" : "Related factor(s) (optional)"}</legend>
+                     <legend>
+                        {endingForm.ending_type === "TERMINATION_FOR_CAUSE" ? (
+                           <>Factor(s) <span className="management-required-indicator" aria-hidden="true">*</span></>
+                        ) : "Related factor(s) (optional)"}
+                     </legend>
                      <p>
                         {endingForm.ending_type === "TERMINATION_FOR_CAUSE"
                            ? "Select every factor materially relevant to this termination."
@@ -971,7 +975,7 @@ function OrganizationGovernanceSection({
                ) : null}
                {endingForm.ending_type === "TERMINATION_FOR_CAUSE" ? (
                   <label className="management-form-field">
-                     <span>Severity</span>
+                     <span>Severity <span className="management-required-indicator" aria-hidden="true">*</span></span>
                      <select
                         value={endingForm.severity}
                         onChange={(event) => updateEndingForm("severity", event.target.value)}
@@ -986,7 +990,7 @@ function OrganizationGovernanceSection({
                ) : null}
                {endingHasOther ? (
                   <label className="management-form-field">
-                     <span>Other factor explanation</span>
+                     <span>Other factor explanation <span className="management-required-indicator" aria-hidden="true">*</span></span>
                      <textarea
                         value={endingForm.other_factor_explanation}
                         onChange={(event) => updateEndingForm("other_factor_explanation", event.target.value)}
@@ -998,7 +1002,7 @@ function OrganizationGovernanceSection({
                   </label>
                ) : null}
                <label className="management-form-field">
-                  <span>Rationale</span>
+                  <span>Rationale <span className="management-required-indicator" aria-hidden="true">*</span></span>
                   <textarea
                      value={endingForm.rationale}
                      onChange={(event) => updateEndingForm("rationale", event.target.value)}
@@ -1009,7 +1013,7 @@ function OrganizationGovernanceSection({
                   />
                </label>
                <label className="management-form-field">
-                  <span>Policy basis</span>
+                  <span>Policy basis <span className="management-required-indicator" aria-hidden="true">*</span></span>
                   <Input
                      value={endingForm.policy_basis}
                      onChange={(event) => updateEndingForm("policy_basis", event.target.value)}
@@ -1019,7 +1023,7 @@ function OrganizationGovernanceSection({
                   />
                </label>
                <label className="management-form-field">
-                  <span>Internal supporting basis</span>
+                  <span>Internal supporting basis <span className="management-required-indicator" aria-hidden="true">*</span></span>
                   <textarea
                      value={endingForm.supporting_basis}
                      onChange={(event) => updateEndingForm("supporting_basis", event.target.value)}
