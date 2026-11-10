@@ -14,14 +14,14 @@ import "./ManagementConsole.css";
 
 const NAVIGATION_ITEMS = [
    { to: "/management", label: "Overview", icon: "dashboard", end: true, access: "admin" },
-   { to: "/management/pipeline", label: "Pipeline Health", icon: "activity", section: "Operations", access: "admin" },
+   { to: "/management/pipeline", label: "Verification System", icon: "activity", section: "Operations", access: "admin" },
    { to: "/management/safety", label: "Safety Review", icon: "shield-check", section: "Platform Safety", access: "safety", end: true },
-   { to: "/management/safety/audit", label: "Safety Audit", icon: "activity", access: "safety" },
+   { to: "/management/safety/audit", label: "Safety History", icon: "activity", access: "safety" },
    { to: "/management/platform-staff", label: "Platform Staff", icon: "shield-user", section: "Governance", access: "admin" },
-   { to: "/management/organizations", label: "Organizations", icon: "landmark", access: "admin" },
-   { to: "/management/memberships", label: "Memberships", icon: "users", access: "admin" },
-   { to: "/management/invitations", label: "Invitations", icon: "mail", access: "admin" },
-   { to: "/management/audit", label: "Governance Audit", icon: "shield-check", access: "admin" },
+   { to: "/management/organizations", label: "Partner Organizations", icon: "landmark", access: "admin" },
+   { to: "/management/memberships", label: "Membership Records", icon: "users", access: "admin" },
+   { to: "/management/invitations", label: "Invitation Records", icon: "mail", access: "admin" },
+   { to: "/management/audit", label: "Governance History", icon: "shield-check", access: "admin" },
 ];
 
 const MOBILE_NAVIGATION_ID = "management-mobile-navigation";
