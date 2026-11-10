@@ -73,6 +73,7 @@ from .management_serializers import (
     ManagementPlatformStaffInvitationSerializer,
     ManagementPlatformStaffSerializer,
     ManagementPartnershipEndingSerializer,
+    ManagementPartnershipReinstatementSerializer,
     ManagementPartnershipSuspensionSerializer,
     ManagementPlatformTrustUpdateSerializer,
     ManagementPrimaryAdminInvitationSerializer,
@@ -778,11 +779,12 @@ class ManagementOrganizationLifecycleTransitionView(APIView):
     transition = None
 
     def post(self, request, organization_id):
-        serializer_class = (
-            ManagementPartnershipSuspensionSerializer
-            if self.transition == "suspend_partnership"
-            else ManagementEmptyMutationSerializer
-        )
+        if self.transition == "suspend_partnership":
+            serializer_class = ManagementPartnershipSuspensionSerializer
+        elif self.transition == "reinstate_partnership":
+            serializer_class = ManagementPartnershipReinstatementSerializer
+        else:
+            serializer_class = ManagementEmptyMutationSerializer
         serializer = serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -800,7 +802,10 @@ class ManagementOrganizationLifecycleTransitionView(APIView):
                 "organization_id": organization_id,
                 "actor": request.user,
             }
-            if self.transition == "suspend_partnership":
+            if self.transition in {
+                "suspend_partnership",
+                "reinstate_partnership",
+            }:
                 transition_kwargs.update(serializer.validated_data)
 
             organization = transition_function(**transition_kwargs)
