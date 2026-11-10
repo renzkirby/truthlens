@@ -143,6 +143,60 @@ class PipelineTelemetryCollectorTests(TestCase):
         ):
             self.assertNotIn(unsafe, serialized)
 
+    def test_gfc_coverage_metadata_and_operation_are_safely_allowlisted(self):
+        @verification_telemetry_scope()
+        def execute(claim_id):
+            bind_verification_run(self.run)
+            record_llm_provider_call(
+                "gfc_proposition_coverage",
+                "gemini",
+                self.run.id,
+                8,
+                "success",
+            )
+            record_pipeline_stage(
+                "gfc_proposition_coverage_check",
+                9,
+                candidate_count=5,
+                relevant_candidate_count=2,
+                covered_candidate_count=1,
+                terminally_sufficient=True,
+                reason_code="EXACT_OR_EQUIVALENT_COVERAGE",
+                reasoning="PRIVATE MODEL REASONING",
+            )
+
+        execute(self.claim.id)
+        provider_event, stage_event = list(
+            self.run.telemetry_events.order_by("sequence")
+        )
+        self.assertEqual(provider_event.name, "gfc_proposition_coverage")
+        self.assertEqual(
+            stage_event.metadata,
+            {
+                "candidate_count": 5,
+                "relevant_candidate_count": 2,
+                "covered_candidate_count": 1,
+                "terminally_sufficient": True,
+                "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
+            },
+        )
+        self.assertNotIn("PRIVATE", repr(stage_event.metadata))
+
+    def test_unknown_gfc_coverage_reason_code_is_dropped(self):
+        @verification_telemetry_scope()
+        def execute(claim_id):
+            bind_verification_run(self.run)
+            record_pipeline_stage(
+                "gfc_proposition_coverage_check",
+                1,
+                candidate_count=1,
+                reason_code="PRIVATE_ARBITRARY_REASON",
+            )
+
+        execute(self.claim.id)
+        event = self.run.telemetry_events.get()
+        self.assertEqual(event.metadata, {"candidate_count": 1})
+
     def test_gemini_model_metadata_is_allowlisted_without_private_fields(self):
         @verification_telemetry_scope()
         def execute(claim_id):
