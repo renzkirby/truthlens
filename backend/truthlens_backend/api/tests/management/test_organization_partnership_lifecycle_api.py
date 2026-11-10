@@ -78,10 +78,31 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
             "suspension_type": "REMEDIAL",
             "factors": ["VERIFICATION_STANDARDS"],
             "severity": "HIGH",
-            "reason": "Repeated sourcing failures require temporary remediation.",
-            "policy_basis": "Partner Verification Standards",
-            "required_remediation": "Review affected investigations and correct the sourcing process.",
+            "rationale": "Repeated sourcing failures require temporary remediation before professional access resumes.",
+            "policy_basis": "Partnership Enforcement Policy §13.1",
+            "supporting_basis": "Internal review of affected investigations and prior corrective guidance.",
+            "supporting_references": ["INV-API-001"],
+            "other_factor_explanation": "",
+            "remediation_problem": "Repeated sourcing failures in completed verification work.",
+            "remediation_required_action": "Review affected investigations and correct the sourcing process.",
+            "remediation_evidence_required": "Updated evidence-review procedure and corrected investigation records.",
+            "remediation_deadline": str(timezone.localdate() + timedelta(days=30)),
+            "remediation_review_method": "Platform Governance will review the submitted procedure and corrected records.",
+            "remediation_failure_consequence": "TruthLens may continue the suspension or consider a stronger proportionate governance action.",
             "review_date": None,
+        }
+
+    def reinstatement_payload(self):
+        return {
+            "basis": "OPERATIONAL_REQUIREMENTS_RESTORED",
+            "rationale": "The organization has restored the operational requirements needed for active Partner participation.",
+            "supporting_basis": "Internal review confirms accountable administration and operational capacity are restored.",
+            "supporting_references": ["GOV-REINSTATE-API-001"],
+            "completed_remediation": "",
+            "continuing_conditions": "",
+            "monitoring_end_date": None,
+            "monitoring_success_criteria": "",
+            "monitoring_recurrence_consequence": "",
         }
 
     def ending_payload(self):
@@ -90,8 +111,11 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
             "ground": "PROLONGED_ABANDONMENT",
             "factors": ["INACTIVITY_RESPONSIVENESS"],
             "severity": "",
-            "reason": "The organization can no longer maintain an active partnership.",
-            "policy_basis": "Partnership Enforcement Policy",
+            "rationale": "The organization can no longer maintain an active partnership because required operations have ceased.",
+            "policy_basis": "Partnership Enforcement Policy §19.2",
+            "supporting_basis": "Internal administrative record confirming prolonged inactivity and loss of operational capacity.",
+            "supporting_references": ["GOV-ENDING-API-001"],
+            "other_factor_explanation": "",
         }
 
     def detail_url(self, organization=None):
@@ -177,7 +201,7 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
                     "can_reject_verification": False,
                     "can_activate_partnership": False,
                     "can_suspend_partnership": False,
-                    "can_reinstate_partnership": True,
+                    "can_reinstate_partnership": False,
                     "can_end_partnership": False,
                     "can_provision_organization_admin": False,
                 },
@@ -185,8 +209,9 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
                     "allowed": False,
                     "code": "FORMER_PARTNER",
                     "message": (
-                        "This organization is a Former Partner. Reinstate the partnership "
-                        "before provisioning or accepting a new Organization Admin."
+                        "This organization is a Former Partner. A future partnership requires "
+                        "a fresh eligibility and activation process before Organization Admin "
+                        "onboarding can resume."
                     ),
                 },
                 "can_end_partnership": False,
@@ -451,7 +476,7 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
                 "management_organization_reinstate_partnership",
                 onboarding,
             ),
-            {},
+            self.reinstatement_payload(),
             format="json",
         )
         self.assertEqual(reinstate_response.status_code, status.HTTP_200_OK)
