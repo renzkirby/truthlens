@@ -16,6 +16,7 @@ from .models import (
     ClaimInstitutionAssociation,
     Institution,
     Organization,
+    OrganizationGovernanceNoticeRecipient,
     OrganizationInstitutionAffiliation,
     OrganizationInvitation,
     OrganizationMembership,
@@ -977,6 +978,7 @@ class ManagementOrganizationAdminInvitationSerializer(serializers.ModelSerialize
 
 class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerializer):
     lifecycle = serializers.SerializerMethodField()
+    governance_notice_delivery = serializers.SerializerMethodField()
     institution_affiliation = serializers.SerializerMethodField()
     verification_specializations = serializers.ListField(
         child=serializers.CharField(), read_only=True
@@ -993,6 +995,47 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
 
     def get_lifecycle(self, obj):
         return get_partner_organization_lifecycle_projection(obj)
+
+    def get_governance_notice_delivery(self, obj):
+        rows = list(
+            OrganizationGovernanceNoticeRecipient.objects.filter(
+                governance_event__subject_organization=obj,
+            )
+            .select_related("user", "governance_event")
+            .order_by("-created_at", "-id")[:20]
+        )
+
+        statuses = OrganizationGovernanceNoticeRecipient.DeliveryStatus
+        summary = {
+            "total_recipients": len(rows),
+            "retry_available": False,
+            "in_app": {value: 0 for value, _label in statuses.choices},
+            "email": {value: 0 for value, _label in statuses.choices},
+            "recent": [],
+        }
+        retryable = {statuses.PENDING, statuses.FAILED}
+
+        for row in rows:
+            summary["in_app"][row.in_app_status] += 1
+            summary["email"][row.email_status] += 1
+            if row.in_app_status in retryable or row.email_status in retryable:
+                summary["retry_available"] = True
+            summary["recent"].append(
+                {
+                    "id": str(row.pk),
+                    "event_id": str(row.governance_event_id),
+                    "username": row.user.username if row.user_id else None,
+                    "audience": row.audience,
+                    "in_app_status": row.in_app_status,
+                    "email_status": row.email_status,
+                    "in_app_attempts": row.in_app_attempts,
+                    "email_attempts": row.email_attempts,
+                    "last_delivery_error": row.last_delivery_error,
+                    "last_delivery_attempt_at": row.last_delivery_attempt_at,
+                    "created_at": row.created_at,
+                }
+            )
+        return summary
 
     def get_organization_admin(self, obj):
         current_admins = (
@@ -1071,6 +1114,7 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
             "organization_admin",
             "primary_admin",
             "lifecycle",
+            "governance_notice_delivery",
             "created_at",
         )
         read_only_fields = fields
