@@ -1765,13 +1765,13 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         )
         self.relevance = self._patch(
             "api.tasks.assess_fact_check_proposition_coverage", return_value={
-    "candidate_count": 1,
-    "relevant_candidate_count": 1,
-    "covered_candidate_count": 1,
-    "terminally_sufficient": True,
-    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
-    "candidates": [],
-}
+                    "candidate_count": 1,
+                    "relevant_candidate_count": 1,
+                    "covered_candidate_count": 1,
+                    "terminally_sufficient": True,
+                    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
+                    "candidates": [],
+                }
         )
         self._patch(
             "api.tasks.load_reasoning_evidence_dossier_for_run",
@@ -3025,14 +3025,7 @@ class PublishedResolutionPollingTests(PublicationResolutionFixture):
             # must never make a claim with no verdict appear completed.
             with patch(
                 "api.verification.relatedness.accepted_reference",
-                return_value={
-    "candidate_count": 1,
-    "relevant_candidate_count": 1,
-    "covered_candidate_count": 1,
-    "terminally_sufficient": True,
-    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
-    "candidates": [],
-},
+                return_value=True,
             ):
                 self.assertEqual(
                     len(get_related_published_fact_check_payloads(self.target)),
