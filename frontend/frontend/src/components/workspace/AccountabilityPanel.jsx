@@ -70,10 +70,10 @@ const PROFESSIONAL_VALUE_LABELS = {
    SUSPENDED: "Suspended",
    LEFT: "Left organization",
    UNVERIFIED: "Unverified",
-   VERIFIED: "Approved",
+   VERIFIED: "Verified",
    REJECTED: "Rejected",
    FACT: "Fact",
-   FAKE: "False",
+   FAKE: "Fake",
    MISLEADING: "Misleading",
    SATIRE: "Satire",
    ADMIN: "Administrator",
@@ -152,18 +152,38 @@ function isTechnicalStateKey(key) {
 function professionalValue(event, key, value) {
    if (key === "assigned_to_id") {
       if (value === null || value === undefined || value === "") return "Unassigned";
+      const actorOwnsAssignment = ["SAFETY_CASE_CLAIMED", "SAFETY_CASE_RELEASED"].includes(
+         event.action_type,
+      );
       if (
-         event.actor?.id
+         actorOwnsAssignment
+         && event.actor?.id
          && String(value) === String(event.actor.id)
          && event.actor?.username
       ) {
          return `@${event.actor.username}`;
       }
-      return "Assigned reviewer recorded";
+      return "Reviewer recorded in technical record";
    }
    if (value === null || value === undefined || value === "") return "Not recorded";
    if (typeof value === "boolean") return value ? "Yes" : "No";
    if (typeof value === "number") return String(value);
+   if (key === "evidence_status") {
+      return {
+         UNVERIFIED: "Pending review",
+         PENDING: "Pending review",
+         VERIFIED: "Approved",
+         REJECTED: "Rejected",
+      }[value] || professionalEnumLabel(value);
+   }
+   if (key === "verification_status") {
+      return {
+         UNVERIFIED: "Unverified",
+         PENDING: "Pending verification",
+         VERIFIED: "Verified",
+         REJECTED: "Rejected",
+      }[value] || professionalEnumLabel(value);
+   }
    if (typeof value === "string") return professionalEnumLabel(value);
    return "Recorded in technical details";
 }
