@@ -593,6 +593,7 @@
    max-width: 980px;
 }
 
+.adjudication-workspace-grid.has-selection .adjudication-primary-surface,
 .adjudication-review-panel.is-guided .adjudication-primary-surface {
    max-width: none;
 }
