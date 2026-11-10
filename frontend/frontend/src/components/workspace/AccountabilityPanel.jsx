@@ -134,6 +134,20 @@ function authorityLabelForEvent(event) {
    return professionalEnumLabel(event.authority?.scope);
 }
 
+function professionalResourceLabel(event) {
+   if (event.domain === "SAFETY") return "Safety case";
+   return {
+      VERIFICATION_ASSIGNMENT: "Investigation assignment",
+      EVIDENCE_SUBMISSION: "Evidence submission",
+      ADJUDICATION_DECISION: "Adjudication decision",
+      OFFICIAL_FACT_CHECK: "Fact-check publication",
+      ORGANIZATION: "Partner Organization",
+      ORGANIZATION_MEMBERSHIP: "Organization membership",
+      ORGANIZATION_INVITATION: "Organization invitation",
+      USER_ACCOUNT: "User account",
+   }[event.resource?.type] || event.resource?.label || displayKey(event.resource?.type || "Record");
+}
+
 function capabilityLabel(value) {
    if (!value) return "Not applicable";
    return CAPABILITY_LABELS[value] || displayKey(value);
@@ -163,7 +177,7 @@ function professionalValue(event, key, value) {
       ) {
          return `@${event.actor.username}`;
       }
-      return "Reviewer recorded in technical record";
+      return "Reviewer identity retained in technical record";
    }
    if (value === null || value === undefined || value === "") return "Not recorded";
    if (typeof value === "boolean") return value ? "Yes" : "No";
@@ -335,7 +349,9 @@ function AccountabilityEvent({ event }) {
    const resourceId = event.resource?.id || "";
    const hasReasonOrNotes = Boolean(event.reason_code || event.notes);
    const hasContext = !isEmptyRecord(event.context);
+   const hasInternalState = !isEmptyRecord(event.previous_state) || !isEmptyRecord(event.new_state);
    const authorityLabel = authorityLabelForEvent(event);
+   const resourceLabel = professionalResourceLabel(event);
    const eventSummary = professionalEventSummary(event, actorLabel);
 
    return (
@@ -367,7 +383,7 @@ function AccountabilityEvent({ event }) {
                <div>
                   <dt>Affected record</dt>
                   <dd>
-                     <strong>{event.resource?.label || displayKey(event.resource?.type || "Record")}</strong>
+                     <strong>{resourceLabel}</strong>
                   </dd>
                </div>
                <div>
@@ -441,6 +457,21 @@ function AccountabilityEvent({ event }) {
                               <dd>{resourceId || "Not recorded"}</dd>
                            </div>
                         </dl>
+                        {hasInternalState ? (
+                           <div className="accountability-technical-context">
+                              <h5>Internal state</h5>
+                              <dl className="accountability-data-list">
+                                 <div>
+                                    <dt>Before</dt>
+                                    <dd><StructuredValue value={event.previous_state} /></dd>
+                                 </div>
+                                 <div>
+                                    <dt>After</dt>
+                                    <dd><StructuredValue value={event.new_state} /></dd>
+                                 </div>
+                              </dl>
+                           </div>
+                        ) : null}
                         {hasContext ? (
                            <div className="accountability-technical-context">
                               <h5>Internal references</h5>
