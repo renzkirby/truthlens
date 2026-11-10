@@ -9,7 +9,7 @@ import Button from "./ui/Button.jsx";
 import { useAuth } from "../hooks/useAuth";
 import { useNotificationInbox } from "../hooks/useNotificationInbox";
 import { useTheme } from "../hooks/useTheme";
-import { canAccessWorkspace, getWorkspaceMemberships } from "../utils/workspace";
+import { canAccessWorkspace } from "../utils/workspace";
 import {
    canAccessManagementConsole,
    canAccessPlatformSafetyConsole,
@@ -71,7 +71,6 @@ function NavigationBar() {
       if (nextOpen) setIsOpen(false);
    }, []);
    const canUseWorkspace = canAccessWorkspace(user);
-   const hasPartnerMembership = getWorkspaceMemberships(user).length > 0;
    const canUseManagementConsole = canAccessManagementConsole(user);
    const canUsePlatformSafetyConsole = canAccessPlatformSafetyConsole(user);
    const managementDestination = canUseManagementConsole ? "/management" : "/management/safety";
@@ -243,7 +242,7 @@ function NavigationBar() {
                                  My Public Profile
                               </Link>
                            )}
-                           {hasPartnerMembership && (
+                           {professionalIdentity && (
                               <Link
                                  to="/partner-guidelines"
                                  className={`tl-app-nav__account-link ${location.pathname === "/partner-guidelines" ? "active" : ""}`}
