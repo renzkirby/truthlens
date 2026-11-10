@@ -103,13 +103,13 @@ class VerificationRunURLRuntimeTests(TestCase):
         )
         self.relevance = self._patch(
             "api.tasks.assess_fact_check_proposition_coverage", return_value={
-    "candidate_count": 1,
-    "relevant_candidate_count": 1,
-    "covered_candidate_count": 1,
-    "terminally_sufficient": True,
-    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
-    "candidates": [],
-}
+                    "candidate_count": 1,
+                    "relevant_candidate_count": 1,
+                    "covered_candidate_count": 1,
+                    "terminally_sufficient": True,
+                    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
+                    "candidates": [],
+                }
         )
         self.evaluate_gfc = self._patch(
             "api.tasks.evaluate_url_claim_with_gfc",
@@ -1297,13 +1297,13 @@ class VerificationEvidenceURLRuntimeTests(TestCase):
             patch(
                 "api.tasks.assess_fact_check_proposition_coverage",
                 return_value={
-    "candidate_count": 1,
-    "relevant_candidate_count": 1,
-    "covered_candidate_count": 1,
-    "terminally_sufficient": True,
-    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
-    "candidates": [],
-},
+                    "candidate_count": 1,
+                    "relevant_candidate_count": 1,
+                    "covered_candidate_count": 1,
+                    "terminally_sufficient": True,
+                    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
+                    "candidates": [],
+                },
             )
         )
         self.evaluate_legacy_gfc = self.enterContext(
