@@ -9,7 +9,7 @@ import Button from "./ui/Button.jsx";
 import { useAuth } from "../hooks/useAuth";
 import { useNotificationInbox } from "../hooks/useNotificationInbox";
 import { useTheme } from "../hooks/useTheme";
-import { canAccessWorkspace } from "../utils/workspace";
+import { canAccessWorkspace, getWorkspaceMemberships } from "../utils/workspace";
 import {
    canAccessManagementConsole,
    canAccessPlatformSafetyConsole,
@@ -71,6 +71,7 @@ function NavigationBar() {
       if (nextOpen) setIsOpen(false);
    }, []);
    const canUseWorkspace = canAccessWorkspace(user);
+   const hasPartnerMembership = getWorkspaceMemberships(user).length > 0;
    const canUseManagementConsole = canAccessManagementConsole(user);
    const canUsePlatformSafetyConsole = canAccessPlatformSafetyConsole(user);
    const managementDestination = canUseManagementConsole ? "/management" : "/management/safety";
@@ -240,6 +241,16 @@ function NavigationBar() {
                               >
                                  <Icons name="user" />
                                  My Public Profile
+                              </Link>
+                           )}
+                           {hasPartnerMembership && (
+                              <Link
+                                 to="/partner-guidelines"
+                                 className={`tl-app-nav__account-link ${location.pathname === "/partner-guidelines" ? "active" : ""}`}
+                                 onClick={() => setIsOpen(false)}
+                              >
+                                 <Icons name="book-open" />
+                                 Partner Guidelines
                               </Link>
                            )}
                            <Link
