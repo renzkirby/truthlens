@@ -72,6 +72,8 @@ from .management_serializers import (
     ManagementPlatformStaffInvitationPublicSerializer,
     ManagementPlatformStaffInvitationSerializer,
     ManagementPlatformStaffSerializer,
+    ManagementPartnershipEndingSerializer,
+    ManagementPartnershipSuspensionSerializer,
     ManagementPlatformTrustUpdateSerializer,
     ManagementPrimaryAdminInvitationSerializer,
     ManagementPrimaryAdminProvisionSerializer,
@@ -774,7 +776,12 @@ class ManagementOrganizationLifecycleTransitionView(APIView):
     transition = None
 
     def post(self, request, organization_id):
-        serializer = ManagementEmptyMutationSerializer(data=request.data)
+        serializer_class = (
+            ManagementPartnershipSuspensionSerializer
+            if self.transition == "suspend_partnership"
+            else ManagementEmptyMutationSerializer
+        )
+        serializer = serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         transitions = {
@@ -787,10 +794,14 @@ class ManagementOrganizationLifecycleTransitionView(APIView):
         transition_function = transitions[self.transition]
 
         try:
-            organization = transition_function(
-                organization_id=organization_id,
-                actor=request.user,
-            )
+            transition_kwargs = {
+                "organization_id": organization_id,
+                "actor": request.user,
+            }
+            if self.transition == "suspend_partnership":
+                transition_kwargs.update(serializer.validated_data)
+
+            organization = transition_function(**transition_kwargs)
         except Organization.DoesNotExist:
             return Response(
                 {"detail": "Organization not found."},
@@ -892,13 +903,14 @@ class ManagementOrganizationEndPartnershipView(APIView):
     permission_classes = [IsPlatformManagementAdmin]
 
     def post(self, request, organization_id):
-        serializer = ManagementEmptyMutationSerializer(data=request.data)
+        serializer = ManagementPartnershipEndingSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         try:
             result = end_partner_organization_partnership(
                 organization_id=organization_id,
                 actor=request.user,
+                **serializer.validated_data,
             )
         except Organization.DoesNotExist:
             return Response(
