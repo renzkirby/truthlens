@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 
 import {
    ManagementPageHeader,
@@ -15,18 +15,39 @@ import { useManagementRequest } from "../hooks/useManagementRequest";
 import { resolveApiEndpoint } from "../utils/api";
 import { formatManagementDate } from "../utils/management";
 
-const INITIAL_FILTERS = {
-   q: "",
-   verification_status: "",
-   partner_status: "",
-   organization_type: "",
-   public_profile_enabled: "",
-};
+const FILTER_KEYS = [
+   "q",
+   "verification_status",
+   "partner_status",
+   "organization_type",
+   "public_profile_enabled",
+];
+
+function readFilters(searchParams) {
+   return Object.fromEntries(
+      FILTER_KEYS.map((key) => [key, searchParams.get(key) || ""]),
+   );
+}
+
+function readPage(searchParams) {
+   const value = Number.parseInt(searchParams.get("page") || "1", 10);
+   return Number.isInteger(value) && value > 0 ? value : 1;
+}
 
 function ManagementOrganizationsPage() {
-   const [draftQuery, setDraftQuery] = useState("");
-   const [filters, setFilters] = useState(INITIAL_FILTERS);
-   const [page, setPage] = useState(1);
+   const [searchParams, setSearchParams] = useSearchParams();
+   const searchKey = searchParams.toString();
+   const filters = useMemo(
+      () => readFilters(new URLSearchParams(searchKey)),
+      [searchKey],
+   );
+   const page = readPage(searchParams);
+   const [draftQuery, setDraftQuery] = useState(filters.q);
+
+   useEffect(() => {
+      setDraftQuery(filters.q);
+   }, [filters.q]);
+
    const requestUrl = useMemo(() => {
       const url = new URL(resolveApiEndpoint("MANAGEMENT_ORGANIZATIONS"));
       Object.entries(filters).forEach(([key, value]) => {
@@ -38,8 +59,11 @@ function ManagementOrganizationsPage() {
    const { data, loading, error, retry } = useManagementRequest(requestUrl);
 
    const updateFilter = (name, value) => {
-      setFilters((current) => ({ ...current, [name]: value }));
-      setPage(1);
+      const next = new URLSearchParams(searchParams);
+      if (value) next.set(name, value);
+      else next.delete(name);
+      next.delete("page");
+      setSearchParams(next);
    };
 
    const submitSearch = (event) => {
@@ -49,15 +73,21 @@ function ManagementOrganizationsPage() {
 
    const clearFilters = () => {
       setDraftQuery("");
-      setFilters(INITIAL_FILTERS);
-      setPage(1);
+      setSearchParams(new URLSearchParams());
+   };
+
+   const changePage = (nextPage) => {
+      const next = new URLSearchParams(searchParams);
+      if (nextPage > 1) next.set("page", String(nextPage));
+      else next.delete("page");
+      setSearchParams(next);
    };
 
    return (
       <div className="management-page">
          <ManagementPageHeader
             title="Partner Organizations"
-            subtitle="Inspect institutional identity and platform trust."
+            subtitle="Review eligibility, verification status, partnership status, and governance records."
             actions={(
                <Link to="/management/organizations/new" className="tl-button tl-button--primary tl-button--standard">
                   <Icons name="circle-plus" size={16} />
@@ -65,6 +95,18 @@ function ManagementOrganizationsPage() {
                </Link>
             )}
          />
+
+         <aside className="management-boundary-note" aria-label="Partner Organization authority">
+            <Icons name="info" size={19} />
+            <div>
+               <strong>Platform governance and organization management are different responsibilities</strong>
+               <p>
+                  Platform Staff control institutional verification and partnership status. Partner
+                  Organization Admins manage their own members and organization-managed public profile
+                  within the authority available to their organization.
+               </p>
+            </div>
+         </aside>
 
          <section className="management-filter-panel" aria-label="Organization filters">
             <form className="management-search" onSubmit={submitSearch}>
@@ -131,9 +173,9 @@ function ManagementOrganizationsPage() {
             error={error}
             onRetry={retry}
             empty={data?.count === 0}
-            emptyMessage="No organizations match the current search and filters."
+            emptyMessage="No Partner Organizations match the current search and filters."
          >
-            <section className="management-table-wrap" aria-label="Partner organizations">
+            <section className="management-table-wrap" aria-label="Partner Organizations">
                <table className="management-table">
                   <thead><tr><th>Organization</th><th>Type</th><th>Verification</th><th>Partner status</th><th>Public profile</th><th>Updated</th></tr></thead>
                   <tbody>
@@ -153,7 +195,7 @@ function ManagementOrganizationsPage() {
                      ))}
                   </tbody>
                </table>
-               <ManagementPagination count={data?.count || 0} page={page} onPageChange={setPage} />
+               <ManagementPagination count={data?.count || 0} page={page} onPageChange={changePage} />
             </section>
          </ManagementRequestState>
       </div>
