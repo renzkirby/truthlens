@@ -300,7 +300,11 @@ class OrganizationPartnershipLifecycleApiTests(APITestCase):
                 "this organization's partnership."
             ),
         ):
-            response = self.authenticated_client().post(self.end_url(), {}, format="json")
+            response = self.authenticated_client().post(
+                self.end_url(),
+                self.ending_payload(),
+                format="json",
+            )
 
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
         self.assertEqual(
