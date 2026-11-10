@@ -251,8 +251,15 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
                 return_value=gfc_payload,
             ) as retrieve_gfc,
             patch(
-                "api.tasks.is_fact_check_relevant",
-                return_value=True,
+                "api.tasks.assess_fact_check_proposition_coverage",
+                return_value={
+                    "candidate_count": 1,
+                    "relevant_candidate_count": 1,
+                    "covered_candidate_count": 1,
+                    "terminally_sufficient": True,
+                    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
+                    "candidates": [],
+                },
             ) as relevance_check,
             patch(
                 "api.tasks.evaluate_image_claim_with_gfc",
@@ -275,7 +282,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
 
         relevance_check.assert_called_once_with(
             cleaned_claim,
-            "Example public claim.",
+            ["Example public claim."],
         )
 
         self.assertEqual(load_dossier.call_args_list, [
@@ -602,8 +609,15 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
                 return_value=gfc_payload,
             ) as retrieve_gfc,
             patch(
-                "api.tasks.is_fact_check_relevant",
-                return_value=True,
+                "api.tasks.assess_fact_check_proposition_coverage",
+                return_value={
+                    "candidate_count": 1,
+                    "relevant_candidate_count": 1,
+                    "covered_candidate_count": 1,
+                    "terminally_sufficient": True,
+                    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
+                    "candidates": [],
+                },
             ) as relevance_check,
             patch(
                 "api.tasks.evaluate_url_claim_with_gfc",
@@ -630,7 +644,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
 
         relevance_check.assert_called_once_with(
             cleaned_claim,
-            "Example public claim.",
+            ["Example public claim."],
         )
 
         self.assertEqual(

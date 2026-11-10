@@ -16,6 +16,12 @@ import {
    formatManagementOperationalLabel,
 } from "../utils/management";
 
+function formatTelemetryMetadataValue(key, value) {
+   if (typeof value === "boolean") return value ? "Yes" : "No";
+   if (key === "reason_code") return formatManagementOperationalLabel(value);
+   return value;
+}
+
 function TelemetryMetadata({ metadata }) {
    const entries = Object.entries(metadata || {});
    if (!entries.length) return null;
@@ -24,7 +30,7 @@ function TelemetryMetadata({ metadata }) {
          {entries.map(([key, value]) => (
             <div key={key}>
                <dt>{formatManagementOperationalLabel(key)}</dt>
-               <dd>{typeof value === "boolean" ? (value ? "Yes" : "No") : value}</dd>
+               <dd>{formatTelemetryMetadataValue(key, value)}</dd>
             </div>
          ))}
       </dl>

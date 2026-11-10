@@ -129,7 +129,14 @@ def serialize_management_pipeline_run(run):
     }
 
 
-def list_management_pipeline_runs(*, window_value, status="", claim_type=""):
+def list_management_pipeline_runs(
+    *,
+    window_value,
+    status="",
+    claim_type="",
+    started_after=None,
+    started_before=None,
+):
     selected_window = _window(window_value)
     queryset = _safe_run_queryset().filter(
         created_at__gte=selected_window["since"],
@@ -139,6 +146,10 @@ def list_management_pipeline_runs(*, window_value, status="", claim_type=""):
         queryset = queryset.filter(status=status)
     if claim_type:
         queryset = queryset.filter(claim__claim_type=claim_type)
+    if started_after is not None:
+        queryset = queryset.filter(started_at__gte=started_after)
+    if started_before is not None:
+        queryset = queryset.filter(started_at__lt=started_before)
     return queryset.order_by("-created_at", "-id")
 
 

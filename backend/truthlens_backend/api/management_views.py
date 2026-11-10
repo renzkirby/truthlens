@@ -414,6 +414,8 @@ class ManagementPipelineRunListView(APIView):
             window_value=data["window"],
             status=data.get("status", ""),
             claim_type=data.get("claim_type", ""),
+            started_after=data.get("started_after"),
+            started_before=data.get("started_before"),
         )
         paginator = ManagementPagination()
         page = paginator.paginate_queryset(queryset, request, view=self)

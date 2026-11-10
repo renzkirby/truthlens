@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 
 import {
@@ -8,6 +8,7 @@ import {
    ManagementStatus,
 } from "../components/management/ManagementUi";
 import Icons from "../components/Icons";
+import Button from "../components/ui/Button";
 import { useManagementRequest } from "../hooks/useManagementRequest";
 import { resolveApiEndpoint } from "../utils/api";
 import {
@@ -24,7 +25,8 @@ const WINDOW_OPTIONS = [
 ];
 const VALID_WINDOWS = new Set(WINDOW_OPTIONS.map(([value]) => value));
 const VALID_STATUSES = new Set(["", "PENDING", "RUNNING", "COMPLETED", "ABSTAINED", "FAILED", "CANCELLED"]);
-const VALID_CLAIM_TYPES = new Set(["", "TEXT", "IMAGE", "VIDEO", "URL", "FILE"]);
+const SUPPORTED_CLAIM_TYPES = ["TEXT", "IMAGE", "URL", "FILE"];
+const VALID_CLAIM_TYPES = new Set(["", ...SUPPORTED_CLAIM_TYPES]);
 const STATUS_ORDER = ["PENDING", "RUNNING", "COMPLETED", "ABSTAINED", "FAILED", "CANCELLED"];
 
 function requestUrl(endpoint, params) {
@@ -33,6 +35,36 @@ function requestUrl(endpoint, params) {
       if (value !== "" && value !== null && value !== undefined) url.searchParams.set(key, value);
    });
    return url.toString();
+}
+
+function parseLocalDateInput(value) {
+   if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return null;
+   const [year, month, day] = value.split("-").map(Number);
+   const date = new Date(year, month - 1, day);
+   if (
+      Number.isNaN(date.getTime())
+      || date.getFullYear() !== year
+      || date.getMonth() !== month - 1
+      || date.getDate() !== day
+   ) {
+      return null;
+   }
+   return date;
+}
+
+function isValidDateInput(value) {
+   return parseLocalDateInput(value) !== null;
+}
+
+function localDayBounds(value) {
+   const start = parseLocalDateInput(value);
+   if (!start) return { startedAfter: "", startedBefore: "" };
+   const end = new Date(start);
+   end.setDate(end.getDate() + 1);
+   return {
+      startedAfter: start.toISOString(),
+      startedBefore: end.toISOString(),
+   };
 }
 
 function Metric({ label, value }) {
@@ -46,6 +78,8 @@ function Metric({ label, value }) {
 
 function ManagementPipelineHealthPage() {
    const [searchParams, setSearchParams] = useSearchParams();
+   const [showAllStages, setShowAllStages] = useState(false);
+   const [showAllProviders, setShowAllProviders] = useState(false);
    const location = useLocation();
    const requestedWindow = searchParams.get("window") || "7d";
    const windowValue = VALID_WINDOWS.has(requestedWindow) ? requestedWindow : "7d";
@@ -53,6 +87,9 @@ function ManagementPipelineHealthPage() {
    const statusFilter = VALID_STATUSES.has(requestedStatus) ? requestedStatus : "";
    const requestedClaimType = searchParams.get("claim_type") || "";
    const claimTypeFilter = VALID_CLAIM_TYPES.has(requestedClaimType) ? requestedClaimType : "";
+   const requestedStartedOn = searchParams.get("started_on") || "";
+   const startedOnFilter = isValidDateInput(requestedStartedOn) ? requestedStartedOn : "";
+   const { startedAfter, startedBefore } = localDayBounds(startedOnFilter);
    const parsedPage = Number.parseInt(searchParams.get("page") || "1", 10);
    const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
 
@@ -71,12 +108,16 @@ function ManagementPipelineHealthPage() {
          next.delete("claim_type");
          changed = true;
       }
+      if (requestedStartedOn && !isValidDateInput(requestedStartedOn)) {
+         next.delete("started_on");
+         changed = true;
+      }
       if (searchParams.has("page") && page === 1 && searchParams.get("page") !== "1") {
          next.delete("page");
          changed = true;
       }
       if (changed) setSearchParams(next, { replace: true });
-   }, [page, requestedClaimType, requestedStatus, searchParams, setSearchParams, windowValue]);
+   }, [page, requestedClaimType, requestedStartedOn, requestedStatus, searchParams, setSearchParams, windowValue]);
 
    const overviewUrl = useMemo(
       () => requestUrl("MANAGEMENT_PIPELINE_OVERVIEW", { window: windowValue }),
@@ -87,9 +128,12 @@ function ManagementPipelineHealthPage() {
          window: windowValue,
          status: statusFilter,
          claim_type: claimTypeFilter,
+         started_after: startedAfter,
+         started_before: startedBefore,
          page,
+         page_size: 15,
       }),
-      [claimTypeFilter, page, statusFilter, windowValue],
+      [claimTypeFilter, page, startedAfter, startedBefore, statusFilter, windowValue],
    );
    const overviewRequest = useManagementRequest(overviewUrl);
    const runsRequest = useManagementRequest(runsUrl);
@@ -106,6 +150,25 @@ function ManagementPipelineHealthPage() {
 
    const overview = overviewRequest.data;
    const runs = runsRequest.data;
+   const hasRunFilters = Boolean(statusFilter || claimTypeFilter || startedOnFilter);
+   const stagePreview = overview?.stages?.slice(0, 6) || [];
+   const providerPreview = useMemo(() => {
+      if (!overview?.providers?.length) return [];
+      return [...overview.providers]
+         .sort((left, right) => (
+            right.failures - left.failures
+            || right.attempts - left.attempts
+            || left.operation.localeCompare(right.operation)
+            || left.provider.localeCompare(right.provider)
+         ))
+         .slice(0, 6);
+   }, [overview]);
+   const stagesToDisplay = showAllStages ? (overview?.stages || []) : stagePreview;
+   const providersToDisplay = showAllProviders ? (overview?.providers || []) : providerPreview;
+   const providerFailureOperations = overview?.providers?.filter(
+      (provider) => provider.failures > 0,
+   ).length || 0;
+   const slowestStage = overview?.stages?.[0] || null;
 
    return (
       <div className="management-page management-pipeline-page">
@@ -142,41 +205,85 @@ function ManagementPipelineHealthPage() {
          >
             {overview ? (
                <>
-                  <section className="management-pipeline-metrics" aria-label="Pipeline summary">
-                     <Metric label="Total runs" value={overview.runs.total} />
-                     <Metric label="Completed" value={overview.runs.statuses.COMPLETED} />
-                     <Metric label="Abstained" value={overview.runs.statuses.ABSTAINED} />
-                     <Metric label="Failed" value={overview.runs.statuses.FAILED} />
-                     <Metric label="Median duration" value={formatManagementDuration(overview.runs.median_duration_ms)} />
-                     <Metric label="P95 duration" value={formatManagementDuration(overview.runs.p95_duration_ms)} />
-                  </section>
-
-                  <section className="management-section">
-                     <div className="management-section__heading">
-                        <h2>Run outcomes</h2>
-                        <p>Every lifecycle state remains distinct; abstention is not counted as failure. Abstained means verification completed without a decisive verdict; the user may still receive an UNVERIFIED or out-of-scope result.</p>
+                  <section className="management-pipeline-summary" aria-label="Pipeline summary">
+                     <div className="management-pipeline-metrics">
+                        <Metric label="Total runs" value={overview.runs.total} />
+                        <Metric label="Completed" value={overview.runs.statuses.COMPLETED} />
+                        <Metric label="Abstained" value={overview.runs.statuses.ABSTAINED} />
+                        <Metric label="Failed" value={overview.runs.statuses.FAILED} />
+                        <Metric label="Median duration" value={formatManagementDuration(overview.runs.median_duration_ms)} />
+                        <Metric label="P95 duration" value={formatManagementDuration(overview.runs.p95_duration_ms)} />
                      </div>
-                     <div className="management-outcome-strip">
+                     <div className="management-pipeline-status-summary" aria-label="Run outcomes">
                         {STATUS_ORDER.map((runStatus) => (
-                           <div key={runStatus}>
+                           <span key={runStatus}>
                               <ManagementStatus value={runStatus} />
                               <strong>{overview.runs.statuses[runStatus]}</strong>
-                           </div>
+                           </span>
                         ))}
+                     </div>
+                     <p className="management-pipeline-summary__note">
+                        Abstained runs completed without a decisive verdict and are not counted as failures.
+                     </p>
+                  </section>
+
+                  <section className="management-section management-attention-section">
+                     <div className="management-section__heading">
+                        <h2>Attention needed</h2>
+                        <p>Immediate operational signals from the selected reporting window.</p>
+                     </div>
+                     <div className="management-attention-grid">
+                        <article>
+                           <Icons name={overview.runs.statuses.FAILED ? "alert-circle" : "check-circle"} size={19} />
+                           <div>
+                              <strong>{overview.runs.statuses.FAILED} failed runs</strong>
+                              <span>{overview.runs.statuses.FAILED ? "Review failed executions and their failure stages." : "No failed verification runs in this window."}</span>
+                           </div>
+                        </article>
+                        <article>
+                           <Icons name={providerFailureOperations ? "activity" : "check-circle"} size={19} />
+                           <div>
+                              <strong>{providerFailureOperations} provider operations with failures</strong>
+                              <span>{providerFailureOperations ? "Fallbacks may still have completed these runs successfully." : "No provider-operation failures were recorded."}</span>
+                           </div>
+                        </article>
+                        <article>
+                           <Icons name="clock" size={19} />
+                           <div>
+                              <strong>{slowestStage ? formatManagementOperationalLabel(slowestStage.stage) : "No stage timing yet"}</strong>
+                              <span>
+                                 {slowestStage
+                                    ? `Slowest P95: ${formatManagementDuration(slowestStage.p95_duration_ms)} across ${slowestStage.samples} samples.`
+                                    : "No stage telemetry was recorded in this window."}
+                              </span>
+                           </div>
+                        </article>
                      </div>
                   </section>
 
                   <section className="management-section">
-                     <div className="management-section__heading">
-                        <h2>Stage performance</h2>
-                        <p>Observed stage timing, ordered by the slowest P95 duration.</p>
+                     <div className="management-section__heading management-section__heading--with-action">
+                        <div>
+                           <h2>Stage performance</h2>
+                           <p>Slowest stages by P95. Expand only when deeper timing analysis is needed.</p>
+                        </div>
+                        {overview.stages.length > 6 ? (
+                           <Button
+                              variant="secondary"
+                              density="compact"
+                              aria-expanded={showAllStages}
+                              onClick={() => setShowAllStages((current) => !current)}
+                           >
+                              {showAllStages ? "Show top 6" : `View all ${overview.stages.length} stages`}
+                           </Button>
+                        ) : null}
                      </div>
                      {overview.stages.length ? (
                         <div className="management-table-wrap management-section__table">
                            <table className="management-table">
                               <thead><tr><th>Stage</th><th>Samples</th><th>Failures</th><th>Median</th><th>P95</th><th>Max</th></tr></thead>
                               <tbody>
-                                 {overview.stages.map((stage) => (
+                                 {stagesToDisplay.map((stage) => (
                                     <tr key={stage.stage}>
                                        <td data-label="Stage"><strong>{formatManagementOperationalLabel(stage.stage)}</strong></td>
                                        <td data-label="Samples">{stage.samples}</td>
@@ -193,9 +300,21 @@ function ManagementPipelineHealthPage() {
                   </section>
 
                   <section className="management-section">
-                     <div className="management-section__heading">
-                        <h2>Provider health</h2>
-                        <p>Provider outcomes inferred from real LLM calls. Groq usage represents configured fallback activity, not failure.</p>
+                     <div className="management-section__heading management-section__heading--with-action">
+                        <div>
+                           <h2>Provider health</h2>
+                           <p>Failure-bearing and high-use provider operations are prioritized in the compact view.</p>
+                        </div>
+                        {overview.providers.length > 6 ? (
+                           <Button
+                              variant="secondary"
+                              density="compact"
+                              aria-expanded={showAllProviders}
+                              onClick={() => setShowAllProviders((current) => !current)}
+                           >
+                              {showAllProviders ? "Show priority rows" : "View all provider operations"}
+                           </Button>
+                        ) : null}
                      </div>
                      <div className="management-fallback-summary" aria-label="Groq fallback summary">
                         <div><span>Groq attempts</span><strong>{overview.fallback.groq_attempts}</strong></div>
@@ -207,7 +326,7 @@ function ManagementPipelineHealthPage() {
                            <table className="management-table">
                               <thead><tr><th>Operation</th><th>Provider</th><th>Attempts</th><th>Successes</th><th>Failures</th><th>Median</th><th>P95</th><th>Max</th></tr></thead>
                               <tbody>
-                                 {overview.providers.map((provider) => (
+                                 {providersToDisplay.map((provider) => (
                                     <tr key={`${provider.operation}-${provider.provider}`}>
                                        <td data-label="Operation"><strong>{formatManagementOperationalLabel(provider.operation)}</strong></td>
                                        <td data-label="Provider">{formatManagementOperationalLabel(provider.provider)}</td>
@@ -246,10 +365,32 @@ function ManagementPipelineHealthPage() {
                      <span>Claim type</span>
                      <select value={claimTypeFilter} onChange={(event) => updateQuery({ claim_type: event.target.value }, { resetPage: true })}>
                         <option value="">All claim types</option>
-                        {["TEXT", "IMAGE", "VIDEO", "URL", "FILE"].map((value) => <option key={value} value={value}>{formatManagementClaimType(value)}</option>)}
+                        {SUPPORTED_CLAIM_TYPES.map((value) => <option key={value} value={value}>{formatManagementClaimType(value)}</option>)}
                      </select>
                   </label>
+                  <label>
+                     <span>Started on</span>
+                     <input
+                        type="date"
+                        value={startedOnFilter}
+                        onChange={(event) => updateQuery({ started_on: event.target.value }, { resetPage: true })}
+                     />
+                  </label>
                </div>
+               {hasRunFilters ? (
+                  <div className="management-pipeline-filters__actions">
+                     <Button
+                        variant="secondary"
+                        density="compact"
+                        onClick={() => updateQuery(
+                           { status: "", claim_type: "", started_on: "" },
+                           { resetPage: true },
+                        )}
+                     >
+                        Clear filters
+                     </Button>
+                  </div>
+               ) : null}
             </div>
             <ManagementRequestState
                loading={runsRequest.loading}
@@ -278,7 +419,7 @@ function ManagementPipelineHealthPage() {
                            ))}
                         </tbody>
                      </table>
-                     <ManagementPagination count={runs.count} page={page} onPageChange={(nextPage) => updateQuery({ page: String(nextPage) })} />
+                     <ManagementPagination count={runs.count} page={page} pageSize={15} onPageChange={(nextPage) => updateQuery({ page: String(nextPage) })} />
                   </div>
                ) : null}
             </ManagementRequestState>

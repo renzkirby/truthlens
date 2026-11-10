@@ -102,7 +102,14 @@ class VerificationRunURLRuntimeTests(TestCase):
             return_value=self.payload,
         )
         self.relevance = self._patch(
-            "api.tasks.is_fact_check_relevant", return_value=True
+            "api.tasks.assess_fact_check_proposition_coverage", return_value={
+                    "candidate_count": 1,
+                    "relevant_candidate_count": 1,
+                    "covered_candidate_count": 1,
+                    "terminally_sufficient": True,
+                    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
+                    "candidates": [],
+                }
         )
         self.evaluate_gfc = self._patch(
             "api.tasks.evaluate_url_claim_with_gfc",
@@ -129,6 +136,10 @@ class VerificationRunURLRuntimeTests(TestCase):
         )
         self.filter_dossier = self._patch(
             "api.tasks.filter_reasoning_evidence_dossier_by_role",
+            return_value=["selected evidence"],
+        )
+        self.filter_dossier_roles = self._patch(
+            "api.tasks.filter_reasoning_evidence_dossier_by_roles",
             return_value=["selected evidence"],
         )
         self.render_dossier = self._patch(
@@ -760,7 +771,14 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.filter_dossier.return_value = [
             SimpleNamespace(evidence=(evidence,))
         ]
-        self.relevance.return_value = False
+        self.relevance.return_value = {
+            "candidate_count": 1,
+            "relevant_candidate_count": 0,
+            "covered_candidate_count": 0,
+            "terminally_sufficient": False,
+            "reason_code": "MATERIAL_DIFFERENCE",
+            "candidates": [],
+        }
         satire_verdict = {
             **self.verdict,
             "verdict": "SATIRE",
@@ -863,19 +881,39 @@ class VerificationRunURLRuntimeTests(TestCase):
             for source in self.claim.ai_sources
         ))
 
-    def test_persisted_gfc_unverified_result_abstains_without_tavily_fallback(self):
+    def test_persisted_gfc_unverified_result_continues_to_tavily(self):
         self.verdict["verdict"] = "UNVERIFIED"
 
         run = self._execute()
 
         self._assert_terminal(run, VerificationRun.Status.ABSTAINED)
-        self.evaluate_persisted.assert_called_once_with(
-            self.cleaned["cleaned_claim"],
-            "Persisted evidence context.",
-            "NEUTRAL",
-        )
+        self.assertEqual(self.evaluate_persisted.call_count, 2)
+        self.retrieve_tavily.assert_called_once()
         self.evaluate_gfc.assert_not_called()
-        self.retrieve_tavily.assert_not_called()
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("url_gfc_continued_to_tavily", stages)
+        self.assertIn("url_tavily_llm_evaluation", stages)
+
+    def test_partial_gfc_coverage_continues_to_tavily_with_combined_evidence(self):
+        self.relevance.return_value = {
+            "candidate_count": 1,
+            "relevant_candidate_count": 1,
+            "covered_candidate_count": 0,
+            "terminally_sufficient": False,
+            "reason_code": "RELATED_BUT_INCOMPLETE",
+            "candidates": [],
+        }
+
+        run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        self.retrieve_tavily.assert_called_once()
+        self.assertEqual(self.evaluate_persisted.call_count, 2)
+        self.filter_dossier_roles.assert_called()
+        self.assertEqual(self.save_claim.call_args.args[2], "Live Web Search")
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("url_gfc_proposition_coverage_check", stages)
+        self.assertIn("url_gfc_continued_to_tavily", stages)
 
     def test_gfc_failure_then_tavily_completes_same_run(self):
         observed = []
@@ -1097,6 +1135,11 @@ class VerificationRunURLRuntimeTests(TestCase):
         ):
             with self.subTest(verdict=verdict):
                 self.verdict["verdict"] = verdict
+                before = {
+                    "complete": self.complete_run.call_count,
+                    "abstain": self.abstain_run.call_count,
+                    "fail": self.fail_run.call_count,
+                }
                 error = RuntimeError("Terminal storage unavailable")
                 helper.side_effect = error
                 try:
@@ -1109,8 +1152,26 @@ class VerificationRunURLRuntimeTests(TestCase):
                     )
                 finally:
                     helper.side_effect = None
-        self.fail_run.assert_not_called()
-        self.retrieve_tavily.assert_not_called()
+
+                if helper is self.complete_run:
+                    self.assertEqual(
+                        self.complete_run.call_count,
+                        before["complete"] + 1,
+                    )
+                    self.assertEqual(
+                        self.abstain_run.call_count,
+                        before["abstain"],
+                    )
+                else:
+                    self.assertEqual(
+                        self.abstain_run.call_count,
+                        before["abstain"] + 1,
+                    )
+                    self.assertEqual(
+                        self.complete_run.call_count,
+                        before["complete"],
+                    )
+                self.assertEqual(self.fail_run.call_count, before["fail"])
 
     def test_create_failure_prevents_verification(self):
         error = RuntimeError("Create unavailable")
@@ -1288,8 +1349,15 @@ class VerificationEvidenceURLRuntimeTests(TestCase):
         self.log_stage = self.enterContext(patch("api.tasks._log_stage"))
         self.relevance = self.enterContext(
             patch(
-                "api.tasks.is_fact_check_relevant",
-                return_value=True,
+                "api.tasks.assess_fact_check_proposition_coverage",
+                return_value={
+                    "candidate_count": 1,
+                    "relevant_candidate_count": 1,
+                    "covered_candidate_count": 1,
+                    "terminally_sufficient": True,
+                    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
+                    "candidates": [],
+                },
             )
         )
         self.evaluate_legacy_gfc = self.enterContext(
@@ -1466,7 +1534,14 @@ class VerificationEvidenceURLRuntimeTests(TestCase):
         )
 
     def test_url_tavily_report_sources_come_from_persisted_evidence(self):
-        self.relevance.return_value = False
+        self.relevance.return_value = {
+            "candidate_count": 1,
+            "relevant_candidate_count": 0,
+            "covered_candidate_count": 0,
+            "terminally_sufficient": False,
+            "reason_code": "MATERIAL_DIFFERENCE",
+            "candidates": [],
+        }
         self.retrieve_tavily.side_effect = self._record_tavily_link
         self.tavily_response["results"] = [
             {"url": "https://not-persisted.example/first-hit",
@@ -1486,7 +1561,14 @@ class VerificationEvidenceURLRuntimeTests(TestCase):
         ))
 
     def test_irrelevant_gfc_is_not_assessed_and_tavily_is_role_isolated(self):
-        self.relevance.return_value = False
+        self.relevance.return_value = {
+            "candidate_count": 1,
+            "relevant_candidate_count": 0,
+            "covered_candidate_count": 0,
+            "terminally_sufficient": False,
+            "reason_code": "MATERIAL_DIFFERENCE",
+            "candidates": [],
+        }
         self.retrieve_tavily.side_effect = self._record_tavily_link
 
         run = self._execute()

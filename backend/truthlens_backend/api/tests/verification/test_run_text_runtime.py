@@ -87,7 +87,14 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.retrieve_gfc = self._patch(
             "api.tasks._retrieve_and_ingest_gfc", return_value=self.gfc_payload
         )
-        self.relevance = self._patch("api.tasks.is_fact_check_relevant", return_value=True)
+        self.relevance = self._patch("api.tasks.assess_fact_check_proposition_coverage", return_value={
+                    "candidate_count": 1,
+                    "relevant_candidate_count": 1,
+                    "covered_candidate_count": 1,
+                    "terminally_sufficient": True,
+                    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
+                    "candidates": [],
+                })
         self.evaluate_gfc = self._patch(
             "api.tasks.evaluate_image_claim_with_gfc", return_value=self.verdict
         )
@@ -108,6 +115,10 @@ class VerificationRunTextRuntimeTests(TestCase):
         )
         self.filter_dossier = self._patch(
             "api.tasks.filter_reasoning_evidence_dossier_by_role",
+            return_value=["selected evidence"],
+        )
+        self.filter_dossier_roles = self._patch(
+            "api.tasks.filter_reasoning_evidence_dossier_by_roles",
             return_value=["selected evidence"],
         )
         self.render_dossier = self._patch(
@@ -788,7 +799,14 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.filter_dossier.return_value = [
             SimpleNamespace(evidence=(evidence,))
         ]
-        self.relevance.return_value = False
+        self.relevance.return_value = {
+            "candidate_count": 1,
+            "relevant_candidate_count": 0,
+            "covered_candidate_count": 0,
+            "terminally_sufficient": False,
+            "reason_code": "MATERIAL_DIFFERENCE",
+            "candidates": [],
+        }
         satire_verdict = {
             **self.verdict,
             "verdict": "SATIRE",
@@ -928,10 +946,76 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.assertEqual(self.save_claim.call_args.args[2], "Live Web Search")
 
     def test_irrelevant_gfc_results_continue_to_tavily(self):
-        self.relevance.return_value = False
+        self.relevance.return_value = {
+            "candidate_count": 1,
+            "relevant_candidate_count": 0,
+            "covered_candidate_count": 0,
+            "terminally_sufficient": False,
+            "reason_code": "MATERIAL_DIFFERENCE",
+            "candidates": [],
+        }
         self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
         self.evaluate_gfc.assert_not_called()
         self.retrieve_tavily.assert_called_once()
+
+    def test_partial_gfc_coverage_continues_to_tavily_with_combined_evidence(self):
+        self.relevance.return_value = {
+            "candidate_count": 1,
+            "relevant_candidate_count": 1,
+            "covered_candidate_count": 0,
+            "terminally_sufficient": False,
+            "reason_code": "RELATED_BUT_INCOMPLETE",
+            "candidates": [],
+        }
+
+        run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        self.retrieve_tavily.assert_called_once()
+        self.assertEqual(self.evaluate_persisted.call_count, 2)
+        self.filter_dossier_roles.assert_called()
+        self.assertEqual(self.save_claim.call_args.args[2], "Live Web Search")
+        self.claim.refresh_from_db()
+        self.assertEqual(
+            [source["url"] for source in self.claim.ai_sources],
+            [
+                "https://example.com/fact-check",
+                "https://example.com/web",
+            ],
+        )
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("gfc_proposition_coverage_check", stages)
+        self.assertIn("gfc_continued_to_tavily", stages)
+
+    def test_coverage_assessor_receives_all_returned_gfc_claims(self):
+        self.gfc_payload["claims"].append({
+            "text": "A later exact reviewed claim.",
+            "claimReview": [{
+                "publisher": {"name": "Second Checker"},
+                "url": "https://example.com/second-fact-check",
+                "textualRating": "False",
+            }],
+        })
+        self.retrieve_gfc.return_value = self.gfc_payload
+        self.relevance.return_value = {
+            "candidate_count": 2,
+            "relevant_candidate_count": 1,
+            "covered_candidate_count": 1,
+            "terminally_sufficient": True,
+            "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
+            "candidates": [],
+        }
+
+        self._assert_terminal(self._execute(), VerificationRun.Status.COMPLETED)
+
+        self.relevance.assert_called_once_with(
+            self.cleaned["cleaned_claim"],
+            [
+                self.cleaned["cleaned_claim"],
+                "A later exact reviewed claim.",
+            ],
+        )
+        self.retrieve_tavily.assert_not_called()
 
     def test_gfc_evaluation_failure_continues_to_tavily(self):
         self.evaluate_persisted.side_effect = [
@@ -1149,7 +1233,14 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
         self.enterContext(patch("api.tasks.search_official_vault", return_value=None))
         self.enterContext(patch("api.embedding_service.generate_embedding", return_value=None))
         self.log_stage = self.enterContext(patch("api.tasks._log_stage"))
-        self.relevance = self.enterContext(patch("api.tasks.is_fact_check_relevant", return_value=True))
+        self.relevance = self.enterContext(patch("api.tasks.assess_fact_check_proposition_coverage", return_value={
+                    "candidate_count": 1,
+                    "relevant_candidate_count": 1,
+                    "covered_candidate_count": 1,
+                    "terminally_sufficient": True,
+                    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
+                    "candidates": [],
+                }))
         self.evaluate_gfc = self.enterContext(patch(
             "api.tasks.evaluate_image_claim_with_gfc", return_value=self.verdict,
         ))
@@ -1318,7 +1409,14 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
         self.assertEqual(self.assessor.call_args.args[1][0].recency_score, 0.55)
 
     def test_irrelevant_gfc_evidence_remains_linked_before_tavily_fallback(self):
-        self.relevance.return_value = False
+        self.relevance.return_value = {
+            "candidate_count": 1,
+            "relevant_candidate_count": 0,
+            "covered_candidate_count": 0,
+            "terminally_sufficient": False,
+            "reason_code": "MATERIAL_DIFFERENCE",
+            "candidates": [],
+        }
         self.retrieve_tavily.side_effect = self._record_links_at_fallback
         run = self._execute()
         self.retrieve_tavily.assert_called_once()

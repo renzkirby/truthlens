@@ -305,12 +305,36 @@ class ManagementPipelineRunListQuerySerializer(StrictFieldsSerializer):
         allow_blank=True,
     )
     claim_type = serializers.ChoiceField(
-        choices=Claim.ClaimType.choices,
+        choices=(
+            Claim.ClaimType.TEXT,
+            Claim.ClaimType.IMAGE,
+            Claim.ClaimType.URL,
+            Claim.ClaimType.FILE,
+        ),
         required=False,
         allow_blank=True,
     )
+    started_after = serializers.DateTimeField(required=False)
+    started_before = serializers.DateTimeField(required=False)
     page = serializers.IntegerField(required=False, min_value=1)
     page_size = serializers.IntegerField(required=False, min_value=1, max_value=100)
+
+    def validate(self, attrs):
+        started_after = attrs.get("started_after")
+        started_before = attrs.get("started_before")
+        if (
+            started_after is not None
+            and started_before is not None
+            and started_after >= started_before
+        ):
+            raise serializers.ValidationError(
+                {
+                    "started_before": (
+                        "started_before must be after started_after."
+                    )
+                }
+            )
+        return attrs
 
 
 class ManagementPipelineRunDetailQuerySerializer(StrictFieldsSerializer):
