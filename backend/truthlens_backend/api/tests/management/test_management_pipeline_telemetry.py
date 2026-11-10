@@ -279,6 +279,73 @@ class ManagementPipelineTelemetryApiTests(APITestCase):
         self.assertEqual(len(first_ids), 2)
         self.assertEqual(len(second_ids), 2)
 
+    def test_run_list_filters_by_started_timestamp_range(self):
+        selected_day = timezone.now() - timedelta(days=1)
+        day_start = selected_day.replace(
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+        day_end = day_start + timedelta(days=1)
+        inside = VerificationRun.objects.create(
+            claim=Claim.objects.create(claim_type=Claim.ClaimType.TEXT),
+            status=VerificationRun.Status.COMPLETED,
+            started_at=day_start + timedelta(hours=2),
+        )
+        VerificationRun.objects.create(
+            claim=Claim.objects.create(claim_type=Claim.ClaimType.TEXT),
+            status=VerificationRun.Status.COMPLETED,
+            started_at=day_start - timedelta(minutes=1),
+        )
+        VerificationRun.objects.create(
+            claim=Claim.objects.create(claim_type=Claim.ClaimType.TEXT),
+            status=VerificationRun.Status.COMPLETED,
+            started_at=day_end,
+        )
+
+        response = self.client_for(self.superuser).get(
+            reverse("management_pipeline_runs"),
+            {
+                "window": "7d",
+                "started_after": day_start.isoformat(),
+                "started_before": day_end.isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        result_ids = {row["id"] for row in response.data["results"]}
+        self.assertIn(str(inside.id), result_ids)
+        self.assertTrue(
+            all(
+                day_start <= row["started_at"] < day_end
+                for row in VerificationRun.objects.filter(
+                    id__in=result_ids,
+                    started_at__isnull=False,
+                ).values("started_at")
+            )
+        )
+
+    def test_run_list_rejects_video_and_invalid_start_ranges(self):
+        url = reverse("management_pipeline_runs")
+        client = self.client_for(self.superuser)
+
+        video = client.get(url, {"claim_type": "VIDEO"})
+        self.assertEqual(video.status_code, status.HTTP_400_BAD_REQUEST)
+
+        malformed = client.get(url, {"started_after": "not-a-date"})
+        self.assertEqual(malformed.status_code, status.HTTP_400_BAD_REQUEST)
+
+        now = timezone.now()
+        reversed_range = client.get(
+            url,
+            {
+                "started_after": now.isoformat(),
+                "started_before": (now - timedelta(hours=1)).isoformat(),
+            },
+        )
+        self.assertEqual(reversed_range.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_run_list_rejects_unsupported_parameters(self):
         response = self.client_for(self.superuser).get(
             reverse("management_pipeline_runs"),
