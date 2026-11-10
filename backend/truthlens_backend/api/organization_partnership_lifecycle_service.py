@@ -1086,9 +1086,9 @@ def apply_legacy_platform_trust_transition(
                     "This organization cannot be activated from its current state."
                 )
         elif requested_partner == Organization.PartnerStatus.SUSPENDED:
-            organization = suspend_partner_organization_partnership(
-                organization_id=organization.pk,
-                actor=actor,
+            raise OrganizationPartnershipLifecycleConflict(
+                "Use the governed Suspend Partnership action so the suspension "
+                "type, factors, severity, and reason are recorded."
             )
         else:
             raise OrganizationPartnershipLifecycleConflict(
