@@ -300,10 +300,44 @@ function OrganizationGovernanceSection({
       ],
    };
    const updateSuspensionForm = (field, value) => {
-      setSuspensionForm((current) => ({ ...current, [field]: value }));
+      setSuspensionForm((current) => {
+         if (field === "suspension_type") {
+            return {
+               ...current,
+               suspension_type: value,
+               remediation_problem: value === "REMEDIAL" ? current.remediation_problem : "",
+               remediation_required_action: value === "REMEDIAL" ? current.remediation_required_action : "",
+               remediation_evidence_required: value === "REMEDIAL" ? current.remediation_evidence_required : "",
+               remediation_deadline: value === "REMEDIAL" ? current.remediation_deadline : "",
+               remediation_review_method: value === "REMEDIAL" ? current.remediation_review_method : "",
+               remediation_failure_consequence: value === "REMEDIAL" ? current.remediation_failure_consequence : "",
+            };
+         }
+         return { ...current, [field]: value };
+      });
    };
    const updateReinstatementForm = (field, value) => {
-      setReinstatementForm((current) => ({ ...current, [field]: value }));
+      setReinstatementForm((current) => {
+         if (field === "basis") {
+            return {
+               ...current,
+               basis: value,
+               completed_remediation: value === "REMEDIATION_COMPLETED"
+                  ? current.completed_remediation
+                  : "",
+            };
+         }
+         if (field === "continuing_conditions" && !value.trim()) {
+            return {
+               ...current,
+               continuing_conditions: value,
+               monitoring_end_date: "",
+               monitoring_success_criteria: "",
+               monitoring_recurrence_consequence: "",
+            };
+         }
+         return { ...current, [field]: value };
+      });
    };
    const updateEndingForm = (field, value) => {
       setEndingForm((current) => {
@@ -321,20 +355,34 @@ function OrganizationGovernanceSection({
    };
 
    const toggleSuspensionFactor = (factor) => {
-      setSuspensionForm((current) => ({
-         ...current,
-         factors: current.factors.includes(factor)
-            ? current.factors.filter((value) => value !== factor)
-            : [...current.factors, factor],
-      }));
+      setSuspensionForm((current) => {
+         const removing = current.factors.includes(factor);
+         return {
+            ...current,
+            factors: removing
+               ? current.factors.filter((value) => value !== factor)
+               : [...current.factors, factor],
+            other_factor_explanation:
+               factor === "OTHER" && removing
+                  ? ""
+                  : current.other_factor_explanation,
+         };
+      });
    };
    const toggleEndingFactor = (factor) => {
-      setEndingForm((current) => ({
-         ...current,
-         factors: current.factors.includes(factor)
-            ? current.factors.filter((value) => value !== factor)
-            : [...current.factors, factor],
-      }));
+      setEndingForm((current) => {
+         const removing = current.factors.includes(factor);
+         return {
+            ...current,
+            factors: removing
+               ? current.factors.filter((value) => value !== factor)
+               : [...current.factors, factor],
+            other_factor_explanation:
+               factor === "OTHER" && removing
+                  ? ""
+                  : current.other_factor_explanation,
+         };
+      });
    };
    const suspensionHasOther = suspensionForm.factors.includes("OTHER");
    const suspensionRemediationReady = suspensionForm.suspension_type !== "REMEDIAL" || Boolean(
