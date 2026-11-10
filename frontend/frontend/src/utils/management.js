@@ -23,8 +23,8 @@ export function formatManagementDate(value, { dateOnly = false } = {}) {
 }
 
 export function managementStatusTone(status) {
-   if (["ACTIVE", "VERIFIED", "ACCEPTED", "COMPLETED"].includes(status)) return "success";
-   if (["PENDING", "RUNNING", "UNVERIFIED"].includes(status)) return "warning";
+   if (["ACTIVE", "VERIFIED", "ACCEPTED", "COMPLETED", "RESOLVED"].includes(status)) return "success";
+   if (["PENDING", "RUNNING", "UNVERIFIED", "SUBMITTED", "UNDER_REVIEW"].includes(status)) return "warning";
    if (["SUSPENDED", "REJECTED", "CANCELLED", "EXPIRED", "FAILED"].includes(status)) return "critical";
    return "neutral";
 }
@@ -124,8 +124,17 @@ export const MANAGEMENT_GOVERNANCE_ACTIONS = [
 
 const MANAGEMENT_GOVERNANCE_ACTION_LABELS = new Map(MANAGEMENT_GOVERNANCE_ACTIONS);
 
-export function formatManagementGovernanceAction(actionType, fallbackLabel) {
-   return MANAGEMENT_GOVERNANCE_ACTION_LABELS.get(actionType)
+const MANAGEMENT_GOVERNANCE_REASON_LABELS = {
+   PARTNERSHIP_RECONSIDERATION_SUBMITTED: "Suspension Reconsideration Submitted",
+   PARTNERSHIP_RECONSIDERATION_REVIEW_STARTED: "Suspension Reconsideration Review Started",
+   PARTNERSHIP_RECONSIDERATION_MOOT: "Suspension Reconsideration Became Moot",
+   PARTNERSHIP_RECONSIDERATION_UPHELD: "Suspension Reconsideration Upheld",
+   PARTNERSHIP_RECONSIDERATION_REVOKED: "Suspension Reconsideration Revoked",
+};
+
+export function formatManagementGovernanceAction(actionType, fallbackLabel, reasonCode = "") {
+   return MANAGEMENT_GOVERNANCE_REASON_LABELS[reasonCode]
+      || MANAGEMENT_GOVERNANCE_ACTION_LABELS.get(actionType)
       || fallbackLabel
       || actionType
       || "Unknown governance action";
