@@ -23,6 +23,7 @@ from .services import (
     OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
     OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
     assess_claim_equivalence,
+    assess_fact_check_proposition_coverage,
     extract_persisted_fact_check_claim_rating,
     llm_provider_scope,
     process_image,
@@ -30,7 +31,6 @@ from .services import (
     clean_extracted_text,
     extract_search_query,
     extract_source_bounded_noneditable_claim,
-    is_fact_check_relevant,
     evaluate_claim_with_persisted_evidence,
     evaluate_image_claim_with_gfc,
     evaluate_image_claim_with_tavily,
@@ -56,6 +56,7 @@ from .verification.evidence_assessment import (
 )
 from .verification.evidence_dossier import (
     filter_reasoning_evidence_dossier_by_role,
+    filter_reasoning_evidence_dossier_by_roles,
     load_reasoning_evidence_dossier_for_run,
     render_reasoning_evidence_dossier,
     render_compact_reasoning_evidence_dossier,
@@ -1643,10 +1644,13 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
             # Similar Vault candidates that were not proven equivalent never
             # become verdict evidence. Continue with fresh GFC/Tavily retrieval.
 
-            # Try GFC first — return early if relevant result found
+            # Try GFC first — return early only for proposition-covering decisive evidence
             gfc_started_at = time.perf_counter()
             gfc_claims = []
             is_relevant = False
+            gfc_terminally_sufficient = False
+            gfc_coverage_reason_code = "NO_RELEVANT_CANDIDATE"
+            gfc_evidence_assessed = False
             official_rating_policy = {
                 "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
                 "satire_evidence_ids": (),
@@ -1695,11 +1699,22 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         )
 
                 if gfc_claims:
+                    coverage_started_at = time.perf_counter()
+                    reviewed_claims = [
+                        claim_data.get("text", "")
+                        for claim_data in gfc_claims[:5]
+                        if isinstance(claim_data, dict)
+                    ]
                     if (
                         official_rating_policy["resolution"]
                         != OFFICIAL_FACT_CHECK_RESOLUTION_NONE
                     ):
                         is_relevant = True
+                        gfc_terminally_sufficient = True
+                        gfc_coverage_reason_code = "EXACT_OR_EQUIVALENT_COVERAGE"
+                        coverage_candidate_count = len(reviewed_claims)
+                        coverage_relevant_count = 1
+                        coverage_covered_count = 1
                         _log_stage(
                             claim_id,
                             "gfc_relevance_bypassed",
@@ -1707,17 +1722,30 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             resolution=official_rating_policy["resolution"],
                         )
                     else:
-                        first_claim_text = gfc_claims[0].get("text", "")
-                        relevance_started_at = time.perf_counter()
-                        is_relevant = is_fact_check_relevant(
-                            cleaned_claim, first_claim_text
+                        coverage = assess_fact_check_proposition_coverage(
+                            cleaned_claim,
+                            reviewed_claims,
                         )
-                        _log_stage(
-                            claim_id,
-                            "gfc_relevance_check",
-                            relevance_started_at,
-                            relevant=is_relevant,
-                        )
+                        is_relevant = coverage["relevant_candidate_count"] > 0
+                        gfc_terminally_sufficient = coverage["terminally_sufficient"]
+                        gfc_coverage_reason_code = coverage["reason_code"]
+                        coverage_candidate_count = coverage["candidate_count"]
+                        coverage_relevant_count = coverage[
+                            "relevant_candidate_count"
+                        ]
+                        coverage_covered_count = coverage[
+                            "covered_candidate_count"
+                        ]
+                    _log_stage(
+                        claim_id,
+                        "gfc_proposition_coverage_check",
+                        coverage_started_at,
+                        candidate_count=coverage_candidate_count,
+                        relevant_candidate_count=coverage_relevant_count,
+                        covered_candidate_count=coverage_covered_count,
+                        terminally_sufficient=gfc_terminally_sufficient,
+                        reason_code=gfc_coverage_reason_code,
+                    )
             except Exception as e:
                 _log_stage(
                     claim_id, "gfc_search_failed", gfc_started_at, error=str(e)[:120]
@@ -1755,6 +1783,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             claim_id,
                             stage_prefix="gfc",
                         )
+                        gfc_evidence_assessed = True
                         evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
                         fact_check_groups = filter_reasoning_evidence_dossier_by_role(
                             evidence_dossier,
@@ -1781,7 +1810,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                                 fact_check_groups,
                                 fallback_active=noneditable_context_fallback,
                                 required_anchor_tokens=noneditable_fallback_anchor_tokens,
-                        assertion_complete=noneditable_fallback_assertion_complete,
+                                assertion_complete=noneditable_fallback_assertion_complete,
                             )
                         except LLMProviderUnavailableError:
                             raise
@@ -1814,50 +1843,64 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         gfc_eval_started_at,
                         verdict=ai_verdict.get("verdict"),
                     )
-                    source_urls = []
-                    for claim_data in gfc_claims[:3]:
-                        review_url = claim_data.get("claimReview", [{}])[0].get(
-                            "url", ""
-                        )
-                        if review_url:
-                            source_urls.append(review_url)
-
-                    # Report cards must project the FACT_CHECK evidence that
-                    # actually reached the persisted-evidence evaluator. Raw
-                    # provider top-N links are only a legacy no-run fallback.
-                    report_sources = (
-                        persisted_evidence_source_previews(
-                            run, VerificationEvidence.EvidenceRole.FACT_CHECK,
-                        ) if run is not None else source_urls
-                    )
-                    save_started_at = time.perf_counter()
-                    _save_claim(
-                        claim_id,
-                        ai_verdict,
-                        "Official Fact Check",
-                        cleaned_claim,
-                        report_sources,
-                        **(
-                            {
-                                "related_proposition": cleaned_claim,
-                                "related_candidate": related_candidate,
-                            }
-                            if is_image_claim else {}
-                        ),
-                    )
-                    _log_stage(
-                        claim_id,
-                        "save_claim",
-                        save_started_at,
-                        source_type="Official Fact Check",
-                    )
-                    outcome = "completed_gfc"
-                    selected_verdict = (
+                    gfc_candidate_verdict = (
                         ai_verdict.get("verdict")
                         if isinstance(ai_verdict, dict)
                         else None
                     )
-                    return
+                    if (
+                        gfc_terminally_sufficient
+                        and gfc_candidate_verdict
+                        in {"FACT", "FAKE", "MISLEADING", "SATIRE"}
+                    ):
+                        source_urls = []
+                        for claim_data in gfc_claims[:3]:
+                            review_url = claim_data.get("claimReview", [{}])[0].get(
+                                "url", ""
+                            )
+                            if review_url:
+                                source_urls.append(review_url)
+
+                        # Report cards project the persisted FACT_CHECK evidence
+                        # that actually reached the terminal GFC evaluator.
+                        report_sources = (
+                            persisted_evidence_source_previews(
+                                run, VerificationEvidence.EvidenceRole.FACT_CHECK,
+                            ) if run is not None else source_urls
+                        )
+                        save_started_at = time.perf_counter()
+                        _save_claim(
+                            claim_id,
+                            ai_verdict,
+                            "Official Fact Check",
+                            cleaned_claim,
+                            report_sources,
+                            **(
+                                {
+                                    "related_proposition": cleaned_claim,
+                                    "related_candidate": related_candidate,
+                                }
+                                if is_image_claim else {}
+                            ),
+                        )
+                        _log_stage(
+                            claim_id,
+                            "save_claim",
+                            save_started_at,
+                            source_type="Official Fact Check",
+                        )
+                        outcome = "completed_gfc"
+                        selected_verdict = gfc_candidate_verdict
+                        return
+
+                    _log_stage(
+                        claim_id,
+                        "gfc_continued_to_tavily",
+                        gfc_eval_started_at,
+                        gfc_verdict=gfc_candidate_verdict,
+                        terminally_sufficient=gfc_terminally_sufficient,
+                        reason_code=gfc_coverage_reason_code,
+                    )
 
             # Fallback — Tavily web search
             tavily_started_at = time.perf_counter()
@@ -1958,26 +2001,46 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             evidence_dossier,
                             VerificationEvidence.EvidenceRole.SECONDARY,
                         )
+                    evaluation_groups = (
+                        filter_reasoning_evidence_dossier_by_roles(
+                            evidence_dossier,
+                            (
+                                VerificationEvidence.EvidenceRole.FACT_CHECK,
+                                VerificationEvidence.EvidenceRole.SECONDARY,
+                            ),
+                        )
+                        if gfc_evidence_assessed
+                        else secondary_groups
+                    )
                     evidence_context = _render_bounded_persisted_evidence_context(
-                        secondary_groups, cleaned_claim, article_stance
+                        evaluation_groups, cleaned_claim, article_stance
                     )
                     if evidence_context:
                         evaluator_invoked = True
-                        ai_verdict = evaluate_claim_with_persisted_evidence(
-                            cleaned_claim,
-                            evidence_context,
-                            article_stance,
+                        ai_verdict = (
+                            _evaluate_persisted_with_official_rating_policy(
+                                cleaned_claim,
+                                evidence_context,
+                                article_stance,
+                                official_rating_policy,
+                            )
+                            if gfc_evidence_assessed
+                            else evaluate_claim_with_persisted_evidence(
+                                cleaned_claim,
+                                evidence_context,
+                                article_stance,
+                            )
                         )
                         ai_verdict = calibrate_verdict_confidence(
                             ai_verdict,
-                            secondary_groups,
+                            evaluation_groups,
                         )
                         ai_verdict = _apply_noneditable_fallback_verdict_policy(
                             ai_verdict,
-                            secondary_groups,
+                            evaluation_groups,
                             fallback_active=noneditable_context_fallback,
-                        required_anchor_tokens=noneditable_fallback_anchor_tokens,
-                        assertion_complete=noneditable_fallback_assertion_complete,
+                            required_anchor_tokens=noneditable_fallback_anchor_tokens,
+                            assertion_complete=noneditable_fallback_assertion_complete,
                         )
                     else:
                         _log_stage(
@@ -2007,15 +2070,23 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         tavily_eval_started_at,
                         verdict=ai_verdict.get("verdict"),
                     )
-                # Keep the visible source cards aligned with the persisted
-                # SECONDARY evidence used by the evaluator. This mirrors the
-                # URL pipeline and prevents top-three retrieval cards from
-                # masquerading as the complete evaluated provenance.
-                report_sources = (
-                    persisted_evidence_source_previews(
-                        run, VerificationEvidence.EvidenceRole.SECONDARY,
-                    ) if run is not None else source_urls
-                )
+                # Keep visible source cards aligned with every persisted role
+                # that reached the final evaluator.
+                if run is not None:
+                    report_sources = []
+                    if gfc_evidence_assessed:
+                        report_sources.extend(
+                            persisted_evidence_source_previews(
+                                run, VerificationEvidence.EvidenceRole.FACT_CHECK,
+                            )
+                        )
+                    report_sources.extend(
+                        persisted_evidence_source_previews(
+                            run, VerificationEvidence.EvidenceRole.SECONDARY,
+                        )
+                    )
+                else:
+                    report_sources = source_urls
                 save_started_at = time.perf_counter()
                 _save_claim(
                     claim_id,
@@ -2502,10 +2573,13 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
             _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
             return
 
-        # Step 3 — Try GFC first, return early if relevant
+        # Step 3 — Try GFC first; only proposition-covering decisive evidence is terminal
         gfc_started_at = time.perf_counter()
         gfc_claims = []
         is_relevant = False
+        gfc_terminally_sufficient = False
+        gfc_coverage_reason_code = "NO_RELEVANT_CANDIDATE"
+        gfc_evidence_assessed = False
         official_rating_policy = {
             "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
             "satire_evidence_ids": (),
@@ -2555,11 +2629,22 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     )
 
             if gfc_claims:
+                coverage_started_at = time.perf_counter()
+                reviewed_claims = [
+                    claim_data.get("text", "")
+                    for claim_data in gfc_claims[:5]
+                    if isinstance(claim_data, dict)
+                ]
                 if (
                     official_rating_policy["resolution"]
                     != OFFICIAL_FACT_CHECK_RESOLUTION_NONE
                 ):
                     is_relevant = True
+                    gfc_terminally_sufficient = True
+                    gfc_coverage_reason_code = "EXACT_OR_EQUIVALENT_COVERAGE"
+                    coverage_candidate_count = len(reviewed_claims)
+                    coverage_relevant_count = 1
+                    coverage_covered_count = 1
                     _log_stage(
                         claim_id,
                         "url_gfc_relevance_bypassed",
@@ -2567,17 +2652,28 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         resolution=official_rating_policy["resolution"],
                     )
                 else:
-                    first_claim_text = gfc_claims[0].get("text", "")
-                    relevance_started_at = time.perf_counter()
-                    is_relevant = is_fact_check_relevant(
-                        cleaned_claim, first_claim_text
+                    coverage = assess_fact_check_proposition_coverage(
+                        cleaned_claim,
+                        reviewed_claims,
                     )
-                    _log_stage(
-                        claim_id,
-                        "url_gfc_relevance_check",
-                        relevance_started_at,
-                        relevant=is_relevant,
-                    )
+                    is_relevant = coverage["relevant_candidate_count"] > 0
+                    gfc_terminally_sufficient = coverage["terminally_sufficient"]
+                    gfc_coverage_reason_code = coverage["reason_code"]
+                    coverage_candidate_count = coverage["candidate_count"]
+                    coverage_relevant_count = coverage[
+                        "relevant_candidate_count"
+                    ]
+                    coverage_covered_count = coverage["covered_candidate_count"]
+                _log_stage(
+                    claim_id,
+                    "url_gfc_proposition_coverage_check",
+                    coverage_started_at,
+                    candidate_count=coverage_candidate_count,
+                    relevant_candidate_count=coverage_relevant_count,
+                    covered_candidate_count=coverage_covered_count,
+                    terminally_sufficient=gfc_terminally_sufficient,
+                    reason_code=gfc_coverage_reason_code,
+                )
         except Exception as e:
             _log_stage(claim_id, "url_gfc_failed", gfc_started_at, error=str(e)[:120])
             logger.error("GFC error for claim %s: %s", claim_id, e)
@@ -2624,6 +2720,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         claim_id,
                         stage_prefix="url_gfc",
                     )
+                    gfc_evidence_assessed = True
                     evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
                     fact_check_groups = filter_reasoning_evidence_dossier_by_role(
                         evidence_dossier,
@@ -2683,44 +2780,62 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     gfc_eval_started_at,
                     verdict=ai_verdict.get("verdict"),
                 )
-
-                source_urls = []
-                for claim_data in gfc_claims[:3]:
-                    review_url = claim_data.get("claimReview", [{}])[0].get("url", "")
-                    if review_url:
-                        source_urls.append(review_url)
-
-                # The URL report must show the proposition and persisted
-                # FACT_CHECK evidence actually used by final evaluation.
-                report_sources = (
-                    persisted_evidence_source_previews(
-                        run, VerificationEvidence.EvidenceRole.FACT_CHECK,
-                    ) if run is not None else source_urls
+                gfc_candidate_verdict = (
+                    ai_verdict.get("verdict")
+                    if isinstance(ai_verdict, dict)
+                    else None
                 )
-                save_started_at = time.perf_counter()
-                _save_claim(
-                    claim_id,
-                    ai_verdict,
-                    "Official Fact Check",
-                    cleaned_claim,
-                    report_sources,
-                    related_proposition=cleaned_claim,
-                    related_candidate=related_candidate,
-                )
+                if (
+                    gfc_terminally_sufficient
+                    and gfc_candidate_verdict
+                    in {"FACT", "FAKE", "MISLEADING", "SATIRE"}
+                ):
+                    source_urls = []
+                    for claim_data in gfc_claims[:3]:
+                        review_url = claim_data.get("claimReview", [{}])[0].get(
+                            "url", ""
+                        )
+                        if review_url:
+                            source_urls.append(review_url)
+
+                    # The URL report projects persisted FACT_CHECK evidence
+                    # only when GFC is terminally proposition-covering.
+                    report_sources = (
+                        persisted_evidence_source_previews(
+                            run, VerificationEvidence.EvidenceRole.FACT_CHECK,
+                        ) if run is not None else source_urls
+                    )
+                    save_started_at = time.perf_counter()
+                    _save_claim(
+                        claim_id,
+                        ai_verdict,
+                        "Official Fact Check",
+                        cleaned_claim,
+                        report_sources,
+                        related_proposition=cleaned_claim,
+                        related_candidate=related_candidate,
+                    )
+                    _log_stage(
+                        claim_id,
+                        "save_claim",
+                        save_started_at,
+                        source_type="Official Fact Check",
+                    )
+                    outcome = "completed_gfc"
+                    selected_verdict = gfc_candidate_verdict
+                    _log_stage(
+                        claim_id, "url_task_total", pipeline_started_at, outcome=outcome
+                    )
+                    return
+
                 _log_stage(
                     claim_id,
-                    "save_claim",
-                    save_started_at,
-                    source_type="Official Fact Check",
+                    "url_gfc_continued_to_tavily",
+                    gfc_eval_started_at,
+                    gfc_verdict=gfc_candidate_verdict,
+                    terminally_sufficient=gfc_terminally_sufficient,
+                    reason_code=gfc_coverage_reason_code,
                 )
-                outcome = "completed_gfc"
-                selected_verdict = (
-                    ai_verdict.get("verdict") if isinstance(ai_verdict, dict) else None
-                )
-                _log_stage(
-                    claim_id, "url_task_total", pipeline_started_at, outcome=outcome
-                )
-                return
 
         # Step 4 — Fallback to Tavily web search
         tavily_search_started_at = time.perf_counter()
@@ -2848,23 +2963,43 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         evidence_dossier,
                         VerificationEvidence.EvidenceRole.SECONDARY,
                     )
+                evaluation_groups = (
+                    filter_reasoning_evidence_dossier_by_roles(
+                        evidence_dossier,
+                        (
+                            VerificationEvidence.EvidenceRole.FACT_CHECK,
+                            VerificationEvidence.EvidenceRole.SECONDARY,
+                        ),
+                    )
+                    if gfc_evidence_assessed
+                    else secondary_groups
+                )
                 evidence_context = _render_bounded_persisted_evidence_context(
-                    secondary_groups, cleaned_claim, article_stance
+                    evaluation_groups, cleaned_claim, article_stance
                 )
                 if evidence_context:
                     evaluator_invoked = True
-                    ai_verdict = evaluate_claim_with_persisted_evidence(
-                        cleaned_claim,
-                        evidence_context,
-                        article_stance,
+                    ai_verdict = (
+                        _evaluate_persisted_with_official_rating_policy(
+                            cleaned_claim,
+                            evidence_context,
+                            article_stance,
+                            official_rating_policy,
+                        )
+                        if gfc_evidence_assessed
+                        else evaluate_claim_with_persisted_evidence(
+                            cleaned_claim,
+                            evidence_context,
+                            article_stance,
+                        )
                     )
                     ai_verdict = calibrate_verdict_confidence(
                         ai_verdict,
-                        secondary_groups,
+                        evaluation_groups,
                     )
                     ai_verdict = _apply_noneditable_fallback_verdict_policy(
                         ai_verdict,
-                        secondary_groups,
+                        evaluation_groups,
                         fallback_active=noneditable_context_fallback,
                         required_anchor_tokens=noneditable_fallback_anchor_tokens,
                         assertion_complete=noneditable_fallback_assertion_complete,
@@ -2897,13 +3032,22 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     tavily_eval_started_at,
                     verdict=ai_verdict.get("verdict"),
                 )
-            # A report source card must reference persisted SECONDARY
-            # evidence; the first three Tavily hits are not the dossier.
-            report_sources = (
-                persisted_evidence_source_previews(
-                    run, VerificationEvidence.EvidenceRole.SECONDARY,
-                ) if run is not None else source_urls
-            )
+            # Project the persisted roles that actually reached final evaluation.
+            if run is not None:
+                report_sources = []
+                if gfc_evidence_assessed:
+                    report_sources.extend(
+                        persisted_evidence_source_previews(
+                            run, VerificationEvidence.EvidenceRole.FACT_CHECK,
+                        )
+                    )
+                report_sources.extend(
+                    persisted_evidence_source_previews(
+                        run, VerificationEvidence.EvidenceRole.SECONDARY,
+                    )
+                )
+            else:
+                report_sources = source_urls
             save_started_at = time.perf_counter()
             _save_claim(
                 claim_id, ai_verdict, "Live Web Search", cleaned_claim,

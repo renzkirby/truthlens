@@ -45,7 +45,11 @@ export function formatManagementOperationalLabel(value) {
    if (!value) return "Not recorded";
    return String(value)
       .replaceAll("_", " ")
-      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+      .replace(/\b\w/g, (letter) => letter.toUpperCase())
+      .replace(/\bGfc\b/g, "GFC")
+      .replace(/\bLlm\b/g, "LLM")
+      .replace(/\bUrl\b/g, "URL")
+      .replace(/\bAi\b/g, "AI");
 }
 
 export function formatManagementClaimType(value) {

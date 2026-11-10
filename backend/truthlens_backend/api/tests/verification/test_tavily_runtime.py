@@ -560,7 +560,14 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         self._patch("api.tasks.search_official_vault", return_value=None)
         self.real_gfc_bridge = tasks._retrieve_and_ingest_gfc
         self.gfc = self._patch("api.tasks._retrieve_and_ingest_gfc", return_value={"claims": []})
-        self.relevance = self._patch("api.tasks.is_fact_check_relevant", return_value=False)
+        self.relevance = self._patch("api.tasks.assess_fact_check_proposition_coverage", return_value={
+                    "candidate_count": 1,
+                    "relevant_candidate_count": 0,
+                    "covered_candidate_count": 0,
+                    "terminally_sufficient": False,
+                    "reason_code": "MATERIAL_DIFFERENCE",
+                    "candidates": [],
+                })
         self.evaluate_gfc = self._patch("api.tasks.evaluate_image_claim_with_gfc")
         self.evaluate_tavily = self._patch(
             "api.tasks.evaluate_image_claim_with_tavily", return_value=self.verdict,
@@ -749,7 +756,14 @@ class TavilyTextRuntimeIngestionTests(TestCase):
 
         def reject_gfc(*args):
             events.append("gfc_relevance")
-            return False
+            return {
+                "candidate_count": 1,
+                "relevant_candidate_count": 0,
+                "covered_candidate_count": 0,
+                "terminally_sufficient": False,
+                "reason_code": "MATERIAL_DIFFERENCE",
+                "candidates": [],
+            }
 
         def search_tavily(**kwargs):
             events.append("tavily_search")
@@ -797,7 +811,7 @@ class TavilyTextRuntimeIngestionTests(TestCase):
             4,
         )
         self.relevance.assert_called_once_with(
-            self.cleaned["cleaned_claim"], "Unrelated fact check.",
+            self.cleaned["cleaned_claim"], ["Unrelated fact check."],
         )
         self._assert_persisted_evaluation_and_sources()
 
@@ -1001,7 +1015,14 @@ class TavilyTextRuntimeIngestionTests(TestCase):
             gfc_raw_items,
         )
         self.gfc.side_effect = self.real_gfc_bridge
-        self.relevance.return_value = False
+        self.relevance.return_value = {
+            "candidate_count": 1,
+            "relevant_candidate_count": 0,
+            "covered_candidate_count": 0,
+            "terminally_sufficient": False,
+            "reason_code": "MATERIAL_DIFFERENCE",
+            "candidates": [],
+        }
 
         evaluate_url = self._execute_url()
 

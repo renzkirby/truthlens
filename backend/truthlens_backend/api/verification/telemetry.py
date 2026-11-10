@@ -31,6 +31,11 @@ SAFE_STAGE_METADATA_KEYS = frozenset(
         "query_index",
         "query_count",
         "results",
+        "candidate_count",
+        "relevant_candidate_count",
+        "covered_candidate_count",
+        "terminally_sufficient",
+        "reason_code",
     }
 )
 SAFE_LLM_OPERATION_LABELS = frozenset(
@@ -39,6 +44,7 @@ SAFE_LLM_OPERATION_LABELS = frozenset(
         "claim_gate",
         "claim_equivalence",
         "fact_check_relevance",
+        "gfc_proposition_coverage",
         "gfc_evaluation",
         "tavily_evaluation",
         "persisted_evidence_evaluation",
@@ -51,6 +57,15 @@ SAFE_GEMINI_MODEL_IDS = frozenset({
     "gemini-2.5-flash",
     "gemini-3.5-flash-lite",
     "gemini-3.8-flash",
+})
+
+SAFE_GFC_COVERAGE_REASON_CODES = frozenset({
+    "EXACT_OR_EQUIVALENT_COVERAGE",
+    "RELATED_BUT_INCOMPLETE",
+    "MATERIAL_DIFFERENCE",
+    "NO_RELEVANT_CANDIDATE",
+    "ASSESSMENT_UNCERTAIN",
+    "ASSESSMENT_FAILED",
 })
 
 
@@ -69,6 +84,10 @@ def sanitize_stage_metadata(metadata):
     safe = {}
     for key in SAFE_STAGE_METADATA_KEYS:
         value = metadata.get(key)
+        if key == "reason_code":
+            if value in SAFE_GFC_COVERAGE_REASON_CODES:
+                safe[key] = value
+            continue
         if isinstance(value, bool) or isinstance(value, int):
             safe[key] = value
         elif isinstance(value, float) and math.isfinite(value):

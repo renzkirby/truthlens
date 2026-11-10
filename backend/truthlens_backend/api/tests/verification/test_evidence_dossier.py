@@ -17,6 +17,7 @@ from api.verification.evidence_dossier import (
     ReasoningEvidenceGroup,
     ReasoningEvidenceItem,
     filter_reasoning_evidence_dossier_by_role,
+    filter_reasoning_evidence_dossier_by_roles,
     load_reasoning_evidence_dossier_for_run,
     render_reasoning_evidence_dossier,
 )
@@ -377,6 +378,44 @@ class ReasoningEvidenceDossierTests(TestCase):
             (first_match, nonmatch, second_match),
         )
         self.assertEqual(original_groups[1].evidence, (removed_group_item,))
+
+    def test_multi_role_filter_preserves_shared_source_identity_grouping(self):
+        fact_check = self._reasoning_item(
+            evidence_role=VerificationEvidence.EvidenceRole.FACT_CHECK,
+            content="Fact-check metadata",
+            provider="GOOGLE_FACT_CHECK",
+        )
+        secondary = self._reasoning_item(
+            evidence_role=VerificationEvidence.EvidenceRole.SECONDARY,
+            content="Web evidence",
+            provider="TAVILY",
+        )
+        excluded = self._reasoning_item(
+            evidence_role=None,
+            content="Excluded evidence",
+        )
+        identity_id = uuid.uuid4()
+        groups = (
+            ReasoningEvidenceGroup(
+                identity_kind=CANONICAL_SOURCE,
+                identity_id=identity_id,
+                evidence=(fact_check, secondary, excluded),
+            ),
+        )
+
+        with self.assertNumQueries(0):
+            filtered = filter_reasoning_evidence_dossier_by_roles(
+                groups,
+                (
+                    VerificationEvidence.EvidenceRole.FACT_CHECK,
+                    VerificationEvidence.EvidenceRole.SECONDARY,
+                ),
+            )
+
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0].identity_id, identity_id)
+        self.assertEqual(filtered[0].evidence, (fact_check, secondary))
+        self.assertEqual(groups[0].evidence, (fact_check, secondary, excluded))
 
     def test_empty_dossier_renders_as_empty_string(self):
         with self.assertNumQueries(0):

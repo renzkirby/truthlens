@@ -143,6 +143,60 @@ class PipelineTelemetryCollectorTests(TestCase):
         ):
             self.assertNotIn(unsafe, serialized)
 
+    def test_gfc_coverage_metadata_and_operation_are_safely_allowlisted(self):
+        @verification_telemetry_scope()
+        def execute(claim_id):
+            bind_verification_run(self.run)
+            record_llm_provider_call(
+                "gfc_proposition_coverage",
+                "gemini",
+                self.run.id,
+                8,
+                "success",
+            )
+            record_pipeline_stage(
+                "gfc_proposition_coverage_check",
+                9,
+                candidate_count=5,
+                relevant_candidate_count=2,
+                covered_candidate_count=1,
+                terminally_sufficient=True,
+                reason_code="EXACT_OR_EQUIVALENT_COVERAGE",
+                reasoning="PRIVATE MODEL REASONING",
+            )
+
+        execute(self.claim.id)
+        provider_event, stage_event = list(
+            self.run.telemetry_events.order_by("sequence")
+        )
+        self.assertEqual(provider_event.name, "gfc_proposition_coverage")
+        self.assertEqual(
+            stage_event.metadata,
+            {
+                "candidate_count": 5,
+                "relevant_candidate_count": 2,
+                "covered_candidate_count": 1,
+                "terminally_sufficient": True,
+                "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
+            },
+        )
+        self.assertNotIn("PRIVATE", repr(stage_event.metadata))
+
+    def test_unknown_gfc_coverage_reason_code_is_dropped(self):
+        @verification_telemetry_scope()
+        def execute(claim_id):
+            bind_verification_run(self.run)
+            record_pipeline_stage(
+                "gfc_proposition_coverage_check",
+                1,
+                candidate_count=1,
+                reason_code="PRIVATE_ARBITRARY_REASON",
+            )
+
+        execute(self.claim.id)
+        event = self.run.telemetry_events.get()
+        self.assertEqual(event.metadata, {"candidate_count": 1})
+
     def test_gemini_model_metadata_is_allowlisted_without_private_fields(self):
         @verification_telemetry_scope()
         def execute(claim_id):
@@ -227,6 +281,7 @@ class ProductionOperationLabelTests(TestCase):
         claim_gate = '{"cleaned_claim":"A claim","search_query":"query","search_queries":["query"],"article_stance":"NEUTRAL"}'
         equivalence = '{"equivalent":true,"reasoning":"Same proposition","material_differences":[]}'
         relevance = '{"reasoning":"Same event","is_relevant":true}'
+        coverage = '{"candidates":[{"candidate_index":0,"relationship":"EQUIVALENT_OR_COVERS","reasoning":"Same proposition","material_differences":[]}]}'
         verdict = '{"reasoning":"Evidence bound","verdict":"FACT","summary":"Supported","confidence_score":95,"score_context":"Strong evidence supports this claim"}'
         gfc = {
             "claims": [
@@ -249,6 +304,7 @@ class ProductionOperationLabelTests(TestCase):
                 claim_gate,
                 equivalence,
                 relevance,
+                coverage,
                 verdict,
                 verdict,
                 verdict,
@@ -263,6 +319,11 @@ class ProductionOperationLabelTests(TestCase):
             )
             self.assertTrue(services.assess_claim_equivalence("A", "A")["equivalent"])
             self.assertTrue(services.is_fact_check_relevant("A", "A"))
+            self.assertTrue(
+                services.assess_fact_check_proposition_coverage("A", ["A"])[
+                    "terminally_sufficient"
+                ]
+            )
             services.evaluate_image_claim_with_gfc("A", gfc)
             services.evaluate_url_claim_with_gfc("A", gfc)
             services.evaluate_image_claim_with_tavily("A", "Evidence")
@@ -276,6 +337,7 @@ class ProductionOperationLabelTests(TestCase):
                 "claim_gate",
                 "claim_equivalence",
                 "fact_check_relevance",
+                "gfc_proposition_coverage",
                 "gfc_evaluation",
                 "gfc_evaluation",
                 "tavily_evaluation",
@@ -284,7 +346,7 @@ class ProductionOperationLabelTests(TestCase):
             ],
         )
 
-        for evaluator_call in provider_call.call_args_list[4:]:
+        for evaluator_call in provider_call.call_args_list[5:]:
             system_prompt = evaluator_call.args[0]
             self.assertIn("USER-FACING SUMMARY RULES", system_prompt)
             self.assertIn("2-3 concise complete sentences", system_prompt)
