@@ -88,13 +88,13 @@ class VerificationRunTextRuntimeTests(TestCase):
             "api.tasks._retrieve_and_ingest_gfc", return_value=self.gfc_payload
         )
         self.relevance = self._patch("api.tasks.assess_fact_check_proposition_coverage", return_value={
-    "candidate_count": 1,
-    "relevant_candidate_count": 1,
-    "covered_candidate_count": 1,
-    "terminally_sufficient": True,
-    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
-    "candidates": [],
-})
+                    "candidate_count": 1,
+                    "relevant_candidate_count": 1,
+                    "covered_candidate_count": 1,
+                    "terminally_sufficient": True,
+                    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
+                    "candidates": [],
+                })
         self.evaluate_gfc = self._patch(
             "api.tasks.evaluate_image_claim_with_gfc", return_value=self.verdict
         )
@@ -670,14 +670,7 @@ class VerificationRunTextRuntimeTests(TestCase):
 
         with patch(
             "api.tasks._resolve_equivalent_published_claim",
-            return_value={
-    "candidate_count": 1,
-    "relevant_candidate_count": 1,
-    "covered_candidate_count": 1,
-    "terminally_sufficient": True,
-    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
-    "candidates": [],
-},
+            return_value=True,
         ) as resolve_equivalent:
             self._assert_terminal(
                 self._execute(),
@@ -1164,13 +1157,13 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
         self.enterContext(patch("api.embedding_service.generate_embedding", return_value=None))
         self.log_stage = self.enterContext(patch("api.tasks._log_stage"))
         self.relevance = self.enterContext(patch("api.tasks.assess_fact_check_proposition_coverage", return_value={
-    "candidate_count": 1,
-    "relevant_candidate_count": 1,
-    "covered_candidate_count": 1,
-    "terminally_sufficient": True,
-    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
-    "candidates": [],
-}))
+                    "candidate_count": 1,
+                    "relevant_candidate_count": 1,
+                    "covered_candidate_count": 1,
+                    "terminally_sufficient": True,
+                    "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
+                    "candidates": [],
+                }))
         self.evaluate_gfc = self.enterContext(patch(
             "api.tasks.evaluate_image_claim_with_gfc", return_value=self.verdict,
         ))
