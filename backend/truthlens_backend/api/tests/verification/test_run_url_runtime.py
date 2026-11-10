@@ -881,19 +881,18 @@ class VerificationRunURLRuntimeTests(TestCase):
             for source in self.claim.ai_sources
         ))
 
-    def test_persisted_gfc_unverified_result_abstains_without_tavily_fallback(self):
+    def test_persisted_gfc_unverified_result_continues_to_tavily(self):
         self.verdict["verdict"] = "UNVERIFIED"
 
         run = self._execute()
 
         self._assert_terminal(run, VerificationRun.Status.ABSTAINED)
-        self.evaluate_persisted.assert_called_once_with(
-            self.cleaned["cleaned_claim"],
-            "Persisted evidence context.",
-            "NEUTRAL",
-        )
+        self.assertEqual(self.evaluate_persisted.call_count, 2)
+        self.retrieve_tavily.assert_called_once()
         self.evaluate_gfc.assert_not_called()
-        self.retrieve_tavily.assert_not_called()
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("url_gfc_continued_to_tavily", stages)
+        self.assertIn("url_tavily_llm_evaluation", stages)
 
     def test_gfc_failure_then_tavily_completes_same_run(self):
         observed = []
