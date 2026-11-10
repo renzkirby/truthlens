@@ -2,6 +2,9 @@ from django.db.models import Count, Q
 from rest_framework import serializers
 
 from .accountability_query_service import MANAGEMENT_GOVERNANCE_ACTIONS
+from .organization_governance_reconsideration_service import (
+    management_reconsideration_projection,
+)
 from .organization_partnership_lifecycle_service import (
     PARTNERSHIP_ENDING_GROUND_CHOICES,
     PARTNERSHIP_ENDING_TYPE_CHOICES,
@@ -19,6 +22,7 @@ from .models import (
     Organization,
     OrganizationGovernanceFallbackDelivery,
     OrganizationGovernanceNoticeRecipient,
+    OrganizationGovernanceReconsideration,
     OrganizationInstitutionAffiliation,
     OrganizationInvitation,
     OrganizationMembership,
@@ -1005,6 +1009,7 @@ class ManagementOrganizationAdminInvitationSerializer(serializers.ModelSerialize
 class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerializer):
     lifecycle = serializers.SerializerMethodField()
     governance_notice_delivery = serializers.SerializerMethodField()
+    governance_reconsiderations = serializers.SerializerMethodField()
     institution_affiliation = serializers.SerializerMethodField()
     verification_specializations = serializers.ListField(
         child=serializers.CharField(), read_only=True
@@ -1113,6 +1118,23 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
             ],
         }
 
+    def get_governance_reconsiderations(self, obj):
+        rows = (
+            OrganizationGovernanceReconsideration.objects.filter(
+                organization=obj,
+            )
+            .select_related(
+                "requested_by",
+                "reviewer",
+                "suspension_event",
+            )
+            .order_by("-submitted_at", "-id")[:10]
+        )
+        return [
+            management_reconsideration_projection(row)
+            for row in rows
+        ]
+
     def get_organization_admin(self, obj):
         current_admins = (
             obj.memberships.select_related("user")
@@ -1192,6 +1214,7 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
             "primary_admin",
             "lifecycle",
             "governance_notice_delivery",
+            "governance_reconsiderations",
             "created_at",
         )
         read_only_fields = fields

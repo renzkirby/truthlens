@@ -3011,6 +3011,92 @@ class OrganizationGovernanceFallbackDelivery(models.Model):
         return f"Governance fallback delivery {self.pk}"
 
 
+class OrganizationGovernanceReconsideration(models.Model):
+    """Organization-requested review of a specific Partner suspension."""
+
+    class Status(models.TextChoices):
+        SUBMITTED = "SUBMITTED", "Submitted"
+        UNDER_REVIEW = "UNDER_REVIEW", "Under review"
+        RESOLVED = "RESOLVED", "Resolved"
+        MOOT = "MOOT", "Moot"
+
+    class Outcome(models.TextChoices):
+        UPHELD = "UPHELD", "Upheld"
+        REVOKED = "REVOKED", "Revoked"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.PROTECT,
+        related_name="governance_reconsiderations",
+    )
+    suspension_event = models.ForeignKey(
+        AccountabilityEvent,
+        on_delete=models.PROTECT,
+        related_name="governance_reconsiderations",
+    )
+    notice_recipient = models.ForeignKey(
+        OrganizationGovernanceNoticeRecipient,
+        on_delete=models.PROTECT,
+        related_name="reconsiderations",
+    )
+    requested_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="requested_governance_reconsiderations",
+    )
+    grounds = models.JSONField(default=list)
+    request_statement = models.TextField()
+    supporting_references = models.JSONField(default=list, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.SUBMITTED,
+        db_index=True,
+    )
+    reviewer = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_governance_reconsiderations",
+    )
+    reviewer_independence_note = models.TextField(blank=True, default="")
+    independence_override_rationale = models.TextField(blank=True, default="")
+    outcome = models.CharField(
+        max_length=16,
+        choices=Outcome.choices,
+        blank=True,
+        default="",
+    )
+    resolution_rationale = models.TextField(blank=True, default="")
+    internal_supporting_basis = models.TextField(blank=True, default="")
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    review_started_at = models.DateTimeField(null=True, blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-submitted_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["suspension_event"],
+                condition=Q(status__in=["SUBMITTED", "UNDER_REVIEW"]),
+                name="org_gov_reconsideration_one_open",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["organization", "status", "-submitted_at"],
+                name="org_gov_reconsider_org_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Governance reconsideration {self.pk}"
+
+
 class AdjudicationDecision(models.Model):
     class Verdict(models.TextChoices):
         FACT = "FACT", "Fact"

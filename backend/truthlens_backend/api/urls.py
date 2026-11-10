@@ -23,6 +23,11 @@ urlpatterns = [
         name="governance_notice_viewed",
     ),
     path(
+        "governance/notices/<uuid:notice_id>/reconsideration/",
+        organization_governance_notice_views.GovernanceNoticeReconsiderationView.as_view(),
+        name="governance_notice_reconsideration",
+    ),
+    path(
         "management/overview/",
         management_views.ManagementOverviewView.as_view(),
         name="management_overview",
@@ -111,6 +116,22 @@ urlpatterns = [
         "management/organizations/<uuid:organization_id>/platform-trust/",
         management_views.ManagementOrganizationPlatformTrustView.as_view(),
         name="management_organization_platform_trust",
+    ),
+    path(
+        (
+            "management/organizations/<uuid:organization_id>/"
+            "reconsiderations/<uuid:reconsideration_id>/review/"
+        ),
+        management_views.ManagementGovernanceReconsiderationReviewView.as_view(),
+        name="management_governance_reconsideration_review",
+    ),
+    path(
+        (
+            "management/organizations/<uuid:organization_id>/"
+            "reconsiderations/<uuid:reconsideration_id>/resolve/"
+        ),
+        management_views.ManagementGovernanceReconsiderationResolveView.as_view(),
+        name="management_governance_reconsideration_resolve",
     ),
     path(
         "management/organizations/<uuid:organization_id>/governance-contact/",

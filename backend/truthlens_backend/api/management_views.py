@@ -35,6 +35,18 @@ from .management_governance_service import (
     ManagementGovernanceValidationError,
     create_partner_organization,
 )
+from .organization_governance_reconsideration_serializers import (
+    ManagementReconsiderationResolveSerializer,
+    ManagementReconsiderationReviewStartSerializer,
+)
+from .organization_governance_reconsideration_service import (
+    GovernanceReconsiderationAuthorizationError,
+    GovernanceReconsiderationConflict,
+    GovernanceReconsiderationValidationError,
+    management_reconsideration_projection,
+    resolve_reconsideration,
+    start_reconsideration_review,
+)
 from .organization_governance_delivery_service import (
     enqueue_governance_fallback_delivery,
     enqueue_governance_notice_delivery,
@@ -94,6 +106,7 @@ from .models import (
     Organization,
     OrganizationGovernanceFallbackDelivery,
     OrganizationGovernanceNoticeRecipient,
+    OrganizationGovernanceReconsideration,
     OrganizationInstitutionAffiliation,
     OrganizationInvitation,
     OrganizationMembership,
@@ -738,6 +751,88 @@ class ManagementOrganizationDetailView(generics.RetrieveAPIView):
 
     def get_serializer_context(self):
         return {**super().get_serializer_context(), "now": timezone.now()}
+
+
+
+
+def _reconsideration_error_response(error):
+    if isinstance(error, GovernanceReconsiderationAuthorizationError):
+        response_status = status.HTTP_403_FORBIDDEN
+    elif isinstance(error, GovernanceReconsiderationConflict):
+        response_status = status.HTTP_409_CONFLICT
+    else:
+        response_status = status.HTTP_400_BAD_REQUEST
+
+    payload = {"detail": str(error)}
+    if isinstance(error, GovernanceReconsiderationValidationError) and error.field:
+        payload[error.field] = [str(error)]
+    return Response(payload, status=response_status)
+
+
+class ManagementGovernanceReconsiderationReviewView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def post(self, request, organization_id, reconsideration_id):
+        serializer = ManagementReconsiderationReviewStartSerializer(
+            data=request.data
+        )
+        serializer.is_valid(raise_exception=True)
+        try:
+            reconsideration = start_reconsideration_review(
+                reconsideration_id=reconsideration_id,
+                organization_id=organization_id,
+                actor=request.user,
+                **serializer.validated_data,
+            )
+        except OrganizationGovernanceReconsideration.DoesNotExist:
+            return Response(
+                {"detail": "Governance reconsideration not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except (
+            GovernanceReconsiderationAuthorizationError,
+            GovernanceReconsiderationConflict,
+            GovernanceReconsiderationValidationError,
+        ) as error:
+            return _reconsideration_error_response(error)
+
+        return Response(
+            management_reconsideration_projection(reconsideration),
+            status=status.HTTP_200_OK,
+        )
+
+
+class ManagementGovernanceReconsiderationResolveView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def post(self, request, organization_id, reconsideration_id):
+        serializer = ManagementReconsiderationResolveSerializer(
+            data=request.data
+        )
+        serializer.is_valid(raise_exception=True)
+        try:
+            reconsideration = resolve_reconsideration(
+                reconsideration_id=reconsideration_id,
+                organization_id=organization_id,
+                actor=request.user,
+                **serializer.validated_data,
+            )
+        except OrganizationGovernanceReconsideration.DoesNotExist:
+            return Response(
+                {"detail": "Governance reconsideration not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except (
+            GovernanceReconsiderationAuthorizationError,
+            GovernanceReconsiderationConflict,
+            GovernanceReconsiderationValidationError,
+        ) as error:
+            return _reconsideration_error_response(error)
+
+        return Response(
+            management_reconsideration_projection(reconsideration),
+            status=status.HTTP_200_OK,
+        )
 
 
 class ManagementOrganizationGovernanceContactView(APIView):

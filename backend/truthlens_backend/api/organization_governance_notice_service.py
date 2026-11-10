@@ -5,6 +5,7 @@ from django.db import transaction
 from .models import (
     OrganizationGovernanceFallbackDelivery,
     OrganizationGovernanceNoticeRecipient,
+    OrganizationGovernanceReconsideration,
     OrganizationMembership,
 )
 
@@ -214,6 +215,11 @@ def _member_status_message(event):
 def serialize_governance_notice(notice):
     """Return an audience-safe projection; unknown context keys stay hidden."""
 
+    from .organization_governance_reconsideration_service import (
+        can_request_reconsideration,
+        organization_reconsideration_projection,
+    )
+
     event = notice.governance_event
     payload = {
         "id": str(notice.pk),
@@ -237,6 +243,22 @@ def serialize_governance_notice(notice):
                 "rationale": event.notes or "",
                 "governance": _safe_governance_metadata(event),
             }
+        )
+        reconsideration = (
+            OrganizationGovernanceReconsideration.objects.filter(
+                suspension_event=event,
+            )
+            .order_by("-submitted_at", "-id")
+            .first()
+        )
+        payload["reconsideration"] = (
+            organization_reconsideration_projection(reconsideration)
+            if reconsideration is not None
+            else None
+        )
+        payload["can_request_reconsideration"] = can_request_reconsideration(
+            notice=notice,
+            user=notice.user,
         )
     else:
         payload["message"] = _member_status_message(event)
