@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 
 import { DetailList, ManagementPageHeader, ManagementRequestState, ManagementStatus } from "../components/management/ManagementUi";
+import Icons from "../components/Icons";
 import { useManagementRequest } from "../hooks/useManagementRequest";
 import { resolveApiEndpoint } from "../utils/api";
 import { formatManagementDate } from "../utils/management";
@@ -14,11 +15,22 @@ function ManagementInvitationDetailPage() {
    return (
       <div className="management-page">
          <ManagementPageHeader
-            title="Invitation"
+            title="Invitation Record"
             subtitle={data ? `${data.organization.name} · ${data.email}` : "Organization invitation record"}
             backTo="/management/invitations"
-            backLabel="Invitations"
+            backLabel="Invitation Records"
          />
+         <aside className="management-boundary-note" aria-label="Invitation record boundary">
+            <Icons name="info" size={19} />
+            <div>
+               <strong>Review delivery and outcome history</strong>
+               <p>
+                  This page records who was invited, the purpose of the invitation, delivery timing,
+                  and its final outcome. It does not provide general Partner Organization membership controls.
+               </p>
+            </div>
+         </aside>
+
          <ManagementRequestState loading={loading} error={error} onRetry={retry}>
             {data ? (
                <div className="management-detail-sections management-detail-sections--two-column">
