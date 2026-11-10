@@ -31,7 +31,6 @@ from .services import (
     clean_extracted_text,
     extract_search_query,
     extract_source_bounded_noneditable_claim,
-    is_fact_check_relevant,
     evaluate_claim_with_persisted_evidence,
     evaluate_image_claim_with_gfc,
     evaluate_image_claim_with_tavily,
@@ -1645,7 +1644,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
             # Similar Vault candidates that were not proven equivalent never
             # become verdict evidence. Continue with fresh GFC/Tavily retrieval.
 
-            # Try GFC first — return early if relevant result found
+            # Try GFC first — return early only for proposition-covering decisive evidence
             gfc_started_at = time.perf_counter()
             gfc_claims = []
             is_relevant = False
@@ -2523,7 +2522,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
             _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
             return
 
-        # Step 3 — Try GFC first, return early if relevant
+        # Step 3 — Try GFC first; only proposition-covering decisive evidence is terminal
         gfc_started_at = time.perf_counter()
         gfc_claims = []
         is_relevant = False
