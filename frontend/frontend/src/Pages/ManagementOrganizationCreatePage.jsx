@@ -48,7 +48,7 @@ function ManagementOrganizationCreatePage() {
       <div className="management-page management-page--form">
          <ManagementPageHeader
             title="Add Partner Organization"
-            subtitle="Create the institutional identity and initial platform trust record. The organization will manage its own public profile after a Organization Admin is invited separately."
+            subtitle="Create the organization record used for institutional review. This does not verify or activate the organization as a Partner."
             backTo="/management/organizations"
             backLabel="Partner Organizations"
          />
@@ -56,7 +56,7 @@ function ManagementOrganizationCreatePage() {
          <form className="management-create-form" onSubmit={submit} noValidate>
             <section className="management-form-section" aria-labelledby="identity-section-title">
                <div className="management-form-section__heading">
-                  <h2 id="identity-section-title">Institutional Identity</h2>
+                  <h2 id="identity-section-title">Organization identity</h2>
                   <p>Use the organization’s formal name and a stable URL-friendly slug.</p>
                </div>
                <div className="management-form-grid">
@@ -109,8 +109,8 @@ function ManagementOrganizationCreatePage() {
 
             <section className="management-form-section" aria-labelledby="trust-section-title">
                <div className="management-form-section__heading">
-                  <h2 id="trust-section-title">Initial Platform Trust</h2>
-                  <p>New organizations always begin Unverified and Not a Partner. After creation, authorized platform administrators can review and update their statuses through the separate, audited governance workflow.</p>
+                  <h2 id="trust-section-title">What happens after creation</h2>
+                  <p>New organizations always begin Unverified and Not a Partner. After creation, Platform Staff can complete institutional verification, provision the first Organization Admin, and activate the partnership through separate audited governance actions.</p>
                </div>
             </section>
 
