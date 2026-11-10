@@ -221,7 +221,7 @@ def submit_reconsideration(
 
     _record_reconsideration_event(
         reconsideration=reconsideration,
-        actor=actor,
+        actor=None,
         reason_code="PARTNERSHIP_RECONSIDERATION_SUBMITTED",
         notes="The Organization Admin submitted a suspension reconsideration request.",
     )
