@@ -1783,6 +1783,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             claim_id,
                             stage_prefix="gfc",
                         )
+                        gfc_evidence_assessed = True
                         evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
                         fact_check_groups = filter_reasoning_evidence_dossier_by_role(
                             evidence_dossier,
@@ -1793,8 +1794,49 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     )
                     has_persisted_evidence = bool(evidence_context)
                     if has_persisted_evidence:
-                    if run is not None:
-                        gfc_evidence_assessed = True
+                        try:
+                            ai_verdict = _evaluate_persisted_with_official_rating_policy(
+                                cleaned_claim,
+                                evidence_context,
+                                article_stance,
+                                official_rating_policy,
+                            )
+                            ai_verdict = calibrate_verdict_confidence(
+                                ai_verdict,
+                                fact_check_groups,
+                            )
+                            ai_verdict = _apply_noneditable_fallback_verdict_policy(
+                                ai_verdict,
+                                fact_check_groups,
+                                fallback_active=noneditable_context_fallback,
+                                required_anchor_tokens=noneditable_fallback_anchor_tokens,
+                                assertion_complete=noneditable_fallback_assertion_complete,
+                            )
+                        except LLMProviderUnavailableError:
+                            raise
+                        except Exception as exc:
+                            has_persisted_evidence = False
+                            _log_stage(
+                                claim_id,
+                                "gfc_llm_evaluation_failed",
+                                gfc_eval_started_at,
+                                error=str(exc)[:120],
+                            )
+                            logger.error(
+                                "GFC persisted-evidence evaluation failed "
+                                "for claim %s: %s",
+                                claim_id,
+                                exc,
+                            )
+                    else:
+                        _log_stage(
+                            claim_id,
+                            "gfc_persisted_evidence_unavailable",
+                            gfc_eval_started_at,
+                            verification_run_id=run.pk,
+                        )
+
+                if has_persisted_evidence:
                     _log_stage(
                         claim_id,
                         "gfc_llm_evaluation",
@@ -2669,6 +2711,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         claim_id,
                         stage_prefix="url_gfc",
                     )
+                    gfc_evidence_assessed = True
                     evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
                     fact_check_groups = filter_reasoning_evidence_dossier_by_role(
                         evidence_dossier,
@@ -2722,8 +2765,6 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     )
 
             if evaluation_completed:
-                if run is not None:
-                    gfc_evidence_assessed = True
                 _log_stage(
                     claim_id,
                     "url_gfc_llm_evaluation",
