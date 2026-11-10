@@ -54,7 +54,7 @@ function ManagementPipelineRunDetailPage() {
             title="Verification Run"
             subtitle={data ? `Run ${data.id}` : "Operational lifecycle and telemetry timeline"}
             backTo={backTo}
-            backLabel="Pipeline Health"
+            backLabel="Verification System Health"
          />
          <ManagementRequestState loading={loading} error={error} onRetry={retry}>
             {data ? (
