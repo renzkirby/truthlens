@@ -189,19 +189,6 @@ function professionalEventSummary(event, actorLabel) {
    return buildSummary ? buildSummary(actorLabel) : "";
 }
 
-function compactIdentifier(value) {
-   if (!value) {
-      return "Identifier unavailable";
-   }
-
-   const text = String(value);
-   if (text.length <= 20) {
-      return text;
-   }
-
-   return `${text.slice(0, 8)}…${text.slice(-6)}`;
-}
-
 function isEmptyRecord(value) {
    return !value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length === 0;
 }
