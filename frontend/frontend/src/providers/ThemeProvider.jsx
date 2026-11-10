@@ -40,7 +40,6 @@ export function ThemeProvider({ children }) {
       if (!mediaQuery) return undefined;
 
       const handleChange = (event) => setSystemPrefersDark(event.matches);
-      setSystemPrefersDark(mediaQuery.matches);
 
       if (typeof mediaQuery.addEventListener === "function") {
          mediaQuery.addEventListener("change", handleChange);
