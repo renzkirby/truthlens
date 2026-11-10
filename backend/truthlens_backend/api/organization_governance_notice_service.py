@@ -78,7 +78,7 @@ def snapshot_governance_notice_recipients(organization):
 
 
 def persist_governance_notice_recipients(*, governance_event, recipients):
-    """Persist the decision-time audience in the same transaction as the event."""
+    """Persist the decision-time audience, then queue delivery only after commit."""
 
     rows = [
         OrganizationGovernanceNoticeRecipient(
@@ -92,10 +92,18 @@ def persist_governance_notice_recipients(*, governance_event, recipients):
     if not rows:
         return []
 
-    return OrganizationGovernanceNoticeRecipient.objects.bulk_create(
-        rows,
-        ignore_conflicts=True,
-    )
+    created = OrganizationGovernanceNoticeRecipient.objects.bulk_create(rows)
+    recipient_ids = [row.pk for row in created]
+
+    def enqueue_after_commit():
+        from .organization_governance_delivery_service import (
+            enqueue_governance_notice_delivery,
+        )
+
+        enqueue_governance_notice_delivery(recipient_ids)
+
+    transaction.on_commit(enqueue_after_commit)
+    return created
 
 
 def list_governance_notices_for_user(user):
