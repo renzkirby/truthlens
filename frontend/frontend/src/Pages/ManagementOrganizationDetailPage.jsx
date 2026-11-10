@@ -39,7 +39,7 @@ function OrganizationGovernanceSection({
    const [endConfirmationOpen, setEndConfirmationOpen] = useState(false);
    const [suspensionForm, setSuspensionForm] = useState({
       suspension_type: "",
-      factor: "",
+      factors: [],
       severity: "",
       reason: "",
       policy_basis: "",
@@ -49,7 +49,7 @@ function OrganizationGovernanceSection({
    const [endingForm, setEndingForm] = useState({
       ending_type: "",
       ground: "",
-      factor: "",
+      factors: [],
       severity: "",
       reason: "",
       policy_basis: "",
@@ -141,7 +141,7 @@ function OrganizationGovernanceSection({
       const body = selectedAction.key === "suspend"
          ? {
             suspension_type: suspensionForm.suspension_type,
-            factors: suspensionForm.factor ? [suspensionForm.factor] : [],
+            factors: suspensionForm.factors,
             severity: suspensionForm.severity,
             reason: suspensionForm.reason,
             policy_basis: suspensionForm.policy_basis,
@@ -189,7 +189,7 @@ function OrganizationGovernanceSection({
             body: {
                ending_type: endingForm.ending_type,
                ground: endingForm.ground,
-               factors: endingForm.factor ? [endingForm.factor] : [],
+               factors: endingForm.factors,
                severity: endingForm.severity,
                reason: endingForm.reason,
                policy_basis: endingForm.policy_basis,
@@ -254,13 +254,52 @@ function OrganizationGovernanceSection({
                ...current,
                ending_type: value,
                ground: "",
-               factor: value === "VOLUNTARY_WITHDRAWAL" ? "" : current.factor,
+               factors: value === "VOLUNTARY_WITHDRAWAL" ? [] : current.factors,
                severity: value === "TERMINATION_FOR_CAUSE" ? current.severity : "",
             };
          }
          return { ...current, [field]: value };
       });
    };
+
+   const toggleSuspensionFactor = (factor) => {
+      setSuspensionForm((current) => ({
+         ...current,
+         factors: current.factors.includes(factor)
+            ? current.factors.filter((value) => value !== factor)
+            : [...current.factors, factor],
+      }));
+   };
+   const toggleEndingFactor = (factor) => {
+      setEndingForm((current) => ({
+         ...current,
+         factors: current.factors.includes(factor)
+            ? current.factors.filter((value) => value !== factor)
+            : [...current.factors, factor],
+      }));
+   };
+   const suspensionReady = Boolean(
+      suspensionForm.suspension_type
+      && suspensionForm.factors.length
+      && suspensionForm.severity
+      && suspensionForm.reason.trim()
+      && (
+         suspensionForm.suspension_type !== "REMEDIAL"
+         || suspensionForm.required_remediation.trim()
+      )
+   );
+   const endingReady = Boolean(
+      endingForm.ending_type
+      && endingForm.ground
+      && endingForm.reason.trim()
+      && (
+         endingForm.ending_type !== "TERMINATION_FOR_CAUSE"
+         || (
+            endingForm.factors.length
+            && ["HIGH", "CRITICAL"].includes(endingForm.severity)
+         )
+      )
+   );
 
    return (
       <section className="management-detail-section management-governance-section">
@@ -427,6 +466,7 @@ function OrganizationGovernanceSection({
             error={error?.message}
             confirmLabel={selectedAction?.label || "Confirm"}
             confirmVariant={selectedAction?.variant || "primary"}
+            confirmDisabled={selectedAction?.key === "suspend" && !suspensionReady}
             processing={pending}
             onConfirm={executeGovernanceAction}
             onClose={() => setConfirmationAction(null)}
@@ -439,6 +479,7 @@ function OrganizationGovernanceSection({
                         value={suspensionForm.suspension_type}
                         onChange={(event) => updateSuspensionForm("suspension_type", event.target.value)}
                         disabled={pending}
+                        required
                      >
                         <option value="">Select suspension type</option>
                         <option value="REMEDIAL">Remedial Suspension</option>
@@ -446,25 +487,30 @@ function OrganizationGovernanceSection({
                         <option value="ADMINISTRATIVE">Administrative Suspension</option>
                      </select>
                   </label>
-                  <label className="management-form-field">
-                     <span>Primary factor</span>
-                     <select
-                        value={suspensionForm.factor}
-                        onChange={(event) => updateSuspensionForm("factor", event.target.value)}
-                        disabled={pending}
-                     >
-                        <option value="">Select factor</option>
+                  <fieldset className="management-governance-factor-group">
+                     <legend>Factor(s)</legend>
+                     <p>Select every factor materially relevant to this suspension.</p>
+                     <div>
                         {partnershipFactors.map(([value, label]) => (
-                           <option key={value} value={value}>{label}</option>
+                           <label key={value}>
+                              <input
+                                 type="checkbox"
+                                 checked={suspensionForm.factors.includes(value)}
+                                 onChange={() => toggleSuspensionFactor(value)}
+                                 disabled={pending}
+                              />
+                              <span>{label}</span>
+                           </label>
                         ))}
-                     </select>
-                  </label>
+                     </div>
+                  </fieldset>
                   <label className="management-form-field">
                      <span>Severity</span>
                      <select
                         value={suspensionForm.severity}
                         onChange={(event) => updateSuspensionForm("severity", event.target.value)}
                         disabled={pending}
+                        required
                      >
                         <option value="">Select severity</option>
                         {severityOptions.map(([value, label]) => (
@@ -479,6 +525,7 @@ function OrganizationGovernanceSection({
                         onChange={(event) => updateSuspensionForm("reason", event.target.value)}
                         rows={4}
                         disabled={pending}
+                        required
                         placeholder="Describe the material facts supporting this suspension."
                      />
                   </label>
@@ -499,6 +546,7 @@ function OrganizationGovernanceSection({
                            onChange={(event) => updateSuspensionForm("required_remediation", event.target.value)}
                            rows={3}
                            disabled={pending}
+                           required
                            placeholder="State what the organization must correct before reinstatement review."
                         />
                      </label>
@@ -523,6 +571,7 @@ function OrganizationGovernanceSection({
             error={error?.message}
             confirmLabel="End partnership"
             confirmVariant="destructive"
+            confirmDisabled={!endingReady}
             processing={pending}
             onConfirm={endPartnership}
             onClose={() => setEndConfirmationOpen(false)}
@@ -534,6 +583,7 @@ function OrganizationGovernanceSection({
                      value={endingForm.ending_type}
                      onChange={(event) => updateEndingForm("ending_type", event.target.value)}
                      disabled={pending}
+                     required
                   >
                      <option value="">Select ending type</option>
                      <option value="VOLUNTARY_WITHDRAWAL">Voluntary Withdrawal</option>
@@ -547,6 +597,7 @@ function OrganizationGovernanceSection({
                      value={endingForm.ground}
                      onChange={(event) => updateEndingForm("ground", event.target.value)}
                      disabled={pending || !endingForm.ending_type}
+                     required
                   >
                      <option value="">Select ground</option>
                      {(endingGroundOptions[endingForm.ending_type] || []).map(([value, label]) => (
@@ -555,19 +606,27 @@ function OrganizationGovernanceSection({
                   </select>
                </label>
                {endingForm.ending_type !== "VOLUNTARY_WITHDRAWAL" ? (
-                  <label className="management-form-field">
-                     <span>{endingForm.ending_type === "TERMINATION_FOR_CAUSE" ? "Primary factor" : "Related factor (optional)"}</span>
-                     <select
-                        value={endingForm.factor}
-                        onChange={(event) => updateEndingForm("factor", event.target.value)}
-                        disabled={pending}
-                     >
-                        <option value="">Select factor</option>
+                  <fieldset className="management-governance-factor-group">
+                     <legend>{endingForm.ending_type === "TERMINATION_FOR_CAUSE" ? "Factor(s)" : "Related factor(s) (optional)"}</legend>
+                     <p>
+                        {endingForm.ending_type === "TERMINATION_FOR_CAUSE"
+                           ? "Select every factor materially relevant to this termination."
+                           : "Select factors only when they help explain the administrative conclusion."}
+                     </p>
+                     <div>
                         {partnershipFactors.map(([value, label]) => (
-                           <option key={value} value={value}>{label}</option>
+                           <label key={value}>
+                              <input
+                                 type="checkbox"
+                                 checked={endingForm.factors.includes(value)}
+                                 onChange={() => toggleEndingFactor(value)}
+                                 disabled={pending}
+                              />
+                              <span>{label}</span>
+                           </label>
                         ))}
-                     </select>
-                  </label>
+                     </div>
+                  </fieldset>
                ) : null}
                {endingForm.ending_type === "TERMINATION_FOR_CAUSE" ? (
                   <label className="management-form-field">
@@ -576,6 +635,7 @@ function OrganizationGovernanceSection({
                         value={endingForm.severity}
                         onChange={(event) => updateEndingForm("severity", event.target.value)}
                         disabled={pending}
+                        required
                      >
                         <option value="">Select severity</option>
                         <option value="HIGH">High</option>
@@ -590,6 +650,7 @@ function OrganizationGovernanceSection({
                      onChange={(event) => updateEndingForm("reason", event.target.value)}
                      rows={4}
                      disabled={pending}
+                     required
                      placeholder="Describe the material facts supporting the conclusion of this partnership."
                   />
                </label>
