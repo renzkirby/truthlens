@@ -63,6 +63,26 @@ function formatLabel(value, fallback = "Unavailable") {
       .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
+const EVIDENCE_HISTORY_LABELS = {
+   CASE_CREATED: "Evidence review created",
+   CASE_CLAIMED: "Evidence review claimed",
+   CASE_ASSIGNED: "Reviewer assigned",
+   CASE_UNASSIGNED: "Reviewer unassigned",
+   REVIEW_STARTED: "Evidence review started",
+   CASE_ESCALATED: "Evidence review escalated",
+   CASE_RESOLVED: "Evidence review completed",
+   CASE_REOPENED: "Evidence review reopened",
+   CASE_CANCELLED: "Evidence review cancelled",
+   EVIDENCE_VERIFIED: "Evidence approved",
+   EVIDENCE_REJECTED: "Evidence rejected",
+   EVIDENCE_REOPENED: "Evidence review reopened",
+};
+
+function formatEvidenceHistoryLabel(event) {
+   return EVIDENCE_HISTORY_LABELS[event?.event_type]
+      || formatLabel(event?.event_type, "Review event");
+}
+
 function formatDateTime(value, fallback = "Not recorded") {
    if (!value) {
       return fallback;
@@ -1237,9 +1257,6 @@ function EvidenceReviewContent({
                            <h4 id="evidence-detail-heading" ref={detailHeadingRef} tabIndex="-1">
                               {getEvidenceTitle(detail)}
                            </h4>
-                           <span className={`evidence-full-case-id ${guidedMode ? "is-guided-secondary-id" : ""}`}>
-                              Case ID: {detail.id}
-                           </span>
                         </div>
                         <div className="evidence-detail-badges">
                            <span className={`evidence-disposition disposition-${evidence?.evidence_status?.toLowerCase() || "unknown"}`}>
@@ -1662,7 +1679,7 @@ function EvidenceReviewContent({
                         {Array.isArray(detail.events) && detail.events.length > 0 ? (
                            <details className="evidence-history-disclosure">
                               <summary>
-                                 <span>Case events</span>
+                                 <span>Review history</span>
                                  <span>{detail.events.length} {detail.events.length === 1 ? "event" : "events"}</span>
                               </summary>
                               <ol className="evidence-event-list">
@@ -1671,12 +1688,12 @@ function EvidenceReviewContent({
                                        <span className="evidence-event-marker" aria-hidden="true" />
                                        <div>
                                           <div className="evidence-event-heading">
-                                             <strong>{formatLabel(event.event_type)}</strong>
+                                             <strong>{formatEvidenceHistoryLabel(event)}</strong>
                                              <FormattedDateTime value={event.created_at} />
                                           </div>
-                                          <p>Actor: {event.actor?.username ? `@${event.actor.username}` : "Actor not displayed"}</p>
+                                          <p>Performed by: {event.actor?.username ? `@${event.actor.username}` : "System or historical actor"}</p>
                                           {(event.from_status || event.to_status) && (
-                                             <p>Case transition: {formatLabel(event.from_status, "None")} → {formatLabel(event.to_status, "None")}</p>
+                                             <p>Review status: {formatLabel(event.from_status, "Not started")} → {formatLabel(event.to_status, "Not recorded")}</p>
                                           )}
                                           {event.reason_code && <p>Reason: {formatLabel(event.reason_code)}</p>}
                                           {event.notes && <p>Notes: {event.notes}</p>}
