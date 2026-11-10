@@ -31,6 +31,7 @@ NOTIFICATION_METADATA = {
     Type.FACT_CHECK_PUBLISHED: ("WORKSPACE", "INFORMATIONAL"),
     Type.FACTUAL_CORRECTION_PUBLISHED: ("WORKSPACE", "IMPORTANT"),
     Type.ORGANIZATION_MEMBERSHIP_CHANGED: ("ORGANIZATION", "IMPORTANT"),
+    Type.ORGANIZATION_GOVERNANCE_CHANGED: ("ORGANIZATION", "ACTION_REQUIRED"),
     Type.THREAD_COMMENTED: ("COMMUNITY", "SOCIAL"),
     Type.EVIDENCE_REVIEWED: ("COMMUNITY", "INFORMATIONAL"),
     Type.USER_FOLLOWED: ("COMMUNITY", "SOCIAL"),
@@ -86,6 +87,10 @@ def dispatch_after_commit(callback, *args, **kwargs):
 
 def notification_destination(notification):
     target = notification.target_type
+    if target == Target.GOVERNANCE_NOTICE:
+        if notification.target_id is None:
+            return None
+        return f"/governance/{notification.target_id}"
     if target == Target.WORKSPACE:
         return "/workspace"
     if target == Target.USER_PROFILE:
