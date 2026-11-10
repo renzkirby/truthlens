@@ -976,6 +976,7 @@ def reinstate_partner_organization_partnership(
         str(prior_suspension.pk) if prior_suspension is not None else None
     )
 
+    notice_recipients = snapshot_governance_notice_recipients(organization)
     previous_state = _organization_status_state(organization)
     organization.partner_status = Organization.PartnerStatus.ACTIVE
     organization.save(update_fields=["partner_status", "updated_at"])
