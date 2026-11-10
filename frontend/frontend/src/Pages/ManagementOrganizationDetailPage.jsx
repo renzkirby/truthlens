@@ -594,6 +594,19 @@ function OrganizationGovernanceSection({
                         ))}
                      </div>
                   </fieldset>
+                  {suspensionHasOther ? (
+                     <label className="management-form-field">
+                        <span>Other factor explanation</span>
+                        <textarea
+                           value={suspensionForm.other_factor_explanation}
+                           onChange={(event) => updateSuspensionForm("other_factor_explanation", event.target.value)}
+                           rows={3}
+                           disabled={pending}
+                           required
+                           placeholder="Identify the underlying Partner standard and explain why the established factors do not fit."
+                        />
+                     </label>
+                  ) : null}
                   <label className="management-form-field">
                      <span>Severity</span>
                      <select
@@ -609,47 +622,235 @@ function OrganizationGovernanceSection({
                      </select>
                   </label>
                   <label className="management-form-field">
-                     <span>Reason / rationale</span>
+                     <span>Rationale</span>
                      <textarea
-                        value={suspensionForm.reason}
-                        onChange={(event) => updateSuspensionForm("reason", event.target.value)}
+                        value={suspensionForm.rationale}
+                        onChange={(event) => updateSuspensionForm("rationale", event.target.value)}
                         rows={4}
                         disabled={pending}
                         required
-                        placeholder="Describe the material facts supporting this suspension."
+                        placeholder="Describe the material facts and context supporting this suspension."
                      />
                   </label>
                   <label className="management-form-field">
-                     <span>Policy basis (optional)</span>
+                     <span>Policy basis</span>
                      <Input
                         value={suspensionForm.policy_basis}
                         onChange={(event) => updateSuspensionForm("policy_basis", event.target.value)}
                         disabled={pending}
-                        placeholder="e.g. Partner Verification Standards §3.2"
+                        required
+                        placeholder="e.g. Partnership Enforcement Policy §13.1"
+                     />
+                  </label>
+                  <label className="management-form-field">
+                     <span>Internal supporting basis</span>
+                     <textarea
+                        value={suspensionForm.supporting_basis}
+                        onChange={(event) => updateSuspensionForm("supporting_basis", event.target.value)}
+                        rows={3}
+                        disabled={pending}
+                        required
+                        placeholder="Internal evidence or records supporting the decision. This is not shown to the organization."
+                     />
+                     <small>Internal Platform Governance only.</small>
+                  </label>
+                  <label className="management-form-field">
+                     <span>Supporting references (optional)</span>
+                     <textarea
+                        value={suspensionForm.supporting_references}
+                        onChange={(event) => updateSuspensionForm("supporting_references", event.target.value)}
+                        rows={2}
+                        disabled={pending}
+                        placeholder="One internal reference per line, up to 10."
                      />
                   </label>
                   {suspensionForm.suspension_type === "REMEDIAL" ? (
-                     <label className="management-form-field">
-                        <span>Required remediation</span>
-                        <textarea
-                           value={suspensionForm.required_remediation}
-                           onChange={(event) => updateSuspensionForm("required_remediation", event.target.value)}
-                           rows={3}
-                           disabled={pending}
-                           required
-                           placeholder="State what the organization must correct before reinstatement review."
-                        />
-                     </label>
+                     <div className="management-governance-form">
+                        <strong>Remediation plan</strong>
+                        <p className="management-section__description">
+                           Record a clear path the organization can follow toward compliance and reinstatement review.
+                        </p>
+                        <label className="management-form-field">
+                           <span>Problem to correct</span>
+                           <textarea
+                              value={suspensionForm.remediation_problem}
+                              onChange={(event) => updateSuspensionForm("remediation_problem", event.target.value)}
+                              rows={2}
+                              disabled={pending}
+                              required
+                           />
+                        </label>
+                        <label className="management-form-field">
+                           <span>Required action</span>
+                           <textarea
+                              value={suspensionForm.remediation_required_action}
+                              onChange={(event) => updateSuspensionForm("remediation_required_action", event.target.value)}
+                              rows={2}
+                              disabled={pending}
+                              required
+                           />
+                        </label>
+                        <label className="management-form-field">
+                           <span>Evidence of compliance</span>
+                           <textarea
+                              value={suspensionForm.remediation_evidence_required}
+                              onChange={(event) => updateSuspensionForm("remediation_evidence_required", event.target.value)}
+                              rows={2}
+                              disabled={pending}
+                              required
+                           />
+                        </label>
+                        <label className="management-form-field">
+                           <span>Remediation deadline</span>
+                           <Input
+                              type="date"
+                              value={suspensionForm.remediation_deadline}
+                              onChange={(event) => updateSuspensionForm("remediation_deadline", event.target.value)}
+                              disabled={pending}
+                              required
+                           />
+                        </label>
+                        <label className="management-form-field">
+                           <span>Review method</span>
+                           <textarea
+                              value={suspensionForm.remediation_review_method}
+                              onChange={(event) => updateSuspensionForm("remediation_review_method", event.target.value)}
+                              rows={2}
+                              disabled={pending}
+                              required
+                           />
+                        </label>
+                        <label className="management-form-field">
+                           <span>Consequence if unresolved</span>
+                           <textarea
+                              value={suspensionForm.remediation_failure_consequence}
+                              onChange={(event) => updateSuspensionForm("remediation_failure_consequence", event.target.value)}
+                              rows={2}
+                              disabled={pending}
+                              required
+                           />
+                        </label>
+                     </div>
                   ) : null}
                   <label className="management-form-field">
-                     <span>Review date (optional)</span>
+                     <span>
+                        Review date{suspensionForm.suspension_type === "PRECAUTIONARY" ? "" : " (optional)"}
+                     </span>
                      <Input
                         type="date"
                         value={suspensionForm.review_date}
                         onChange={(event) => updateSuspensionForm("review_date", event.target.value)}
                         disabled={pending}
+                        required={suspensionForm.suspension_type === "PRECAUTIONARY"}
                      />
                   </label>
+               </div>
+            ) : selectedAction?.key === "reinstate" ? (
+               <div className="management-governance-form">
+                  <label className="management-form-field">
+                     <span>Basis for reinstatement</span>
+                     <select
+                        value={reinstatementForm.basis}
+                        onChange={(event) => updateReinstatementForm("basis", event.target.value)}
+                        disabled={pending}
+                        required
+                     >
+                        <option value="">Select reinstatement basis</option>
+                        {reinstatementBasisOptions.map(([value, label]) => (
+                           <option key={value} value={value}>{label}</option>
+                        ))}
+                     </select>
+                  </label>
+                  <label className="management-form-field">
+                     <span>Rationale</span>
+                     <textarea
+                        value={reinstatementForm.rationale}
+                        onChange={(event) => updateReinstatementForm("rationale", event.target.value)}
+                        rows={4}
+                        disabled={pending}
+                        required
+                        placeholder="Explain why continued suspension is no longer justified."
+                     />
+                  </label>
+                  {reinstatementForm.basis === "REMEDIATION_COMPLETED" ? (
+                     <label className="management-form-field">
+                        <span>Completed remediation</span>
+                        <textarea
+                           value={reinstatementForm.completed_remediation}
+                           onChange={(event) => updateReinstatementForm("completed_remediation", event.target.value)}
+                           rows={3}
+                           disabled={pending}
+                           required
+                           placeholder="Describe the remediation completed and accepted by TruthLens."
+                        />
+                     </label>
+                  ) : null}
+                  <label className="management-form-field">
+                     <span>Internal supporting basis</span>
+                     <textarea
+                        value={reinstatementForm.supporting_basis}
+                        onChange={(event) => updateReinstatementForm("supporting_basis", event.target.value)}
+                        rows={3}
+                        disabled={pending}
+                        required
+                        placeholder="Internal evidence supporting reinstatement. This is not shown to the organization."
+                     />
+                     <small>Internal Platform Governance only.</small>
+                  </label>
+                  <label className="management-form-field">
+                     <span>Supporting references (optional)</span>
+                     <textarea
+                        value={reinstatementForm.supporting_references}
+                        onChange={(event) => updateReinstatementForm("supporting_references", event.target.value)}
+                        rows={2}
+                        disabled={pending}
+                        placeholder="One internal reference per line, up to 10."
+                     />
+                  </label>
+                  <label className="management-form-field">
+                     <span>Continuing conditions (optional)</span>
+                     <textarea
+                        value={reinstatementForm.continuing_conditions}
+                        onChange={(event) => updateReinstatementForm("continuing_conditions", event.target.value)}
+                        rows={3}
+                        disabled={pending}
+                        placeholder="Leave blank when no formal monitoring conditions apply."
+                     />
+                  </label>
+                  {reinstatementForm.continuing_conditions.trim() ? (
+                     <>
+                        <label className="management-form-field">
+                           <span>Monitoring end date</span>
+                           <Input
+                              type="date"
+                              value={reinstatementForm.monitoring_end_date}
+                              onChange={(event) => updateReinstatementForm("monitoring_end_date", event.target.value)}
+                              disabled={pending}
+                              required
+                           />
+                        </label>
+                        <label className="management-form-field">
+                           <span>Success criteria</span>
+                           <textarea
+                              value={reinstatementForm.monitoring_success_criteria}
+                              onChange={(event) => updateReinstatementForm("monitoring_success_criteria", event.target.value)}
+                              rows={2}
+                              disabled={pending}
+                              required
+                           />
+                        </label>
+                        <label className="management-form-field">
+                           <span>Consequence if the serious issue recurs</span>
+                           <textarea
+                              value={reinstatementForm.monitoring_recurrence_consequence}
+                              onChange={(event) => updateReinstatementForm("monitoring_recurrence_consequence", event.target.value)}
+                              rows={2}
+                              disabled={pending}
+                              required
+                           />
+                        </label>
+                     </>
+                  ) : null}
                </div>
             ) : null}
          </ManagementConfirmDialog>
@@ -733,11 +934,24 @@ function OrganizationGovernanceSection({
                      </select>
                   </label>
                ) : null}
+               {endingHasOther ? (
+                  <label className="management-form-field">
+                     <span>Other factor explanation</span>
+                     <textarea
+                        value={endingForm.other_factor_explanation}
+                        onChange={(event) => updateEndingForm("other_factor_explanation", event.target.value)}
+                        rows={3}
+                        disabled={pending}
+                        required
+                        placeholder="Identify the underlying Partner standard and explain why the established factors do not fit."
+                     />
+                  </label>
+               ) : null}
                <label className="management-form-field">
-                  <span>Reason / rationale</span>
+                  <span>Rationale</span>
                   <textarea
-                     value={endingForm.reason}
-                     onChange={(event) => updateEndingForm("reason", event.target.value)}
+                     value={endingForm.rationale}
+                     onChange={(event) => updateEndingForm("rationale", event.target.value)}
                      rows={4}
                      disabled={pending}
                      required
@@ -745,12 +959,35 @@ function OrganizationGovernanceSection({
                   />
                </label>
                <label className="management-form-field">
-                  <span>Policy basis (optional)</span>
+                  <span>Policy basis</span>
                   <Input
                      value={endingForm.policy_basis}
                      onChange={(event) => updateEndingForm("policy_basis", event.target.value)}
                      disabled={pending}
+                     required
                      placeholder="e.g. Partnership Enforcement Policy §19.3"
+                  />
+               </label>
+               <label className="management-form-field">
+                  <span>Internal supporting basis</span>
+                  <textarea
+                     value={endingForm.supporting_basis}
+                     onChange={(event) => updateEndingForm("supporting_basis", event.target.value)}
+                     rows={3}
+                     disabled={pending}
+                     required
+                     placeholder="Internal evidence or records supporting the decision. This is not shown to the organization."
+                  />
+                  <small>Internal Platform Governance only.</small>
+               </label>
+               <label className="management-form-field">
+                  <span>Supporting references (optional)</span>
+                  <textarea
+                     value={endingForm.supporting_references}
+                     onChange={(event) => updateEndingForm("supporting_references", event.target.value)}
+                     rows={2}
+                     disabled={pending}
+                     placeholder="One internal reference per line, up to 10."
                   />
                </label>
             </div>
