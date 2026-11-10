@@ -121,6 +121,10 @@ class Notification(models.Model):
         FACT_CHECK_PUBLISHED = "FACT_CHECK_PUBLISHED", "Fact-check published"
         FACTUAL_CORRECTION_PUBLISHED = "FACTUAL_CORRECTION_PUBLISHED", "Factual correction published"
         ORGANIZATION_MEMBERSHIP_CHANGED = "ORGANIZATION_MEMBERSHIP_CHANGED", "Membership changed"
+        ORGANIZATION_GOVERNANCE_CHANGED = (
+            "ORGANIZATION_GOVERNANCE_CHANGED",
+            "Organization governance changed",
+        )
         THREAD_COMMENTED = "THREAD_COMMENTED", "Thread commented"
         EVIDENCE_REVIEWED = "EVIDENCE_REVIEWED", "Evidence reviewed"
         USER_FOLLOWED = "USER_FOLLOWED", "User followed"
@@ -131,6 +135,7 @@ class Notification(models.Model):
         OFFICIAL_FACT_CHECK = "OFFICIAL_FACT_CHECK", "Official fact-check"
         WORKSPACE = "WORKSPACE", "Workspace"
         ORGANIZATION = "ORGANIZATION", "Organization"
+        GOVERNANCE_NOTICE = "GOVERNANCE_NOTICE", "Governance notice"
         USER_PROFILE = "USER_PROFILE", "User profile"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -155,11 +160,12 @@ class Notification(models.Model):
                 "PARTNER_FACT_CHECK_PUBLISHED", "PARTNER_FACT_CHECK_CORRECTED",
                 "ARTICLE_RETURNED_FOR_REWORK", "FACT_CHECK_PUBLISHED",
                 "FACTUAL_CORRECTION_PUBLISHED", "ORGANIZATION_MEMBERSHIP_CHANGED",
-                "THREAD_COMMENTED", "EVIDENCE_REVIEWED", "USER_FOLLOWED",
+                "ORGANIZATION_GOVERNANCE_CHANGED", "THREAD_COMMENTED",
+                "EVIDENCE_REVIEWED", "USER_FOLLOWED",
             ]), name="notification_type_valid"),
             models.CheckConstraint(condition=Q(target_type__in=[
                 "CLAIM", "THREAD", "OFFICIAL_FACT_CHECK", "WORKSPACE", "ORGANIZATION",
-                "USER_PROFILE",
+                "GOVERNANCE_NOTICE", "USER_PROFILE",
             ]), name="notification_target_valid"),
         ]
         indexes = [
