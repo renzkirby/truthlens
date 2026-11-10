@@ -716,12 +716,13 @@ class ManagementApiTests(APITestCase):
             {"partner_status": Organization.PartnerStatus.SUSPENDED},
             format="json",
         )
-        self.assertEqual(suspended.status_code, status.HTTP_200_OK)
+        self.assertEqual(suspended.status_code, status.HTTP_409_CONFLICT)
         self.pending_organization.refresh_from_db()
         self.assertEqual(
             self.pending_organization.partner_status,
-            Organization.PartnerStatus.SUSPENDED,
+            Organization.PartnerStatus.ACTIVE,
         )
+        self.assertIn("governed Suspend Partnership action", suspended.data["detail"])
 
     def test_platform_trust_compatibility_endpoint_activates_true_onboarding_organization(
         self,
