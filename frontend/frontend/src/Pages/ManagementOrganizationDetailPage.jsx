@@ -1059,10 +1059,6 @@ function GovernanceContactSection({
    const [outOfBandDetails, setOutOfBandDetails] = useState("");
    const { mutate, pending, error, reset } = useManagementMutation();
 
-   useEffect(() => {
-      setEmail(organization.governance_contact_email || "");
-   }, [organization.governance_contact_email]);
-
    const saveContact = async (event) => {
       event.preventDefault();
       const result = await mutate(
@@ -1176,6 +1172,7 @@ function GovernanceContactSection({
                      disabled={pending}
                      onClick={() => {
                         reset();
+                        setEmail(organization.governance_contact_email || "");
                         setEditing(true);
                      }}
                   >
