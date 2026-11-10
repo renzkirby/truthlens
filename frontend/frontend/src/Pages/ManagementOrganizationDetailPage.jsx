@@ -1045,6 +1045,230 @@ function OrganizationGovernanceSection({
 }
 
 
+
+function GovernanceReconsiderationCard({
+   organizationId,
+   reconsideration,
+   onRefresh,
+   onFeedback,
+}) {
+   const [independenceNote, setIndependenceNote] = useState("");
+   const [overrideRationale, setOverrideRationale] = useState("");
+   const [outcome, setOutcome] = useState("UPHELD");
+   const [resolutionRationale, setResolutionRationale] = useState("");
+   const [internalBasis, setInternalBasis] = useState("");
+   const { mutate, pending, error, reset } = useManagementMutation();
+
+   const startReview = async (event) => {
+      event.preventDefault();
+      const result = await mutate(
+         resolveApiEndpoint(
+            "MANAGEMENT_GOVERNANCE_RECONSIDERATION_REVIEW",
+            organizationId,
+            reconsideration.id,
+         ),
+         {
+            method: "POST",
+            body: {
+               reviewer_independence_note: independenceNote.trim(),
+               independence_override_rationale: overrideRationale.trim(),
+            },
+         },
+      );
+      if (!result.ok) return;
+      onFeedback("Reconsideration review started.");
+      onRefresh();
+   };
+
+   const resolveReview = async (event) => {
+      event.preventDefault();
+      const result = await mutate(
+         resolveApiEndpoint(
+            "MANAGEMENT_GOVERNANCE_RECONSIDERATION_RESOLVE",
+            organizationId,
+            reconsideration.id,
+         ),
+         {
+            method: "POST",
+            body: {
+               outcome,
+               resolution_rationale: resolutionRationale.trim(),
+               internal_supporting_basis: internalBasis.trim(),
+            },
+         },
+      );
+      if (!result.ok) return;
+      onFeedback(
+         outcome === "REVOKED"
+            ? "Reconsideration resolved and the suspension was revoked through governed reinstatement."
+            : "Reconsideration resolved and the suspension was upheld.",
+      );
+      onRefresh();
+   };
+
+   return (
+      <article className="management-governance-action">
+         <div>
+            <div className="management-section__title-row">
+               <div>
+                  <strong>Suspension reconsideration</strong>
+                  <p>
+                     Target suspension event: {reconsideration.suspension_event_id}
+                  </p>
+               </div>
+               <ManagementStatus value={reconsideration.status} />
+            </div>
+            <DetailList items={[
+               { label: "Requested by", value: reconsideration.requested_by || "Historical user" },
+               { label: "Grounds", value: reconsideration.grounds?.join(", ") || "Not recorded" },
+               { label: "Organization statement", value: reconsideration.request_statement },
+               { label: "Original decision-maker", value: reconsideration.original_decision_maker || "Not recorded" },
+               { label: "Reviewer", value: reconsideration.reviewer || "Not assigned" },
+               { label: "Outcome", value: reconsideration.outcome || "Pending" },
+               reconsideration.resolution_rationale
+                  ? { label: "Organization-facing resolution", value: reconsideration.resolution_rationale }
+                  : null,
+            ].filter(Boolean)} />
+
+            {reconsideration.status === "SUBMITTED" ? (
+               <form className="management-governance-form" onSubmit={startReview}>
+                  <strong>Begin review</strong>
+                  <p className="management-section__description">
+                     Use an independent Platform Admin where practicable. If the original decision-maker must self-review, the backend enforces the required independence record.
+                  </p>
+                  <label className="management-form-field">
+                     <span>Reviewer independence note (optional unless required)</span>
+                     <textarea
+                        rows={3}
+                        value={independenceNote}
+                        onChange={(event) => {
+                           reset();
+                           setIndependenceNote(event.target.value);
+                        }}
+                        disabled={pending}
+                        placeholder="Record how reviewer independence is satisfied, or why independent review is unavailable."
+                     />
+                     <FieldError id={`reconsideration-independence-${reconsideration.id}`}>
+                        {error?.fields.reviewer_independence_note}
+                     </FieldError>
+                  </label>
+                  <label className="management-form-field">
+                     <span>Self-review override rationale (only when necessary)</span>
+                     <textarea
+                        rows={3}
+                        value={overrideRationale}
+                        onChange={(event) => {
+                           reset();
+                           setOverrideRationale(event.target.value);
+                        }}
+                        disabled={pending}
+                        placeholder="Required only when the original decision-maker reviews despite another active Platform Admin being available."
+                     />
+                     <FieldError id={`reconsideration-override-${reconsideration.id}`}>
+                        {error?.fields.independence_override_rationale}
+                     </FieldError>
+                  </label>
+                  <Button type="submit" loading={pending} loadingLabel="Starting review…">
+                     Start review
+                  </Button>
+               </form>
+            ) : null}
+
+            {reconsideration.status === "UNDER_REVIEW" ? (
+               <form className="management-governance-form" onSubmit={resolveReview}>
+                  <strong>Resolve review</strong>
+                  <label className="management-form-field">
+                     <span>Outcome</span>
+                     <select
+                        value={outcome}
+                        onChange={(event) => setOutcome(event.target.value)}
+                        disabled={pending}
+                     >
+                        <option value="UPHELD">Upheld</option>
+                        <option value="REVOKED">Revoked</option>
+                     </select>
+                  </label>
+                  <label className="management-form-field">
+                     <span>Organization-facing resolution rationale</span>
+                     <textarea
+                        rows={4}
+                        value={resolutionRationale}
+                        onChange={(event) => {
+                           reset();
+                           setResolutionRationale(event.target.value);
+                        }}
+                        disabled={pending}
+                        required
+                        minLength={20}
+                        placeholder="Explain why the suspension is upheld or revoked."
+                     />
+                  </label>
+                  <label className="management-form-field">
+                     <span>Internal supporting basis</span>
+                     <textarea
+                        rows={4}
+                        value={internalBasis}
+                        onChange={(event) => {
+                           reset();
+                           setInternalBasis(event.target.value);
+                        }}
+                        disabled={pending}
+                        required
+                        minLength={20}
+                        placeholder="Internal evidence supporting the reconsideration outcome. This is not shown to the organization."
+                     />
+                     <small>Internal Platform Governance only.</small>
+                  </label>
+                  <Button
+                     type="submit"
+                     variant={outcome === "REVOKED" ? "primary" : "secondary"}
+                     loading={pending}
+                     loadingLabel="Resolving…"
+                     disabled={
+                        resolutionRationale.trim().length < 20
+                        || internalBasis.trim().length < 20
+                     }
+                  >
+                     Resolve reconsideration
+                  </Button>
+               </form>
+            ) : null}
+
+            {error ? <ManagementFeedback tone="error">{error.message}</ManagementFeedback> : null}
+         </div>
+      </article>
+   );
+}
+
+function GovernanceReconsiderationSection({
+   organization,
+   onRefresh,
+   onFeedback,
+}) {
+   const reconsiderations = organization.governance_reconsiderations || [];
+   if (!reconsiderations.length) return null;
+
+   return (
+      <section className="management-detail-section">
+         <h2>Suspension reconsideration</h2>
+         <p className="management-section__description">
+            Organization-requested review of a suspension. Submission never restores professional authority; only a revoked outcome uses the governed reinstatement transition.
+         </p>
+         <div className="management-governance-correction-list">
+            {reconsiderations.map((reconsideration) => (
+               <GovernanceReconsiderationCard
+                  key={reconsideration.id}
+                  organizationId={organization.id}
+                  reconsideration={reconsideration}
+                  onRefresh={onRefresh}
+                  onFeedback={onFeedback}
+               />
+            ))}
+         </div>
+      </section>
+   );
+}
+
 function GovernanceContactSection({
    organization,
    onRefresh,
@@ -1617,6 +1841,11 @@ function ManagementOrganizationDetailPage() {
                      onFeedback={showFeedback}
                   />
                   <GovernanceContactSection
+                     organization={data}
+                     onRefresh={retry}
+                     onFeedback={showFeedback}
+                  />
+                  <GovernanceReconsiderationSection
                      organization={data}
                      onRefresh={retry}
                      onFeedback={showFeedback}

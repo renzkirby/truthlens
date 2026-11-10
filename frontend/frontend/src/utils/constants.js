@@ -114,6 +114,16 @@ export const API_ENDPOINTS = {
       `management/organizations/${encodeURIComponent(organizationId)}/governance-notices/fallback/out-of-band/`,
    MANAGEMENT_ORGANIZATION_GOVERNANCE_NOTICE_RETRY: (organizationId) =>
       `management/organizations/${encodeURIComponent(organizationId)}/governance-notices/retry/`,
+   MANAGEMENT_GOVERNANCE_RECONSIDERATION_REVIEW: (organizationId, reconsiderationId) =>
+      `management/organizations/${encodeURIComponent(organizationId)}/reconsiderations/${encodeURIComponent(reconsiderationId)}/review/`,
+   MANAGEMENT_GOVERNANCE_RECONSIDERATION_RESOLVE: (organizationId, reconsiderationId) =>
+      `management/organizations/${encodeURIComponent(organizationId)}/reconsiderations/${encodeURIComponent(reconsiderationId)}/resolve/`,
+   GOVERNANCE_NOTICE_DETAIL: (noticeId) =>
+      `governance/notices/${encodeURIComponent(noticeId)}/`,
+   GOVERNANCE_NOTICE_VIEWED: (noticeId) =>
+      `governance/notices/${encodeURIComponent(noticeId)}/viewed/`,
+   GOVERNANCE_NOTICE_RECONSIDERATION: (noticeId) =>
+      `governance/notices/${encodeURIComponent(noticeId)}/reconsideration/`,
    MANAGEMENT_ORGANIZATION_VERIFY: (organizationId) =>
       `management/organizations/${encodeURIComponent(organizationId)}/verification/verify/`,
    MANAGEMENT_ORGANIZATION_REJECT_VERIFICATION: (organizationId) =>

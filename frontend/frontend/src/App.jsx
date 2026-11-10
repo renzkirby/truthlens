@@ -15,6 +15,7 @@ import VerifyEmailPage from "./Pages/VerifyEmailPage.jsx";
 import Toast from "./components/Toast";
 import UserHub from "./Pages/UserHub.jsx";
 import NotificationPage from "./Pages/NotificationPage.jsx";
+import GovernanceNoticePage from "./Pages/GovernanceNoticePage.jsx";
 import SettingsPage from "./Pages/SettingsPage.jsx";
 import DeepAnalysisPage from "./Pages/DeepAnalysisPage.jsx";
 import OnboardingPage from "./Pages/OnboardingPage.jsx";
@@ -147,6 +148,7 @@ function App() {
                      <Route path="/user/:username" element={<UserProfile />} />
                      <Route path="/settings" element={<SettingsPage />} />
                      <Route path="/notifications" element={<NotificationPage />} />
+                     <Route path="/governance/:noticeId" element={<GovernanceNoticePage />} />
 
                      {/* Capability-driven operational workspace */}
                      <Route element={<PrivateRoute requireWorkspace />}>
