@@ -1,9 +1,11 @@
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.core import mail
 from django.test import override_settings
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -274,8 +276,7 @@ class GovernanceNoticeDeliveryTests(APITestCase):
             "remediation_evidence_required": (
                 "Updated evidence-review procedure and corrected investigation records."
             ),
-            "remediation_deadline": __import__("django").utils.timezone.localdate()
-            + __import__("datetime").timedelta(days=30),
+            "remediation_deadline": timezone.localdate() + timedelta(days=30),
             "remediation_review_method": (
                 "Platform Governance will review the submitted procedure and records."
             ),
