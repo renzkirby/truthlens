@@ -46,6 +46,11 @@ test("stored theme defaults safely to light and rejects invalid values", () => {
    assert.equal(readStoredThemePreference(createStorage({ [THEME_STORAGE_KEY]: "dark" })), "dark");
 });
 
+test("missing storage safely falls back without throwing", () => {
+   assert.equal(readStoredThemePreference(undefined), "light");
+   assert.equal(writeStoredThemePreference("dark", undefined), false);
+});
+
 test("storage failures do not break theme initialization", () => {
    const throwingStorage = {
       getItem() {

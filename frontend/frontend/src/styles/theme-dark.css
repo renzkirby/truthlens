@@ -343,3 +343,76 @@ html[data-theme="dark"] :is(
    background: var(--tl-color-bg-elevated);
    box-shadow: var(--tl-shadow-lg);
 }
+
+
+/* Onboarding is application UI, not media. Convert its legacy white cards. */
+html[data-theme="dark"] :is(
+   .ob-browser-mockup,
+   .ob-browser-url,
+   .ob-verify-card,
+   .ob-thread-card,
+   .ob-stat-chip
+) {
+   border-color: var(--tl-color-border-soft);
+   background: var(--tl-color-bg-surface);
+   box-shadow: var(--tl-shadow-sm);
+}
+
+html[data-theme="dark"] .ob-vtab--active {
+   color: var(--tl-color-brand-primary);
+   background: var(--tl-color-status-info-bg);
+}
+
+html[data-theme="dark"] .ob-verify-btn {
+   color: #ffffff;
+   background: var(--tl-color-brand-fill);
+}
+
+/* Verification-scope management dialog still contains legacy literals. */
+html[data-theme="dark"] .org-scope-dialog__heading {
+   border-bottom-color: var(--tl-color-border-default);
+}
+
+html[data-theme="dark"] .org-scope-dialog :is(
+   .org-scope-dialog__heading p,
+   .org-scope-dialog__form fieldset > p,
+   .org-scope-input-label small,
+   .org-scope-note,
+   .org-scope-domain small,
+   .org-scope-panel__header p,
+   .org-scope-summary dt
+) {
+   color: var(--tl-color-text-muted);
+}
+
+html[data-theme="dark"] .org-scope-dialog :is(
+   .org-scope-dialog__form legend,
+   .org-scope-input-label
+) {
+   color: var(--tl-color-text-main);
+}
+
+html[data-theme="dark"] .org-scope-dialog__heading button,
+html[data-theme="dark"] .org-scope-domain,
+html[data-theme="dark"] .org-scope-input-label textarea {
+   border-color: var(--tl-color-border-default);
+   color: var(--tl-color-text-main);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .org-scope-domain.selected {
+   border-color: var(--tl-color-brand-primary);
+   background: var(--tl-color-status-info-bg);
+}
+
+html[data-theme="dark"] .org-scope-error {
+   color: var(--tl-color-status-critical-text);
+   border-color: var(--tl-color-status-critical-border);
+   background: var(--tl-color-status-critical-bg);
+}
+
+/* This public landing illustration intentionally previews the browser extension
+   on a light canvas; it is illustrative content, not an unthemed app panel. */
+html[data-theme="dark"] .landing-page .extension-window {
+   color-scheme: light;
+}

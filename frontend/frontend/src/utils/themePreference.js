@@ -15,20 +15,30 @@ export function resolveThemePreference(preference, systemPrefersDark = false) {
    return normalized;
 }
 
-export function readStoredThemePreference(storage = globalThis?.localStorage) {
+function getBrowserStorage() {
    try {
-      if (!storage?.getItem) return "light";
-      return normalizeThemePreference(storage.getItem(THEME_STORAGE_KEY));
+      return typeof globalThis === "undefined" ? null : globalThis.localStorage;
+   } catch {
+      return null;
+   }
+}
+
+export function readStoredThemePreference(storage) {
+   const target = arguments.length ? storage : getBrowserStorage();
+   try {
+      if (!target?.getItem) return "light";
+      return normalizeThemePreference(target.getItem(THEME_STORAGE_KEY));
    } catch {
       return "light";
    }
 }
 
-export function writeStoredThemePreference(preference, storage = globalThis?.localStorage) {
+export function writeStoredThemePreference(preference, storage) {
    const normalized = normalizeThemePreference(preference);
+   const target = arguments.length > 1 ? storage : getBrowserStorage();
    try {
-      storage?.setItem?.(THEME_STORAGE_KEY, normalized);
-      return true;
+      target?.setItem?.(THEME_STORAGE_KEY, normalized);
+      return Boolean(target?.setItem);
    } catch {
       return false;
    }
