@@ -2091,7 +2091,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.assertNotIn("vault_search_success", stages)
         self.assertEqual(
             self.relevance.call_args_list[0].args,
-            (self.cleaned["cleaned_claim"], "External fact-check"),
+            (self.cleaned["cleaned_claim"], ["External fact-check"]),
         )
 
     def test_url_semantic_match_continues_normal_evidence_path(self):
@@ -2107,12 +2107,19 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.assertNotIn("url_vault_search_success", stages)
         self.assertEqual(
             self.relevance.call_args_list[0].args,
-            (self.cleaned["cleaned_claim"], "External fact-check"),
+            (self.cleaned["cleaned_claim"], ["External fact-check"]),
         )
 
     def test_image_gma_astronomy_candidate_rejects_earthquake_context(self):
         self.astronomy_earthquake_context()
-        self.relevance.return_value = True
+        self.relevance.return_value = {
+            "candidate_count": 1,
+            "relevant_candidate_count": 1,
+            "covered_candidate_count": 1,
+            "terminally_sufficient": True,
+            "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
+            "candidates": [],
+        }
 
         self.image()
 
@@ -2123,7 +2130,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.assertNotEqual(self.target.source_type, "TruthLens Verified Vault")
         self.assertEqual(
             self.relevance.call_args_list[0].args,
-            (self.cleaned["cleaned_claim"], "External fact-check"),
+            (self.cleaned["cleaned_claim"], ["External fact-check"]),
         )
         stages = [call.args[1] for call in self.log_stage.call_args_list]
         self.assertIn("vault_related_validation_deferred", stages)
@@ -2137,7 +2144,14 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
 
     def test_url_gma_astronomy_candidate_rejects_earthquake_context(self):
         self.astronomy_earthquake_context()
-        self.relevance.return_value = True
+        self.relevance.return_value = {
+            "candidate_count": 1,
+            "relevant_candidate_count": 1,
+            "covered_candidate_count": 1,
+            "terminally_sufficient": True,
+            "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
+            "candidates": [],
+        }
 
         self.url()
 
