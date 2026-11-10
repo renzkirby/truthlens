@@ -31,7 +31,19 @@ function ManagementInvitationsPage() {
 
    return (
       <div className="management-page">
-         <ManagementPageHeader title="Invitations" subtitle="Inspect organization membership and Organization Admin onboarding invitations." />
+         <ManagementPageHeader title="Invitation Records" subtitle="Review invitation delivery, status, and onboarding outcomes." />
+         <aside className="management-boundary-note" aria-label="Invitation record boundary">
+            <Icons name="info" size={19} />
+            <div>
+               <strong>Invitation history is not a central membership editor</strong>
+               <p>
+                  Partner Organization Admins manage ordinary membership invitations. Platform Staff
+                  can review those records here and manage initial Organization Admin provisioning
+                  through the relevant Partner Organization governance page.
+               </p>
+            </div>
+         </aside>
+
          <section className="management-filter-panel" aria-label="Invitation filters">
             <form className="management-search" onSubmit={(event) => { event.preventDefault(); updateFilter("q", draftQuery.trim()); }}>
                <label htmlFor="invitation-search">Search invitations</label>

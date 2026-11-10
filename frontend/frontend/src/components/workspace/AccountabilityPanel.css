@@ -320,6 +320,14 @@
    overflow-wrap: anywhere;
 }
 
+.accountability-event-summary {
+   max-width: 48rem;
+   margin: var(--tl-space-2) 0 0;
+   color: var(--tl-color-text-body);
+   font-size: var(--tl-text-sm);
+   line-height: 1.5;
+}
+
 .accountability-event-header time,
 .accountability-event-header > span {
    flex: 0 0 auto;

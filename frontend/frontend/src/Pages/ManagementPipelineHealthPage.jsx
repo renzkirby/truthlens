@@ -173,8 +173,8 @@ function ManagementPipelineHealthPage() {
    return (
       <div className="management-page management-pipeline-page">
          <ManagementPageHeader
-            title="Pipeline Health"
-            subtitle="Operational telemetry for recent verification runs, pipeline stages, and provider fallback behavior."
+            title="Verification System Health"
+            subtitle="Monitor whether automated verification is completing successfully and investigate failed or slow runs."
             actions={(
                <label className="management-window-control">
                   <span>Time window</span>
@@ -191,9 +191,11 @@ function ManagementPipelineHealthPage() {
          <div className="management-boundary-note">
             <Icons name="info" size={19} />
             <div>
-               <strong>Read-only operational telemetry</strong>
+               <strong>Use this page to diagnose verification operations</strong>
                <p>
-                  This view summarizes actual verification executions. It does not actively probe services or expose claim content, user activity, prompts, or evidence bodies.
+                  Start with failed runs and the Attention needed summary. Stage and provider details are
+                  diagnostic information for troubleshooting; this page does not expose claim content,
+                  user activity, prompts, or evidence bodies.
                </p>
             </div>
          </div>

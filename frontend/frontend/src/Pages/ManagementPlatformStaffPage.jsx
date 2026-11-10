@@ -163,7 +163,7 @@ function ManagementPlatformStaffPage() {
       <div className="management-page management-platform-staff-page">
          <ManagementPageHeader
             title="Platform Staff"
-            subtitle="Manage platform-governance identities and Platform Safety access."
+            subtitle="Manage the people authorized to operate TruthLens at the platform level."
             actions={(
                <Button
                   ref={inviteButtonRef}
@@ -178,12 +178,14 @@ function ManagementPlatformStaffPage() {
          <section className="management-platform-staff-boundary">
             <span aria-hidden="true"><Icons name="shield-user" size={20} /></span>
             <div>
-               <h2>Platform roles are separate from Community and partner roles</h2>
+               <h2>Platform Staff authority is separate from Partner Organization roles</h2>
                <p>
-                  Platform Safety Moderators can review Safety cases and Safety Audit history.
-                  They do not become Platform Admins or gain Partner Organization authority.
-                  While this platform role is active, the staff account does not participate
-                  in Community reputation.
+                  Platform Staff operate TruthLens on behalf of the platform. A person may also
+                  belong to a Partner Organization, but that professional role does not grant
+                  Platform Staff authority. Platform Safety Moderators can review Safety cases and
+                  Safety Action History; they do not become Platform Admins or gain Partner
+                  Organization authority. While a Platform Staff role is active, that account does
+                  not participate in Community reputation.
                </p>
             </div>
          </section>
@@ -194,7 +196,7 @@ function ManagementPlatformStaffPage() {
             <div className="management-platform-staff-section__heading">
                <div>
                   <h2>Current Platform Staff</h2>
-                  <p>Active platform-governance identities and their console access.</p>
+                  <p>People currently authorized to operate TruthLens and the access assigned to them.</p>
                </div>
             </div>
 
@@ -448,7 +450,7 @@ function ManagementPlatformStaffPage() {
             title="Revoke Platform Safety access?"
             description={
                revokeTarget
-                  ? `@${revokeTarget.username} will no longer be able to access Safety Review or Safety Audit through this platform role.`
+                  ? `@${revokeTarget.username} will no longer be able to access Safety Review or Safety Action History through this platform role.`
                   : ""
             }
             warning="This changes only the Platform Safety role. Any legitimate Partner Organization membership remains unchanged."

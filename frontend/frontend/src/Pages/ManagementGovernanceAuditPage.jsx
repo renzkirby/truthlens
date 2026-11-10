@@ -96,16 +96,17 @@ function ManagementGovernanceAuditPage() {
    return (
       <div className="management-page">
          <ManagementPageHeader
-            title="Governance Audit"
-            subtitle="Inspect attributable platform actions affecting Partner Organization governance."
+            title="Governance History"
+            subtitle="Review the permanent history of administrative and Partner Organization governance decisions."
          />
 
          <aside className="management-boundary-note" aria-label="Governance audit boundary">
             <Icons name="shield-check" size={20} />
             <div>
-               <strong>Read-only platform-governance history</strong>
+               <strong>Permanent, read-only governance record</strong>
                <p>
-                  This record covers controlled Partner Organization governance actions. It is not a general view of user activity.
+                  These records preserve who took a governance action, what changed, and when it
+                  occurred. They are retained for accountability and are not a general view of user activity.
                </p>
             </div>
          </aside>
@@ -170,9 +171,9 @@ function ManagementGovernanceAuditPage() {
             error={error}
             onRetry={retry}
             empty={data?.count === 0}
-            emptyMessage="No platform-governance events match the current filters."
+            emptyMessage="No governance history records match the current filters."
          >
-            <section className="management-table-wrap" aria-label="Governance audit events">
+            <section className="management-table-wrap" aria-label="Governance history records">
                <table className="management-table management-table--wide">
                   <thead>
                      <tr>
