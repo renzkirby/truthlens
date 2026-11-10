@@ -1400,6 +1400,54 @@
    flex-shrink: 0;
 }
 
+.hub-verdict-badge--fact {
+   color: #065f46;
+   border-color: #0e9f6e;
+   background: #d1fae5;
+}
+
+.hub-verdict-badge--fake {
+   color: #7f1d1d;
+   border-color: #e02424;
+   background: #fee2e2;
+}
+
+.hub-verdict-badge--misleading {
+   color: #78350f;
+   border-color: #d97706;
+   background: #fef3c7;
+}
+
+.hub-verdict-badge--satire {
+   color: #4c1d95;
+   border-color: #7c3aed;
+   background: #ede9fe;
+}
+
+.hub-verdict-badge--unverified {
+   color: #374151;
+   border-color: #6b7280;
+   background: #f3f4f6;
+}
+
+.hub-verdict-badge--pending {
+   color: #3730a3;
+   border-color: #6366f1;
+   background: #eef2ff;
+}
+
+.hub-verdict-badge--needs-context {
+   color: #9a3412;
+   border-color: #f97316;
+   background: #fff7ed;
+}
+
+.hub-verdict-badge--out-of-scope {
+   color: #374151;
+   border-color: #9ca3af;
+   background: #f3f4f6;
+}
+
 .hub-wrapper.loading,
 .hub-wrapper.error {
    display: flex;

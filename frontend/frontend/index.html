@@ -10,6 +10,37 @@
          name="viewport"
          content="width=device-width, initial-scale=1.0" />
       <meta
+         name="color-scheme"
+         content="light dark" />
+      <script>
+         (() => {
+            const storageKey = "truthlens.theme";
+            const allowed = new Set(["system", "light", "dark"]);
+            let preference = "light";
+
+            try {
+               const stored = window.localStorage.getItem(storageKey);
+               if (allowed.has(stored)) preference = stored;
+            } catch {
+               // Storage may be unavailable in private/restricted browser contexts.
+            }
+
+            const systemPrefersDark =
+               typeof window.matchMedia === "function" &&
+               window.matchMedia("(prefers-color-scheme: dark)").matches;
+            const resolved =
+               preference === "system"
+                  ? systemPrefersDark
+                     ? "dark"
+                     : "light"
+                  : preference;
+
+            document.documentElement.dataset.themePreference = preference;
+            document.documentElement.dataset.theme = resolved;
+            document.documentElement.style.colorScheme = resolved;
+         })();
+      </script>
+      <meta
          name="google-site-verification"
          content="LS793ZleHV4es382lIU74NaaR1I0LxNJlk_4R9nRjd4" />
       <title>TruthLens</title>

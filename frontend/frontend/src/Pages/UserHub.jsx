@@ -392,23 +392,17 @@ const TrustExplainerModal = ({ reputation, onClose }) => {
 const VerdictBadge = ({ verdict, claimabilityStatus }) => {
    const claimabilityMap = {
       PENDING: {
-         bg: "#eef2ff",
-         text: "#3730a3",
-         border: "#6366f1",
+         className: "pending",
          label: "Not assessed",
          Icon: "info",
       },
       INSUFFICIENT_CONTEXT: {
-         bg: "#fff7ed",
-         text: "#9a3412",
-         border: "#f97316",
+         className: "needs-context",
          label: "Needs context",
          Icon: "help-circle",
       },
       OUT_OF_SCOPE: {
-         bg: "#f3f4f6",
-         text: "#374151",
-         border: "#9ca3af",
+         className: "out-of-scope",
          label: "Out of scope",
          Icon: "alert-octagon",
       },
@@ -417,7 +411,7 @@ const VerdictBadge = ({ verdict, claimabilityStatus }) => {
    if (claimabilityStatus && claimabilityStatus !== "CLAIMABLE" && claimabilityMap[claimabilityStatus]) {
       const state = claimabilityMap[claimabilityStatus];
       return (
-         <span className="hub-verdict-badge" style={{ background: state.bg, color: state.text, borderColor: state.border }}>
+         <span className={`hub-verdict-badge hub-verdict-badge--${state.className}`}>
             <Icons name={state.Icon} size={12} strokeWidth={2.5} />
             {state.label}
          </span>
@@ -426,37 +420,27 @@ const VerdictBadge = ({ verdict, claimabilityStatus }) => {
 
    const map = {
       FACT: {
-         bg: "#d1fae5",
-         text: "#065f46",
-         border: "#0e9f6e",
+         className: "fact",
          label: "Fact",
          Icon: "check-circle",
       },
       FAKE: {
-         bg: "#fee2e2",
-         text: "#7f1d1d",
-         border: "#e02424",
+         className: "fake",
          label: "Fake",
          Icon: "x-circle",
       },
       MISLEADING: {
-         bg: "#fef3c7",
-         text: "#78350f",
-         border: "#d97706",
+         className: "misleading",
          label: "Misleading",
          Icon: "alert-triangle",
       },
       SATIRE: {
-         bg: "#ede9fe",
-         text: "#4c1d95",
-         border: "#7c3aed",
+         className: "satire",
          label: "Satire",
          Icon: "wand",
       },
       UNVERIFIED: {
-         bg: "#f3f4f6",
-         text: "#374151",
-         border: "#6b7280",
+         className: "unverified",
          label: "Unverified",
          Icon: "help-circle",
       },
@@ -466,7 +450,7 @@ const VerdictBadge = ({ verdict, claimabilityStatus }) => {
    const s = map[normalized] || map.UNVERIFIED;
 
    return (
-      <span className="hub-verdict-badge" style={{ background: s.bg, color: s.text, borderColor: s.border }}>
+      <span className={`hub-verdict-badge hub-verdict-badge--${s.className}`}>
          <Icons name={s.Icon} size={12} strokeWidth={2.5} />
          {s.label}
       </span>

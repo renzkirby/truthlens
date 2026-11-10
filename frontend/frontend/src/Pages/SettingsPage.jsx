@@ -5,6 +5,7 @@ import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import Textarea from "../components/ui/Textarea";
 import { useAuth } from "../hooks/useAuth";
+import { useTheme } from "../hooks/useTheme";
 import { resolveApiEndpoint } from "../utils/api";
 import { userFacingErrorMessage } from "../utils/userFacingError";
 
@@ -30,6 +31,7 @@ const authMethodLabel = (method) => {
 
 function SettingsPage() {
    const { user, authFetch, refreshUser, logout } = useAuth();
+   const { themePreference, setThemePreference } = useTheme();
    const [activeSection, setActiveSection] = useState("profile");
    const [formData, setFormData] = useState(() => profileFromUser(user));
    const [savedProfile, setSavedProfile] = useState(() => profileFromUser(user));
@@ -280,8 +282,8 @@ function SettingsPage() {
                <h1>Settings</h1>
                <p>
                   {hasPublicCommunityProfile
-                     ? "Manage your public profile and the security details tied to your account."
-                     : "Manage your platform account identity and security details."}
+                     ? "Manage your public profile, appearance, and the security details tied to your account."
+                     : "Manage your platform account identity, appearance, and security details."}
                </p>
             </header>
 
@@ -295,6 +297,15 @@ function SettingsPage() {
                   >
                      <Icons name="user" size={18} aria-hidden="true" />
                      <span>Profile</span>
+                  </button>
+                  <button
+                     type="button"
+                     className={`settings-nav__item ${activeSection === "appearance" ? "is-active" : ""}`}
+                     onClick={() => setActiveSection("appearance")}
+                     aria-current={activeSection === "appearance" ? "page" : undefined}
+                  >
+                     <Icons name="palette" size={18} aria-hidden="true" />
+                     <span>Appearance</span>
                   </button>
                   <button
                      type="button"
@@ -450,6 +461,70 @@ function SettingsPage() {
                               </div>
                            ) : null}
                         </form>
+                     </section>
+                  ) : activeSection === "appearance" ? (
+                     <section aria-labelledby="appearance-settings-title">
+                        <div className="settings-section__header">
+                           <h2 id="appearance-settings-title">Appearance</h2>
+                           <p>
+                              Choose how TruthLens looks on this browser. System follows your operating system or
+                              browser preference.
+                           </p>
+                        </div>
+
+                        <div className="settings-appearance">
+                           <div className="settings-appearance__heading">
+                              <h3>Theme</h3>
+                              <p>Changes apply immediately and are stored only in this browser.</p>
+                           </div>
+
+                           <div className="settings-theme-grid" role="radiogroup" aria-label="Theme">
+                              {[
+                                 { value: "system", label: "System", description: "Follow device", preview: "system" },
+                                 { value: "light", label: "Light", description: "Always light", preview: "light" },
+                                 { value: "dark", label: "Dark", description: "Always dark", preview: "dark" },
+                              ].map((option) => {
+                                 const selected = themePreference === option.value;
+                                 return (
+                                    <button
+                                       key={option.value}
+                                       type="button"
+                                       role="radio"
+                                       aria-checked={selected}
+                                       className={`settings-theme-card ${selected ? "is-selected" : ""}`}
+                                       onClick={() => setThemePreference(option.value)}
+                                    >
+                                       <span
+                                          className={`settings-theme-preview settings-theme-preview--${option.preview}`}
+                                          aria-hidden="true"
+                                       >
+                                          <span className="settings-theme-preview__bar" />
+                                          <span className="settings-theme-preview__body">
+                                             <span className="settings-theme-preview__card" />
+                                             <span className="settings-theme-preview__line" />
+                                             <span className="settings-theme-preview__line settings-theme-preview__line--short" />
+                                          </span>
+                                       </span>
+                                       <span className="settings-theme-card__meta">
+                                          <span>
+                                             <strong>{option.label}</strong>
+                                             <small>{option.description}</small>
+                                          </span>
+                                          <span className="settings-theme-card__radio" aria-hidden="true" />
+                                       </span>
+                                    </button>
+                                 );
+                              })}
+                           </div>
+
+                           <div className="settings-appearance__note">
+                              <Icons name="info" size={17} aria-hidden="true" />
+                              <p>
+                                 The account menu also includes a quick Dark mode switch. Using that switch selects an
+                                 explicit Light or Dark preference; choose System here to follow your device again.
+                              </p>
+                           </div>
+                        </div>
                      </section>
                   ) : (
                      <section aria-labelledby="security-settings-title">
