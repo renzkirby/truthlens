@@ -35,6 +35,9 @@ from .management_governance_service import (
     ManagementGovernanceValidationError,
     create_partner_organization,
 )
+from .organization_governance_delivery_service import (
+    enqueue_governance_notice_delivery,
+)
 from .organization_partnership_lifecycle_service import (
     OrganizationPartnershipLifecycleAuthorizationError,
     OrganizationPartnershipLifecycleConflict,
@@ -86,6 +89,7 @@ from .models import (
     ClaimInvestigationClassification,
     Institution,
     Organization,
+    OrganizationGovernanceNoticeRecipient,
     OrganizationInstitutionAffiliation,
     OrganizationInvitation,
     OrganizationMembership,
@@ -730,6 +734,41 @@ class ManagementOrganizationDetailView(generics.RetrieveAPIView):
 
     def get_serializer_context(self):
         return {**super().get_serializer_context(), "now": timezone.now()}
+
+
+class ManagementOrganizationGovernanceNoticeRetryView(APIView):
+    permission_classes = [IsPlatformManagementAdmin]
+
+    def post(self, request, organization_id):
+        organization = get_object_or_404(Organization, pk=organization_id)
+        retryable = {
+            OrganizationGovernanceNoticeRecipient.DeliveryStatus.PENDING,
+            OrganizationGovernanceNoticeRecipient.DeliveryStatus.FAILED,
+        }
+        recipient_ids = list(
+            OrganizationGovernanceNoticeRecipient.objects.filter(
+                governance_event__subject_organization=organization,
+            )
+            .filter(
+                Q(in_app_status__in=retryable)
+                | Q(email_status__in=retryable)
+            )
+            .order_by("created_at", "id")
+            .values_list("id", flat=True)
+        )
+
+        enqueue_governance_notice_delivery(recipient_ids)
+        return Response(
+            {
+                "queued": len(recipient_ids),
+                "detail": (
+                    "Governance notice delivery retry queued."
+                    if recipient_ids
+                    else "No pending or failed governance notice deliveries."
+                ),
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class ManagementOrganizationPlatformTrustView(APIView):
