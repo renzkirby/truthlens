@@ -89,6 +89,7 @@ class ManagementGovernanceAuditApiTests(APITestCase):
         new_state=None,
         context=None,
         notes="",
+        reason_code="",
     ):
         organization = organization or self.organization
         actor = self.superuser if actor is None else actor
@@ -115,6 +116,7 @@ class ManagementGovernanceAuditApiTests(APITestCase):
             new_state=new_state or {},
             context=context or {},
             notes=notes,
+            reason_code=reason_code,
         )
 
     def detail_url(self, event):
@@ -155,6 +157,14 @@ class ManagementGovernanceAuditApiTests(APITestCase):
                 action_type=(
                     AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED
                 ),
+            ),
+            self.make_event(
+                action_type=(
+                    AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED
+                ),
+                capability="MANAGE_ORGANIZATION",
+                authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+                reason_code="PARTNERSHIP_RECONSIDERATION_SUBMITTED",
             ),
             self.make_event(
                 action_type=AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CREATED,
