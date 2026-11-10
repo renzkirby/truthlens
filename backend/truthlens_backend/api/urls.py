@@ -113,6 +113,14 @@ urlpatterns = [
         name="management_organization_platform_trust",
     ),
     path(
+        (
+            "management/organizations/<uuid:organization_id>/"
+            "governance-notices/retry/"
+        ),
+        management_views.ManagementOrganizationGovernanceNoticeRetryView.as_view(),
+        name="management_organization_governance_notice_retry",
+    ),
+    path(
         "management/organizations/<uuid:organization_id>/verification/verify/",
         management_views.ManagementOrganizationVerifyView.as_view(),
         name="management_organization_verify",
