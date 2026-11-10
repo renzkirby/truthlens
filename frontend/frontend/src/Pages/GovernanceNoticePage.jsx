@@ -12,6 +12,19 @@ const dateFormatter = new Intl.DateTimeFormat(undefined, {
    timeStyle: "short",
 });
 
+const dateOnlyFormatter = new Intl.DateTimeFormat(undefined, {
+   dateStyle: "medium",
+});
+
+const remediationLabels = {
+   problem: "Problem to correct",
+   required_action: "Required action",
+   evidence_required: "Evidence of compliance",
+   deadline: "Remediation deadline",
+   review_method: "Review method",
+   failure_consequence: "Consequence if unresolved",
+};
+
 const groundOptions = [
    ["MATERIAL_FACTS_INCORRECT", "Material facts are incorrect"],
    ["RELEVANT_EVIDENCE_OVERLOOKED", "Relevant evidence was overlooked"],
@@ -30,6 +43,42 @@ function formatValue(value) {
    if (Array.isArray(value)) return value.length ? value.join(", ") : "Not recorded";
    if (typeof value === "object") return JSON.stringify(value);
    return String(value);
+}
+
+function formatDateOnly(value) {
+   if (!value) return "Not recorded";
+   const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+   if (!match) return formatValue(value);
+   const [, year, month, day] = match;
+   return dateOnlyFormatter.format(new Date(Number(year), Number(month) - 1, Number(day)));
+}
+
+function GovernanceDetailValue({ field, value }) {
+   if (
+      field === "remediation"
+      && value
+      && typeof value === "object"
+      && !Array.isArray(value)
+   ) {
+      const entries = Object.entries(remediationLabels)
+         .map(([key, label]) => [key, label, value[key]])
+         .filter(([, , itemValue]) => itemValue !== null && itemValue !== undefined && itemValue !== "");
+
+      if (!entries.length) return "Not recorded";
+
+      return (
+         <div className="tl-governance-remediation-list">
+            {entries.map(([key, label, itemValue]) => (
+               <div className="tl-governance-remediation-item" key={key}>
+                  <span>{label}</span>
+                  <p>{key === "deadline" ? formatDateOnly(itemValue) : formatValue(itemValue)}</p>
+               </div>
+            ))}
+         </div>
+      );
+   }
+
+   return formatValue(value);
 }
 
 function ReconsiderationSummary({ reconsideration }) {
@@ -226,7 +275,7 @@ function GovernanceNoticePage() {
                            {governanceEntries.map(([key, value]) => (
                               <div key={key}>
                                  <dt>{key.replaceAll("_", " ")}</dt>
-                                 <dd>{formatValue(value)}</dd>
+                                 <dd><GovernanceDetailValue field={key} value={value} /></dd>
                               </div>
                            ))}
                         </dl>
