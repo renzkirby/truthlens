@@ -4772,3 +4772,38 @@
         transition: none;
     }
 }
+
+
+/* Dark-theme verdict badges.
+   Keep verdict identity visible in both the breadcrumb/header and assessment
+   card. These live in the page stylesheet so component CSS load order cannot
+   flatten them back to the neutral dark control treatment. */
+html[data-theme="dark"] .thread-detail-page .thread-detail-verdict.thread-detail-verdict--fact {
+   color: var(--tl-color-fact-text);
+   border-color: color-mix(in srgb, var(--tl-color-fact-border) 62%, transparent);
+   background: var(--tl-color-fact-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .thread-detail-verdict.thread-detail-verdict--fake {
+   color: var(--tl-color-fake-text);
+   border-color: color-mix(in srgb, var(--tl-color-fake-border) 62%, transparent);
+   background: var(--tl-color-fake-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .thread-detail-verdict.thread-detail-verdict--misleading {
+   color: var(--tl-color-misleading-text);
+   border-color: color-mix(in srgb, var(--tl-color-misleading-border) 62%, transparent);
+   background: var(--tl-color-misleading-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .thread-detail-verdict.thread-detail-verdict--satire {
+   color: var(--tl-color-satire-text);
+   border-color: color-mix(in srgb, var(--tl-color-satire-border) 62%, transparent);
+   background: var(--tl-color-satire-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .thread-detail-verdict.thread-detail-verdict--unverified {
+   color: var(--tl-color-unverified-text);
+   border-color: color-mix(in srgb, var(--tl-color-unverified-border) 62%, transparent);
+   background: var(--tl-color-unverified-bg);
+}
