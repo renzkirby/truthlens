@@ -612,7 +612,7 @@ function OrganizationGovernanceSection({
             {selectedAction?.key === "suspend" ? (
                <div className="management-governance-form">
                   <label className="management-form-field">
-                     <span>Suspension type</span>
+                     <span>Suspension type <span className="management-required-indicator" aria-hidden="true">*</span></span>
                      <select
                         value={suspensionForm.suspension_type}
                         onChange={(event) => updateSuspensionForm("suspension_type", event.target.value)}
@@ -626,7 +626,7 @@ function OrganizationGovernanceSection({
                      </select>
                   </label>
                   <fieldset className="management-governance-factor-group">
-                     <legend>Factor(s)</legend>
+                     <legend>Factor(s) <span className="management-required-indicator" aria-hidden="true">*</span></legend>
                      <p>Select every factor materially relevant to this suspension.</p>
                      <div>
                         {partnershipFactors.map(([value, label]) => (
@@ -644,7 +644,7 @@ function OrganizationGovernanceSection({
                   </fieldset>
                   {suspensionHasOther ? (
                      <label className="management-form-field">
-                        <span>Other factor explanation</span>
+                        <span>Other factor explanation <span className="management-required-indicator" aria-hidden="true">*</span></span>
                         <textarea
                            value={suspensionForm.other_factor_explanation}
                            onChange={(event) => updateSuspensionForm("other_factor_explanation", event.target.value)}
@@ -656,7 +656,7 @@ function OrganizationGovernanceSection({
                      </label>
                   ) : null}
                   <label className="management-form-field">
-                     <span>Severity</span>
+                     <span>Severity <span className="management-required-indicator" aria-hidden="true">*</span></span>
                      <select
                         value={suspensionForm.severity}
                         onChange={(event) => updateSuspensionForm("severity", event.target.value)}
@@ -670,7 +670,7 @@ function OrganizationGovernanceSection({
                      </select>
                   </label>
                   <label className="management-form-field">
-                     <span>Rationale</span>
+                     <span>Rationale <span className="management-required-indicator" aria-hidden="true">*</span></span>
                      <textarea
                         value={suspensionForm.rationale}
                         onChange={(event) => updateSuspensionForm("rationale", event.target.value)}
@@ -681,7 +681,7 @@ function OrganizationGovernanceSection({
                      />
                   </label>
                   <label className="management-form-field">
-                     <span>Policy basis</span>
+                     <span>Policy basis <span className="management-required-indicator" aria-hidden="true">*</span></span>
                      <Input
                         value={suspensionForm.policy_basis}
                         onChange={(event) => updateSuspensionForm("policy_basis", event.target.value)}
@@ -691,7 +691,7 @@ function OrganizationGovernanceSection({
                      />
                   </label>
                   <label className="management-form-field">
-                     <span>Internal supporting basis</span>
+                     <span>Internal supporting basis <span className="management-required-indicator" aria-hidden="true">*</span></span>
                      <textarea
                         value={suspensionForm.supporting_basis}
                         onChange={(event) => updateSuspensionForm("supporting_basis", event.target.value)}
@@ -719,7 +719,7 @@ function OrganizationGovernanceSection({
                            Record a clear path the organization can follow toward compliance and reinstatement review.
                         </p>
                         <label className="management-form-field">
-                           <span>Problem to correct</span>
+                           <span>Problem to correct <span className="management-required-indicator" aria-hidden="true">*</span></span>
                            <textarea
                               value={suspensionForm.remediation_problem}
                               onChange={(event) => updateSuspensionForm("remediation_problem", event.target.value)}
@@ -729,7 +729,7 @@ function OrganizationGovernanceSection({
                            />
                         </label>
                         <label className="management-form-field">
-                           <span>Required action</span>
+                           <span>Required action <span className="management-required-indicator" aria-hidden="true">*</span></span>
                            <textarea
                               value={suspensionForm.remediation_required_action}
                               onChange={(event) => updateSuspensionForm("remediation_required_action", event.target.value)}
@@ -739,7 +739,7 @@ function OrganizationGovernanceSection({
                            />
                         </label>
                         <label className="management-form-field">
-                           <span>Evidence of compliance</span>
+                           <span>Evidence of compliance <span className="management-required-indicator" aria-hidden="true">*</span></span>
                            <textarea
                               value={suspensionForm.remediation_evidence_required}
                               onChange={(event) => updateSuspensionForm("remediation_evidence_required", event.target.value)}
@@ -749,7 +749,7 @@ function OrganizationGovernanceSection({
                            />
                         </label>
                         <label className="management-form-field">
-                           <span>Remediation deadline</span>
+                           <span>Remediation deadline <span className="management-required-indicator" aria-hidden="true">*</span></span>
                            <Input
                               type="date"
                               value={suspensionForm.remediation_deadline}
@@ -759,7 +759,7 @@ function OrganizationGovernanceSection({
                            />
                         </label>
                         <label className="management-form-field">
-                           <span>Review method</span>
+                           <span>Review method <span className="management-required-indicator" aria-hidden="true">*</span></span>
                            <textarea
                               value={suspensionForm.remediation_review_method}
                               onChange={(event) => updateSuspensionForm("remediation_review_method", event.target.value)}
@@ -769,7 +769,7 @@ function OrganizationGovernanceSection({
                            />
                         </label>
                         <label className="management-form-field">
-                           <span>Consequence if unresolved</span>
+                           <span>Consequence if unresolved <span className="management-required-indicator" aria-hidden="true">*</span></span>
                            <textarea
                               value={suspensionForm.remediation_failure_consequence}
                               onChange={(event) => updateSuspensionForm("remediation_failure_consequence", event.target.value)}
@@ -782,7 +782,9 @@ function OrganizationGovernanceSection({
                   ) : null}
                   <label className="management-form-field">
                      <span>
-                        Review date{suspensionForm.suspension_type === "PRECAUTIONARY" ? "" : " (optional)"}
+                        Review date{suspensionForm.suspension_type === "PRECAUTIONARY" ? (
+                           <> <span className="management-required-indicator" aria-hidden="true">*</span></>
+                        ) : " (optional)"}
                      </span>
                      <Input
                         type="date"
