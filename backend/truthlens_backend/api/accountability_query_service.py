@@ -557,13 +557,20 @@ def _management_governance_queryset():
             resource_type=resource_type,
         )
 
-    return (
-        AccountabilityEvent.objects.filter(
-            authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
-        )
-        .filter(governance_pairs)
-        .select_related("actor", "authority_organization", "subject_organization")
+    platform_governance = Q(
+        authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+    ) & governance_pairs
+    reconsideration_submissions = Q(
+        authority_scope=AccountabilityEvent.AuthorityScope.ORGANIZATION,
+        action_type=AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED,
+        capability="MANAGE_ORGANIZATION",
+        resource_type=AccountabilityEvent.ResourceType.ORGANIZATION,
+        reason_code="PARTNERSHIP_RECONSIDERATION_SUBMITTED",
     )
+
+    return AccountabilityEvent.objects.filter(
+        platform_governance | reconsideration_submissions
+    ).select_related("actor", "authority_organization", "subject_organization")
 
 
 def list_management_governance_accountability_events(
