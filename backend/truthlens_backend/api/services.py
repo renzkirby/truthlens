@@ -723,20 +723,19 @@ def call_llm_with_fallback(
             _provider_error_label(groq_err),
         )
 
-        # Persisted evidence can legitimately exceed a fallback provider's
-        # per-request/free-tier token budget while remaining valid for Gemini.
-        # If Gemini's first attempt failed only because of a transient server
-        # error and Groq explicitly rejects the unchanged request as too large,
-        # give Gemini one final chance instead of truncating or dropping evidence.
+        # A valid request can exceed a fallback provider's per-request/free-tier
+        # token budget while still fitting Gemini. If Gemini's first attempt
+        # failed only because of a transient server error and Groq explicitly
+        # rejects the unchanged request as too large, give Gemini one final
+        # chance instead of truncating or dropping evidence/context.
         if (
-            operation == "persisted_evidence_evaluation"
-            and _is_groq_request_too_large(groq_err)
+            _is_groq_request_too_large(groq_err)
             and _is_transient_gemini_server_error(last_gemini_error)
             and not _gemini_model_is_degraded(gemini_model)
         ):
             logger.warning(
-                "Groq rejected the persisted-evidence request as too large; "
-                "retrying Gemini once after transient server failure."
+                "Groq rejected the request as too large; retrying Gemini once "
+                "after transient server failure."
             )
             time.sleep(1.0)
             recovery_response = _try_gemini()
