@@ -262,12 +262,23 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
             Organization.PartnerStatus.FORMER,
         )
         self.assertEqual(
+            lifecycle_event.notes,
+            TEST_ENDING_GOVERNANCE["reason"],
+        )
+        self.assertEqual(
             lifecycle_event.context,
             {
                 "transition": PARTNERSHIP_ENDED_REASON,
                 "ended_memberships": 2,
                 "cancelled_invitations": 1,
                 "requeued_investigations": 1,
+                "governance": {
+                    "ending_type": "ADMINISTRATIVE_CONCLUSION",
+                    "ground": "PROLONGED_ABANDONMENT",
+                    "factors": ["INACTIVITY_RESPONSIVENESS"],
+                    "severity": None,
+                    "policy_basis": "Partnership Enforcement Policy",
+                },
             },
         )
 
