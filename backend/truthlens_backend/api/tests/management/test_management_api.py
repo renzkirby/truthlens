@@ -935,7 +935,7 @@ class ManagementApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
-        self.assertIn("Reinstate the partnership", response.data["detail"])
+        self.assertIn("fresh eligibility and activation process", response.data["detail"])
         self.assertFalse(organization.invitations.exists())
 
     def test_primary_admin_provision_rejects_unknown_fields_and_conflicts(self):
