@@ -1135,6 +1135,11 @@ class VerificationRunURLRuntimeTests(TestCase):
         ):
             with self.subTest(verdict=verdict):
                 self.verdict["verdict"] = verdict
+                before = {
+                    "complete": self.complete_run.call_count,
+                    "abstain": self.abstain_run.call_count,
+                    "fail": self.fail_run.call_count,
+                }
                 error = RuntimeError("Terminal storage unavailable")
                 helper.side_effect = error
                 try:
@@ -1147,8 +1152,26 @@ class VerificationRunURLRuntimeTests(TestCase):
                     )
                 finally:
                     helper.side_effect = None
-        self.fail_run.assert_not_called()
-        self.retrieve_tavily.assert_not_called()
+
+                if helper is self.complete_run:
+                    self.assertEqual(
+                        self.complete_run.call_count,
+                        before["complete"] + 1,
+                    )
+                    self.assertEqual(
+                        self.abstain_run.call_count,
+                        before["abstain"],
+                    )
+                else:
+                    self.assertEqual(
+                        self.abstain_run.call_count,
+                        before["abstain"] + 1,
+                    )
+                    self.assertEqual(
+                        self.complete_run.call_count,
+                        before["complete"],
+                    )
+                self.assertEqual(self.fail_run.call_count, before["fail"])
 
     def test_create_failure_prevents_verification(self):
         error = RuntimeError("Create unavailable")
