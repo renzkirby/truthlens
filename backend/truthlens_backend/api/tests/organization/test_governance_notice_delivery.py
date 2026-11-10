@@ -13,6 +13,7 @@ from api.models import (
     Notification,
     Organization,
     OrganizationGovernanceNoticeRecipient,
+    OrganizationMembership,
     UserProfile,
 )
 from api.notification_service import notification_destination
@@ -23,6 +24,7 @@ from api.organization_governance_delivery_service import (
 )
 from api.organization_partnership_lifecycle_service import (
     MANAGE_PARTNER_ORGANIZATION,
+    suspend_partner_organization_partnership,
 )
 
 
@@ -232,6 +234,78 @@ class GovernanceNoticeDeliveryTests(APITestCase):
         self.assertEqual(
             result,
             {"requested": 1, "queued": 0, "queue_failed": 1},
+        )
+        self.assertEqual(recipient.in_app_status, "PENDING")
+        self.assertEqual(recipient.email_status, "PENDING")
+
+    def test_broker_failure_after_commit_does_not_rollback_suspension(self):
+        organization = Organization.objects.create(
+            name="Broker Failure Partner",
+            slug="broker-failure-partner",
+            verification_status=Organization.VerificationStatus.VERIFIED,
+            partner_status=Organization.PartnerStatus.ACTIVE,
+        )
+        OrganizationMembership.objects.create(
+            organization=organization,
+            user=self.organization_admin,
+            role=OrganizationMembership.Role.ADMIN,
+            status=OrganizationMembership.Status.ACTIVE,
+        )
+        payload = {
+            "suspension_type": "REMEDIAL",
+            "factors": ["VERIFICATION_STANDARDS"],
+            "severity": "HIGH",
+            "rationale": (
+                "Repeated sourcing failures require temporary remediation before "
+                "professional access resumes."
+            ),
+            "policy_basis": "Partnership Enforcement Policy §13.1",
+            "supporting_basis": (
+                "Internal review of affected investigations and prior corrective "
+                "guidance."
+            ),
+            "supporting_references": ["BROKER-FAILURE-001"],
+            "remediation_problem": (
+                "Repeated sourcing failures in completed verification work."
+            ),
+            "remediation_required_action": (
+                "Review affected investigations and correct the sourcing process."
+            ),
+            "remediation_evidence_required": (
+                "Updated evidence-review procedure and corrected investigation records."
+            ),
+            "remediation_deadline": __import__("django").utils.timezone.localdate()
+            + __import__("datetime").timedelta(days=30),
+            "remediation_review_method": (
+                "Platform Governance will review the submitted procedure and records."
+            ),
+            "remediation_failure_consequence": (
+                "TruthLens may continue the suspension or consider a stronger "
+                "proportionate governance action."
+            ),
+        }
+
+        with patch(
+            "api.tasks.deliver_organization_governance_notice_task.delay",
+            side_effect=RuntimeError("Redis unavailable"),
+        ):
+            with self.captureOnCommitCallbacks(execute=True):
+                suspend_partner_organization_partnership(
+                    organization_id=organization.pk,
+                    actor=self.platform_admin,
+                    **payload,
+                )
+
+        organization.refresh_from_db()
+        self.assertEqual(
+            organization.partner_status,
+            Organization.PartnerStatus.SUSPENDED,
+        )
+        recipient = OrganizationGovernanceNoticeRecipient.objects.get(
+            governance_event__subject_organization=organization,
+            governance_event__resource_type=AccountabilityEvent.ResourceType.ORGANIZATION,
+            governance_event__resource_id=str(organization.pk),
+            user=self.organization_admin,
         )
         self.assertEqual(recipient.in_app_status, "PENDING")
         self.assertEqual(recipient.email_status, "PENDING")
