@@ -2,7 +2,7 @@ import { Link, Navigate, useLocation } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
 import { canAccessManagementConsole } from "../utils/management";
-import { canAccessWorkspace, getWorkspaceMemberships } from "../utils/workspace";
+import { canAccessWorkspace } from "../utils/workspace";
 
 import "./PartnerOrganizationGuidelinesPage.css";
 
@@ -441,8 +441,8 @@ function PartnerOrganizationGuidelinesPage() {
    const { user } = useAuth();
    const location = useLocation();
    const isPlatformAdmin = canAccessManagementConsole(user);
-   const memberships = getWorkspaceMemberships(user);
-   const canView = isPlatformAdmin || memberships.length > 0;
+   const professionalIdentity = user?.community_identity?.professional_identity || null;
+   const canView = isPlatformAdmin || Boolean(professionalIdentity);
 
    if (!canView) {
       return <Navigate to="/community" replace />;
