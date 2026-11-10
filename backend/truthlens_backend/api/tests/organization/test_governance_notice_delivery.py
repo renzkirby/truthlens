@@ -470,6 +470,63 @@ class GovernanceNoticeDeliveryTests(APITestCase):
         self.assertEqual(fallback.status, "OUT_OF_BAND_RECORDED")
         self.assertEqual(fallback.recorded_by, self.platform_admin)
 
+    def test_out_of_band_notice_cannot_overwrite_sent_fallback(self):
+        organization = Organization.objects.create(
+            name="Sent Fallback Partner",
+            slug="sent-fallback-partner",
+            governance_contact_email="governance-contact@example.com",
+            verification_status=Organization.VerificationStatus.VERIFIED,
+            partner_status=Organization.PartnerStatus.ACTIVE,
+        )
+        payload = {
+            "suspension_type": "ADMINISTRATIVE",
+            "factors": ["GOVERNANCE_CAPACITY"],
+            "severity": "HIGH",
+            "rationale": (
+                "The organization currently lacks accountable administration for "
+                "continued professional access."
+            ),
+            "policy_basis": "Partnership Enforcement Policy §13.3",
+            "supporting_basis": "Internal organization-contact review.",
+            "supporting_references": ["NO-ADMIN-SENT-001"],
+        }
+
+        with patch("api.tasks.deliver_organization_governance_fallback_task.delay"):
+            with self.captureOnCommitCallbacks(execute=True):
+                suspend_partner_organization_partnership(
+                    organization_id=organization.pk,
+                    actor=self.platform_admin,
+                    **payload,
+                )
+
+        fallback = OrganizationGovernanceFallbackDelivery.objects.get(
+            governance_event__subject_organization=organization,
+        )
+        deliver_governance_fallback_email(fallback.pk)
+        fallback.refresh_from_db()
+        self.assertEqual(fallback.status, "SENT")
+
+        response = self.client_for(self.platform_admin).post(
+            reverse(
+                "management_organization_governance_out_of_band_notice",
+                kwargs={"organization_id": organization.pk},
+            ),
+            {
+                "fallback_delivery_id": str(fallback.pk),
+                "method": "Official organization email",
+                "details": (
+                    "This should not replace a fallback delivery that was already "
+                    "recorded as successfully sent."
+                ),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        fallback.refresh_from_db()
+        self.assertEqual(fallback.status, "SENT")
+        self.assertEqual(fallback.out_of_band_method, "")
+
     def test_platform_admin_can_update_private_governance_contact(self):
         response = self.client_for(self.platform_admin).patch(
             reverse(
