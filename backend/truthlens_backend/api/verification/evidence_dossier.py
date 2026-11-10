@@ -79,18 +79,21 @@ def load_reasoning_evidence_dossier_for_run(
     ]
 
 
-def filter_reasoning_evidence_dossier_by_role(
+def filter_reasoning_evidence_dossier_by_roles(
     evidence_groups: Iterable[ReasoningEvidenceGroup],
-    evidence_role: str,
+    evidence_roles: Iterable[str],
 ) -> list[ReasoningEvidenceGroup]:
-    """Select an exact evidence role without changing group or member order."""
-    filtered_groups = []
+    """Select evidence roles while preserving source-identity grouping and order."""
+    roles = frozenset(evidence_roles)
+    if not roles:
+        return []
 
+    filtered_groups = []
     for evidence_group in evidence_groups:
         matching_evidence = tuple(
             evidence_item
             for evidence_item in evidence_group.evidence
-            if evidence_item.evidence_role == evidence_role
+            if evidence_item.evidence_role in roles
         )
         if matching_evidence:
             filtered_groups.append(ReasoningEvidenceGroup(
@@ -98,8 +101,18 @@ def filter_reasoning_evidence_dossier_by_role(
                 identity_id=evidence_group.identity_id,
                 evidence=matching_evidence,
             ))
-
     return filtered_groups
+
+
+def filter_reasoning_evidence_dossier_by_role(
+    evidence_groups: Iterable[ReasoningEvidenceGroup],
+    evidence_role: str,
+) -> list[ReasoningEvidenceGroup]:
+    """Select one evidence role without changing group or member order."""
+    return filter_reasoning_evidence_dossier_by_roles(
+        evidence_groups,
+        (evidence_role,),
+    )
 
 
 def render_reasoning_evidence_dossier(
