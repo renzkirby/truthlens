@@ -1008,7 +1008,14 @@ class TavilyTextRuntimeIngestionTests(TestCase):
             gfc_raw_items,
         )
         self.gfc.side_effect = self.real_gfc_bridge
-        self.relevance.return_value = False
+        self.relevance.return_value = {
+            "candidate_count": 1,
+            "relevant_candidate_count": 0,
+            "covered_candidate_count": 0,
+            "terminally_sufficient": False,
+            "reason_code": "MATERIAL_DIFFERENCE",
+            "candidates": [],
+        }
 
         evaluate_url = self._execute_url()
 
