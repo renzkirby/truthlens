@@ -37,6 +37,23 @@ function OrganizationGovernanceSection({
    const [confirmationAction, setConfirmationAction] = useState(null);
    const [correctionConfirmation, setCorrectionConfirmation] = useState(null);
    const [endConfirmationOpen, setEndConfirmationOpen] = useState(false);
+   const [suspensionForm, setSuspensionForm] = useState({
+      suspension_type: "",
+      factor: "",
+      severity: "",
+      reason: "",
+      policy_basis: "",
+      required_remediation: "",
+      review_date: "",
+   });
+   const [endingForm, setEndingForm] = useState({
+      ending_type: "",
+      ground: "",
+      factor: "",
+      severity: "",
+      reason: "",
+      policy_basis: "",
+   });
    const { mutate, pending, error, reset } = useManagementMutation();
 
    const lifecycleLabels = {
@@ -121,9 +138,21 @@ function OrganizationGovernanceSection({
    const executeGovernanceAction = async () => {
       if (!selectedAction) return;
 
+      const body = selectedAction.key === "suspend"
+         ? {
+            suspension_type: suspensionForm.suspension_type,
+            factors: suspensionForm.factor ? [suspensionForm.factor] : [],
+            severity: suspensionForm.severity,
+            reason: suspensionForm.reason,
+            policy_basis: suspensionForm.policy_basis,
+            required_remediation: suspensionForm.required_remediation,
+            review_date: suspensionForm.review_date || null,
+         }
+         : {};
+
       const result = await mutate(
          resolveApiEndpoint(selectedAction.endpoint, organization.id),
-         { method: "POST", body: {} },
+         { method: "POST", body },
       );
       if (!result.ok) return;
 
@@ -155,7 +184,17 @@ function OrganizationGovernanceSection({
    const endPartnership = async () => {
       const result = await mutate(
          resolveApiEndpoint("MANAGEMENT_ORGANIZATION_END_PARTNERSHIP", organization.id),
-         { method: "POST", body: {} },
+         {
+            method: "POST",
+            body: {
+               ending_type: endingForm.ending_type,
+               ground: endingForm.ground,
+               factors: endingForm.factor ? [endingForm.factor] : [],
+               severity: endingForm.severity,
+               reason: endingForm.reason,
+               policy_basis: endingForm.policy_basis,
+            },
+         },
       );
       if (!result.ok) return;
 
@@ -172,6 +211,56 @@ function OrganizationGovernanceSection({
       `${impact.active_investigations ?? 0} active investigation(s) will return to intake`,
       "completed adjudications, published fact-checks, authorship, and provenance will be retained",
    ].join("; ");
+
+   const partnershipFactors = [
+      ["VERIFICATION_STANDARDS", "Verification Standards Violation"],
+      ["IMPARTIALITY_CONFLICT", "Impartiality or Conflict-of-Interest Violation"],
+      ["TRANSPARENCY_MISREPRESENTATION", "Transparency or Misrepresentation Violation"],
+      ["CORRECTIONS_ACCOUNTABILITY", "Correction or Accountability Failure"],
+      ["PLATFORM_PARTNERSHIP", "Platform or Partnership Policy Violation"],
+      ["GOVERNANCE_CAPACITY", "Organizational Governance or Capacity Concern"],
+      ["SECURITY_INTEGRITY", "Security, Legal, or Institutional Integrity Risk"],
+      ["INACTIVITY_RESPONSIVENESS", "Inactivity or Non-responsiveness"],
+      ["OTHER", "Other"],
+   ];
+   const severityOptions = [
+      ["LOW", "Low"],
+      ["MODERATE", "Moderate"],
+      ["HIGH", "High"],
+      ["CRITICAL", "Critical"],
+   ];
+   const endingGroundOptions = {
+      VOLUNTARY_WITHDRAWAL: [
+         ["VOLUNTARY_WITHDRAWAL", "Voluntary Withdrawal"],
+      ],
+      ADMINISTRATIVE_CONCLUSION: [
+         ["PERMANENT_LOSS_ELIGIBILITY", "Permanent Loss of Eligibility or Capacity"],
+         ["ORGANIZATION_DISSOLVED", "Organization Dissolved or Ceased Relevant Operations"],
+         ["PROLONGED_ABANDONMENT", "Prolonged Inactivity or Partnership Abandonment"],
+      ],
+      TERMINATION_FOR_CAUSE: [
+         ["SEVERE_NON_REMEDIABLE_VIOLATION", "Severe Non-remediable Violation"],
+         ["REPEATED_SYSTEMIC_VIOLATIONS", "Repeated or Systemic Serious Violations"],
+         ["FAILED_REMEDIATION", "Failed Remediation"],
+      ],
+   };
+   const updateSuspensionForm = (field, value) => {
+      setSuspensionForm((current) => ({ ...current, [field]: value }));
+   };
+   const updateEndingForm = (field, value) => {
+      setEndingForm((current) => {
+         if (field === "ending_type") {
+            return {
+               ...current,
+               ending_type: value,
+               ground: "",
+               factor: value === "VOLUNTARY_WITHDRAWAL" ? "" : current.factor,
+               severity: value === "TERMINATION_FOR_CAUSE" ? current.severity : "",
+            };
+         }
+         return { ...current, [field]: value };
+      });
+   };
 
    return (
       <section className="management-detail-section management-governance-section">
@@ -341,11 +430,95 @@ function OrganizationGovernanceSection({
             processing={pending}
             onConfirm={executeGovernanceAction}
             onClose={() => setConfirmationAction(null)}
-         />
+         >
+            {selectedAction?.key === "suspend" ? (
+               <div className="management-governance-form">
+                  <label className="management-form-field">
+                     <span>Suspension type</span>
+                     <select
+                        value={suspensionForm.suspension_type}
+                        onChange={(event) => updateSuspensionForm("suspension_type", event.target.value)}
+                        disabled={pending}
+                     >
+                        <option value="">Select suspension type</option>
+                        <option value="REMEDIAL">Remedial Suspension</option>
+                        <option value="PRECAUTIONARY">Precautionary Suspension</option>
+                        <option value="ADMINISTRATIVE">Administrative Suspension</option>
+                     </select>
+                  </label>
+                  <label className="management-form-field">
+                     <span>Primary factor</span>
+                     <select
+                        value={suspensionForm.factor}
+                        onChange={(event) => updateSuspensionForm("factor", event.target.value)}
+                        disabled={pending}
+                     >
+                        <option value="">Select factor</option>
+                        {partnershipFactors.map(([value, label]) => (
+                           <option key={value} value={value}>{label}</option>
+                        ))}
+                     </select>
+                  </label>
+                  <label className="management-form-field">
+                     <span>Severity</span>
+                     <select
+                        value={suspensionForm.severity}
+                        onChange={(event) => updateSuspensionForm("severity", event.target.value)}
+                        disabled={pending}
+                     >
+                        <option value="">Select severity</option>
+                        {severityOptions.map(([value, label]) => (
+                           <option key={value} value={value}>{label}</option>
+                        ))}
+                     </select>
+                  </label>
+                  <label className="management-form-field">
+                     <span>Reason / rationale</span>
+                     <textarea
+                        value={suspensionForm.reason}
+                        onChange={(event) => updateSuspensionForm("reason", event.target.value)}
+                        rows={4}
+                        disabled={pending}
+                        placeholder="Describe the material facts supporting this suspension."
+                     />
+                  </label>
+                  <label className="management-form-field">
+                     <span>Policy basis (optional)</span>
+                     <Input
+                        value={suspensionForm.policy_basis}
+                        onChange={(event) => updateSuspensionForm("policy_basis", event.target.value)}
+                        disabled={pending}
+                        placeholder="e.g. Partner Verification Standards §3.2"
+                     />
+                  </label>
+                  {suspensionForm.suspension_type === "REMEDIAL" ? (
+                     <label className="management-form-field">
+                        <span>Required remediation</span>
+                        <textarea
+                           value={suspensionForm.required_remediation}
+                           onChange={(event) => updateSuspensionForm("required_remediation", event.target.value)}
+                           rows={3}
+                           disabled={pending}
+                           placeholder="State what the organization must correct before reinstatement review."
+                        />
+                     </label>
+                  ) : null}
+                  <label className="management-form-field">
+                     <span>Review date (optional)</span>
+                     <Input
+                        type="date"
+                        value={suspensionForm.review_date}
+                        onChange={(event) => updateSuspensionForm("review_date", event.target.value)}
+                        disabled={pending}
+                     />
+                  </label>
+               </div>
+            ) : null}
+         </ManagementConfirmDialog>
          <ManagementConfirmDialog
             open={endConfirmationOpen}
             title="End this Partner Organization’s partnership?"
-            description="This is an operational retirement action. Historical verification records and published work will not be deleted."
+            description="Historical verification records and published work will not be deleted. Record why the active partnership is ending."
             warning={endImpactSummary}
             error={error?.message}
             confirmLabel="End partnership"
@@ -353,7 +526,84 @@ function OrganizationGovernanceSection({
             processing={pending}
             onConfirm={endPartnership}
             onClose={() => setEndConfirmationOpen(false)}
-         />
+         >
+            <div className="management-governance-form">
+               <label className="management-form-field">
+                  <span>Ending type</span>
+                  <select
+                     value={endingForm.ending_type}
+                     onChange={(event) => updateEndingForm("ending_type", event.target.value)}
+                     disabled={pending}
+                  >
+                     <option value="">Select ending type</option>
+                     <option value="VOLUNTARY_WITHDRAWAL">Voluntary Withdrawal</option>
+                     <option value="ADMINISTRATIVE_CONCLUSION">Administrative Conclusion</option>
+                     <option value="TERMINATION_FOR_CAUSE">Termination for Cause</option>
+                  </select>
+               </label>
+               <label className="management-form-field">
+                  <span>Ground</span>
+                  <select
+                     value={endingForm.ground}
+                     onChange={(event) => updateEndingForm("ground", event.target.value)}
+                     disabled={pending || !endingForm.ending_type}
+                  >
+                     <option value="">Select ground</option>
+                     {(endingGroundOptions[endingForm.ending_type] || []).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                     ))}
+                  </select>
+               </label>
+               {endingForm.ending_type !== "VOLUNTARY_WITHDRAWAL" ? (
+                  <label className="management-form-field">
+                     <span>{endingForm.ending_type === "TERMINATION_FOR_CAUSE" ? "Primary factor" : "Related factor (optional)"}</span>
+                     <select
+                        value={endingForm.factor}
+                        onChange={(event) => updateEndingForm("factor", event.target.value)}
+                        disabled={pending}
+                     >
+                        <option value="">Select factor</option>
+                        {partnershipFactors.map(([value, label]) => (
+                           <option key={value} value={value}>{label}</option>
+                        ))}
+                     </select>
+                  </label>
+               ) : null}
+               {endingForm.ending_type === "TERMINATION_FOR_CAUSE" ? (
+                  <label className="management-form-field">
+                     <span>Severity</span>
+                     <select
+                        value={endingForm.severity}
+                        onChange={(event) => updateEndingForm("severity", event.target.value)}
+                        disabled={pending}
+                     >
+                        <option value="">Select severity</option>
+                        <option value="HIGH">High</option>
+                        <option value="CRITICAL">Critical</option>
+                     </select>
+                  </label>
+               ) : null}
+               <label className="management-form-field">
+                  <span>Reason / rationale</span>
+                  <textarea
+                     value={endingForm.reason}
+                     onChange={(event) => updateEndingForm("reason", event.target.value)}
+                     rows={4}
+                     disabled={pending}
+                     placeholder="Describe the material facts supporting the conclusion of this partnership."
+                  />
+               </label>
+               <label className="management-form-field">
+                  <span>Policy basis (optional)</span>
+                  <Input
+                     value={endingForm.policy_basis}
+                     onChange={(event) => updateEndingForm("policy_basis", event.target.value)}
+                     disabled={pending}
+                     placeholder="e.g. Partnership Enforcement Policy §19.3"
+                  />
+               </label>
+            </div>
+         </ManagementConfirmDialog>
       </section>
    );
 }
