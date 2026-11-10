@@ -920,3 +920,100 @@ html[data-theme="dark"] .hub-page-layout .hub-verdict-badge--out-of-scope {
    border-color: color-mix(in srgb, var(--tl-color-outofscope-border) 58%, transparent);
    background: var(--tl-color-outofscope-bg);
 }
+
+
+/* Thread Detail sidebar: complete the remaining legacy light-only surfaces. */
+html[data-theme="dark"] .thread-detail-sidebar-card {
+   border-color: var(--tl-color-border-soft);
+   background: var(--tl-color-bg-surface);
+   box-shadow: var(--tl-shadow-sm);
+}
+
+html[data-theme="dark"] .thread-detail-sidebar-label {
+   color: var(--tl-color-text-muted);
+}
+
+html[data-theme="dark"] .thread-detail-sidebar-author {
+   color: var(--tl-color-text-main);
+}
+
+html[data-theme="dark"] .thread-detail-sidebar-author small {
+   color: var(--tl-color-text-muted);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .thread-detail-trust-ring {
+   background:
+      conic-gradient(
+         #f59e0b var(--trust-value),
+         var(--tl-color-border-default) 0
+      );
+}
+
+html[data-theme="dark"] .thread-detail-trust-ring::before {
+   background: var(--tl-color-bg-surface);
+}
+
+html[data-theme="dark"] .thread-detail-trust-ring span {
+   color: var(--tl-color-text-main);
+}
+
+html[data-theme="dark"] .thread-detail-poster-stats div {
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .thread-detail-poster-stats strong {
+   color: var(--tl-color-text-main);
+}
+
+html[data-theme="dark"] .thread-detail-poster-stats span {
+   color: var(--tl-color-text-muted);
+}
+
+html[data-theme="dark"] .thread-detail-trust-meter-row {
+   color: var(--tl-color-text-muted);
+}
+
+html[data-theme="dark"] .thread-detail-trust-meter {
+   background: var(--tl-color-border-default);
+}
+
+html[data-theme="dark"] .thread-detail-trust-note {
+   color: var(--tl-color-text-muted);
+}
+
+html[data-theme="dark"] .thread-detail-sidebar-actions--classic button {
+   border-color: var(--tl-color-border-default);
+   color: var(--tl-color-text-body);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .thread-detail-sidebar-actions--classic button:hover {
+   border-color: color-mix(in srgb, var(--tl-color-brand-primary) 42%, var(--tl-color-border-default));
+   color: var(--tl-color-text-main);
+   background: var(--tl-color-bg-surface);
+}
+
+html[data-theme="dark"] .thread-detail-sidebar-actions--classic button.is-danger {
+   color: var(--tl-color-status-critical-text);
+   border-color: color-mix(in srgb, var(--tl-color-status-critical-border) 68%, transparent);
+   background: var(--tl-color-status-critical-bg);
+}
+
+html[data-theme="dark"] .thread-detail-sidebar-actions--classic button.is-danger:hover {
+   color: var(--tl-color-status-critical-text);
+   border-color: var(--tl-color-status-critical-border);
+   background: color-mix(in srgb, var(--tl-color-status-critical-bg) 82%, var(--tl-color-bg-surface));
+}
+
+/* Thread Detail dialogs use the same elevated dark surface instead of the
+   legacy white card. */
+html[data-theme="dark"] .thread-detail-dialog {
+   color: var(--tl-color-text-main);
+   background: var(--tl-color-bg-elevated);
+   box-shadow: var(--tl-shadow-lg);
+}
+
+html[data-theme="dark"] .thread-detail-dialog > p:not(.thread-detail-dialog-kicker) {
+   color: var(--tl-color-text-muted);
+}
