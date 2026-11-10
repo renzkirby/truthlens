@@ -1469,6 +1469,44 @@
   line-height: 1.55;
 }
 
+
+.management-governance-form {
+  display: grid;
+  gap: var(--tl-space-4);
+  margin-top: var(--tl-space-5);
+  max-height: min(52vh, 520px);
+  overflow-y: auto;
+  padding-right: var(--tl-space-1);
+}
+
+.management-governance-form select,
+.management-governance-form textarea {
+  width: 100%;
+  border: 1px solid var(--tl-color-border-default);
+  border-radius: var(--tl-radius-md);
+  color: var(--tl-color-text-main);
+  background: var(--tl-color-bg-surface);
+  font: inherit;
+}
+
+.management-governance-form select {
+  min-height: 42px;
+  padding: 0 var(--tl-space-3);
+}
+
+.management-governance-form textarea {
+  resize: vertical;
+  min-height: 96px;
+  padding: var(--tl-space-3);
+  line-height: 1.5;
+}
+
+.management-governance-form select:focus-visible,
+.management-governance-form textarea:focus-visible {
+  outline: 2px solid var(--tl-color-focus-ring);
+  outline-offset: 2px;
+}
+
 .management-dialog__warning,
 .management-dialog__error {
   margin-top: var(--tl-space-5);
