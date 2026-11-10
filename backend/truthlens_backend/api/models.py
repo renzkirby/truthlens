@@ -2870,6 +2870,80 @@ class OrganizationGovernanceSupportingBasis(models.Model):
         return f"Supporting basis for accountability event {self.governance_event_id}"
 
 
+class OrganizationGovernanceNoticeRecipient(models.Model):
+    """Durable recipient/access record for a Partner governance notice.
+
+    The linked AccountabilityEvent remains the authoritative governance
+    decision. This row records who was entitled to receive/read the notice at
+    decision time and tracks delivery/view state without duplicating the
+    governance rationale or internal supporting basis.
+    """
+
+    class Audience(models.TextChoices):
+        ADMIN = "ADMIN", "Organization Admin"
+        MEMBER = "MEMBER", "Organization Member"
+
+    class DeliveryStatus(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        SENT = "SENT", "Sent"
+        FAILED = "FAILED", "Failed"
+        SKIPPED = "SKIPPED", "Skipped"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    governance_event = models.ForeignKey(
+        AccountabilityEvent,
+        on_delete=models.PROTECT,
+        related_name="governance_notice_recipients",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="organization_governance_notice_recipients",
+    )
+    audience = models.CharField(max_length=16, choices=Audience.choices)
+    can_read_notice = models.BooleanField(default=True)
+    in_app_status = models.CharField(
+        max_length=16,
+        choices=DeliveryStatus.choices,
+        default=DeliveryStatus.PENDING,
+    )
+    email_status = models.CharField(
+        max_length=16,
+        choices=DeliveryStatus.choices,
+        default=DeliveryStatus.PENDING,
+    )
+    in_app_attempts = models.PositiveSmallIntegerField(default=0)
+    email_attempts = models.PositiveSmallIntegerField(default=0)
+    last_delivery_error = models.TextField(blank=True, default="")
+    last_delivery_attempt_at = models.DateTimeField(null=True, blank=True)
+    viewed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["governance_event", "user"],
+                name="org_gov_notice_event_user_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["user", "-created_at"],
+                name="org_gov_notice_user_idx",
+            ),
+            models.Index(
+                fields=["governance_event", "audience"],
+                name="org_gov_notice_event_aud_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Governance notice recipient {self.pk}"
+
+
 class AdjudicationDecision(models.Model):
     class Verdict(models.TextChoices):
         FACT = "FACT", "Fact"
