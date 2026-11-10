@@ -150,6 +150,7 @@ export function ManagementConfirmDialog({
    description,
    warning,
    error,
+   children,
    confirmLabel,
    processing = false,
    confirmVariant = "primary",
@@ -227,6 +228,7 @@ export function ManagementConfirmDialog({
          >
             <h2 id="management-confirm-title">{title}</h2>
             <p id="management-confirm-description">{description}</p>
+            {children}
             {warning ? <div className="management-dialog__warning">{warning}</div> : null}
             {error ? <div className="management-dialog__error" role="alert">{error}</div> : null}
             <div className="management-dialog__actions">
