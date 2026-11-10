@@ -2,6 +2,11 @@ from rest_framework import serializers
 
 from .accountability_query_service import MANAGEMENT_GOVERNANCE_ACTIONS
 from .organization_partnership_lifecycle_service import (
+    PARTNERSHIP_ENDING_GROUND_CHOICES,
+    PARTNERSHIP_ENDING_TYPE_CHOICES,
+    PARTNERSHIP_FACTOR_CHOICES,
+    PARTNERSHIP_SEVERITY_CHOICES,
+    PARTNERSHIP_SUSPENSION_TYPE_CHOICES,
     get_partner_organization_lifecycle_projection,
 )
 from .models import (
@@ -106,6 +111,136 @@ ManagementPrimaryAdminProvisionSerializer = ManagementOrganizationAdminProvision
 
 class ManagementEmptyMutationSerializer(StrictFieldsSerializer):
     pass
+
+
+class ManagementPartnershipSuspensionSerializer(StrictFieldsSerializer):
+    suspension_type = serializers.ChoiceField(
+        choices=PARTNERSHIP_SUSPENSION_TYPE_CHOICES,
+    )
+    factors = serializers.ListField(
+        child=serializers.ChoiceField(choices=PARTNERSHIP_FACTOR_CHOICES),
+        allow_empty=False,
+        max_length=8,
+    )
+    severity = serializers.ChoiceField(
+        choices=PARTNERSHIP_SEVERITY_CHOICES,
+    )
+    reason = serializers.CharField(
+        max_length=4000,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    policy_basis = serializers.CharField(
+        max_length=1000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+    required_remediation = serializers.CharField(
+        max_length=4000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+    review_date = serializers.DateField(
+        required=False,
+        allow_null=True,
+    )
+
+    def validate(self, attrs):
+        if (
+            attrs.get("suspension_type") == "REMEDIAL"
+            and not attrs.get("required_remediation", "").strip()
+        ):
+            raise serializers.ValidationError(
+                {
+                    "required_remediation": (
+                        "Required remediation must be recorded for a remedial suspension."
+                    )
+                }
+            )
+        return attrs
+
+
+class ManagementPartnershipEndingSerializer(StrictFieldsSerializer):
+    ending_type = serializers.ChoiceField(
+        choices=PARTNERSHIP_ENDING_TYPE_CHOICES,
+    )
+    ground = serializers.ChoiceField(
+        choices=PARTNERSHIP_ENDING_GROUND_CHOICES,
+    )
+    factors = serializers.ListField(
+        child=serializers.ChoiceField(choices=PARTNERSHIP_FACTOR_CHOICES),
+        required=False,
+        allow_empty=True,
+        max_length=8,
+        default=list,
+    )
+    severity = serializers.ChoiceField(
+        choices=PARTNERSHIP_SEVERITY_CHOICES,
+        required=False,
+        allow_blank=True,
+        default="",
+    )
+    reason = serializers.CharField(
+        max_length=4000,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    policy_basis = serializers.CharField(
+        max_length=1000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+
+    def validate(self, attrs):
+        ending_type = attrs["ending_type"]
+        ground = attrs["ground"]
+        factors = attrs.get("factors", [])
+        severity = attrs.get("severity", "")
+
+        if ending_type == "VOLUNTARY_WITHDRAWAL":
+            if ground != "VOLUNTARY_WITHDRAWAL":
+                raise serializers.ValidationError(
+                    {"ground": "Voluntary withdrawal requires the voluntary-withdrawal ground."}
+                )
+            if factors:
+                raise serializers.ValidationError(
+                    {"factors": "Voluntary withdrawal must not be classified as a policy violation."}
+                )
+            attrs["severity"] = ""
+        elif ending_type == "ADMINISTRATIVE_CONCLUSION":
+            if ground not in {
+                "PERMANENT_LOSS_ELIGIBILITY",
+                "ORGANIZATION_DISSOLVED",
+                "PROLONGED_ABANDONMENT",
+            }:
+                raise serializers.ValidationError(
+                    {"ground": "Select an administrative partnership-ending ground."}
+                )
+            attrs["severity"] = ""
+        else:
+            if ground not in {
+                "SEVERE_NON_REMEDIABLE_VIOLATION",
+                "REPEATED_SYSTEMIC_VIOLATIONS",
+                "FAILED_REMEDIATION",
+            }:
+                raise serializers.ValidationError(
+                    {"ground": "Select a termination-for-cause ground."}
+                )
+            if not factors:
+                raise serializers.ValidationError(
+                    {"factors": "At least one partnership factor is required."}
+                )
+            if severity not in {"HIGH", "CRITICAL"}:
+                raise serializers.ValidationError(
+                    {"severity": "Termination for cause requires High or Critical severity."}
+                )
+        return attrs
 
 
 class ManagementGovernanceAuditQuerySerializer(StrictFieldsSerializer):
