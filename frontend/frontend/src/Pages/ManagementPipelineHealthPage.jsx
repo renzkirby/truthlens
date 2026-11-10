@@ -8,6 +8,7 @@ import {
    ManagementStatus,
 } from "../components/management/ManagementUi";
 import Icons from "../components/Icons";
+import Button from "../components/ui/Button";
 import { useManagementRequest } from "../hooks/useManagementRequest";
 import { resolveApiEndpoint } from "../utils/api";
 import {
@@ -24,7 +25,8 @@ const WINDOW_OPTIONS = [
 ];
 const VALID_WINDOWS = new Set(WINDOW_OPTIONS.map(([value]) => value));
 const VALID_STATUSES = new Set(["", "PENDING", "RUNNING", "COMPLETED", "ABSTAINED", "FAILED", "CANCELLED"]);
-const VALID_CLAIM_TYPES = new Set(["", "TEXT", "IMAGE", "VIDEO", "URL", "FILE"]);
+const SUPPORTED_CLAIM_TYPES = ["TEXT", "IMAGE", "URL", "FILE"];
+const VALID_CLAIM_TYPES = new Set(["", ...SUPPORTED_CLAIM_TYPES]);
 const STATUS_ORDER = ["PENDING", "RUNNING", "COMPLETED", "ABSTAINED", "FAILED", "CANCELLED"];
 
 function requestUrl(endpoint, params) {
@@ -33,6 +35,23 @@ function requestUrl(endpoint, params) {
       if (value !== "" && value !== null && value !== undefined) url.searchParams.set(key, value);
    });
    return url.toString();
+}
+
+function isValidDateInput(value) {
+   if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return false;
+   const date = new Date(`${value}T00:00:00`);
+   return !Number.isNaN(date.getTime());
+}
+
+function localDayBounds(value) {
+   if (!isValidDateInput(value)) return { startedAfter: "", startedBefore: "" };
+   const start = new Date(`${value}T00:00:00`);
+   const end = new Date(start);
+   end.setDate(end.getDate() + 1);
+   return {
+      startedAfter: start.toISOString(),
+      startedBefore: end.toISOString(),
+   };
 }
 
 function Metric({ label, value }) {
@@ -53,6 +72,9 @@ function ManagementPipelineHealthPage() {
    const statusFilter = VALID_STATUSES.has(requestedStatus) ? requestedStatus : "";
    const requestedClaimType = searchParams.get("claim_type") || "";
    const claimTypeFilter = VALID_CLAIM_TYPES.has(requestedClaimType) ? requestedClaimType : "";
+   const requestedStartedOn = searchParams.get("started_on") || "";
+   const startedOnFilter = isValidDateInput(requestedStartedOn) ? requestedStartedOn : "";
+   const { startedAfter, startedBefore } = localDayBounds(startedOnFilter);
    const parsedPage = Number.parseInt(searchParams.get("page") || "1", 10);
    const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
 
@@ -71,12 +93,16 @@ function ManagementPipelineHealthPage() {
          next.delete("claim_type");
          changed = true;
       }
+      if (requestedStartedOn && !isValidDateInput(requestedStartedOn)) {
+         next.delete("started_on");
+         changed = true;
+      }
       if (searchParams.has("page") && page === 1 && searchParams.get("page") !== "1") {
          next.delete("page");
          changed = true;
       }
       if (changed) setSearchParams(next, { replace: true });
-   }, [page, requestedClaimType, requestedStatus, searchParams, setSearchParams, windowValue]);
+   }, [page, requestedClaimType, requestedStartedOn, requestedStatus, searchParams, setSearchParams, windowValue]);
 
    const overviewUrl = useMemo(
       () => requestUrl("MANAGEMENT_PIPELINE_OVERVIEW", { window: windowValue }),
@@ -87,9 +113,11 @@ function ManagementPipelineHealthPage() {
          window: windowValue,
          status: statusFilter,
          claim_type: claimTypeFilter,
+         started_after: startedAfter,
+         started_before: startedBefore,
          page,
       }),
-      [claimTypeFilter, page, statusFilter, windowValue],
+      [claimTypeFilter, page, startedAfter, startedBefore, statusFilter, windowValue],
    );
    const overviewRequest = useManagementRequest(overviewUrl);
    const runsRequest = useManagementRequest(runsUrl);
@@ -106,6 +134,7 @@ function ManagementPipelineHealthPage() {
 
    const overview = overviewRequest.data;
    const runs = runsRequest.data;
+   const hasRunFilters = Boolean(statusFilter || claimTypeFilter || startedOnFilter);
 
    return (
       <div className="management-page management-pipeline-page">
@@ -246,10 +275,32 @@ function ManagementPipelineHealthPage() {
                      <span>Claim type</span>
                      <select value={claimTypeFilter} onChange={(event) => updateQuery({ claim_type: event.target.value }, { resetPage: true })}>
                         <option value="">All claim types</option>
-                        {["TEXT", "IMAGE", "VIDEO", "URL", "FILE"].map((value) => <option key={value} value={value}>{formatManagementClaimType(value)}</option>)}
+                        {SUPPORTED_CLAIM_TYPES.map((value) => <option key={value} value={value}>{formatManagementClaimType(value)}</option>)}
                      </select>
                   </label>
+                  <label>
+                     <span>Started on</span>
+                     <input
+                        type="date"
+                        value={startedOnFilter}
+                        onChange={(event) => updateQuery({ started_on: event.target.value }, { resetPage: true })}
+                     />
+                  </label>
                </div>
+               {hasRunFilters ? (
+                  <div className="management-pipeline-filters__actions">
+                     <Button
+                        variant="secondary"
+                        density="compact"
+                        onClick={() => updateQuery(
+                           { status: "", claim_type: "", started_on: "" },
+                           { resetPage: true },
+                        )}
+                     >
+                        Clear filters
+                     </Button>
+                  </div>
+               ) : null}
             </div>
             <ManagementRequestState
                loading={runsRequest.loading}
