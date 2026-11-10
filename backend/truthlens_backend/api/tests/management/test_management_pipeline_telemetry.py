@@ -110,6 +110,34 @@ class ManagementPipelineTelemetryApiTests(APITestCase):
             outcome="success",
             occurred_at=now,
         )
+        VerificationTelemetryEvent.objects.create(
+            verification_run=self.run,
+            sequence=4,
+            event_type=VerificationTelemetryEvent.EventType.LLM_PROVIDER_CALL,
+            name="gfc_proposition_coverage",
+            provider="gemini",
+            provider_call_id=uuid4(),
+            duration_ms=90,
+            outcome="success",
+            occurred_at=now,
+        )
+        VerificationTelemetryEvent.objects.create(
+            verification_run=self.run,
+            sequence=5,
+            event_type=VerificationTelemetryEvent.EventType.PIPELINE_STAGE,
+            name="gfc_proposition_coverage_check",
+            duration_ms=90,
+            outcome="",
+            metadata={
+                "candidate_count": 5,
+                "relevant_candidate_count": 2,
+                "covered_candidate_count": 0,
+                "terminally_sufficient": False,
+                "reason_code": "RELATED_BUT_INCOMPLETE",
+                "reasoning": "DANGEROUS PRIVATE REASONING",
+            },
+            occurred_at=now,
+        )
 
     def client_for(self, user):
         client = APIClient()
@@ -295,9 +323,23 @@ class ManagementPipelineTelemetryApiTests(APITestCase):
         self.assertNotIn("failure_message", response.data)
         self.assertNotIn("triggered_by", response.data)
         events = response.data["telemetry_events"]
-        self.assertEqual([event["sequence"] for event in events], [1, 2, 3])
+        self.assertEqual(
+            [event["sequence"] for event in events],
+            [1, 2, 3, 4, 5],
+        )
         self.assertEqual(events[0]["metadata"], {"status_code": 503, "results": 2})
         self.assertEqual(events[1]["error_label"], "RuntimeError code=503")
+        self.assertEqual(events[3]["operation"], "gfc_proposition_coverage")
+        self.assertEqual(
+            events[4]["metadata"],
+            {
+                "candidate_count": 5,
+                "relevant_candidate_count": 2,
+                "covered_candidate_count": 0,
+                "terminally_sufficient": False,
+                "reason_code": "RELATED_BUT_INCOMPLETE",
+            },
+        )
 
         payload = json.dumps(response.data, default=str)
         for secret in (
@@ -311,6 +353,7 @@ class ManagementPipelineTelemetryApiTests(APITestCase):
             "DANGEROUS TOKEN",
             "DANGEROUS PROMPT",
             "DANGEROUS RESPONSE",
+            "DANGEROUS PRIVATE REASONING",
         ):
             self.assertNotIn(secret, payload)
 
