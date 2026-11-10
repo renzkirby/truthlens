@@ -6,6 +6,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
+from api.accountability_service import record_accountability_event
 from api.models import (
     AccountabilityEvent,
     Organization,
@@ -13,6 +14,7 @@ from api.models import (
     OrganizationMembership,
 )
 from api.organization_partnership_lifecycle_service import (
+    MANAGE_PARTNER_ORGANIZATION,
     end_partner_organization_partnership,
     suspend_partner_organization_partnership,
 )
@@ -149,14 +151,48 @@ class GovernanceNoticeAccessTests(APITestCase):
         )
 
     def test_admin_notice_projection_is_detailed_but_allowlisted(self):
-        event = self.suspend()
-        event.context["governance"]["internal_secret"] = "must never leak"
-        event.save(update_fields=["context"])
-
-        notice = OrganizationGovernanceNoticeRecipient.objects.get(
+        event = record_accountability_event(
+            action_type=(
+                AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED
+            ),
+            resource_type=AccountabilityEvent.ResourceType.ORGANIZATION,
+            resource_id=self.organization.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+            actor=self.platform_admin,
+            subject_organization=self.organization,
+            capability=MANAGE_PARTNER_ORGANIZATION,
+            previous_state={
+                "verification_status": Organization.VerificationStatus.VERIFIED,
+                "partner_status": Organization.PartnerStatus.ACTIVE,
+            },
+            new_state={
+                "verification_status": Organization.VerificationStatus.VERIFIED,
+                "partner_status": Organization.PartnerStatus.SUSPENDED,
+            },
+            reason_code="PARTNERSHIP_SUSPENDED",
+            notes=self.suspension_payload()["rationale"],
+            context={
+                "governance": {
+                    "suspension_type": "REMEDIAL",
+                    "factors": ["VERIFICATION_STANDARDS"],
+                    "severity": "HIGH",
+                    "policy_basis": "Partnership Enforcement Policy §13.1",
+                    "remediation": {
+                        "required_action": (
+                            "Review affected investigations and correct the "
+                            "sourcing process."
+                        )
+                    },
+                    "internal_review_marker": "must never leak",
+                }
+            },
+        )
+        notice = OrganizationGovernanceNoticeRecipient.objects.create(
             governance_event=event,
             user=self.organization_admin,
+            audience=OrganizationGovernanceNoticeRecipient.Audience.ADMIN,
         )
+
         response = self.client_for(self.organization_admin).get(
             reverse("governance_notice_detail", kwargs={"notice_id": notice.pk})
         )
@@ -178,7 +214,7 @@ class GovernanceNoticeAccessTests(APITestCase):
         self.assertIn("remediation", response.data["governance"])
         self.assertNotIn("supporting_basis", response.data)
         self.assertNotIn("supporting_basis", response.data["governance"])
-        self.assertNotIn("internal_secret", response.data["governance"])
+        self.assertNotIn("internal_review_marker", response.data["governance"])
 
     def test_member_notice_projection_is_status_only(self):
         event = self.suspend()
@@ -240,12 +276,13 @@ class GovernanceNoticeAccessTests(APITestCase):
             OrganizationMembership.Status.LEFT,
         )
 
-        event = AccountabilityEvent.objects.get(
-            subject_organization=self.organization,
-            reason_code="PARTNERSHIP_ENDED",
-        )
         notice = OrganizationGovernanceNoticeRecipient.objects.get(
-            governance_event=event,
+            governance_event__subject_organization=self.organization,
+            governance_event__reason_code="PARTNERSHIP_ENDED",
+            governance_event__resource_type=(
+                AccountabilityEvent.ResourceType.ORGANIZATION
+            ),
+            governance_event__resource_id=str(self.organization.pk),
             user=self.organization_admin,
         )
         response = self.client_for(self.organization_admin).get(
