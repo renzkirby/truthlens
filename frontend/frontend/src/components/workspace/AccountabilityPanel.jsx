@@ -708,10 +708,11 @@ function AccountabilityPanel({ scope, organizationId, organizationName }) {
          <section className="accountability-boundary-note" aria-label="Accountability record scope">
             <Icons name="activity" size={18} />
             <div>
-               <strong>Read-only accountability record</strong>
+               <strong>Professional accountability history</strong>
                <p>
-                  Review attributable actions recorded for <strong>{scopeLabel}</strong>. This history supports
-                  accountable review of authorized operations; it is not a general user-surveillance view.
+                  Review what happened, who performed the action, what changed, and when it occurred for
+                  <strong> {scopeLabel}</strong>. Technical identifiers remain available only when traceability
+                  or troubleshooting requires them.
                </p>
             </div>
          </section>
@@ -720,7 +721,7 @@ function AccountabilityPanel({ scope, organizationId, organizationName }) {
             <div className="accountability-history-heading">
                <div>
                   <h3>Recorded actions</h3>
-                  <p>See what changed, who performed the action, when it happened, and which record was affected.</p>
+                  <p>Read the professional record first; open Technical record only when an internal reference is needed.</p>
                </div>
                <Button
                   type="button"
