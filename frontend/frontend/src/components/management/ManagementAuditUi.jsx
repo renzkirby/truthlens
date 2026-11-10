@@ -10,6 +10,8 @@ const STATE_FIELDS = [
    ["invitation_purpose", "Invitation purpose"],
    ["invited_role", "Invited role"],
    ["send_count", "Delivery count"],
+   ["reconsideration_status", "Reconsideration status"],
+   ["outcome", "Reconsideration outcome"],
 ];
 
 const CONTEXT_FIELDS = [
@@ -18,6 +20,9 @@ const CONTEXT_FIELDS = [
    ["operation", "Operation"],
    ["delivery_status", "Delivery status"],
    ["transition", "Lifecycle transition"],
+   ["reconsideration_id", "Reconsideration ID"],
+   ["target_suspension_event_id", "Target suspension event"],
+   ["grounds", "Reconsideration grounds"],
 ];
 
 const GOVERNANCE_FIELD_LABELS = {
