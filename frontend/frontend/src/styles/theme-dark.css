@@ -747,3 +747,115 @@ html[data-theme="dark"] .hub-modal-content .br-modal-footer {
    border-top-color: var(--tl-color-border-light);
    background: var(--tl-color-bg-subtle);
 }
+
+
+/* Cross-page dark-surface consistency.
+   Passive containers share the same soft-outline language. Interactive fields,
+   selects, buttons, and focusable controls intentionally keep clearer borders. */
+html[data-theme="dark"] :is(
+   .verify-tabs,
+   .verify-layout .box-panel,
+   .verify-layout .result-card,
+   .create-thread-panel,
+   .create-thread-existing,
+   .tl-notifications-page__filters,
+   .tl-notifications-page__state,
+   .tl-notifications-list
+) {
+   border-color: var(--tl-color-border-soft);
+   background: var(--tl-color-bg-surface);
+   box-shadow: var(--tl-shadow-sm);
+}
+
+html[data-theme="dark"] .verify-tabs {
+   background: color-mix(in srgb, var(--tl-color-bg-surface) 92%, var(--tl-color-bg-subtle));
+}
+
+html[data-theme="dark"] .verify-tab-btn--media::before {
+   background: var(--tl-color-border-light);
+}
+
+html[data-theme="dark"] .feed-controls {
+   border-bottom-color: var(--tl-color-border-light);
+}
+
+html[data-theme="dark"] .feed-assessment {
+   border-color: var(--tl-color-border-soft);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .feed-assessment-logo {
+   border-color: var(--tl-color-border-soft);
+}
+
+html[data-theme="dark"] .feed-card-actions {
+   border-top-color: var(--tl-color-border-light);
+}
+
+/* Dashboard action controls that had late light-theme overrides. */
+html[data-theme="dark"] .hub-page-layout .hub-action-refresh,
+html[data-theme="dark"] .hub-page-layout .hub-trust-explain-btn {
+   border-color: var(--tl-color-border-default);
+   color: var(--tl-color-text-body);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-action-refresh:hover:not(:disabled),
+html[data-theme="dark"] .hub-page-layout .hub-trust-explain-btn:hover {
+   border-color: color-mix(in srgb, var(--tl-color-brand-primary) 42%, var(--tl-color-border-default));
+   color: var(--tl-color-text-main);
+   background: var(--tl-color-bg-surface);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-last-updated {
+   color: var(--tl-color-text-muted);
+}
+
+/* Trust-score explainer modal follows the same dashboard surface system. */
+html[data-theme="dark"] .hub-trust-explainer {
+   color: var(--tl-color-text-main);
+   background: var(--tl-color-bg-elevated);
+   box-shadow: var(--tl-shadow-lg);
+}
+
+html[data-theme="dark"] .hub-trust-explainer-header {
+   border-bottom-color: var(--tl-color-border-light);
+}
+
+html[data-theme="dark"] .hub-trust-explainer :is(
+   .hub-trust-explainer-header h2,
+   .hub-trust-current-summary strong,
+   .hub-explainer-section h3,
+   .hub-score-range-grid strong,
+   .hub-rank-guidance strong
+) {
+   color: var(--tl-color-text-main);
+}
+
+html[data-theme="dark"] .hub-trust-explainer :is(
+   .hub-trust-current-summary span,
+   .hub-explainer-section p,
+   .hub-score-range-grid span,
+   .hub-rank-guidance
+) {
+   color: var(--tl-color-text-muted);
+}
+
+html[data-theme="dark"] .hub-trust-explainer :is(
+   .hub-trust-current-summary > div,
+   .hub-score-range-grid > div
+) {
+   border-color: var(--tl-color-border-soft);
+   background: var(--tl-color-bg-subtle);
+}
+
+/* Keep passive profile/settings/partner surfaces visually aligned with the
+   feed, dashboard, verify, and notification pages. */
+html[data-theme="dark"] :is(
+   .user-profile__profile-card,
+   .settings-content,
+   .partner-directory-card
+) {
+   border-color: var(--tl-color-border-soft);
+   box-shadow: var(--tl-shadow-sm);
+}
