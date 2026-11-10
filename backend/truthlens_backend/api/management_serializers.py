@@ -5,6 +5,7 @@ from .organization_partnership_lifecycle_service import (
     PARTNERSHIP_ENDING_GROUND_CHOICES,
     PARTNERSHIP_ENDING_TYPE_CHOICES,
     PARTNERSHIP_FACTOR_CHOICES,
+    PARTNERSHIP_REINSTATEMENT_BASIS_CHOICES,
     PARTNERSHIP_SEVERITY_CHOICES,
     PARTNERSHIP_SUSPENSION_TYPE_CHOICES,
     get_partner_organization_lifecycle_projection,
@@ -125,20 +126,74 @@ class ManagementPartnershipSuspensionSerializer(StrictFieldsSerializer):
     severity = serializers.ChoiceField(
         choices=PARTNERSHIP_SEVERITY_CHOICES,
     )
-    reason = serializers.CharField(
+    rationale = serializers.CharField(
+        min_length=20,
         max_length=4000,
         allow_blank=False,
         trim_whitespace=True,
     )
     policy_basis = serializers.CharField(
         max_length=1000,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    supporting_basis = serializers.CharField(
+        max_length=6000,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    supporting_references = serializers.ListField(
+        child=serializers.CharField(
+            max_length=500,
+            allow_blank=False,
+            trim_whitespace=True,
+        ),
+        required=False,
+        allow_empty=True,
+        max_length=10,
+        default=list,
+    )
+    other_factor_explanation = serializers.CharField(
+        max_length=2000,
         required=False,
         allow_blank=True,
         trim_whitespace=True,
         default="",
     )
-    required_remediation = serializers.CharField(
-        max_length=4000,
+    remediation_problem = serializers.CharField(
+        max_length=3000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+    remediation_required_action = serializers.CharField(
+        max_length=3000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+    remediation_evidence_required = serializers.CharField(
+        max_length=3000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+    remediation_deadline = serializers.DateField(
+        required=False,
+        allow_null=True,
+    )
+    remediation_review_method = serializers.CharField(
+        max_length=3000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+    remediation_failure_consequence = serializers.CharField(
+        max_length=3000,
         required=False,
         allow_blank=True,
         trim_whitespace=True,
@@ -150,14 +205,73 @@ class ManagementPartnershipSuspensionSerializer(StrictFieldsSerializer):
     )
 
     def validate(self, attrs):
+        factors = attrs.get("factors", [])
+        other_explanation = attrs.get("other_factor_explanation", "").strip()
+        if "OTHER" in factors and not other_explanation:
+            raise serializers.ValidationError(
+                {
+                    "other_factor_explanation": (
+                        "Explain the underlying standard and why the established factors do not fit."
+                    )
+                }
+            )
+        if "OTHER" not in factors and other_explanation:
+            raise serializers.ValidationError(
+                {
+                    "other_factor_explanation": (
+                        "Other-factor explanation is only valid when Other is selected."
+                    )
+                }
+            )
+
+        remediation_fields = {
+            "remediation_problem": attrs.get("remediation_problem", "").strip(),
+            "remediation_required_action": attrs.get(
+                "remediation_required_action", ""
+            ).strip(),
+            "remediation_evidence_required": attrs.get(
+                "remediation_evidence_required", ""
+            ).strip(),
+            "remediation_review_method": attrs.get(
+                "remediation_review_method", ""
+            ).strip(),
+            "remediation_failure_consequence": attrs.get(
+                "remediation_failure_consequence", ""
+            ).strip(),
+        }
+        has_remediation = any(remediation_fields.values()) or bool(
+            attrs.get("remediation_deadline")
+        )
+
+        if attrs.get("suspension_type") == "REMEDIAL":
+            errors = {
+                field: "This field is required for a remedial suspension."
+                for field, value in remediation_fields.items()
+                if not value
+            }
+            if not attrs.get("remediation_deadline"):
+                errors["remediation_deadline"] = (
+                    "A remediation deadline is required for a remedial suspension."
+                )
+            if errors:
+                raise serializers.ValidationError(errors)
+        elif has_remediation:
+            raise serializers.ValidationError(
+                {
+                    "remediation_problem": (
+                        "Structured remediation fields are only valid for a remedial suspension."
+                    )
+                }
+            )
+
         if (
-            attrs.get("suspension_type") == "REMEDIAL"
-            and not attrs.get("required_remediation", "").strip()
+            attrs.get("suspension_type") == "PRECAUTIONARY"
+            and not attrs.get("review_date")
         ):
             raise serializers.ValidationError(
                 {
-                    "required_remediation": (
-                        "Required remediation must be recorded for a remedial suspension."
+                    "review_date": (
+                        "A review date is required for a precautionary suspension."
                     )
                 }
             )
@@ -184,13 +298,35 @@ class ManagementPartnershipEndingSerializer(StrictFieldsSerializer):
         allow_blank=True,
         default="",
     )
-    reason = serializers.CharField(
+    rationale = serializers.CharField(
+        min_length=20,
         max_length=4000,
         allow_blank=False,
         trim_whitespace=True,
     )
     policy_basis = serializers.CharField(
         max_length=1000,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    supporting_basis = serializers.CharField(
+        max_length=6000,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    supporting_references = serializers.ListField(
+        child=serializers.CharField(
+            max_length=500,
+            allow_blank=False,
+            trim_whitespace=True,
+        ),
+        required=False,
+        allow_empty=True,
+        max_length=10,
+        default=list,
+    )
+    other_factor_explanation = serializers.CharField(
+        max_length=2000,
         required=False,
         allow_blank=True,
         trim_whitespace=True,
@@ -202,6 +338,7 @@ class ManagementPartnershipEndingSerializer(StrictFieldsSerializer):
         ground = attrs["ground"]
         factors = attrs.get("factors", [])
         severity = attrs.get("severity", "")
+        other_explanation = attrs.get("other_factor_explanation", "").strip()
 
         if ending_type == "VOLUNTARY_WITHDRAWAL":
             if ground != "VOLUNTARY_WITHDRAWAL":
@@ -240,6 +377,121 @@ class ManagementPartnershipEndingSerializer(StrictFieldsSerializer):
                 raise serializers.ValidationError(
                     {"severity": "Termination for cause requires High or Critical severity."}
                 )
+
+        if "OTHER" in factors and not other_explanation:
+            raise serializers.ValidationError(
+                {
+                    "other_factor_explanation": (
+                        "Explain the underlying standard and why the established factors do not fit."
+                    )
+                }
+            )
+        if "OTHER" not in factors and other_explanation:
+            raise serializers.ValidationError(
+                {
+                    "other_factor_explanation": (
+                        "Other-factor explanation is only valid when Other is selected."
+                    )
+                }
+            )
+        return attrs
+
+
+class ManagementPartnershipReinstatementSerializer(StrictFieldsSerializer):
+    basis = serializers.ChoiceField(
+        choices=PARTNERSHIP_REINSTATEMENT_BASIS_CHOICES,
+    )
+    rationale = serializers.CharField(
+        min_length=20,
+        max_length=4000,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    supporting_basis = serializers.CharField(
+        max_length=6000,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    supporting_references = serializers.ListField(
+        child=serializers.CharField(
+            max_length=500,
+            allow_blank=False,
+            trim_whitespace=True,
+        ),
+        required=False,
+        allow_empty=True,
+        max_length=10,
+        default=list,
+    )
+    completed_remediation = serializers.CharField(
+        max_length=4000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+    continuing_conditions = serializers.CharField(
+        max_length=4000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+    monitoring_end_date = serializers.DateField(
+        required=False,
+        allow_null=True,
+    )
+    monitoring_success_criteria = serializers.CharField(
+        max_length=3000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+    monitoring_recurrence_consequence = serializers.CharField(
+        max_length=3000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        default="",
+    )
+
+    def validate(self, attrs):
+        if (
+            attrs.get("basis") == "REMEDIATION_COMPLETED"
+            and not attrs.get("completed_remediation", "").strip()
+        ):
+            raise serializers.ValidationError(
+                {
+                    "completed_remediation": (
+                        "Completed remediation is required for this reinstatement basis."
+                    )
+                }
+            )
+
+        continuing_conditions = attrs.get("continuing_conditions", "").strip()
+        monitoring_values = (
+            attrs.get("monitoring_end_date"),
+            attrs.get("monitoring_success_criteria", "").strip(),
+            attrs.get("monitoring_recurrence_consequence", "").strip(),
+        )
+        if continuing_conditions and not all(monitoring_values):
+            raise serializers.ValidationError(
+                {
+                    "continuing_conditions": (
+                        "Monitoring end date, success criteria, and recurrence consequence "
+                        "are required when continuing conditions apply."
+                    )
+                }
+            )
+        if not continuing_conditions and any(monitoring_values):
+            raise serializers.ValidationError(
+                {
+                    "continuing_conditions": (
+                        "Continuing conditions are required when monitoring details are provided."
+                    )
+                }
+            )
         return attrs
 
 
