@@ -894,6 +894,27 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.assertIn("url_gfc_continued_to_tavily", stages)
         self.assertIn("url_tavily_llm_evaluation", stages)
 
+    def test_partial_gfc_coverage_continues_to_tavily_with_combined_evidence(self):
+        self.relevance.return_value = {
+            "candidate_count": 1,
+            "relevant_candidate_count": 1,
+            "covered_candidate_count": 0,
+            "terminally_sufficient": False,
+            "reason_code": "RELATED_BUT_INCOMPLETE",
+            "candidates": [],
+        }
+
+        run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        self.retrieve_tavily.assert_called_once()
+        self.assertEqual(self.evaluate_persisted.call_count, 2)
+        self.filter_dossier_roles.assert_called()
+        self.assertEqual(self.save_claim.call_args.args[2], "Live Web Search")
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("url_gfc_proposition_coverage_check", stages)
+        self.assertIn("url_gfc_continued_to_tavily", stages)
+
     def test_gfc_failure_then_tavily_completes_same_run(self):
         observed = []
 
