@@ -1,0 +1,286 @@
+from unittest.mock import patch
+
+from django.contrib.auth.models import User
+from django.core import mail
+from django.test import override_settings
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from api.accountability_service import record_accountability_event
+from api.models import (
+    AccountabilityEvent,
+    Notification,
+    Organization,
+    OrganizationGovernanceNoticeRecipient,
+    UserProfile,
+)
+from api.notification_service import notification_destination
+from api.organization_governance_delivery_service import (
+    GovernanceNoticeDeliveryError,
+    deliver_governance_notice_channels,
+    enqueue_governance_notice_delivery,
+)
+from api.organization_partnership_lifecycle_service import (
+    MANAGE_PARTNER_ORGANIZATION,
+)
+
+
+@override_settings(
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    DEFAULT_FROM_EMAIL="TruthLens <noreply@truthlens.test>",
+    FRONTEND_URL="https://truthlens.example",
+)
+class GovernanceNoticeDeliveryTests(APITestCase):
+    def setUp(self):
+        self.platform_admin = User.objects.create_superuser(
+            username="governance-delivery-platform-admin",
+            email="platform@example.com",
+            password="test-password",
+        )
+        self.organization_admin = User.objects.create_user(
+            username="governance-delivery-org-admin",
+            email="admin@example.com",
+            password="test-password",
+        )
+        self.member = User.objects.create_user(
+            username="governance-delivery-member",
+            email="member@example.com",
+            password="test-password",
+        )
+        self.organization = Organization.objects.create(
+            name="Governance Delivery Partner",
+            slug="governance-delivery-partner",
+            verification_status=Organization.VerificationStatus.VERIFIED,
+            partner_status=Organization.PartnerStatus.SUSPENDED,
+        )
+        profile, _created = UserProfile.objects.get_or_create(
+            user=self.organization_admin
+        )
+        profile.is_email_verified = True
+        profile.save(update_fields=["is_email_verified"])
+        member_profile, _created = UserProfile.objects.get_or_create(user=self.member)
+        member_profile.is_email_verified = True
+        member_profile.save(update_fields=["is_email_verified"])
+
+    def client_for(self, user):
+        self.client.force_authenticate(user=user)
+        return self.client
+
+    def make_event(self):
+        return record_accountability_event(
+            action_type=(
+                AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED
+            ),
+            resource_type=AccountabilityEvent.ResourceType.ORGANIZATION,
+            resource_id=self.organization.pk,
+            authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+            actor=self.platform_admin,
+            subject_organization=self.organization,
+            capability=MANAGE_PARTNER_ORGANIZATION,
+            previous_state={
+                "verification_status": Organization.VerificationStatus.VERIFIED,
+                "partner_status": Organization.PartnerStatus.ACTIVE,
+            },
+            new_state={
+                "verification_status": Organization.VerificationStatus.VERIFIED,
+                "partner_status": Organization.PartnerStatus.SUSPENDED,
+            },
+            reason_code="PARTNERSHIP_SUSPENDED",
+            notes=(
+                "A detailed organization-facing rationale that must never be copied "
+                "into the governance alert email."
+            ),
+            context={
+                "governance": {
+                    "suspension_type": "REMEDIAL",
+                    "severity": "HIGH",
+                    "policy_basis": "Partnership Enforcement Policy §13.1",
+                }
+            },
+        )
+
+    def make_recipient(self, *, user=None, audience="ADMIN"):
+        return OrganizationGovernanceNoticeRecipient.objects.create(
+            governance_event=self.make_event(),
+            user=user or self.organization_admin,
+            audience=audience,
+        )
+
+    def test_admin_delivery_creates_inbox_notice_and_minimal_email(self):
+        recipient = self.make_recipient()
+
+        result = deliver_governance_notice_channels(recipient.pk)
+
+        recipient.refresh_from_db()
+        self.assertEqual(
+            recipient.in_app_status,
+            OrganizationGovernanceNoticeRecipient.DeliveryStatus.SENT,
+        )
+        self.assertEqual(
+            recipient.email_status,
+            OrganizationGovernanceNoticeRecipient.DeliveryStatus.SENT,
+        )
+        self.assertEqual(recipient.in_app_attempts, 1)
+        self.assertEqual(recipient.email_attempts, 1)
+        self.assertEqual(result["in_app_status"], "SENT")
+        self.assertEqual(result["email_status"], "SENT")
+
+        notification = Notification.objects.get(recipient=self.organization_admin)
+        self.assertEqual(
+            notification.notification_type,
+            Notification.NotificationType.ORGANIZATION_GOVERNANCE_CHANGED,
+        )
+        self.assertEqual(
+            notification.target_type,
+            Notification.TargetType.GOVERNANCE_NOTICE,
+        )
+        self.assertEqual(notification.target_id, recipient.pk)
+        self.assertEqual(
+            notification_destination(notification),
+            f"/governance/{recipient.pk}",
+        )
+
+        self.assertEqual(len(mail.outbox), 1)
+        email = mail.outbox[0]
+        self.assertEqual(email.subject, "TruthLens Partner governance notice")
+        self.assertIn("Partnership Suspended", email.body)
+        self.assertIn(
+            f"https://truthlens.example/governance/{recipient.pk}",
+            email.body,
+        )
+        self.assertNotIn("detailed organization-facing rationale", email.body)
+        self.assertNotIn("Partnership Enforcement Policy", email.body)
+
+    def test_member_receives_in_app_status_but_email_is_skipped(self):
+        recipient = self.make_recipient(
+            user=self.member,
+            audience=OrganizationGovernanceNoticeRecipient.Audience.MEMBER,
+        )
+
+        deliver_governance_notice_channels(recipient.pk)
+
+        recipient.refresh_from_db()
+        self.assertEqual(recipient.in_app_status, "SENT")
+        self.assertEqual(recipient.email_status, "SKIPPED")
+        self.assertEqual(recipient.in_app_attempts, 1)
+        self.assertEqual(recipient.email_attempts, 0)
+        self.assertEqual(len(mail.outbox), 0)
+
+        notification = Notification.objects.get(recipient=self.member)
+        self.assertEqual(notification.title, "Partner status update")
+        self.assertNotIn("rationale", notification.message.lower())
+        self.assertNotIn("policy", notification.message.lower())
+
+    def test_unverified_admin_email_is_skipped_without_blocking_in_app(self):
+        profile = self.organization_admin.profile
+        profile.is_email_verified = False
+        profile.save(update_fields=["is_email_verified"])
+        recipient = self.make_recipient()
+
+        deliver_governance_notice_channels(recipient.pk)
+
+        recipient.refresh_from_db()
+        self.assertEqual(recipient.in_app_status, "SENT")
+        self.assertEqual(recipient.email_status, "SKIPPED")
+        self.assertEqual(recipient.email_attempts, 0)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_email_failure_does_not_duplicate_successful_in_app_delivery_on_retry(self):
+        recipient = self.make_recipient()
+
+        with patch(
+            "api.organization_governance_delivery_service.EmailMultiAlternatives.send",
+            side_effect=RuntimeError("SMTP unavailable"),
+        ):
+            with self.assertRaises(GovernanceNoticeDeliveryError):
+                deliver_governance_notice_channels(recipient.pk)
+
+        recipient.refresh_from_db()
+        self.assertEqual(recipient.in_app_status, "SENT")
+        self.assertEqual(recipient.email_status, "FAILED")
+        self.assertEqual(recipient.in_app_attempts, 1)
+        self.assertEqual(recipient.email_attempts, 1)
+        self.assertEqual(
+            Notification.objects.filter(recipient=self.organization_admin).count(),
+            1,
+        )
+
+        deliver_governance_notice_channels(recipient.pk)
+
+        recipient.refresh_from_db()
+        self.assertEqual(recipient.in_app_status, "SENT")
+        self.assertEqual(recipient.email_status, "SENT")
+        self.assertEqual(recipient.in_app_attempts, 1)
+        self.assertEqual(recipient.email_attempts, 2)
+        self.assertEqual(
+            Notification.objects.filter(recipient=self.organization_admin).count(),
+            1,
+        )
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_broker_failure_leaves_durable_pending_row_and_is_reported(self):
+        recipient = self.make_recipient()
+
+        with patch(
+            "api.tasks.deliver_organization_governance_notice_task.delay",
+            side_effect=RuntimeError("Redis unavailable"),
+        ):
+            result = enqueue_governance_notice_delivery([recipient.pk])
+
+        recipient.refresh_from_db()
+        self.assertEqual(
+            result,
+            {"requested": 1, "queued": 0, "queue_failed": 1},
+        )
+        self.assertEqual(recipient.in_app_status, "PENDING")
+        self.assertEqual(recipient.email_status, "PENDING")
+
+    def test_management_detail_exposes_delivery_status_and_retry_endpoint(self):
+        recipient = self.make_recipient()
+        recipient.in_app_status = OrganizationGovernanceNoticeRecipient.DeliveryStatus.SENT
+        recipient.email_status = OrganizationGovernanceNoticeRecipient.DeliveryStatus.FAILED
+        recipient.in_app_attempts = 1
+        recipient.email_attempts = 2
+        recipient.last_delivery_error = "Email delivery failed: SMTP unavailable"
+        recipient.save(
+            update_fields=[
+                "in_app_status",
+                "email_status",
+                "in_app_attempts",
+                "email_attempts",
+                "last_delivery_error",
+            ]
+        )
+
+        detail = self.client_for(self.platform_admin).get(
+            reverse(
+                "management_organization_detail",
+                kwargs={"organization_id": self.organization.pk},
+            )
+        )
+        self.assertEqual(detail.status_code, status.HTTP_200_OK)
+        delivery = detail.data["governance_notice_delivery"]
+        self.assertEqual(delivery["total_recipients"], 1)
+        self.assertTrue(delivery["retry_available"])
+        self.assertEqual(delivery["in_app"]["SENT"], 1)
+        self.assertEqual(delivery["email"]["FAILED"], 1)
+        self.assertEqual(delivery["recent"][0]["id"], str(recipient.pk))
+
+        with patch(
+            "api.tasks.deliver_organization_governance_notice_task.delay"
+        ) as delay:
+            retry = self.client_for(self.platform_admin).post(
+                reverse(
+                    "management_organization_governance_notice_retry",
+                    kwargs={"organization_id": self.organization.pk},
+                ),
+                {},
+                format="json",
+            )
+
+        self.assertEqual(retry.status_code, status.HTTP_200_OK)
+        self.assertEqual(retry.data["requested"], 1)
+        self.assertEqual(retry.data["queued"], 1)
+        self.assertEqual(retry.data["queue_failed"], 0)
+        delay.assert_called_once_with(str(recipient.pk))
