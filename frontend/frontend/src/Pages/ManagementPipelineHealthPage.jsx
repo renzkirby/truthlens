@@ -37,15 +37,28 @@ function requestUrl(endpoint, params) {
    return url.toString();
 }
 
+function parseLocalDateInput(value) {
+   if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return null;
+   const [year, month, day] = value.split("-").map(Number);
+   const date = new Date(year, month - 1, day);
+   if (
+      Number.isNaN(date.getTime())
+      || date.getFullYear() !== year
+      || date.getMonth() !== month - 1
+      || date.getDate() !== day
+   ) {
+      return null;
+   }
+   return date;
+}
+
 function isValidDateInput(value) {
-   if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return false;
-   const date = new Date(`${value}T00:00:00`);
-   return !Number.isNaN(date.getTime());
+   return parseLocalDateInput(value) !== null;
 }
 
 function localDayBounds(value) {
-   if (!isValidDateInput(value)) return { startedAfter: "", startedBefore: "" };
-   const start = new Date(`${value}T00:00:00`);
+   const start = parseLocalDateInput(value);
+   if (!start) return { startedAfter: "", startedBefore: "" };
    const end = new Date(start);
    end.setDate(end.getDate() + 1);
    return {
