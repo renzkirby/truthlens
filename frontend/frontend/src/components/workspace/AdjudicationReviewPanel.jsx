@@ -65,6 +65,28 @@ function formatLabel(value, fallback = "Unavailable") {
       .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
+const ADJUDICATION_HISTORY_LABELS = {
+   CASE_CREATED: "Adjudication case created",
+   CASE_CLAIMED: "Adjudication claimed",
+   CASE_ASSIGNED: "Adjudicator assigned",
+   CASE_UNASSIGNED: "Adjudicator unassigned",
+   REVIEW_STARTED: "Adjudication review started",
+   CASE_ESCALATED: "Adjudication escalated",
+   CASE_RESOLVED: "Adjudication completed",
+   CASE_REOPENED: "Adjudication reopened",
+   CASE_CANCELLED: "Adjudication cancelled",
+   ADJUDICATION_STARTED: "Adjudication started",
+   VERDICT_ISSUED: "Authoritative verdict recorded",
+   VERDICT_REOPENED: "Verdict reopened for review",
+   VERDICT_REVISED: "Authoritative verdict revised",
+};
+
+function formatAdjudicationHistoryLabel(event) {
+   return ADJUDICATION_HISTORY_LABELS[event?.event_type]
+      || event?.event_type_label
+      || formatLabel(event?.event_type, "Adjudication event");
+}
+
 function formatDateTime(value, fallback = "Not recorded") {
    if (!value) {
       return fallback;
@@ -172,24 +194,15 @@ function DecisionRecord({ decision, current = false }) {
             </div>
          </dl>
 
-         {current ? (
-            <details className="adjudication-record-disclosure adjudication-technical-provenance">
-               <summary>Technical provenance</summary>
-               <dl className="adjudication-detail-facts compact adjudication-record-disclosure-body">
-                  <div>
-                     <dt>Verification run</dt>
-                     <dd>{decision?.verification_run_id || "Not recorded"}</dd>
-                  </div>
-               </dl>
-            </details>
-         ) : (
-            <dl className="adjudication-detail-facts compact adjudication-decision-technical">
+         <details className="adjudication-record-disclosure adjudication-technical-provenance">
+            <summary>Technical provenance</summary>
+            <dl className="adjudication-detail-facts compact adjudication-record-disclosure-body">
                <div>
-                  <dt>Verification run</dt>
+                  <dt>Verification run ID</dt>
                   <dd>{decision?.verification_run_id || "Not recorded"}</dd>
                </div>
             </dl>
-         )}
+         </details>
 
          <div className="adjudication-reading-block">
             <strong>Claim statement</strong>
@@ -341,7 +354,6 @@ function EvidenceRecord({
                <p>
                   <strong>Rejection reason:</strong>{" "}
                   {evidence?.rejection_reason_label || formatLabel(evidence?.rejection_reason, "Not recorded")}
-                  {evidence?.rejection_reason && ` (${evidence.rejection_reason})`}
                </p>
             )}
             <div className="adjudication-review-notes-row">
@@ -366,10 +378,6 @@ function EvidenceRecord({
                   <dt>Submitted</dt>
                   <dd><FormattedDateTime value={evidence?.submitted_at} /></dd>
                </div>
-               <div>
-                  <dt>Evidence ID</dt>
-                  <dd>{evidence?.id || "Unavailable"}</dd>
-               </div>
             </dl>
          </details>
       </li>
@@ -384,13 +392,13 @@ function EventRecord({ event }) {
          <span className="adjudication-event-marker" aria-hidden="true" />
          <div>
             <div className="adjudication-event-heading">
-               <strong>{event?.event_type_label || formatLabel(event?.event_type, "Case event")}</strong>
+               <strong>{formatAdjudicationHistoryLabel(event)}</strong>
                <FormattedDateTime value={event?.created_at} />
             </div>
-            <p>Actor: <MinimalUser user={event?.actor} fallback="Actor not displayed" /></p>
+            <p>Performed by: <MinimalUser user={event?.actor} fallback="System or historical actor" /></p>
             {hasTransition && (
                <p>
-                  Case transition: {formatLabel(event?.from_status, "None")} → {formatLabel(event?.to_status, "None")}
+                  Decision status: {formatLabel(event?.from_status, "Not started")} → {formatLabel(event?.to_status, "Not recorded")}
                </p>
             )}
             {event?.reason_code && <p>Reason: {formatLabel(event.reason_code)}</p>}
@@ -2509,10 +2517,12 @@ function AdjudicationReviewContent({
                                     </dl>
 
                                     <details className="adjudication-record-disclosure adjudication-technical-preconditions">
-                                       <summary>Decision checks</summary>
+                                       <summary>Decision readiness details</summary>
                                        <dl className="adjudication-detail-facts compact adjudication-record-disclosure-body">
-                                          <div><dt>Expected revision</dt><dd>{actionState.expected_revision ?? "Unavailable"}</dd></div>
-                                          <div><dt>Case identity check</dt><dd>{actionPreconditionsAreValid ? "Confirmed" : "Unavailable"}</dd></div>
+                                          <div>
+                                             <dt>Current case state</dt>
+                                             <dd>{actionPreconditionsAreValid ? "Confirmed — you are reviewing the latest case state." : "Refresh required before deciding."}</dd>
+                                          </div>
                                        </dl>
                                     </details>
 

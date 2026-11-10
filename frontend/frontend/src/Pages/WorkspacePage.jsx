@@ -136,8 +136,8 @@ const WORKSPACE_SECTIONS = [
    },
    {
       id: "accountability",
-      label: "Accountability",
-      description: "Review attributable actions and state changes affecting this organization.",
+      label: "Accountability History",
+      description: "Review the professional history of attributable actions and changes affecting this organization.",
       icon: "activity",
       scope: "organization",
       capabilities: ORGANIZATION_ACCOUNTABILITY_CAPABILITIES,

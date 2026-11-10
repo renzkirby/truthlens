@@ -47,17 +47,180 @@ function displayKey(value) {
       .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
-function compactIdentifier(value) {
-   if (!value) {
-      return "Identifier unavailable";
-   }
+const PROFESSIONAL_FIELD_LABELS = {
+   assigned_to_id: "Assigned reviewer",
+   status: "Status",
+   evidence_status: "Evidence decision",
+   verdict: "Verdict",
+   publication_status: "Publication status",
+   verification_status: "Organization verification",
+   partner_status: "Partnership status",
+   role: "Role",
+   public_profile_enabled: "Public profile",
+   is_active: "Account status",
+   version: "Version",
+};
 
+const PROFESSIONAL_VALUE_LABELS = {
+   PENDING: "Pending",
+   AVAILABLE: "Available",
+   ACTIVE: "Active",
+   COMPLETED: "Completed",
+   CANCELLED: "Cancelled",
+   SUSPENDED: "Suspended",
+   LEFT: "Left organization",
+   UNVERIFIED: "Unverified",
+   VERIFIED: "Verified",
+   REJECTED: "Rejected",
+   FACT: "Fact",
+   FAKE: "Fake",
+   MISLEADING: "Misleading",
+   SATIRE: "Satire",
+   ADMIN: "Administrator",
+   LEAD_VERIFIER: "Lead Verifier",
+   VERIFICATION_REVIEWER: "Verification Reviewer",
+   RESEARCHER: "Researcher",
+   DRAFT: "Draft",
+   SUBMITTED: "Submitted",
+   PUBLISHED: "Published",
+   RETURNED_FOR_REWORK: "Returned for rework",
+};
+
+const CAPABILITY_LABELS = {
+   REVIEW_SAFETY: "Safety review",
+   CLAIM_VERIFICATION_WORK: "Investigation work",
+   REVIEW_EVIDENCE: "Evidence review",
+   ADJUDICATE: "Adjudication",
+   CREATE_FACT_CHECK_DRAFT: "Fact-check drafting",
+   PUBLISH_FACT_CHECK: "Fact-check publishing",
+   MANAGE_ORGANIZATION: "Partner Organization administration",
+};
+
+const EVENT_SUMMARIES = {
+   SAFETY_CASE_CLAIMED: (actor) => `${actor} took responsibility for reviewing this Safety case.`,
+   SAFETY_CASE_RELEASED: (actor) => `${actor} released this Safety case back to the review queue.`,
+   SAFETY_CASE_ESCALATED: (actor) => `${actor} escalated this Safety case for further review.`,
+   VERIFICATION_ASSIGNMENT_CLAIMED: (actor) => `${actor} took responsibility for this investigation.`,
+   VERIFICATION_ASSIGNMENT_RELEASED: (actor) => `${actor} released this investigation back to the organization queue.`,
+   VERIFICATION_ASSIGNMENT_COMPLETED: () => "The investigation assignment was completed.",
+   EVIDENCE_VERIFIED: (actor) => `${actor} approved this evidence for use in the investigation.`,
+   EVIDENCE_REJECTED: (actor) => `${actor} rejected this evidence for use in the investigation.`,
+   EVIDENCE_REOPENED: (actor) => `${actor} reopened this evidence for another review.`,
+   ADJUDICATION_STARTED: (actor) => `${actor} began the authoritative claim decision.`,
+   VERDICT_ISSUED: (actor) => `${actor} recorded the first authoritative verdict for this investigation.`,
+   VERDICT_REVISED: (actor) => `${actor} recorded a revised authoritative verdict.`,
+   ARTICLE_DRAFT_CREATED: (actor) => `${actor} created a fact-check draft from completed investigation work.`,
+   ARTICLE_SUBMITTED: (actor) => `${actor} submitted the fact-check draft for publication review.`,
+   ARTICLE_PUBLISHED: (actor) => `${actor} published the fact check.`,
+};
+
+function professionalFieldLabel(key) {
+   return PROFESSIONAL_FIELD_LABELS[key] || displayKey(key);
+}
+
+function professionalEnumLabel(value) {
+   if (value === null || value === undefined || value === "") return "Not recorded";
    const text = String(value);
-   if (text.length <= 20) {
-      return text;
-   }
+   return PROFESSIONAL_VALUE_LABELS[text] || displayKey(text);
+}
 
-   return `${text.slice(0, 8)}…${text.slice(-6)}`;
+function authorityLabelForEvent(event) {
+   if (event.authority?.organization?.name) {
+      return event.authority.organization.name;
+   }
+   if (event.authority?.scope === "PLATFORM") return "Platform Staff";
+   if (event.authority?.scope === "SYSTEM") return "TruthLens system";
+   if (event.authority?.scope === "ORGANIZATION") return "Partner Organization";
+   return professionalEnumLabel(event.authority?.scope);
+}
+
+function professionalResourceLabel(event) {
+   if (event.domain === "SAFETY") return "Safety case";
+   return {
+      VERIFICATION_ASSIGNMENT: "Investigation assignment",
+      EVIDENCE_SUBMISSION: "Evidence submission",
+      ADJUDICATION_DECISION: "Adjudication decision",
+      OFFICIAL_FACT_CHECK: "Fact-check publication",
+      ORGANIZATION: "Partner Organization",
+      ORGANIZATION_MEMBERSHIP: "Organization membership",
+      ORGANIZATION_INVITATION: "Organization invitation",
+      USER_ACCOUNT: "User account",
+   }[event.resource?.type] || event.resource?.label || displayKey(event.resource?.type || "Record");
+}
+
+function capabilityLabel(value) {
+   if (!value) return "Not applicable";
+   return CAPABILITY_LABELS[value] || displayKey(value);
+}
+
+function isTechnicalStateKey(key) {
+   if (key === "assigned_to_id") return false;
+   return (
+      key.endsWith("_id")
+      || key.endsWith("_ids")
+      || key.startsWith("expected_")
+      || ["decision_id", "case_id", "revision_number", "edit_generation"].includes(key)
+   );
+}
+
+function professionalValue(event, key, value) {
+   if (key === "assigned_to_id") {
+      if (value === null || value === undefined || value === "") return "Unassigned";
+      const actorOwnsAssignment = ["SAFETY_CASE_CLAIMED", "SAFETY_CASE_RELEASED"].includes(
+         event.action_type,
+      );
+      if (
+         actorOwnsAssignment
+         && event.actor?.id
+         && String(value) === String(event.actor.id)
+         && event.actor?.username
+      ) {
+         return `@${event.actor.username}`;
+      }
+      return "Reviewer identity retained in technical record";
+   }
+   if (value === null || value === undefined || value === "") return "Not recorded";
+   if (typeof value === "boolean") return value ? "Yes" : "No";
+   if (typeof value === "number") return String(value);
+   if (key === "evidence_status") {
+      return {
+         UNVERIFIED: "Pending review",
+         PENDING: "Pending review",
+         VERIFIED: "Approved",
+         REJECTED: "Rejected",
+      }[value] || professionalEnumLabel(value);
+   }
+   if (key === "verification_status") {
+      return {
+         UNVERIFIED: "Unverified",
+         PENDING: "Pending verification",
+         VERIFIED: "Verified",
+         REJECTED: "Rejected",
+      }[value] || professionalEnumLabel(value);
+   }
+   if (typeof value === "string") return professionalEnumLabel(value);
+   return "Recorded in technical details";
+}
+
+function buildProfessionalChanges(event) {
+   return buildStateChanges(event.previous_state, event.new_state)
+      .filter((change) => !isTechnicalStateKey(change.key))
+      .filter((change) => {
+         const simpleBefore = change.before === null || ["string", "number", "boolean", "undefined"].includes(typeof change.before);
+         const simpleAfter = change.after === null || ["string", "number", "boolean", "undefined"].includes(typeof change.after);
+         return simpleBefore && simpleAfter;
+      })
+      .map((change) => ({
+         ...change,
+         label: professionalFieldLabel(change.key),
+         beforeLabel: professionalValue(event, change.key, change.before),
+         afterLabel: professionalValue(event, change.key, change.after),
+      }));
+}
+
+function professionalEventSummary(event, actorLabel) {
+   const buildSummary = EVENT_SUMMARIES[event.action_type];
+   return buildSummary ? buildSummary(actorLabel) : "";
 }
 
 function isEmptyRecord(value) {
@@ -137,35 +300,38 @@ function StructuredValue({ value }) {
    return <PrimitiveValue value={value} />;
 }
 
-function StateChanges({ previousState, newState }) {
-   const changes = buildStateChanges(previousState, newState);
+function StateChanges({ event }) {
+   const changes = buildProfessionalChanges(event);
 
    if (changes.length === 0) {
       return (
          <section className="accountability-expanded-section">
-            <h4>Changes</h4>
-            <p className="accountability-detail-note">No field-level state changes were recorded for this event.</p>
+            <h4>What changed</h4>
+            <p className="accountability-detail-note">
+               No additional professional state change needs to be shown for this action.
+               Internal identifiers and system state remain available in Technical record.
+            </p>
          </section>
       );
    }
 
    return (
       <section className="accountability-expanded-section">
-         <h4>Changes</h4>
+         <h4>What changed</h4>
          <div className="accountability-change-list" role="list">
             {changes.map((change) => (
                <div className="accountability-change-row" role="listitem" key={change.key}>
-                  <div className="accountability-change-field">{displayKey(change.key)}</div>
+                  <div className="accountability-change-field">{change.label}</div>
                   <div className="accountability-change-value">
                      <span className="accountability-change-label">Before</span>
-                     <StructuredValue value={change.before} />
+                     <span>{change.beforeLabel}</span>
                   </div>
                   <span className="accountability-change-arrow" aria-hidden="true">
                      <Icons name="arrow-right" size={18} />
                   </span>
                   <div className="accountability-change-value">
                      <span className="accountability-change-label">After</span>
-                     <StructuredValue value={change.after} />
+                     <span>{change.afterLabel}</span>
                   </div>
                </div>
             ))}
@@ -183,7 +349,10 @@ function AccountabilityEvent({ event }) {
    const resourceId = event.resource?.id || "";
    const hasReasonOrNotes = Boolean(event.reason_code || event.notes);
    const hasContext = !isEmptyRecord(event.context);
-   const authorityLabel = event.authority?.organization?.name || event.authority?.scope || "Not applicable";
+   const hasInternalState = !isEmptyRecord(event.previous_state) || !isEmptyRecord(event.new_state);
+   const authorityLabel = authorityLabelForEvent(event);
+   const resourceLabel = professionalResourceLabel(event);
+   const eventSummary = professionalEventSummary(event, actorLabel);
 
    return (
       <li>
@@ -194,6 +363,7 @@ function AccountabilityEvent({ event }) {
                      <span>{event.domain_label || displayKey(event.domain)}</span>
                   </div>
                   <h3>{event.action_label || displayKey(event.action_type)}</h3>
+                  {eventSummary ? <p className="accountability-event-summary">{eventSummary}</p> : null}
                </div>
                {validTimestamp ? (
                   <time dateTime={timestamp.toISOString()}>{formatDateTime(event.created_at)}</time>
@@ -213,12 +383,11 @@ function AccountabilityEvent({ event }) {
                <div>
                   <dt>Affected record</dt>
                   <dd>
-                     <strong>{event.resource?.label || displayKey(event.resource?.type || "Record")}</strong>
-                     {resourceId ? <code title={resourceId}>{compactIdentifier(resourceId)}</code> : null}
+                     <strong>{resourceLabel}</strong>
                   </dd>
                </div>
                <div>
-                  <dt>Recorded authority</dt>
+                  <dt>Authority</dt>
                   <dd>{authorityLabel}</dd>
                </div>
             </dl>
@@ -238,7 +407,7 @@ function AccountabilityEvent({ event }) {
 
             {expanded ? (
                <div className="accountability-expanded" id={detailId}>
-                  <StateChanges previousState={event.previous_state} newState={event.new_state} />
+                  <StateChanges event={event} />
 
                   {hasReasonOrNotes ? (
                      <section className="accountability-expanded-section">
@@ -262,31 +431,50 @@ function AccountabilityEvent({ event }) {
 
                   <details className="accountability-context-disclosure">
                      <summary>
-                        <span>Authority and technical record</span>
-                        <span className="accountability-context-hint">Details on demand</span>
+                        <span>Technical record</span>
+                        <span className="accountability-context-hint">For traceability and troubleshooting</span>
                      </summary>
                      <div className="accountability-context-content">
                         <dl className="accountability-record-details">
                            <div>
-                              <dt>Authority scope</dt>
-                              <dd>{event.authority?.scope || "Not recorded"}</dd>
+                              <dt>Event ID</dt>
+                              <dd>{event.id || "Not recorded"}</dd>
                            </div>
                            <div>
-                              <dt>Capability used</dt>
-                              <dd>{event.authority?.capability || "Not applicable"}</dd>
+                              <dt>Authority</dt>
+                              <dd>{authorityLabel}</dd>
+                           </div>
+                           <div>
+                              <dt>Capability</dt>
+                              <dd>{capabilityLabel(event.authority?.capability)}</dd>
                            </div>
                            <div>
                               <dt>Resource type</dt>
-                              <dd>{displayKey(event.resource?.type || "Not recorded")}</dd>
+                              <dd>{event.resource?.label || displayKey(event.resource?.type || "Not recorded")}</dd>
                            </div>
                            <div>
                               <dt>Resource ID</dt>
                               <dd>{resourceId || "Not recorded"}</dd>
                            </div>
                         </dl>
+                        {hasInternalState ? (
+                           <div className="accountability-technical-context">
+                              <h5>Internal state</h5>
+                              <dl className="accountability-data-list">
+                                 <div>
+                                    <dt>Before</dt>
+                                    <dd><StructuredValue value={event.previous_state} /></dd>
+                                 </div>
+                                 <div>
+                                    <dt>After</dt>
+                                    <dd><StructuredValue value={event.new_state} /></dd>
+                                 </div>
+                              </dl>
+                           </div>
+                        ) : null}
                         {hasContext ? (
                            <div className="accountability-technical-context">
-                              <h5>Additional context</h5>
+                              <h5>Internal references</h5>
                               <StructuredValue value={event.context} />
                            </div>
                         ) : null}
@@ -551,10 +739,11 @@ function AccountabilityPanel({ scope, organizationId, organizationName }) {
          <section className="accountability-boundary-note" aria-label="Accountability record scope">
             <Icons name="activity" size={18} />
             <div>
-               <strong>Read-only accountability record</strong>
+               <strong>Professional accountability history</strong>
                <p>
-                  Review attributable actions recorded for <strong>{scopeLabel}</strong>. This history supports
-                  accountable review of authorized operations; it is not a general user-surveillance view.
+                  Review what happened, who performed the action, what changed, and when it occurred for
+                  <strong> {scopeLabel}</strong>. Technical identifiers remain available only when traceability
+                  or troubleshooting requires them.
                </p>
             </div>
          </section>
@@ -563,7 +752,7 @@ function AccountabilityPanel({ scope, organizationId, organizationName }) {
             <div className="accountability-history-heading">
                <div>
                   <h3>Recorded actions</h3>
-                  <p>See what changed, who performed the action, when it happened, and which record was affected.</p>
+                  <p>Read the professional record first; open Technical record only when an internal reference is needed.</p>
                </div>
                <Button
                   type="button"

@@ -5,8 +5,8 @@ function ManagementSafetyAuditPage() {
    return (
       <div className="management-page">
          <ManagementPageHeader
-            title="Safety Audit"
-            subtitle="Review the append-only record of Platform Safety actions and case state changes."
+            title="Safety Action History"
+            subtitle="Review past Platform Safety decisions, assignments, and case-state changes."
          />
 
          <AccountabilityPanel scope="platform" />

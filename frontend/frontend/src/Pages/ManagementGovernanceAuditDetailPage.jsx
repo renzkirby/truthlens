@@ -29,15 +29,15 @@ function ManagementGovernanceAuditDetailPage() {
    );
    const actionLabel = data
       ? formatManagementGovernanceAction(data.action_type, data.action_label)
-      : "Governance audit event";
+      : "Governance history record";
 
    return (
       <div className="management-page">
          <ManagementPageHeader
             title={actionLabel}
-            subtitle={data?.subject_organization?.name || "Platform-governance record"}
+            subtitle={data?.subject_organization?.name || "Platform governance record"}
             backTo={backTo}
-            backLabel="Governance Audit"
+            backLabel="Governance History"
          />
          <ManagementRequestState loading={loading} error={error} onRetry={retry}>
             {data ? (

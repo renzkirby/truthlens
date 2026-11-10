@@ -9,7 +9,7 @@ function ManagementSafetyReviewPage() {
       <div className="management-page management-safety-page">
          <ManagementPageHeader
             title="Safety Review"
-            subtitle="Review reported Community content and record platform-safety decisions."
+            subtitle="Review reported Community content and decide whether platform action is required."
          />
 
          <section className="management-safety-boundary" aria-labelledby="management-safety-boundary-title">
@@ -17,10 +17,11 @@ function ManagementSafetyReviewPage() {
                <Icons name="shield-check" size={20} />
             </span>
             <div>
-               <h2 id="management-safety-boundary-title">Platform policy review</h2>
+               <h2 id="management-safety-boundary-title">What you review here</h2>
                <p>
-                  Review reports for abuse, spam, harassment, and other platform-policy concerns.
-                  Safety actions do not determine whether a claim is factually true or false.
+                  Review reports about abuse, spam, harassment, and other Community safety concerns.
+                  Your decision affects platform safety and content handling; it does not decide whether
+                  a factual claim is true or false.
                </p>
             </div>
          </section>

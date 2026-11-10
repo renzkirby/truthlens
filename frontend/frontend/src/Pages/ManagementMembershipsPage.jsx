@@ -36,7 +36,19 @@ function ManagementMembershipsPage() {
 
    return (
       <div className="management-page">
-         <ManagementPageHeader title="Memberships" subtitle="Inspect organization roles and membership status." />
+         <ManagementPageHeader title="Membership Records" subtitle="Review Partner Organization membership roles, status, and admission history." />
+         <aside className="management-boundary-note" aria-label="Membership record boundary">
+            <Icons name="info" size={19} />
+            <div>
+               <strong>Read-only Partner Organization records</strong>
+               <p>
+                  Platform Staff can review membership history here for governance and accountability.
+                  Partner Organization membership changes are managed through the organization’s own
+                  administration workflows.
+               </p>
+            </div>
+         </aside>
+
          <section className="management-filter-panel" aria-label="Membership filters">
             <form className="management-search" onSubmit={(event) => { event.preventDefault(); updateFilter("q", draftQuery.trim()); }}>
                <label htmlFor="membership-search">Search memberships</label>

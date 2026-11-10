@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 
 import { DetailList, ManagementPageHeader, ManagementRequestState, ManagementStatus } from "../components/management/ManagementUi";
+import Icons from "../components/Icons";
 import { useManagementRequest } from "../hooks/useManagementRequest";
 import { resolveApiEndpoint } from "../utils/api";
 import { formatManagementDate } from "../utils/management";
@@ -14,11 +15,22 @@ function ManagementMembershipDetailPage() {
    return (
       <div className="management-page">
          <ManagementPageHeader
-            title="Membership"
+            title="Membership Record"
             subtitle={data ? `${data.organization.name} · @${data.user.username}` : "Organization membership record"}
             backTo="/management/memberships"
-            backLabel="Memberships"
+            backLabel="Membership Records"
          />
+         <aside className="management-boundary-note" aria-label="Membership record boundary">
+            <Icons name="info" size={19} />
+            <div>
+               <strong>Review record only</strong>
+               <p>
+                  This page records the member’s role, status, and admission history. Membership
+                  changes are managed by the Partner Organization through its own administration workflow.
+               </p>
+            </div>
+         </aside>
+
          <ManagementRequestState loading={loading} error={error} onRetry={retry}>
             {data ? (
                <div className="management-detail-sections management-detail-sections--two-column">
