@@ -33,6 +33,25 @@ from api.organization_partnership_lifecycle_service import (
 )
 
 
+TEST_SUSPENSION_GOVERNANCE = {
+    "suspension_type": "REMEDIAL",
+    "factors": ["VERIFICATION_STANDARDS"],
+    "severity": "HIGH",
+    "reason": "Repeated sourcing failures require temporary remediation.",
+    "policy_basis": "Partner Verification Standards",
+    "required_remediation": "Review affected investigations and correct the sourcing process.",
+}
+
+TEST_ENDING_GOVERNANCE = {
+    "ending_type": "ADMINISTRATIVE_CONCLUSION",
+    "ground": "PROLONGED_ABANDONMENT",
+    "factors": ["INACTIVITY_RESPONSIVENESS"],
+    "severity": "",
+    "reason": "The organization can no longer maintain an active partnership.",
+    "policy_basis": "Partnership Enforcement Policy",
+}
+
+
 class OrganizationPartnershipLifecycleServiceTests(TestCase):
     def setUp(self):
         self.platform_admin = User.objects.create_superuser(
@@ -136,6 +155,7 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
         result = end_partner_organization_partnership(
             organization_id=self.organization.pk,
             actor=self.platform_admin,
+            **TEST_ENDING_GOVERNANCE,
         )
 
         self.organization.refresh_from_db()
@@ -285,6 +305,7 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
             end_partner_organization_partnership(
                 organization_id=self.organization.pk,
                 actor=self.ordinary_user,
+                **TEST_ENDING_GOVERNANCE,
             )
 
         self.organization.refresh_from_db()
@@ -303,6 +324,7 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
         end_partner_organization_partnership(
             organization_id=self.organization.pk,
             actor=self.platform_admin,
+            **TEST_ENDING_GOVERNANCE,
         )
 
         self.organization.refresh_from_db()
@@ -332,6 +354,7 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
             end_partner_organization_partnership(
                 organization_id=onboarding.pk,
                 actor=self.platform_admin,
+                **TEST_ENDING_GOVERNANCE,
             )
 
     def test_former_partner_cannot_be_ended_again(self):
@@ -342,6 +365,7 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
             end_partner_organization_partnership(
                 organization_id=self.organization.pk,
                 actor=self.platform_admin,
+                **TEST_ENDING_GOVERNANCE,
             )
 
     def test_suspended_partnership_can_be_ended(self):
@@ -351,6 +375,7 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
         end_partner_organization_partnership(
             organization_id=self.organization.pk,
             actor=self.platform_admin,
+            **TEST_ENDING_GOVERNANCE,
         )
 
         self.organization.refresh_from_db()
@@ -460,6 +485,7 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
         suspend_partner_organization_partnership(
             organization_id=self.organization.pk,
             actor=self.platform_admin,
+            **TEST_SUSPENSION_GOVERNANCE,
         )
 
         self.organization.refresh_from_db()
@@ -519,6 +545,7 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
         end_partner_organization_partnership(
             organization_id=self.organization.pk,
             actor=self.platform_admin,
+            **TEST_ENDING_GOVERNANCE,
         )
 
         self.admin_membership.refresh_from_db()
@@ -556,6 +583,7 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
             suspend_partner_organization_partnership(
                 organization_id=self.organization.pk,
                 actor=self.ordinary_user,
+                **TEST_SUSPENSION_GOVERNANCE,
             )
 
 
