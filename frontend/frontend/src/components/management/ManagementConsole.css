@@ -244,6 +244,12 @@
   margin-top: var(--tl-space-5);
 }
 
+.management-pipeline-filters__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--tl-space-3);
+}
+
 .management-telemetry-timeline {
   display: grid;
   gap: 0;
