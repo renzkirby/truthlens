@@ -101,6 +101,24 @@ from .verification.telemetry import (
 logger = logging.getLogger(__name__)
 
 
+@shared_task(bind=True, max_retries=5)
+def deliver_organization_governance_notice_task(self, notice_recipient_id):
+    """Retry failed governance-notice channels with bounded exponential backoff."""
+
+    from .organization_governance_delivery_service import (
+        GovernanceNoticeDeliveryError,
+        deliver_governance_notice_channels,
+    )
+
+    try:
+        return deliver_governance_notice_channels(notice_recipient_id)
+    except GovernanceNoticeDeliveryError as error:
+        if self.request.retries >= self.max_retries:
+            raise
+        countdown = min(30 * (2 ** self.request.retries), 900)
+        raise self.retry(exc=error, countdown=countdown)
+
+
 
 class ClaimPersistenceError(RuntimeError):
     """Raised when automated analysis cannot be persisted to a Claim."""
