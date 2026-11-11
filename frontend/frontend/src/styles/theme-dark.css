@@ -1074,6 +1074,13 @@ html[data-theme="dark"] .hub-page-layout .hub-professional-paused {
 /* Community thread: the current classic layout moved the visible comment
    surface into .thread-detail-comment-bubble, while the older dark override
    still targeted .thread-detail-comment-content. */
+html[data-theme="dark"] .thread-detail-page--classic .thread-detail-comment-content {
+   border: 0;
+   border-radius: 0;
+   background: transparent;
+   box-shadow: none;
+}
+
 html[data-theme="dark"] .thread-detail-page--classic .thread-detail-comment-bubble {
    color: var(--tl-color-text-main);
    background: var(--tl-color-bg-subtle);
