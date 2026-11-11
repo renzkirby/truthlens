@@ -8,7 +8,7 @@ import EvidenceCard from "../components/EvidenceCard";
 import PartnerAffiliations from "../components/partners/PartnerAffiliations.jsx";
 import RichTextEditor from "../components/richtext/RichTextEditor.jsx";
 import RichTextRenderer from "../components/richtext/RichTextRenderer.jsx";
-import { VERDICT_CONFIG, EVIDENCE_VERDICT_META, EVIDENCE_ASSESSMENT_OPTIONS, ESCALATION_OPTIONS } from "../utils/constants";
+import { VERDICT_CONFIG, EVIDENCE_ASSESSMENT_OPTIONS, ESCALATION_OPTIONS } from "../utils/constants";
 import { evidenceSubmissionErrorMessage } from "../utils/evidenceSubmissionError";
 import { userFacingErrorMessage } from "../utils/userFacingError";
 import "./ThreadDetailPage.css";
@@ -1193,7 +1193,7 @@ export default function ThreadDetailPage() {
    }
 
    async function handleSaveEvidenceEdit(evidenceId, richCaption, caption, verdict) {
-      if (!caption.trim()) return;
+      if (!caption.trim() || !verdict) return;
       try {
          await authFetch(apiUrl(`evidence/${evidenceId}/`), {
             method: "PATCH",
