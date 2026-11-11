@@ -242,6 +242,53 @@ def _contextual_basis_qualities(verdict_result, verdict, evidence_groups):
     return basis_qualities
 
 
+def has_claim_scoped_misleading_support(
+    verdict_result: dict,
+    evidence_groups: Iterable[ReasoningEvidenceGroup],
+) -> bool:
+    """Return whether assessed evidence can safely backstop MISLEADING.
+
+    This is intentionally stricter than ordinary contextual confidence
+    calibration. It is used only when the separate materiality audit cannot
+    complete. Preserving MISLEADING requires:
+    - a valid persisted contextual basis tied to actual assessed evidence; and
+    - at least one usable SUPPORTS item and one usable REFUTES item for the
+      exact submitted claim.
+
+    Broader CONTEXT-only nuance therefore cannot keep a misleading verdict alive
+    after an audit outage.
+    """
+    if (
+        not isinstance(verdict_result, dict)
+        or verdict_result.get("verdict") != "MISLEADING"
+    ):
+        return False
+
+    evidence_groups = tuple(evidence_groups)
+    if _contextual_basis_qualities(
+        verdict_result,
+        "MISLEADING",
+        evidence_groups,
+    ) is None:
+        return False
+
+    has_support = False
+    has_refute = False
+    for group in evidence_groups:
+        for item in group.evidence:
+            quality = _item_quality(item)
+            if quality is None or quality < _USABLE_SCORE_FLOOR:
+                continue
+            if item.stance == VerificationEvidence.Stance.SUPPORTS:
+                has_support = True
+            elif item.stance == VerificationEvidence.Stance.REFUTES:
+                has_refute = True
+            if has_support and has_refute:
+                return True
+
+    return False
+
+
 def _calibrate_contextual_verdict(verdict_result, verdict, confidence, evidence_groups):
     basis_qualities = _contextual_basis_qualities(
         verdict_result,
