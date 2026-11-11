@@ -371,6 +371,15 @@
    border-radius: 12px;
    background: var(--tl-color-bg-surface);
    box-shadow: var(--tl-shadow-sm);
+   animation: workspace-guide-step-highlight 4.8s ease-in-out infinite;
+}
+
+.workspace-guide-visual-step-wrap:nth-child(2) .workspace-guide-visual-step {
+   animation-delay: 1.6s;
+}
+
+.workspace-guide-visual-step-wrap:nth-child(3) .workspace-guide-visual-step {
+   animation-delay: 3.2s;
 }
 
 .workspace-guide-visual-step > span {
@@ -645,6 +654,19 @@
    50% { left: calc(97% - 26px); opacity: 1; }
 }
 
+@keyframes workspace-guide-step-highlight {
+   0%, 24%, 100% {
+      border-color: var(--tl-color-border-default);
+      box-shadow: var(--tl-shadow-sm);
+      transform: translateY(0);
+   }
+   10% {
+      border-color: color-mix(in srgb, var(--tl-color-brand-primary) 55%, var(--tl-color-border-default));
+      box-shadow: 0 8px 20px color-mix(in srgb, var(--tl-color-brand-primary) 12%, transparent);
+      transform: translateY(-2px);
+   }
+}
+
 @media (max-width: 760px) {
    .workspace-guide-overlay {
       padding: 10px;
@@ -763,7 +785,8 @@
 @media (prefers-reduced-motion: reduce) {
    .workspace-guide-hero-orbit,
    .workspace-guide-hero-orbit span,
-   .workspace-guide-workflow-pulse {
+   .workspace-guide-workflow-pulse,
+   .workspace-guide-visual-step {
       animation: none;
    }
 }
