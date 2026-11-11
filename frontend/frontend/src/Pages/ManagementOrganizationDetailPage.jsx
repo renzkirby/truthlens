@@ -612,6 +612,9 @@ function OrganizationGovernanceSection({
                         disabled={pending}
                         onClick={() => {
                            reset();
+                           if (action.key === "suspend" || action.key === "reinstate") {
+                              resetValidationTouched(action.key);
+                           }
                            setConfirmationAction(action.key);
                         }}
                      >
@@ -681,6 +684,7 @@ function OrganizationGovernanceSection({
                   disabled={!actions.can_end_partnership || pending}
                   onClick={() => {
                      reset();
+                     resetValidationTouched("end");
                      setEndConfirmationOpen(true);
                   }}
                >
@@ -723,6 +727,16 @@ function OrganizationGovernanceSection({
          >
             {selectedAction?.key === "suspend" ? (
                <div className="management-governance-form">
+                  {visibleValidationErrors("suspend", suspensionValidationErrors).length ? (
+                     <ManagementFeedback tone="error">
+                        <strong>Complete the required suspension fields.</strong>
+                        <ul className="management-validation-summary">
+                           {visibleValidationErrors("suspend", suspensionValidationErrors).map((message) => (
+                              <li key={message}>{message}</li>
+                           ))}
+                        </ul>
+                     </ManagementFeedback>
+                  ) : null}
                   <label className="management-form-field">
                      <span>Suspension type <span className="management-required-indicator" aria-hidden="true">*</span></span>
                      <select
@@ -781,16 +795,25 @@ function OrganizationGovernanceSection({
                         ))}
                      </select>
                   </label>
-                  <label className="management-form-field">
+                  <label className={`management-form-field${isTouchedInvalid("suspend", "rationale", suspensionValidationErrors) ? " management-form-field--invalid" : ""}`}>
                      <span>Rationale <span className="management-required-indicator" aria-hidden="true">*</span></span>
                      <textarea
                         value={suspensionForm.rationale}
                         onChange={(event) => updateSuspensionForm("rationale", event.target.value)}
+                        onBlur={() => markValidationTouched("suspend", "rationale")}
                         rows={4}
                         disabled={pending}
                         required
+                        minLength={20}
+                        aria-invalid={isTouchedInvalid("suspend", "rationale", suspensionValidationErrors)}
+                        aria-describedby={isTouchedInvalid("suspend", "rationale", suspensionValidationErrors) ? "suspension-rationale-error" : undefined}
                         placeholder="Describe the material facts and context supporting this suspension."
                      />
+                     <FieldError id="suspension-rationale-error">
+                        {isTouchedInvalid("suspend", "rationale", suspensionValidationErrors)
+                           ? suspensionValidationErrors.rationale
+                           : ""}
+                     </FieldError>
                   </label>
                   <label className="management-form-field">
                      <span>Policy basis <span className="management-required-indicator" aria-hidden="true">*</span></span>
@@ -909,52 +932,84 @@ function OrganizationGovernanceSection({
                </div>
             ) : selectedAction?.key === "reinstate" ? (
                <div className="management-governance-form">
-                  <label className="management-form-field">
-                     <span>Basis for reinstatement</span>
+                  {visibleValidationErrors("reinstate", reinstatementValidationErrors).length ? (
+                     <ManagementFeedback tone="error">
+                        <strong>Complete the required reinstatement fields.</strong>
+                        <ul className="management-validation-summary">
+                           {visibleValidationErrors("reinstate", reinstatementValidationErrors).map((message) => (
+                              <li key={message}>{message}</li>
+                           ))}
+                        </ul>
+                     </ManagementFeedback>
+                  ) : null}
+                  <label className={`management-form-field${isTouchedInvalid("reinstate", "basis", reinstatementValidationErrors) ? " management-form-field--invalid" : ""}`}>
+                     <span>Basis for reinstatement <span className="management-required-indicator" aria-hidden="true">*</span></span>
                      <select
                         value={reinstatementForm.basis}
-                        onChange={(event) => updateReinstatementForm("basis", event.target.value)}
+                        onChange={(event) => {
+                           updateReinstatementForm("basis", event.target.value);
+                           markValidationTouched("reinstate", "basis");
+                        }}
                         disabled={pending}
                         required
+                        aria-invalid={isTouchedInvalid("reinstate", "basis", reinstatementValidationErrors)}
                      >
                         <option value="">Select reinstatement basis</option>
                         {reinstatementBasisOptions.map(([value, label]) => (
                            <option key={value} value={value}>{label}</option>
                         ))}
                      </select>
+                     <FieldError id="reinstatement-basis-error">
+                        {isTouchedInvalid("reinstate", "basis", reinstatementValidationErrors)
+                           ? reinstatementValidationErrors.basis
+                           : ""}
+                     </FieldError>
                   </label>
-                  <label className="management-form-field">
-                     <span>Rationale</span>
+                  <label className={`management-form-field${isTouchedInvalid("reinstate", "rationale", reinstatementValidationErrors) ? " management-form-field--invalid" : ""}`}>
+                     <span>Rationale <span className="management-required-indicator" aria-hidden="true">*</span></span>
                      <textarea
                         value={reinstatementForm.rationale}
                         onChange={(event) => updateReinstatementForm("rationale", event.target.value)}
+                        onBlur={() => markValidationTouched("reinstate", "rationale")}
                         rows={4}
                         disabled={pending}
                         required
+                        minLength={20}
+                        aria-invalid={isTouchedInvalid("reinstate", "rationale", reinstatementValidationErrors)}
+                        aria-describedby={isTouchedInvalid("reinstate", "rationale", reinstatementValidationErrors) ? "reinstatement-rationale-error" : undefined}
                         placeholder="Explain why continued suspension is no longer justified."
                      />
+                     <FieldError id="reinstatement-rationale-error">
+                        {isTouchedInvalid("reinstate", "rationale", reinstatementValidationErrors)
+                           ? reinstatementValidationErrors.rationale
+                           : ""}
+                     </FieldError>
                   </label>
                   {reinstatementForm.basis === "REMEDIATION_COMPLETED" ? (
-                     <label className="management-form-field">
-                        <span>Completed remediation</span>
+                     <label className={`management-form-field${isTouchedInvalid("reinstate", "completed_remediation", reinstatementValidationErrors) ? " management-form-field--invalid" : ""}`}>
+                        <span>Completed remediation <span className="management-required-indicator" aria-hidden="true">*</span></span>
                         <textarea
                            value={reinstatementForm.completed_remediation}
                            onChange={(event) => updateReinstatementForm("completed_remediation", event.target.value)}
+                           onBlur={() => markValidationTouched("reinstate", "completed_remediation")}
                            rows={3}
                            disabled={pending}
                            required
+                           aria-invalid={isTouchedInvalid("reinstate", "completed_remediation", reinstatementValidationErrors)}
                            placeholder="Describe the remediation completed and accepted by TruthLens."
                         />
                      </label>
                   ) : null}
-                  <label className="management-form-field">
-                     <span>Internal supporting basis</span>
+                  <label className={`management-form-field${isTouchedInvalid("reinstate", "supporting_basis", reinstatementValidationErrors) ? " management-form-field--invalid" : ""}`}>
+                     <span>Internal supporting basis <span className="management-required-indicator" aria-hidden="true">*</span></span>
                      <textarea
                         value={reinstatementForm.supporting_basis}
                         onChange={(event) => updateReinstatementForm("supporting_basis", event.target.value)}
+                        onBlur={() => markValidationTouched("reinstate", "supporting_basis")}
                         rows={3}
                         disabled={pending}
                         required
+                        aria-invalid={isTouchedInvalid("reinstate", "supporting_basis", reinstatementValidationErrors)}
                         placeholder="Internal evidence supporting reinstatement. This is not shown to the organization."
                      />
                      <small>Internal Platform Governance only.</small>
@@ -982,30 +1037,36 @@ function OrganizationGovernanceSection({
                   {reinstatementForm.continuing_conditions.trim() ? (
                      <>
                         <label className="management-form-field">
-                           <span>Monitoring end date</span>
+                           <span>Monitoring end date <span className="management-required-indicator" aria-hidden="true">*</span></span>
                            <Input
                               type="date"
                               value={reinstatementForm.monitoring_end_date}
                               onChange={(event) => updateReinstatementForm("monitoring_end_date", event.target.value)}
+                              onBlur={() => markValidationTouched("reinstate", "monitoring_end_date")}
+                              invalid={isTouchedInvalid("reinstate", "monitoring_end_date", reinstatementValidationErrors)}
                               disabled={pending}
                               required
                            />
                         </label>
-                        <label className="management-form-field">
-                           <span>Success criteria</span>
+                        <label className={`management-form-field${isTouchedInvalid("reinstate", "monitoring_success_criteria", reinstatementValidationErrors) ? " management-form-field--invalid" : ""}`}>
+                           <span>Success criteria <span className="management-required-indicator" aria-hidden="true">*</span></span>
                            <textarea
                               value={reinstatementForm.monitoring_success_criteria}
                               onChange={(event) => updateReinstatementForm("monitoring_success_criteria", event.target.value)}
+                              onBlur={() => markValidationTouched("reinstate", "monitoring_success_criteria")}
+                              aria-invalid={isTouchedInvalid("reinstate", "monitoring_success_criteria", reinstatementValidationErrors)}
                               rows={2}
                               disabled={pending}
                               required
                            />
                         </label>
-                        <label className="management-form-field">
-                           <span>Consequence if the serious issue recurs</span>
+                        <label className={`management-form-field${isTouchedInvalid("reinstate", "monitoring_recurrence_consequence", reinstatementValidationErrors) ? " management-form-field--invalid" : ""}`}>
+                           <span>Consequence if the serious issue recurs <span className="management-required-indicator" aria-hidden="true">*</span></span>
                            <textarea
                               value={reinstatementForm.monitoring_recurrence_consequence}
                               onChange={(event) => updateReinstatementForm("monitoring_recurrence_consequence", event.target.value)}
+                              onBlur={() => markValidationTouched("reinstate", "monitoring_recurrence_consequence")}
+                              aria-invalid={isTouchedInvalid("reinstate", "monitoring_recurrence_consequence", reinstatementValidationErrors)}
                               rows={2}
                               disabled={pending}
                               required
@@ -1030,6 +1091,16 @@ function OrganizationGovernanceSection({
             onClose={() => setEndConfirmationOpen(false)}
          >
             <div className="management-governance-form">
+               {visibleValidationErrors("end", endingValidationErrors).length ? (
+                  <ManagementFeedback tone="error">
+                     <strong>Complete the required partnership-ending fields.</strong>
+                     <ul className="management-validation-summary">
+                        {visibleValidationErrors("end", endingValidationErrors).map((message) => (
+                           <li key={message}>{message}</li>
+                        ))}
+                     </ul>
+                  </ManagementFeedback>
+               ) : null}
                <label className="management-form-field">
                   <span>Ending type <span className="management-required-indicator" aria-hidden="true">*</span></span>
                   <select
@@ -1113,16 +1184,25 @@ function OrganizationGovernanceSection({
                      />
                   </label>
                ) : null}
-               <label className="management-form-field">
+               <label className={`management-form-field${isTouchedInvalid("end", "rationale", endingValidationErrors) ? " management-form-field--invalid" : ""}`}>
                   <span>Rationale <span className="management-required-indicator" aria-hidden="true">*</span></span>
                   <textarea
                      value={endingForm.rationale}
                      onChange={(event) => updateEndingForm("rationale", event.target.value)}
+                     onBlur={() => markValidationTouched("end", "rationale")}
                      rows={4}
                      disabled={pending}
                      required
+                     minLength={20}
+                     aria-invalid={isTouchedInvalid("end", "rationale", endingValidationErrors)}
+                     aria-describedby={isTouchedInvalid("end", "rationale", endingValidationErrors) ? "ending-rationale-error" : undefined}
                      placeholder="Describe the material facts supporting the conclusion of this partnership."
                   />
+                  <FieldError id="ending-rationale-error">
+                     {isTouchedInvalid("end", "rationale", endingValidationErrors)
+                        ? endingValidationErrors.rationale
+                        : ""}
+                  </FieldError>
                </label>
                <label className="management-form-field">
                   <span>Policy basis <span className="management-required-indicator" aria-hidden="true">*</span></span>
