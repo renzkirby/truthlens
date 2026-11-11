@@ -1255,7 +1255,23 @@ function GovernanceReconsiderationCard({
    const [outcome, setOutcome] = useState("UPHELD");
    const [resolutionRationale, setResolutionRationale] = useState("");
    const [internalBasis, setInternalBasis] = useState("");
+   const [resolutionTouched, setResolutionTouched] = useState({
+      rationale: false,
+      supporting_basis: false,
+   });
    const { mutate, pending, error, reset } = useManagementMutation();
+
+   const resolutionErrors = {
+      rationale: resolutionRationale.trim().length >= 20
+         ? ""
+         : "Organization-facing resolution rationale must be at least 20 characters.",
+      supporting_basis: internalBasis.trim().length >= 20
+         ? ""
+         : "Internal supporting basis must be at least 20 characters.",
+   };
+   const resolutionValidationMessages = Object.values(resolutionErrors).filter(Boolean);
+   const showResolutionSummary = Object.values(resolutionTouched).some(Boolean)
+      && resolutionValidationMessages.length > 0;
 
    const startReview = async (event) => {
       event.preventDefault();
@@ -1375,6 +1391,16 @@ function GovernanceReconsiderationCard({
             {reconsideration.status === "UNDER_REVIEW" ? (
                <form className="management-governance-form" onSubmit={resolveReview}>
                   <strong>Resolve review</strong>
+                  {showResolutionSummary ? (
+                     <ManagementFeedback tone="error">
+                        <strong>Complete the required reconsideration fields.</strong>
+                        <ul className="management-validation-summary">
+                           {resolutionValidationMessages.map((message) => (
+                              <li key={message}>{message}</li>
+                           ))}
+                        </ul>
+                     </ManagementFeedback>
+                  ) : null}
                   <label className="management-form-field">
                      <span>Outcome</span>
                      <select
@@ -1386,8 +1412,8 @@ function GovernanceReconsiderationCard({
                         <option value="REVOKED">Revoked</option>
                      </select>
                   </label>
-                  <label className="management-form-field">
-                     <span>Organization-facing resolution rationale</span>
+                  <label className={`management-form-field${resolutionTouched.rationale && resolutionErrors.rationale ? " management-form-field--invalid" : ""}`}>
+                     <span>Organization-facing resolution rationale <span className="management-required-indicator" aria-hidden="true">*</span></span>
                      <textarea
                         rows={4}
                         value={resolutionRationale}
@@ -1395,14 +1421,20 @@ function GovernanceReconsiderationCard({
                            reset();
                            setResolutionRationale(event.target.value);
                         }}
+                        onBlur={() => setResolutionTouched((current) => ({ ...current, rationale: true }))}
                         disabled={pending}
                         required
                         minLength={20}
+                        aria-invalid={Boolean(resolutionTouched.rationale && resolutionErrors.rationale)}
+                        aria-describedby={resolutionTouched.rationale && resolutionErrors.rationale ? `reconsideration-resolution-rationale-${reconsideration.id}` : undefined}
                         placeholder="Explain why the suspension is upheld or revoked."
                      />
+                     <FieldError id={`reconsideration-resolution-rationale-${reconsideration.id}`}>
+                        {resolutionTouched.rationale ? resolutionErrors.rationale : ""}
+                     </FieldError>
                   </label>
-                  <label className="management-form-field">
-                     <span>Internal supporting basis</span>
+                  <label className={`management-form-field${resolutionTouched.supporting_basis && resolutionErrors.supporting_basis ? " management-form-field--invalid" : ""}`}>
+                     <span>Internal supporting basis <span className="management-required-indicator" aria-hidden="true">*</span></span>
                      <textarea
                         rows={4}
                         value={internalBasis}
@@ -1410,12 +1442,18 @@ function GovernanceReconsiderationCard({
                            reset();
                            setInternalBasis(event.target.value);
                         }}
+                        onBlur={() => setResolutionTouched((current) => ({ ...current, supporting_basis: true }))}
                         disabled={pending}
                         required
                         minLength={20}
+                        aria-invalid={Boolean(resolutionTouched.supporting_basis && resolutionErrors.supporting_basis)}
+                        aria-describedby={resolutionTouched.supporting_basis && resolutionErrors.supporting_basis ? `reconsideration-internal-basis-${reconsideration.id}` : undefined}
                         placeholder="Internal evidence supporting the reconsideration outcome. This is not shown to the organization."
                      />
                      <small>Internal Platform Governance only.</small>
+                     <FieldError id={`reconsideration-internal-basis-${reconsideration.id}`}>
+                        {resolutionTouched.supporting_basis ? resolutionErrors.supporting_basis : ""}
+                     </FieldError>
                   </label>
                   <Button
                      type="submit"
