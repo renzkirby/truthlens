@@ -4,6 +4,8 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import Icons from "../components/Icons.jsx";
 import PartnerLogo from "../components/partners/PartnerLogo.jsx";
+import WorkspaceGuideModal from "../components/workspace/WorkspaceGuideModal.jsx";
+import { buildApiUrl } from "../utils/api";
 import {
    WorkspaceCapability,
    getDefaultWorkspaceOrganizationId,
@@ -167,7 +169,7 @@ let pendingFallbackHistoryTraversal = null;
 let allowedFallbackHistoryIndex = null;
 
 function WorkspacePage() {
-   const { user } = useAuth();
+   const { user, authFetch, refreshUser } = useAuth();
    const location = useLocation();
    const navigate = useNavigate();
    const { requestId: routeRequestId } = useParams();
@@ -197,6 +199,10 @@ function WorkspacePage() {
    const defaultOrganizationId = useMemo(() => getDefaultWorkspaceOrganizationId(user), [user]);
 
    const [requestedSectionId, setRequestedSectionId] = useState(null);
+
+   const [workspaceGuideOpen, setWorkspaceGuideOpen] = useState(false);
+   const [workspaceGuideFirstVisit, setWorkspaceGuideFirstVisit] = useState(false);
+   const autoOpenedGuideVersionRef = useRef(null);
 
    const [draftingHandoff, setDraftingHandoff] = useState(null);
 
@@ -347,6 +353,66 @@ function WorkspacePage() {
          group("organization", "Organization & insights", ["organization", "analytics", "accountability"]),
       ].filter((item) => item.sections.length > 0);
    }, [visibleSections]);
+
+   const workspaceGuideCurrentVersion = Number(user?.workspace?.guide_current_version || 0);
+   const workspaceGuideVersionSeen = Number(user?.workspace?.guide_version_seen || 0);
+
+   useEffect(() => {
+      if (
+         memberships.length === 0 ||
+         visibleSections.length === 0 ||
+         workspaceGuideCurrentVersion <= 0 ||
+         workspaceGuideVersionSeen >= workspaceGuideCurrentVersion ||
+         autoOpenedGuideVersionRef.current === workspaceGuideCurrentVersion
+      ) {
+         return;
+      }
+
+      autoOpenedGuideVersionRef.current = workspaceGuideCurrentVersion;
+      setWorkspaceGuideFirstVisit(true);
+      setWorkspaceGuideOpen(true);
+   }, [
+      memberships.length,
+      visibleSections.length,
+      workspaceGuideCurrentVersion,
+      workspaceGuideVersionSeen,
+   ]);
+
+   const openWorkspaceGuide = useCallback(() => {
+      setWorkspaceGuideFirstVisit(false);
+      setWorkspaceGuideOpen(true);
+   }, []);
+
+   const dismissWorkspaceGuide = useCallback(
+      async () => {
+         const shouldPersistCompletion =
+            workspaceGuideFirstVisit &&
+            workspaceGuideCurrentVersion > workspaceGuideVersionSeen;
+
+         setWorkspaceGuideOpen(false);
+         setWorkspaceGuideFirstVisit(false);
+
+         if (!shouldPersistCompletion) {
+            return;
+         }
+
+         try {
+            await authFetch(buildApiUrl("auth/workspace-guide/complete/"), {
+               method: "POST",
+            });
+            await refreshUser();
+         } catch (error) {
+            console.warn("Unable to persist Workspace Guide completion:", error);
+         }
+      },
+      [
+         authFetch,
+         refreshUser,
+         workspaceGuideCurrentVersion,
+         workspaceGuideFirstVisit,
+         workspaceGuideVersionSeen,
+      ],
+   );
 
    const activeSectionId = useMemo(() => {
       if (visibleSections.length === 0) {
@@ -728,23 +794,34 @@ function WorkspacePage() {
             </div>
 
             {memberships.length > 0 ? (
-               <div className="workspace-organization-context" aria-label="Current partner organization">
-                  <PartnerLogo
-                     logoUrl={selectedOrganization?.logo_url}
-                     organizationName={selectedOrganization?.name || "Partner organization"}
-                     size="workspace"
-                  />
+               <div className="workspace-header-actions">
+                  <button
+                     type="button"
+                     className="workspace-guide-launch"
+                     onClick={openWorkspaceGuide}
+                  >
+                     <Icons name="book-open" size={15} />
+                     Workspace Guide
+                  </button>
 
-                  <div className="workspace-organization-context-copy">
-                     <span className="workspace-organization-context-label">Partner organization</span>
-                     <strong>{selectedOrganization?.name || "Partner organization"}</strong>
+                  <div className="workspace-organization-context" aria-label="Current partner organization">
+                     <PartnerLogo
+                        logoUrl={selectedOrganization?.logo_url}
+                        organizationName={selectedOrganization?.name || "Partner organization"}
+                        size="workspace"
+                     />
 
-                     {selectedMembership && (
-                        <span className="workspace-organization-context-role">
-                           <Icons name="shield-user" size={13} />
-                           {formatRole(selectedMembership.role)}
-                        </span>
-                     )}
+                     <div className="workspace-organization-context-copy">
+                        <span className="workspace-organization-context-label">Partner organization</span>
+                        <strong>{selectedOrganization?.name || "Partner organization"}</strong>
+
+                        {selectedMembership && (
+                           <span className="workspace-organization-context-role">
+                              <Icons name="shield-user" size={13} />
+                              {formatRole(selectedMembership.role)}
+                           </span>
+                        )}
+                     </div>
                   </div>
                </div>
             ) : null}
@@ -946,6 +1023,14 @@ function WorkspacePage() {
                )}
             </section>
          </div>
+         <WorkspaceGuideModal
+            open={workspaceGuideOpen}
+            firstVisit={workspaceGuideFirstVisit}
+            organizationName={selectedOrganization?.name}
+            roleLabel={selectedMembership ? formatRole(selectedMembership.role) : "Partner member"}
+            sectionGroups={visibleSectionGroups}
+            onDismiss={dismissWorkspaceGuide}
+         />
          <CorrectionDialog
             open={navigationPromptOpen}
             title="Discard unsaved correction proposal changes?"
