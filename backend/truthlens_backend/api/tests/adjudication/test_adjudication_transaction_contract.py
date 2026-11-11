@@ -517,6 +517,24 @@ class AdjudicationActionApiContractTests(
         self.assertEqual(missing_revision.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(unknown_field.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_canonical_action_rejects_non_authoritative_verdict_choices(self):
+        context = self.make_context(
+            evidence_statuses=[EvidenceSubmission.EvidenceStatus.VERIFIED]
+        )
+
+        for verdict in (
+            AdjudicationDecision.Verdict.UNVERIFIED,
+            "OUT_OF_SCOPE",
+        ):
+            response = self.client.post(
+                self.action_url(context),
+                self.action_payload(moderator_verdict=verdict),
+                format="json",
+            )
+
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+            self.assertIn("moderator_verdict", response.data)
+
     def test_canonical_action_requires_authentication(self):
         context = self.make_context(
             evidence_statuses=[EvidenceSubmission.EvidenceStatus.VERIFIED]
