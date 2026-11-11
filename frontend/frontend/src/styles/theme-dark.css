@@ -1113,6 +1113,19 @@ html[data-theme="dark"] .thread-detail-page--classic :is(
    color: var(--tl-color-text-muted);
 }
 
+html[data-theme="dark"] .thread-detail-page--classic .thread-detail-comment-header > a,
+html[data-theme="dark"] .thread-detail-page--classic .thread-detail-reply-context a {
+   color: var(--tl-color-brand-primary);
+}
+
+html[data-theme="dark"] .thread-detail-page--classic .thread-detail-comment-actions button {
+   color: var(--tl-color-text-muted);
+}
+
+html[data-theme="dark"] .thread-detail-page--classic .thread-detail-comment-actions button.is-danger {
+   color: var(--tl-color-status-critical-text);
+}
+
 html[data-theme="dark"] .thread-detail-page--classic .thread-detail-comment-actions button:hover:not(:disabled),
 html[data-theme="dark"] .thread-detail-page--classic .thread-detail-comment-actions button.is-selected {
    color: var(--tl-color-brand-primary);
@@ -1393,5 +1406,27 @@ html[data-theme="dark"] .evidence-source-preview__safety--unchecked {
    color: var(--tl-color-status-neutral-text);
    border-color: var(--tl-color-status-neutral-border);
    background: var(--tl-color-status-neutral-bg);
+}
+
+/* Dashboard analysis loading state has its own modal class and does not inherit
+   the standard .hub-modal-content dark treatment. */
+html[data-theme="dark"] .hub-analysis-loading-modal {
+   color: var(--tl-color-text-main);
+   border-color: var(--tl-color-border-soft);
+   background: var(--tl-color-bg-elevated);
+   box-shadow: var(--tl-shadow-lg);
+}
+
+html[data-theme="dark"] .hub-analysis-loading-icon {
+   color: var(--tl-color-brand-primary);
+   background: var(--tl-color-status-info-bg);
+}
+
+html[data-theme="dark"] .hub-analysis-loading-copy h2 {
+   color: var(--tl-color-text-main);
+}
+
+html[data-theme="dark"] .hub-analysis-loading-copy p {
+   color: var(--tl-color-text-muted);
 }
 
