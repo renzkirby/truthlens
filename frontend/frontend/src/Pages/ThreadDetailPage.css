@@ -3902,7 +3902,7 @@
     border: 0;
     border-radius: 0 14px 14px 14px;
     background: #f8fafc;
-    transition: background-color 0.18s ease, box-shadow 0.18s ease;
+    transition: box-shadow var(--tl-duration-fast) ease;
 }
 
 .thread-detail-page--classic .thread-detail-comment--reply {
