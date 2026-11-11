@@ -406,6 +406,58 @@
    white-space: nowrap;
 }
 
+.workspace-guide-process-summary {
+   width: min(760px, 100%);
+   display: grid;
+   grid-template-columns: auto minmax(0, 1fr);
+   align-items: center;
+   gap: 12px;
+   margin: 14px auto 0;
+}
+
+.workspace-guide-process-summary > span {
+   color: var(--tl-color-text-muted);
+   font-size: 0.59rem;
+   font-weight: 800;
+   letter-spacing: 0.06em;
+   text-transform: uppercase;
+   white-space: nowrap;
+}
+
+.workspace-guide-visual-flow.is-compact {
+   justify-content: flex-start;
+   gap: 6px;
+}
+
+.workspace-guide-visual-flow.is-compact .workspace-guide-visual-step-wrap {
+   flex: 0 1 auto;
+   gap: 6px;
+}
+
+.workspace-guide-visual-flow.is-compact .workspace-guide-visual-step {
+   min-height: 32px;
+   padding: 5px 8px;
+   border-radius: 8px;
+   box-shadow: none;
+   animation: none;
+}
+
+.workspace-guide-visual-flow.is-compact .workspace-guide-visual-step > span {
+   width: 19px;
+   height: 19px;
+   font-size: 0.53rem;
+}
+
+.workspace-guide-visual-flow.is-compact .workspace-guide-visual-step strong {
+   font-size: 0.57rem;
+   line-height: 1.2;
+   white-space: nowrap;
+}
+
+.workspace-guide-visual-flow.is-compact .workspace-guide-visual-arrow {
+   font-size: 0.65rem;
+}
+
 .workspace-guide-actions {
    max-width: 700px;
    display: grid;
@@ -726,9 +778,32 @@
       flex-direction: column;
    }
 
+   .workspace-guide-process-summary {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 7px;
+   }
+
+   .workspace-guide-visual-flow.is-compact {
+      flex-direction: row;
+      flex-wrap: wrap;
+   }
+
+   .workspace-guide-visual-flow.is-compact .workspace-guide-visual-step-wrap {
+      width: auto;
+      flex-direction: row;
+   }
+
+   .workspace-guide-visual-flow.is-compact .workspace-guide-visual-arrow {
+      transform: none;
+   }
+
    .workspace-guide-visual-step strong {
       white-space: normal;
       text-wrap: balance;
+   }
+
+   .workspace-guide-visual-flow.is-compact .workspace-guide-visual-step strong {
+      white-space: normal;
    }
 
    .workspace-guide-visual-step-wrap {
