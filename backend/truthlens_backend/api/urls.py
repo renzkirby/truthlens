@@ -259,6 +259,11 @@ urlpatterns = [
     path("auth/refresh/", SessionTokenRefreshView.as_view()),
     path("auth/register/", views.register_user),
     path("auth/me/", views.get_current_user, name="auth_me"),
+    path(
+        "auth/workspace-guide/complete/",
+        views.complete_workspace_guide,
+        name="complete_workspace_guide",
+    ),
     path("auth/profile/update/", views.update_profile),
     path("auth/guest-scan-sync/", views.sync_guest_scan),
     path("users/search/", views.search_users),
