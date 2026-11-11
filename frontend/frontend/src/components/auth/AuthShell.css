@@ -105,6 +105,36 @@
    background: var(--background, #ffffff);
 }
 
+@media (min-width: 721px) {
+   .auth-shell {
+      height: 100vh;
+      height: 100dvh;
+      min-height: 0;
+      overflow: hidden;
+   }
+
+   .auth-brand-panel,
+   .auth-form-panel {
+      min-height: 0;
+   }
+
+   .auth-brand-panel {
+      padding-block: clamp(1.5rem, 3.5vh, 2.5rem);
+      padding-inline: clamp(2rem, 4vw, 4rem);
+   }
+
+   .auth-brand-content {
+      padding-block: clamp(1.5rem, 4vh, 3rem);
+   }
+
+   .auth-form-panel {
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding-block: clamp(1.25rem, 3vh, 2.25rem);
+      padding-inline: clamp(2rem, 5vw, 5rem);
+   }
+}
+
 .auth-mobile-brand {
    display: none;
 }
