@@ -1353,6 +1353,24 @@ html[data-theme="dark"] .thread-detail-page .evidence-card-edit :is(textarea, se
 }
 
 /* Evidence source safety status uses the same semantic dark palette. */
+html[data-theme="dark"] .evidence-source-preview__mark {
+   color: var(--tl-color-text-muted);
+   border-color: var(--tl-color-border-default);
+   background: var(--tl-color-bg-surface);
+}
+
+html[data-theme="dark"] .evidence-source-preview__open {
+   color: var(--tl-color-brand-primary);
+   border-color: color-mix(in srgb, var(--tl-color-brand-primary) 52%, var(--tl-color-border-default));
+   background: var(--tl-color-bg-surface);
+}
+
+html[data-theme="dark"] .evidence-source-preview__open:hover {
+   color: var(--tl-color-text-main);
+   border-color: var(--tl-color-brand-primary);
+   background: var(--tl-color-bg-subtle);
+}
+
 html[data-theme="dark"] .evidence-source-preview__safety {
    color: var(--tl-color-status-info-text);
    border-color: var(--tl-color-status-info-border);
