@@ -173,7 +173,6 @@ function WorkflowVisual({ sections }) {
 }
 
 export default function WorkspaceGuideModal({
-   open,
    firstVisit = false,
    organizationName,
    roleLabel,
@@ -197,9 +196,6 @@ export default function WorkspaceGuideModal({
    const [activeKey, setActiveKey] = useState(firstVisit ? "welcome" : "contents");
 
    useEffect(() => {
-      if (!open) return undefined;
-
-      setActiveKey(firstVisit ? "welcome" : "contents");
       const previousOverflow = document.body.style.overflow;
       document.body.style.overflow = "hidden";
       window.requestAnimationFrame(() => dialogRef.current?.focus());
@@ -215,9 +211,7 @@ export default function WorkspaceGuideModal({
          document.body.style.overflow = previousOverflow;
          document.removeEventListener("keydown", handleKeyDown);
       };
-   }, [firstVisit, onDismiss, open]);
-
-   if (!open) return null;
+   }, [firstVisit, onDismiss]);
 
    const sequenceIndex = sequence.findIndex((item) => item.key === activeKey);
    const current = sequenceIndex >= 0 ? sequence[sequenceIndex] : null;
