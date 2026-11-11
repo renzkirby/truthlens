@@ -270,29 +270,27 @@ def deliver_governance_notice_channels(notice_recipient_id):
     }
 
 
-def enqueue_governance_notice_delivery(notice_recipient_ids):
-    """Best-effort queueing; durable PENDING rows remain available if Redis is down."""
-
-    from .tasks import deliver_organization_governance_notice_task
+def dispatch_governance_notice_delivery(notice_recipient_ids):
+    """Best-effort direct delivery after commit; failures remain durable and retryable."""
 
     recipient_ids = list(notice_recipient_ids)
-    queued = 0
-    queue_failed = 0
+    delivered = 0
+    failed = 0
     for recipient_id in recipient_ids:
         try:
-            deliver_organization_governance_notice_task.delay(str(recipient_id))
-            queued += 1
-        except Exception:
-            queue_failed += 1
+            deliver_governance_notice_channels(str(recipient_id))
+            delivered += 1
+        except GovernanceNoticeDeliveryError:
+            failed += 1
             logger.exception(
-                "Could not queue governance notice delivery for recipient=%s",
+                "Governance notice delivery failed for recipient=%s",
                 recipient_id,
             )
 
     return {
         "requested": len(recipient_ids),
-        "queued": queued,
-        "queue_failed": queue_failed,
+        "delivered": delivered,
+        "failed": failed,
     }
 
 
@@ -399,27 +397,25 @@ def deliver_governance_fallback_email(fallback_delivery_id):
     return {"missing": False, "status": fallback.status}
 
 
-def enqueue_governance_fallback_delivery(fallback_delivery_ids):
-    """Best-effort queueing for no-Admin fallback email delivery."""
-
-    from .tasks import deliver_organization_governance_fallback_task
+def dispatch_governance_fallback_delivery(fallback_delivery_ids):
+    """Best-effort direct fallback delivery after commit."""
 
     fallback_ids = list(fallback_delivery_ids)
-    queued = 0
-    queue_failed = 0
+    delivered = 0
+    failed = 0
     for fallback_id in fallback_ids:
         try:
-            deliver_organization_governance_fallback_task.delay(str(fallback_id))
-            queued += 1
-        except Exception:
-            queue_failed += 1
+            deliver_governance_fallback_email(str(fallback_id))
+            delivered += 1
+        except GovernanceNoticeDeliveryError:
+            failed += 1
             logger.exception(
-                "Could not queue governance fallback delivery for fallback=%s",
+                "Governance fallback delivery failed for fallback=%s",
                 fallback_id,
             )
 
     return {
         "requested": len(fallback_ids),
-        "queued": queued,
-        "queue_failed": queue_failed,
+        "delivered": delivered,
+        "failed": failed,
     }
