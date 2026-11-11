@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
@@ -437,8 +438,29 @@ function GuidelineSection({ section }) {
    );
 }
 
+const governanceDocuments = [
+   {
+      key: "guidelines",
+      title: "Partner Organization Guidelines",
+      description: "Professional and organizational standards for recognized Partner Organizations.",
+      current: true,
+   },
+   {
+      key: "framework",
+      title: "Partnership Governance Framework",
+      description: "Governance principles, lifecycle standards, decision factors, and administrative safeguards.",
+   },
+   {
+      key: "enforcement",
+      title: "Partnership Enforcement Policy",
+      description: "Enforcement factors, severity, suspension, reinstatement, partnership ending, and review standards.",
+   },
+];
+
 function PartnerOrganizationGuidelinesPage() {
    const { user } = useAuth();
+   const [activeSection, setActiveSection] = useState(sections[0]?.id || "");
+
    const location = useLocation();
    const isPlatformAdmin = canAccessManagementConsole(user);
    const professionalIdentity = user?.community_identity?.professional_identity || null;
@@ -449,6 +471,32 @@ function PartnerOrganizationGuidelinesPage() {
    }
 
    const managementView = location.pathname.startsWith("/management/");
+
+   useEffect(() => {
+      const sectionNodes = sections
+         .map((section) => document.getElementById(section.id))
+         .filter(Boolean);
+      if (!sectionNodes.length) return undefined;
+
+      const observer = new IntersectionObserver(
+         (entries) => {
+            const visibleEntries = entries
+               .filter((entry) => entry.isIntersecting)
+               .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+            if (visibleEntries.length) {
+               setActiveSection(visibleEntries[0].target.id);
+            }
+         },
+         {
+            rootMargin: "-96px 0px -68% 0px",
+            threshold: [0, 0.1, 0.4],
+         },
+      );
+
+      sectionNodes.forEach((node) => observer.observe(node));
+      return () => observer.disconnect();
+   }, []);
+
    const backTo = managementView
       ? "/management/organizations"
       : canAccessWorkspace(user)
@@ -462,34 +510,70 @@ function PartnerOrganizationGuidelinesPage() {
                ← {managementView ? "Partner Organizations" : canAccessWorkspace(user) ? "Verification Workspace" : "Community"}
             </Link>
 
-            <header className="partner-guidelines-header">
-               <span>TruthLens Partner Governance</span>
-               <h1>Partner Organization Guidelines</h1>
-               <p>
-                  Professional and organizational standards for recognized TruthLens Partner Organizations
-                  and members acting through professional TruthLens privileges.
-               </p>
-               <div className="partner-guidelines-access-note">
-                  <strong>Read-only policy</strong>
-                  <p>
-                     These Guidelines apply to Partner Organizations, Organization Administrators,
-                     Lead Verifiers, Researchers, and other members using professional privileges.
-                  </p>
-               </div>
-            </header>
+            <div className="partner-guidelines-layout">
+               <aside className="partner-guidelines-sidebar partner-guidelines-sidebar--toc" aria-label="On this page">
+                  <div className="partner-guidelines-sidebar__sticky">
+                     <span className="partner-guidelines-sidebar__eyebrow">On this page</span>
+                     <nav className="partner-guidelines-toc">
+                        {sections.map((section) => (
+                           <a
+                              href={`#${section.id}`}
+                              key={section.id}
+                              className={activeSection === section.id ? "is-active" : ""}
+                              aria-current={activeSection === section.id ? "location" : undefined}
+                           >
+                              {section.title}
+                           </a>
+                        ))}
+                     </nav>
+                  </div>
+               </aside>
 
-            <nav className="partner-guidelines-toc" aria-label="Partner Organization Guidelines sections">
-               <strong>On this page</strong>
-               <div>
-                  {sections.map((section) => (
-                     <a href={`#${section.id}`} key={section.id}>{section.title}</a>
-                  ))}
-               </div>
-            </nav>
+               <div className="partner-guidelines-main">
+                  <header className="partner-guidelines-header">
+                     <span>TruthLens Partner Governance</span>
+                     <h1>Partner Organization Guidelines</h1>
+                     <p>
+                        Professional and organizational standards for recognized TruthLens Partner Organizations
+                        and members acting through professional TruthLens privileges.
+                     </p>
+                     <div className="partner-guidelines-access-note">
+                        <strong>Read-only policy</strong>
+                        <p>
+                           These Guidelines apply to Partner Organizations, Organization Administrators,
+                           Lead Verifiers, Researchers, and other members using professional privileges.
+                        </p>
+                     </div>
+                  </header>
 
-            <article className="partner-guidelines-document">
-               {sections.map((section) => <GuidelineSection section={section} key={section.id} />)}
-            </article>
+                  <article className="partner-guidelines-document">
+                     {sections.map((section) => <GuidelineSection section={section} key={section.id} />)}
+                  </article>
+               </div>
+
+               <aside className="partner-guidelines-sidebar partner-guidelines-sidebar--documents" aria-label="Partner governance documents">
+                  <div className="partner-guidelines-sidebar__sticky">
+                     <span className="partner-guidelines-sidebar__eyebrow">Governance documents</span>
+                     <div className="partner-governance-documents">
+                        {governanceDocuments.map((document) => (
+                           <article
+                              key={document.key}
+                              className={`partner-governance-document-card ${document.current ? "is-current" : ""}`}
+                           >
+                              <div className="partner-governance-document-card__title-row">
+                                 <strong>{document.title}</strong>
+                                 {document.current ? <span>Current</span> : null}
+                              </div>
+                              <p>{document.description}</p>
+                           </article>
+                        ))}
+                     </div>
+                     <p className="partner-guidelines-sidebar__note">
+                        These documents are read together as the Partner Governance reference set.
+                     </p>
+                  </div>
+               </aside>
+            </div>
          </div>
       </main>
    );
