@@ -248,7 +248,7 @@
    width: 16px;
    height: 20px;
    pointer-events: none;
-   background: #ffffff;
+   background: var(--tl-color-text-main);
    clip-path: polygon(
       8% 0%,
       8% 78%,
