@@ -155,8 +155,12 @@
 }
 
 .workspace-guide-demo-pill {
+   width: fit-content;
+   max-width: 100%;
    display: inline-flex;
    align-items: center;
+   justify-self: start;
+   flex: 0 0 auto;
    min-height: 20px;
    padding: 0 7px;
    border: 1px solid var(--tl-color-status-neutral-border);
@@ -228,6 +232,35 @@
 
 .workspace-guide-demo .is-animated {
    animation: workspace-guide-demo-focus 4.4s ease-in-out infinite;
+}
+
+.workspace-guide-demo .has-cursor {
+   position: relative;
+   overflow: visible;
+}
+
+.workspace-guide-demo .has-cursor::after {
+   content: "";
+   position: absolute;
+   z-index: 5;
+   top: 50%;
+   left: 50%;
+   width: 16px;
+   height: 20px;
+   pointer-events: none;
+   background: #ffffff;
+   clip-path: polygon(
+      8% 0%,
+      8% 78%,
+      31% 59%,
+      44% 96%,
+      58% 90%,
+      45% 55%,
+      74% 55%
+   );
+   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55));
+   transform-origin: 36% 28%;
+   animation: workspace-guide-demo-cursor 4.4s ease-in-out infinite;
 }
 
 .workspace-guide-demo-split {
@@ -762,6 +795,32 @@
    }
 }
 
+@keyframes workspace-guide-demo-cursor {
+   0%, 14% {
+      opacity: 0;
+      transform: translate(-46px, 30px) rotate(-8deg) scale(0.92);
+   }
+   24% {
+      opacity: 1;
+   }
+   62% {
+      opacity: 1;
+      transform: translate(2px, 6px) rotate(-8deg) scale(1);
+   }
+   69% {
+      opacity: 1;
+      transform: translate(2px, 6px) rotate(-8deg) scale(0.82);
+   }
+   76%, 88% {
+      opacity: 1;
+      transform: translate(2px, 6px) rotate(-8deg) scale(1);
+   }
+   100% {
+      opacity: 0;
+      transform: translate(2px, 6px) rotate(-8deg) scale(1);
+   }
+}
+
 @keyframes workspace-guide-demo-type {
    0%, 8% { background-size: 0 100%; }
    60%, 88% { background-size: 100% 100%; }
@@ -827,8 +886,13 @@
 
 @media (prefers-reduced-motion: reduce) {
    .workspace-guide-demo .is-animated,
+   .workspace-guide-demo .has-cursor::after,
    .workspace-guide-demo-typing,
    .workspace-guide-demo-chart span {
       animation: none;
+   }
+
+   .workspace-guide-demo .has-cursor::after {
+      display: none;
    }
 }
