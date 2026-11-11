@@ -80,7 +80,7 @@ def snapshot_governance_notice_recipients(organization):
 
 
 def persist_governance_notice_recipients(*, governance_event, recipients):
-    """Persist the decision-time audience, then queue delivery only after commit."""
+    """Persist the decision-time audience, then deliver only after commit."""
 
     rows = [
         OrganizationGovernanceNoticeRecipient(
@@ -116,22 +116,22 @@ def persist_governance_notice_recipients(*, governance_event, recipients):
             ),
         )
 
-    def enqueue_after_commit():
+    def deliver_after_commit():
         from .organization_governance_delivery_service import (
-            enqueue_governance_fallback_delivery,
-            enqueue_governance_notice_delivery,
+            dispatch_governance_fallback_delivery,
+            dispatch_governance_notice_delivery,
         )
 
         if recipient_ids:
-            enqueue_governance_notice_delivery(recipient_ids)
+            dispatch_governance_notice_delivery(recipient_ids)
         if (
             fallback_delivery is not None
             and fallback_delivery.status
             == OrganizationGovernanceFallbackDelivery.Status.PENDING
         ):
-            enqueue_governance_fallback_delivery([fallback_delivery.pk])
+            dispatch_governance_fallback_delivery([fallback_delivery.pk])
 
-    transaction.on_commit(enqueue_after_commit)
+    transaction.on_commit(deliver_after_commit)
     return created
 
 
