@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import Icons from "../Icons.jsx";
+import WorkspaceGuidePanelDemo from "./WorkspaceGuidePanelDemo.jsx";
 
 import "./WorkspaceGuideModal.css";
 
@@ -369,11 +370,11 @@ export default function WorkspaceGuideModal({
                <p>{detail.summary}</p>
             </div>
 
-            <div className="workspace-guide-section-visual">
-               <div className="workspace-guide-section-icon" aria-hidden="true">
-                  <Icons name={current.section.icon} size={26} />
-               </div>
-               <VisualFlow labels={detail.visual} />
+            <WorkspaceGuidePanelDemo sectionId={current.section.id} />
+
+            <div className="workspace-guide-process-summary">
+               <span>Typical flow</span>
+               <VisualFlow labels={detail.visual} compact />
             </div>
 
             <ul className="workspace-guide-actions">
