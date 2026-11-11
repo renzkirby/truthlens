@@ -287,6 +287,33 @@ export const API_ENDPOINTS = {
    POLLING: "polling/",
 };
 
+// ── Community Evidence Assessment Options ──
+// Human-selectable claim assessments attached to a submitted evidence item.
+// Keep legacy verdict metadata above for historical display, but new submissions
+// and edits intentionally exclude UNVERIFIED and OUT_OF_SCOPE.
+export const EVIDENCE_ASSESSMENT_OPTIONS = [
+   {
+      value: "FACT",
+      label: "Fact",
+      desc: "This evidence supports the claim as stated.",
+   },
+   {
+      value: "FAKE",
+      label: "Fake",
+      desc: "This evidence contradicts the claim as stated.",
+   },
+   {
+      value: "MISLEADING",
+      label: "Misleading",
+      desc: "This evidence suggests the claim is partly accurate but missing or distorting important context.",
+   },
+   {
+      value: "SATIRE",
+      label: "Satire",
+      desc: "This evidence indicates the content is satire or parody rather than factual reporting.",
+   },
+];
+
 // ── Community Investigation Focus Options ──
 // Author-selected context describing what contributors should examine.
 // These values do not change verdicts, confidence, priority, or authority.

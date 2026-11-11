@@ -85,6 +85,14 @@ from .rich_text_schema import (
 )
 
 
+HUMAN_VERDICT_CHOICES = (
+    (AdjudicationDecision.Verdict.FACT, "Fact"),
+    (AdjudicationDecision.Verdict.FAKE, "Fake"),
+    (AdjudicationDecision.Verdict.MISLEADING, "Misleading"),
+    (AdjudicationDecision.Verdict.SATIRE, "Satire"),
+)
+
+
 def _apply_rich_text_projection(
     serializer,
     attrs,
@@ -2644,6 +2652,10 @@ class EvidenceSubmissionSerializer(serializers.ModelSerializer):
     contributor = ThreadDetailEvidenceContributorSerializer(read_only=True)
     verified_by = ThreadDetailVerifiedBySerializer(read_only=True)
     thread_id = serializers.UUIDField(write_only=True)
+    evidence_verdict = serializers.ChoiceField(
+        choices=HUMAN_VERDICT_CHOICES,
+        required=True,
+    )
     # Include full thread and claim for moderation context
     thread = serializers.SerializerMethodField(read_only=True)
     upvotes = serializers.SerializerMethodField(read_only=True)
@@ -3088,7 +3100,7 @@ class AdjudicationActionSerializer(
     serializers.Serializer,
 ):
     moderator_verdict = serializers.ChoiceField(
-        choices=(AdjudicationDecision.Verdict.choices)
+        choices=HUMAN_VERDICT_CHOICES
     )
 
     moderator_notes = serializers.CharField(

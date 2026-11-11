@@ -8,7 +8,7 @@ import EvidenceCard from "../components/EvidenceCard";
 import PartnerAffiliations from "../components/partners/PartnerAffiliations.jsx";
 import RichTextEditor from "../components/richtext/RichTextEditor.jsx";
 import RichTextRenderer from "../components/richtext/RichTextRenderer.jsx";
-import { VERDICT_CONFIG, EVIDENCE_VERDICT_META, ESCALATION_OPTIONS } from "../utils/constants";
+import { VERDICT_CONFIG, EVIDENCE_ASSESSMENT_OPTIONS, ESCALATION_OPTIONS } from "../utils/constants";
 import { evidenceSubmissionErrorMessage } from "../utils/evidenceSubmissionError";
 import { userFacingErrorMessage } from "../utils/userFacingError";
 import "./ThreadDetailPage.css";
@@ -721,7 +721,7 @@ export default function ThreadDetailPage() {
    const [showEvidenceForm, setShowEvidenceForm] = useState(false);
    const [evidenceUrl, setEvidenceUrl] = useState("");
    const [evidenceType, setEvidenceType] = useState("CONTRADICTS CLAIM");
-   const [evidenceAssessment, setEvidenceAssessment] = useState("UNVERIFIED");
+   const [evidenceAssessment, setEvidenceAssessment] = useState("");
    const [evidenceExplanation, setEvidenceExplanation] = useState("");
    const [evidenceExplanationRich, setEvidenceExplanationRich] = useState(null);
    const [submittingEvidence, setSubmittingEvidence] = useState(false);
@@ -738,7 +738,7 @@ export default function ThreadDetailPage() {
    const [editingEvidenceId, setEditingEvidenceId] = useState(null);
    const [editingEvidenceText, setEditingEvidenceText] = useState("");
    const [editingEvidenceRich, setEditingEvidenceRich] = useState(null);
-   const [editingEvidenceVerdict, setEditingEvidenceVerdict] = useState("UNVERIFIED");
+   const [editingEvidenceVerdict, setEditingEvidenceVerdict] = useState("");
    const [votingEvidenceId, setVotingEvidenceId] = useState(null);
    const [confirmDialog, setConfirmDialog] = useState({ open: false, type: null, targetId: null });
    const [dialogBusy, setDialogBusy] = useState(false);
@@ -1162,7 +1162,7 @@ export default function ThreadDetailPage() {
 
    async function handleEvidenceSubmit(event) {
       event.preventDefault();
-      if (!evidenceUrl.trim() || !evidenceExplanation.trim() || submittingEvidence) return;
+      if (!evidenceUrl.trim() || !evidenceExplanation.trim() || !evidenceAssessment || submittingEvidence) return;
       setSubmittingEvidence(true);
       try {
          await authFetch(apiUrl("evidence/"), {
@@ -1180,7 +1180,7 @@ export default function ThreadDetailPage() {
          setEvidenceUrl("");
          setEvidenceExplanation("");
          setEvidenceExplanationRich(null);
-         setEvidenceAssessment("UNVERIFIED");
+         setEvidenceAssessment("");
          setShowEvidenceForm(false);
          changeTab("evidence");
          addToast({ type: "success", message: "Evidence submitted for community review.", duration: 2200 });
@@ -1193,7 +1193,7 @@ export default function ThreadDetailPage() {
    }
 
    async function handleSaveEvidenceEdit(evidenceId, richCaption, caption, verdict) {
-      if (!caption.trim()) return;
+      if (!caption.trim() || !verdict) return;
       try {
          await authFetch(apiUrl(`evidence/${evidenceId}/`), {
             method: "PATCH",
@@ -1207,7 +1207,7 @@ export default function ThreadDetailPage() {
          setEditingEvidenceId(null);
          setEditingEvidenceText("");
          setEditingEvidenceRich(null);
-         setEditingEvidenceVerdict("UNVERIFIED");
+         setEditingEvidenceVerdict("");
          addToast({ type: "success", message: "Evidence updated.", duration: 1800 });
       } catch (error) {
          console.error("Failed to edit evidence", error);
@@ -1653,12 +1653,21 @@ export default function ThreadDetailPage() {
                                  <div className="thread-detail-evidence-form-group thread-detail-evidence-form-group--assessment">
                                     <label htmlFor="evidence-assessment">Your assessment</label>
                                     <div className="thread-detail-evidence-select-shell">
-                                       <select id="evidence-assessment" value={evidenceAssessment} onChange={(event) => setEvidenceAssessment(event.target.value)}>
-                                          {Object.entries(EVIDENCE_VERDICT_META).map(([key, meta]) => <option key={key} value={key}>{meta.label}</option>)}
+                                       <select id="evidence-assessment" value={evidenceAssessment} onChange={(event) => setEvidenceAssessment(event.target.value)} required>
+                                          <option value="" disabled>Choose an assessment</option>
+                                          {EVIDENCE_ASSESSMENT_OPTIONS.map((option) => (
+                                             <option key={option.value} value={option.value}>{option.label}</option>
+                                          ))}
                                        </select>
                                        <Icons name="chevron-down" size={13} />
                                     </div>
-                                    <small>Your assessment is your interpretation, not a TruthLens or professional verdict.</small>
+                                    {evidenceAssessment ? (
+                                       <small>
+                                          {EVIDENCE_ASSESSMENT_OPTIONS.find((option) => option.value === evidenceAssessment)?.desc}
+                                       </small>
+                                    ) : (
+                                       <small>Choose the conclusion this evidence supports about the claim. This is your interpretation, not an official TruthLens verdict.</small>
+                                    )}
                                  </div>
                               </div>
                               <div className="thread-detail-evidence-form-group">

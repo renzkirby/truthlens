@@ -1400,21 +1400,45 @@
 
 .adjudication-verdict-options > div {
    display: grid;
-   grid-template-columns: repeat(5, minmax(0, 1fr));
-   gap: 7px;
+   grid-template-columns: repeat(2, minmax(0, 1fr));
+   gap: 8px;
 }
 
 .adjudication-verdict-option {
    min-width: 0;
    display: flex;
-   align-items: center;
-   gap: 6px;
-   padding: 9px;
+   align-items: flex-start;
+   gap: 8px;
+   padding: 11px;
    border: 1px solid var(--border-default);
    border-radius: 8px;
    color: var(--text-body);
    font-size: 0.72rem;
+   line-height: 1.45;
    cursor: pointer;
+}
+
+.adjudication-verdict-option-copy {
+   min-width: 0;
+   display: flex;
+   flex-direction: column;
+   gap: 3px;
+}
+
+.adjudication-verdict-option-copy strong {
+   color: inherit;
+   font-size: 0.76rem;
+}
+
+.adjudication-verdict-option-copy small {
+   color: var(--text-muted);
+   font-size: 0.68rem;
+   font-weight: 500;
+   line-height: 1.45;
+}
+
+.adjudication-verdict-option:has(input:checked) .adjudication-verdict-option-copy small {
+   color: inherit;
 }
 
 .adjudication-verdict-option:has(input:checked) {
@@ -1443,12 +1467,6 @@
    border-color: var(--verdict-satire-border);
    background: var(--verdict-satire-bg);
    color: var(--verdict-satire-text);
-}
-
-.adjudication-verdict-option--unverified:has(input:checked) {
-   border-color: var(--verdict-unverified-border);
-   background: var(--verdict-unverified-bg);
-   color: var(--verdict-unverified-text);
 }
 
 .adjudication-verdict-option--neutral:has(input:checked) {
@@ -1537,6 +1555,19 @@
    line-height: 1.55;
    overflow-wrap: anywhere;
    white-space: pre-wrap;
+}
+
+.adjudication-confirmation-summary dd:has(.adjudication-confirmation-verdict-description) {
+   display: flex;
+   flex-direction: column;
+   align-items: flex-start;
+   gap: 5px;
+}
+
+.adjudication-confirmation-verdict-description {
+   color: var(--text-muted);
+   font-size: 0.7rem;
+   line-height: 1.45;
 }
 
 .adjudication-history-heading {

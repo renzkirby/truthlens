@@ -441,6 +441,7 @@
 .thread-detail-page .evidence-card-edit p { margin: 0; color: #64748b; font-size: 10px; }
 .thread-detail-page .evidence-card-edit > div { justify-content: flex-end; gap: 8px; }
 .thread-detail-page .evidence-card-edit button.is-primary { border-color: #4f46e5; color: #ffffff; background: #4f46e5; }
+.thread-detail-page .evidence-card-edit button:disabled { opacity: 0.55; cursor: not-allowed; }
 
 @media (max-width: 700px) {
    .thread-detail-page .evidence-card { padding: 15px; }

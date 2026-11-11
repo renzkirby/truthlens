@@ -26,11 +26,26 @@ const QUEUE_VIEW_OPTIONS = [
 ];
 
 const VERDICT_OPTIONS = [
-   { value: "FACT", label: "Fact" },
-   { value: "FAKE", label: "Fake" },
-   { value: "MISLEADING", label: "Misleading" },
-   { value: "SATIRE", label: "Satire" },
-   { value: "UNVERIFIED", label: "Unverified" },
+   {
+      value: "FACT",
+      label: "Fact",
+      description: "The reviewed evidence supports the claim as stated.",
+   },
+   {
+      value: "FAKE",
+      label: "Fake",
+      description: "The reviewed evidence contradicts the claim as stated.",
+   },
+   {
+      value: "MISLEADING",
+      label: "Misleading",
+      description: "The claim is partly accurate, but important context is missing or distorted.",
+   },
+   {
+      value: "SATIRE",
+      label: "Satire",
+      description: "The content is presented as satire or parody rather than factual reporting.",
+   },
 ];
 
 const EMPTY_DECISION_DRAFT = {
@@ -2829,7 +2844,7 @@ function AdjudicationReviewContent({
                                              aria-describedby={decisionErrors.verdict ? "adjudication-verdict-error" : undefined}
                                           >
                                              <legend>Adjudication verdict <span aria-hidden="true">*</span></legend>
-                                             <p>Choose the claim-level human decision. Evidence dispositions remain separate.</p>
+                                             <p>Choose the Partner Organization's authoritative determination after reviewing the available evidence. Evidence dispositions remain separate.</p>
                                              <div>
                                                 {VERDICT_OPTIONS.map((option, index) => (
                                                    <label
@@ -2845,7 +2860,10 @@ function AdjudicationReviewContent({
                                                          onChange={(event) => handleDecisionDraftChange("verdict", event.target.value)}
                                                          required
                                                       />
-                                                      <span>{option.label}</span>
+                                                      <span className="adjudication-verdict-option-copy">
+                                                         <strong>{option.label}</strong>
+                                                         <small>{option.description}</small>
+                                                      </span>
                                                    </label>
                                                 ))}
                                              </div>
@@ -2947,6 +2965,9 @@ function AdjudicationReviewContent({
                                                    >
                                                       {VERDICT_OPTIONS.find((option) => option.value === confirmation.payload.moderator_verdict)?.label}
                                                    </span>
+                                                   <small className="adjudication-confirmation-verdict-description">
+                                                      {VERDICT_OPTIONS.find((option) => option.value === confirmation.payload.moderator_verdict)?.description}
+                                                   </small>
                                                 </dd>
                                              </div>
                                              <div>
