@@ -1557,6 +1557,19 @@
    white-space: pre-wrap;
 }
 
+.adjudication-confirmation-summary dd:has(.adjudication-confirmation-verdict-description) {
+   display: flex;
+   flex-direction: column;
+   align-items: flex-start;
+   gap: 5px;
+}
+
+.adjudication-confirmation-verdict-description {
+   color: var(--text-muted);
+   font-size: 0.7rem;
+   line-height: 1.45;
+}
+
 .adjudication-history-heading {
    align-items: baseline;
    margin-top: 20px;
