@@ -329,6 +329,8 @@ def _evaluate_persisted_with_official_rating_policy(
     evidence_context,
     article_stance,
     official_rating_policy,
+    *,
+    evidence_groups=(),
 ):
     if (
         official_rating_policy["resolution"]
@@ -338,6 +340,7 @@ def _evaluate_persisted_with_official_rating_policy(
             claim_text,
             evidence_context,
             article_stance,
+            evidence_groups=evidence_groups,
         )
     return evaluate_claim_with_persisted_evidence(
         claim_text,
@@ -345,6 +348,7 @@ def _evaluate_persisted_with_official_rating_policy(
         article_stance,
         official_rating_policy["resolution"],
         official_rating_policy["satire_evidence_ids"],
+        evidence_groups=evidence_groups,
     )
 
 
