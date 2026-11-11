@@ -47,7 +47,7 @@ function IntakeDemo() {
                   <span>AI assessment · Fact</span>
                </div>
             </div>
-            <button type="button" tabIndex={-1} className="workspace-guide-demo-action is-animated">
+            <button type="button" tabIndex={-1} className="workspace-guide-demo-action is-animated has-cursor">
                Claim investigation
             </button>
          </div>
@@ -78,7 +78,7 @@ function InvestigationsDemo() {
                   <span>Updated recently</span>
                </div>
             </div>
-            <button type="button" tabIndex={-1} className="workspace-guide-demo-action is-animated">
+            <button type="button" tabIndex={-1} className="workspace-guide-demo-action is-animated has-cursor">
                Open investigation
             </button>
          </div>
@@ -116,7 +116,7 @@ function EvidenceDemo() {
                <p>The source is available and relevant to the investigation claim.</p>
                <div className="workspace-guide-demo-source">reuters.com / health / covid-19</div>
                <div className="workspace-guide-demo-actions">
-                  <button type="button" tabIndex={-1} className="workspace-guide-demo-action is-success is-animated">
+                  <button type="button" tabIndex={-1} className="workspace-guide-demo-action is-success is-animated has-cursor">
                      Verify evidence
                   </button>
                   <button type="button" tabIndex={-1} className="workspace-guide-demo-action is-danger">
@@ -141,7 +141,7 @@ function AdjudicationDemo() {
             <div className="workspace-guide-demo-verdicts">
                <span>Fact</span>
                <span>Fake</span>
-               <span className="is-selected is-animated">Misleading</span>
+               <span className="is-selected is-animated has-cursor">Misleading</span>
                <span>Satire</span>
             </div>
             <div className="workspace-guide-demo-field">
@@ -181,7 +181,7 @@ function DraftingDemo() {
                <span>WHO source</span>
                <span>Reuters source</span>
             </div>
-            <button type="button" tabIndex={-1} className="workspace-guide-demo-action is-animated">Save draft</button>
+            <button type="button" tabIndex={-1} className="workspace-guide-demo-action is-animated has-cursor">Save draft</button>
          </div>
       </DemoShell>
    );
@@ -210,7 +210,7 @@ function PublishingDemo() {
                <button type="button" tabIndex={-1} className="workspace-guide-demo-action is-secondary">
                   Return for rework
                </button>
-               <button type="button" tabIndex={-1} className="workspace-guide-demo-action is-success is-animated">
+               <button type="button" tabIndex={-1} className="workspace-guide-demo-action is-success is-animated has-cursor">
                   Publish fact-check
                </button>
             </div>
@@ -255,7 +255,7 @@ function PublicationsDemo() {
                   <button type="button" tabIndex={-1} className="workspace-guide-demo-action is-secondary">
                      Create revision
                   </button>
-                  <button type="button" tabIndex={-1} className="workspace-guide-demo-action is-animated">
+                  <button type="button" tabIndex={-1} className="workspace-guide-demo-action is-animated has-cursor">
                      Request correction
                   </button>
                </div>
@@ -291,7 +291,7 @@ function CorrectionDemo() {
                </div>
             </div>
             <div className="workspace-guide-demo-actions">
-               <button type="button" tabIndex={-1} className="workspace-guide-demo-action is-animated">
+               <button type="button" tabIndex={-1} className="workspace-guide-demo-action is-animated has-cursor">
                   Prepare correction proposal
                </button>
             </div>
