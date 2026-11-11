@@ -1463,6 +1463,30 @@
   line-height: 1.45;
 }
 
+.management-form-field--invalid textarea,
+.management-form-field--invalid select {
+  border-color: var(--tl-color-status-critical-text);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--tl-color-status-critical-text) 28%, transparent);
+}
+
+.management-form-field--invalid textarea:focus,
+.management-form-field--invalid select:focus {
+  border-color: var(--tl-color-status-critical-text);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tl-color-status-critical-text) 22%, transparent);
+  outline: none;
+}
+
+.management-validation-summary {
+  display: grid;
+  gap: var(--tl-space-1);
+  margin: var(--tl-space-2) 0 0;
+  padding-left: var(--tl-space-5);
+}
+
+.management-validation-summary li {
+  line-height: 1.45;
+}
+
 .management-form-actions,
 .management-inline-actions,
 .management-record-actions {
