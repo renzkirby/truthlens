@@ -465,11 +465,6 @@ function PartnerOrganizationGuidelinesPage() {
    const isPlatformAdmin = canAccessManagementConsole(user);
    const professionalIdentity = user?.community_identity?.professional_identity || null;
    const canView = isPlatformAdmin || Boolean(professionalIdentity);
-
-   if (!canView) {
-      return <Navigate to="/community" replace />;
-   }
-
    const managementView = location.pathname.startsWith("/management/");
 
    useEffect(() => {
@@ -496,6 +491,10 @@ function PartnerOrganizationGuidelinesPage() {
       sectionNodes.forEach((node) => observer.observe(node));
       return () => observer.disconnect();
    }, []);
+
+   if (!canView) {
+      return <Navigate to="/community" replace />;
+   }
 
    const backTo = managementView
       ? "/management/organizations"
