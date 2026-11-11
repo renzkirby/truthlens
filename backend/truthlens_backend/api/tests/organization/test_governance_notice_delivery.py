@@ -24,7 +24,7 @@ from api.organization_governance_delivery_service import (
     GovernanceNoticeDeliveryError,
     deliver_governance_fallback_email,
     deliver_governance_notice_channels,
-    enqueue_governance_notice_delivery,
+    dispatch_governance_notice_delivery,
 )
 from api.organization_partnership_lifecycle_service import (
     MANAGE_PARTNER_ORGANIZATION,
@@ -225,27 +225,27 @@ class GovernanceNoticeDeliveryTests(APITestCase):
         )
         self.assertEqual(len(mail.outbox), 1)
 
-    def test_broker_failure_leaves_durable_pending_row_and_is_reported(self):
+    def test_direct_dispatch_records_smtp_failure_and_keeps_in_app_notice(self):
         recipient = self.make_recipient()
 
         with patch(
-            "api.tasks.deliver_organization_governance_notice_task.delay",
-            side_effect=RuntimeError("Redis unavailable"),
+            "api.organization_governance_delivery_service.EmailMultiAlternatives.send",
+            side_effect=RuntimeError("SMTP unavailable"),
         ):
-            result = enqueue_governance_notice_delivery([recipient.pk])
+            result = dispatch_governance_notice_delivery([recipient.pk])
 
         recipient.refresh_from_db()
         self.assertEqual(
             result,
-            {"requested": 1, "queued": 0, "queue_failed": 1},
+            {"requested": 1, "delivered": 0, "failed": 1},
         )
-        self.assertEqual(recipient.in_app_status, "PENDING")
-        self.assertEqual(recipient.email_status, "PENDING")
+        self.assertEqual(recipient.in_app_status, "SENT")
+        self.assertEqual(recipient.email_status, "FAILED")
 
-    def test_broker_failure_after_commit_does_not_rollback_suspension(self):
+    def test_smtp_failure_after_commit_does_not_rollback_suspension(self):
         organization = Organization.objects.create(
-            name="Broker Failure Partner",
-            slug="broker-failure-partner",
+            name="SMTP Failure Partner",
+            slug="smtp-failure-partner",
             verification_status=Organization.VerificationStatus.VERIFIED,
             partner_status=Organization.PartnerStatus.ACTIVE,
         )
@@ -268,7 +268,7 @@ class GovernanceNoticeDeliveryTests(APITestCase):
                 "Internal review of affected investigations and prior corrective "
                 "guidance."
             ),
-            "supporting_references": ["BROKER-FAILURE-001"],
+            "supporting_references": ["SMTP-FAILURE-001"],
             "remediation_problem": (
                 "Repeated sourcing failures in completed verification work."
             ),
@@ -289,8 +289,8 @@ class GovernanceNoticeDeliveryTests(APITestCase):
         }
 
         with patch(
-            "api.tasks.deliver_organization_governance_notice_task.delay",
-            side_effect=RuntimeError("Redis unavailable"),
+            "api.organization_governance_delivery_service.EmailMultiAlternatives.send",
+            side_effect=RuntimeError("SMTP unavailable"),
         ):
             with self.captureOnCommitCallbacks(execute=True):
                 suspend_partner_organization_partnership(
@@ -310,8 +310,8 @@ class GovernanceNoticeDeliveryTests(APITestCase):
             governance_event__resource_id=str(organization.pk),
             user=self.organization_admin,
         )
-        self.assertEqual(recipient.in_app_status, "PENDING")
-        self.assertEqual(recipient.email_status, "PENDING")
+        self.assertEqual(recipient.in_app_status, "SENT")
+        self.assertEqual(recipient.email_status, "FAILED")
 
     def test_management_detail_exposes_delivery_status_and_retry_endpoint(self):
         recipient = self.make_recipient()
@@ -344,23 +344,22 @@ class GovernanceNoticeDeliveryTests(APITestCase):
         self.assertEqual(delivery["email"]["FAILED"], 1)
         self.assertEqual(delivery["recent"][0]["id"], str(recipient.pk))
 
-        with patch(
-            "api.tasks.deliver_organization_governance_notice_task.delay"
-        ) as delay:
-            retry = self.client_for(self.platform_admin).post(
-                reverse(
-                    "management_organization_governance_notice_retry",
-                    kwargs={"organization_id": self.organization.pk},
-                ),
-                {},
-                format="json",
-            )
+        retry = self.client_for(self.platform_admin).post(
+            reverse(
+                "management_organization_governance_notice_retry",
+                kwargs={"organization_id": self.organization.pk},
+            ),
+            {},
+            format="json",
+        )
 
         self.assertEqual(retry.status_code, status.HTTP_200_OK)
         self.assertEqual(retry.data["requested"], 1)
-        self.assertEqual(retry.data["queued"], 1)
-        self.assertEqual(retry.data["queue_failed"], 0)
-        delay.assert_called_once_with(str(recipient.pk))
+        self.assertEqual(retry.data["delivered"], 1)
+        self.assertEqual(retry.data["failed"], 0)
+        recipient.refresh_from_db()
+        self.assertEqual(recipient.email_status, "SENT")
+        self.assertEqual(len(mail.outbox), 1)
 
     def test_no_admin_uses_private_governance_contact_fallback(self):
         organization = Organization.objects.create(
@@ -383,23 +382,17 @@ class GovernanceNoticeDeliveryTests(APITestCase):
             "supporting_references": ["NO-ADMIN-001"],
         }
 
-        with patch("api.tasks.deliver_organization_governance_fallback_task.delay") as delay:
-            with self.captureOnCommitCallbacks(execute=True):
-                suspend_partner_organization_partnership(
-                    organization_id=organization.pk,
-                    actor=self.platform_admin,
-                    **payload,
-                )
+        with self.captureOnCommitCallbacks(execute=True):
+            suspend_partner_organization_partnership(
+                organization_id=organization.pk,
+                actor=self.platform_admin,
+                **payload,
+            )
 
         fallback = OrganizationGovernanceFallbackDelivery.objects.get(
             governance_event__subject_organization=organization,
         )
-        self.assertEqual(fallback.status, "PENDING")
         self.assertEqual(fallback.contact_email, "governance-contact@example.com")
-        delay.assert_called_once_with(str(fallback.pk))
-
-        deliver_governance_fallback_email(fallback.pk)
-        fallback.refresh_from_db()
         self.assertEqual(fallback.status, "SENT")
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn("Partnership Suspended", mail.outbox[0].body)
@@ -491,19 +484,16 @@ class GovernanceNoticeDeliveryTests(APITestCase):
             "supporting_references": ["NO-ADMIN-SENT-001"],
         }
 
-        with patch("api.tasks.deliver_organization_governance_fallback_task.delay"):
-            with self.captureOnCommitCallbacks(execute=True):
-                suspend_partner_organization_partnership(
-                    organization_id=organization.pk,
-                    actor=self.platform_admin,
-                    **payload,
-                )
+        with self.captureOnCommitCallbacks(execute=True):
+            suspend_partner_organization_partnership(
+                organization_id=organization.pk,
+                actor=self.platform_admin,
+                **payload,
+            )
 
         fallback = OrganizationGovernanceFallbackDelivery.objects.get(
             governance_event__subject_organization=organization,
         )
-        deliver_governance_fallback_email(fallback.pk)
-        fallback.refresh_from_db()
         self.assertEqual(fallback.status, "SENT")
 
         response = self.client_for(self.platform_admin).post(
