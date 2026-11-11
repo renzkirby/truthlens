@@ -2965,6 +2965,9 @@ function AdjudicationReviewContent({
                                                    >
                                                       {VERDICT_OPTIONS.find((option) => option.value === confirmation.payload.moderator_verdict)?.label}
                                                    </span>
+                                                   <small className="adjudication-confirmation-verdict-description">
+                                                      {VERDICT_OPTIONS.find((option) => option.value === confirmation.payload.moderator_verdict)?.description}
+                                                   </small>
                                                 </dd>
                                              </div>
                                              <div>
