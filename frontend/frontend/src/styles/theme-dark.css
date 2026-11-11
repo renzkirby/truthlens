@@ -1122,6 +1122,15 @@ html[data-theme="dark"] .thread-detail-page--classic .thread-detail-comment-acti
    color: var(--tl-color-text-muted);
 }
 
+html[data-theme="dark"] .thread-detail-page .thread-detail-role-label {
+   color: var(--tl-color-status-success-text);
+   background: var(--tl-color-status-success-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .thread-detail-send-state--failed {
+   color: var(--tl-color-status-critical-text);
+}
+
 html[data-theme="dark"] .thread-detail-page--classic .thread-detail-comment-actions button.is-danger {
    color: var(--tl-color-status-critical-text);
 }
