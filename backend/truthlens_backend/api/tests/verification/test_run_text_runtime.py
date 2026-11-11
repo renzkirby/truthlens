@@ -727,7 +727,10 @@ class VerificationRunTextRuntimeTests(TestCase):
             verification_run=self.claim.verification_runs.get(),
         )
         self.evaluate_persisted.assert_called_once_with(
-            self.cleaned["cleaned_claim"], "Persisted evidence context.", "NEUTRAL"
+            self.cleaned["cleaned_claim"],
+            "Persisted evidence context.",
+            "NEUTRAL",
+            evidence_groups=self.filter_dossier.return_value,
         )
         self.calibrate_confidence.assert_called_once_with(
             self.verdict,
@@ -778,6 +781,7 @@ class VerificationRunTextRuntimeTests(TestCase):
             "NEUTRAL",
             services.OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
             (evidence_id,),
+            evidence_groups=self.filter_dossier.return_value,
         )
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, "SATIRE")
@@ -828,6 +832,7 @@ class VerificationRunTextRuntimeTests(TestCase):
             "NEUTRAL",
             services.OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
             (evidence_id,),
+            evidence_groups=self.filter_dossier.return_value,
         )
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, "SATIRE")
@@ -875,6 +880,7 @@ class VerificationRunTextRuntimeTests(TestCase):
             "NEUTRAL",
             services.OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT,
             (satire_id,),
+            evidence_groups=self.filter_dossier.return_value,
         )
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, "FAKE")
