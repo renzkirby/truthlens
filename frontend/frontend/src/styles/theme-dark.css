@@ -1017,3 +1017,363 @@ html[data-theme="dark"] .thread-detail-dialog {
 html[data-theme="dark"] .thread-detail-dialog > p:not(.thread-detail-dialog-kicker) {
    color: var(--tl-color-text-muted);
 }
+
+/* Dark-mode consistency follow-up: legacy surfaces that still use fixed
+   light-theme fills. Keep these overrides scoped to dark mode so light mode
+   remains visually unchanged. */
+
+/* Workspace: active navigation is a filled selection, not brand-colored text. */
+html[data-theme="dark"] .workspace-nav-item.active {
+   background: var(--tl-color-brand-fill);
+   color: var(--tl-color-text-inverse);
+   box-shadow: inset 3px 0 0 var(--tl-color-text-inverse);
+}
+
+html[data-theme="dark"] .workspace-nav-item.active .workspace-nav-icon {
+   color: var(--tl-color-text-inverse);
+   background: color-mix(in srgb, #ffffff 16%, transparent);
+}
+
+/* Dashboard: professional identity card still contains legacy light panels. */
+html[data-theme="dark"] .hub-page-layout :is(
+   .hub-professional-title,
+   .hub-professional-facts strong,
+   .hub-professional-actions h3
+) {
+   color: var(--tl-color-text-main);
+}
+
+html[data-theme="dark"] .hub-page-layout :is(
+   .hub-professional-description,
+   .hub-professional-facts span,
+   .hub-professional-actions p
+) {
+   color: var(--tl-color-text-muted);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-professional-facts {
+   border-color: var(--tl-color-border-default);
+   background: var(--tl-color-border-default);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-professional-facts article {
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-professional-actions {
+   border-color: var(--tl-color-border-default);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-professional-paused {
+   color: var(--tl-color-status-warning-text);
+   border-color: var(--tl-color-status-warning-border);
+   background: var(--tl-color-status-warning-bg);
+}
+
+/* Community thread: the current classic layout moved the visible comment
+   surface into .thread-detail-comment-bubble, while the older dark override
+   still targeted .thread-detail-comment-content. */
+html[data-theme="dark"] .thread-detail-page--classic .thread-detail-comment-bubble {
+   color: var(--tl-color-text-main);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .thread-detail-page--classic .thread-detail-comment--reply .thread-detail-comment-bubble {
+   background: color-mix(in srgb, var(--tl-color-brand-primary) 5%, var(--tl-color-bg-surface));
+}
+
+html[data-theme="dark"] .thread-detail-page--classic .thread-detail-comment.is-highlighted .thread-detail-comment-bubble {
+   background: var(--tl-color-status-info-bg);
+   box-shadow: inset 0 0 0 1px var(--tl-color-status-info-border);
+}
+
+html[data-theme="dark"] .thread-detail-page--classic .thread-detail-comment.is-send-failed .thread-detail-comment-bubble {
+   background: var(--tl-color-status-critical-bg);
+   box-shadow: inset 0 0 0 1px var(--tl-color-status-critical-border);
+}
+
+html[data-theme="dark"] .thread-detail-page--classic :is(
+   .thread-detail-comment-text,
+   .thread-detail-evidence-toolbar h2,
+   .thread-detail-evidence-form-group > label,
+   .thread-detail-evidence-rich-label
+) {
+   color: var(--tl-color-text-main);
+}
+
+html[data-theme="dark"] .thread-detail-page--classic :is(
+   .thread-detail-comment-header time,
+   .thread-detail-send-state,
+   .thread-detail-reply-context,
+   .thread-detail-evidence-toolbar p,
+   .thread-detail-evidence-form-group > small,
+   .thread-detail-evidence-weight
+) {
+   color: var(--tl-color-text-muted);
+}
+
+html[data-theme="dark"] .thread-detail-page--classic .thread-detail-comment-actions button:hover:not(:disabled),
+html[data-theme="dark"] .thread-detail-page--classic .thread-detail-comment-actions button.is-selected {
+   color: var(--tl-color-brand-primary);
+   background: var(--tl-color-status-info-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page--classic .thread-detail-comment-actions button.is-owner-action {
+   color: var(--tl-color-text-body);
+   border-color: var(--tl-color-border-default);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .thread-detail-page--classic .thread-detail-comment-actions button.is-owner-action:hover:not(:disabled) {
+   color: var(--tl-color-text-main);
+   border-color: color-mix(in srgb, var(--tl-color-brand-primary) 38%, var(--tl-color-border-default));
+   background: var(--tl-color-bg-surface);
+}
+
+html[data-theme="dark"] .thread-detail-page--classic .thread-detail-comment-actions button.is-owner-action.is-danger {
+   color: var(--tl-color-status-critical-text);
+   border-color: var(--tl-color-status-critical-border);
+   background: var(--tl-color-status-critical-bg);
+}
+
+/* Community evidence toolbar, contribution form, and ranking strip. */
+html[data-theme="dark"] .thread-detail-page .thread-detail-text-button {
+   color: var(--tl-color-text-body);
+   border-color: var(--tl-color-border-default);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .thread-detail-page .thread-detail-text-button:hover:not(:disabled) {
+   color: var(--tl-color-text-main);
+   border-color: color-mix(in srgb, var(--tl-color-brand-primary) 42%, var(--tl-color-border-default));
+   background: var(--tl-color-bg-surface);
+}
+
+html[data-theme="dark"] .thread-detail-page--classic .thread-detail-evidence-form--legacy {
+   border-color: var(--tl-color-brand-primary);
+   background: var(--tl-color-bg-surface);
+   box-shadow: var(--tl-shadow-sm);
+}
+
+html[data-theme="dark"] .thread-detail-page--classic :is(
+   .thread-detail-evidence-input-shell,
+   .thread-detail-evidence-select-shell
+) {
+   color: var(--tl-color-text-muted);
+   border-color: var(--tl-color-border-default);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .thread-detail-page--classic :is(
+   .thread-detail-evidence-input-shell,
+   .thread-detail-evidence-select-shell
+):focus-within {
+   border-color: var(--tl-color-brand-primary);
+   background: var(--tl-color-bg-surface);
+   box-shadow: 0 0 0 3px color-mix(in srgb, var(--tl-color-brand-primary) 16%, transparent);
+}
+
+html[data-theme="dark"] .thread-detail-page--classic :is(
+   .thread-detail-evidence-input-shell input,
+   .thread-detail-evidence-select-shell select
+) {
+   color: var(--tl-color-text-main);
+}
+
+html[data-theme="dark"] .thread-detail-page--classic .thread-detail-evidence-select-shell--supports {
+   border-color: color-mix(in srgb, var(--tl-color-fact-border) 62%, var(--tl-color-border-default));
+   background: color-mix(in srgb, var(--tl-color-fact-bg) 58%, var(--tl-color-bg-subtle));
+}
+
+html[data-theme="dark"] .thread-detail-page--classic .thread-detail-evidence-select-shell--contradicts {
+   border-color: color-mix(in srgb, var(--tl-color-fake-border) 62%, var(--tl-color-border-default));
+   background: color-mix(in srgb, var(--tl-color-fake-bg) 58%, var(--tl-color-bg-subtle));
+}
+
+html[data-theme="dark"] .thread-detail-page--classic .thread-detail-evidence-select-shell--context {
+   border-color: color-mix(in srgb, var(--tl-color-misleading-border) 62%, var(--tl-color-border-default));
+   background: color-mix(in srgb, var(--tl-color-misleading-bg) 58%, var(--tl-color-bg-subtle));
+}
+
+html[data-theme="dark"] .thread-detail-page--classic .thread-detail-evidence-select-shell--verification {
+   border-color: color-mix(in srgb, var(--tl-color-status-info-border) 72%, var(--tl-color-border-default));
+   background: var(--tl-color-status-info-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page--classic .thread-detail-evidence-sort-row {
+   color: var(--tl-color-text-muted);
+   border-color: var(--tl-color-border-default);
+   background: linear-gradient(
+      120deg,
+      var(--tl-color-bg-subtle) 0%,
+      color-mix(in srgb, var(--tl-color-bg-surface) 72%, var(--tl-color-bg-subtle)) 100%
+   );
+}
+
+html[data-theme="dark"] .thread-detail-page--classic .thread-detail-evidence-formula {
+   color: var(--tl-color-text-body);
+   border-color: var(--tl-color-border-default);
+   background: var(--tl-color-bg-surface);
+}
+
+/* Evidence cards: remove remaining white controls while retaining semantic hue. */
+html[data-theme="dark"] .thread-detail-page .evidence-card-semantics {
+   border-color: var(--tl-color-border-light);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-semantic-item > span,
+html[data-theme="dark"] .thread-detail-page .evidence-card-semantics time,
+html[data-theme="dark"] .thread-detail-page .evidence-card-vote-hint {
+   color: var(--tl-color-text-muted);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-assessment {
+   color: var(--tl-color-status-neutral-text);
+   background: var(--tl-color-status-neutral-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-assessment--fact {
+   color: var(--tl-color-fact-text);
+   background: var(--tl-color-fact-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-assessment--fake {
+   color: var(--tl-color-fake-text);
+   background: var(--tl-color-fake-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-assessment--misleading {
+   color: var(--tl-color-misleading-text);
+   background: var(--tl-color-misleading-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-assessment--satire {
+   color: var(--tl-color-satire-text);
+   background: var(--tl-color-satire-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-assessment--out_of_scope {
+   color: var(--tl-color-outofscope-text);
+   background: var(--tl-color-outofscope-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-assessment--unverified {
+   color: var(--tl-color-unverified-text);
+   background: var(--tl-color-unverified-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-review {
+   color: var(--tl-color-status-neutral-text);
+   border-color: var(--tl-color-status-neutral-border);
+   background: var(--tl-color-status-neutral-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-review--verified {
+   color: var(--tl-color-fact-text);
+   border-color: var(--tl-color-fact-border);
+   background: var(--tl-color-fact-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-review--rejected {
+   color: var(--tl-color-fake-text);
+   border-color: var(--tl-color-fake-border);
+   background: var(--tl-color-fake-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-type {
+   color: var(--tl-color-status-neutral-text);
+   background: var(--tl-color-status-neutral-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-type--supports {
+   color: var(--tl-color-fact-text);
+   background: var(--tl-color-fact-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-type--contradicts {
+   color: var(--tl-color-fake-text);
+   background: var(--tl-color-fake-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-type--context {
+   color: var(--tl-color-misleading-text);
+   background: var(--tl-color-misleading-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-type--verification {
+   color: var(--tl-color-status-info-text);
+   background: var(--tl-color-status-info-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-vote {
+   background: var(--tl-color-bg-surface);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-vote--up {
+   color: var(--tl-color-fact-text);
+   border-color: color-mix(in srgb, var(--tl-color-fact-border) 72%, var(--tl-color-border-default));
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-vote--up:hover:not(:disabled),
+html[data-theme="dark"] .thread-detail-page .evidence-card-vote--up.is-selected {
+   color: var(--tl-color-fact-text);
+   border-color: var(--tl-color-fact-border);
+   background: var(--tl-color-fact-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-vote--down {
+   color: var(--tl-color-fake-text);
+   border-color: color-mix(in srgb, var(--tl-color-fake-border) 72%, var(--tl-color-border-default));
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-vote--down:hover:not(:disabled),
+html[data-theme="dark"] .thread-detail-page .evidence-card-vote--down.is-selected {
+   color: var(--tl-color-fake-text);
+   border-color: var(--tl-color-fake-border);
+   background: var(--tl-color-fake-bg);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-weighted {
+   color: var(--tl-color-text-body);
+   border-color: var(--tl-color-border-default);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-edit {
+   color: var(--tl-color-text-main);
+   border-color: var(--tl-color-border-default);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .thread-detail-page .evidence-card-edit :is(textarea, select) {
+   color: var(--tl-color-text-main);
+   border-color: var(--tl-color-border-default);
+   background: var(--tl-color-bg-surface);
+}
+
+/* Evidence source safety status uses the same semantic dark palette. */
+html[data-theme="dark"] .evidence-source-preview__safety {
+   color: var(--tl-color-status-info-text);
+   border-color: var(--tl-color-status-info-border);
+   background: var(--tl-color-status-info-bg);
+}
+
+html[data-theme="dark"] .evidence-source-preview__safety--unavailable {
+   color: var(--tl-color-status-warning-text);
+   border-color: var(--tl-color-status-warning-border);
+   background: var(--tl-color-status-warning-bg);
+}
+
+html[data-theme="dark"] .evidence-source-preview__safety--threat {
+   color: var(--tl-color-status-critical-text);
+   border-color: var(--tl-color-status-critical-border);
+   background: var(--tl-color-status-critical-bg);
+}
+
+html[data-theme="dark"] .evidence-source-preview__safety--unchecked {
+   color: var(--tl-color-status-neutral-text);
+   border-color: var(--tl-color-status-neutral-border);
+   background: var(--tl-color-status-neutral-bg);
+}
+
