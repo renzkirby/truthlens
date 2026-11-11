@@ -3902,7 +3902,7 @@
     border: 0;
     border-radius: 0 14px 14px 14px;
     background: #f8fafc;
-    transition: background-color 0.18s ease, box-shadow 0.18s ease;
+    transition: box-shadow var(--tl-duration-fast) ease;
 }
 
 .thread-detail-page--classic .thread-detail-comment--reply {
@@ -4807,3 +4807,32 @@ html[data-theme="dark"] .thread-detail-page .thread-detail-verdict.thread-detail
    border-color: color-mix(in srgb, var(--tl-color-unverified-border) 62%, transparent);
    background: var(--tl-color-unverified-bg);
 }
+
+/* Dark-theme classic comments must preserve the light-theme visual grouping:
+   only the rounded bubble owns a surface; the action row remains outside it.
+   Keep this at the end of the page stylesheet so late classic rules cannot
+   restore a surface on the wrapper. */
+html[data-theme="dark"] .thread-detail-page.thread-detail-page--classic .thread-detail-comment .thread-detail-comment-content {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+html[data-theme="dark"] .thread-detail-page.thread-detail-page--classic .thread-detail-comment .thread-detail-comment-bubble {
+    border: 0;
+    border-radius: 0 14px 14px 14px;
+    color: var(--tl-color-text-main);
+    background: var(--tl-color-bg-subtle);
+    transition: box-shadow var(--tl-duration-fast) ease;
+}
+
+html[data-theme="dark"] .thread-detail-page.thread-detail-page--classic .thread-detail-comment--reply .thread-detail-comment-bubble {
+    background: color-mix(in srgb, var(--tl-color-brand-primary) 5%, var(--tl-color-bg-surface));
+}
+
+html[data-theme="dark"] .thread-detail-page.thread-detail-page--classic .thread-detail-comment .thread-detail-comment-actions {
+    background: transparent;
+}
+
