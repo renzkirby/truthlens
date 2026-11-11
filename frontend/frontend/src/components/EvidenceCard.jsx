@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import Icons from "./Icons";
-import { EVIDENCE_VERDICT_META } from "../utils/constants";
+import { EVIDENCE_VERDICT_META, EVIDENCE_ASSESSMENT_OPTIONS } from "../utils/constants";
 import "./EvidenceCard.css";
 import PartnerAffiliations from "./partners/PartnerAffiliations.jsx";
 import EvidenceSourcePreview from "./evidence/EvidenceSourcePreview.jsx";
@@ -117,7 +117,7 @@ export default function EvidenceCard({
                            setEditingId(evidence.id);
                            setEditingText(evidence.evidence_caption || "");
                            setEditingRich(evidence.evidence_caption_rich || null);
-                           setEditingVerdict(verdict);
+                           setEditingVerdict(EVIDENCE_ASSESSMENT_OPTIONS.some((option) => option.value === verdict) ? verdict : "");
                         }}
                      >
                         Edit
@@ -143,13 +143,20 @@ export default function EvidenceCard({
                   placeholder="Explain why this evidence matters..."
                />
                <label htmlFor={`evidence-assessment-${evidence.id}`}>Your assessment</label>
-               <select id={`evidence-assessment-${evidence.id}`} value={editingVerdict} onChange={(event) => setEditingVerdict(event.target.value)}>
-                  {Object.entries(EVIDENCE_VERDICT_META).map(([key, meta]) => <option key={key} value={key}>{meta.label}</option>)}
+               <select id={`evidence-assessment-${evidence.id}`} value={editingVerdict} onChange={(event) => setEditingVerdict(event.target.value)} required>
+                  <option value="" disabled>Choose an assessment</option>
+                  {EVIDENCE_ASSESSMENT_OPTIONS.map((option) => (
+                     <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
                </select>
-               <p>Your assessment is your interpretation, not a TruthLens or professional verdict.</p>
+               <p>
+                  {editingVerdict
+                     ? EVIDENCE_ASSESSMENT_OPTIONS.find((option) => option.value === editingVerdict)?.desc
+                     : "Choose the conclusion this evidence supports about the claim. This is your interpretation, not an official TruthLens verdict."}
+               </p>
                <div>
-                  <button type="button" className="is-primary" onClick={() => onEdit(evidence.id, editingRich, editingText, editingVerdict)}>Save</button>
-                  <button type="button" onClick={() => { setEditingId(null); setEditingText(""); setEditingRich(null); setEditingVerdict("UNVERIFIED"); }}>Cancel</button>
+                  <button type="button" className="is-primary" disabled={!editingVerdict} onClick={() => onEdit(evidence.id, editingRich, editingText, editingVerdict)}>Save</button>
+                  <button type="button" onClick={() => { setEditingId(null); setEditingText(""); setEditingRich(null); setEditingVerdict(""); }}>Cancel</button>
                </div>
             </div>
          ) : (
