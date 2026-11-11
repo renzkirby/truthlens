@@ -48,8 +48,8 @@ from .organization_governance_reconsideration_service import (
     start_reconsideration_review,
 )
 from .organization_governance_delivery_service import (
-    enqueue_governance_fallback_delivery,
-    enqueue_governance_notice_delivery,
+    dispatch_governance_fallback_delivery,
+    dispatch_governance_notice_delivery,
 )
 from .organization_partnership_lifecycle_service import (
     OrganizationPartnershipLifecycleAuthorizationError,
@@ -942,28 +942,28 @@ class ManagementOrganizationGovernanceNoticeRetryView(APIView):
             .values_list("id", flat=True)
         )
 
-        recipient_result = enqueue_governance_notice_delivery(recipient_ids)
-        fallback_result = enqueue_governance_fallback_delivery(fallback_ids)
-        queue_result = {
+        recipient_result = dispatch_governance_notice_delivery(recipient_ids)
+        fallback_result = dispatch_governance_fallback_delivery(fallback_ids)
+        delivery_result = {
             "requested": recipient_result["requested"] + fallback_result["requested"],
-            "queued": recipient_result["queued"] + fallback_result["queued"],
-            "queue_failed": recipient_result["queue_failed"] + fallback_result["queue_failed"],
+            "delivered": recipient_result["delivered"] + fallback_result["delivered"],
+            "failed": recipient_result["failed"] + fallback_result["failed"],
             "recipient_requested": recipient_result["requested"],
             "fallback_requested": fallback_result["requested"],
         }
         if not recipient_ids and not fallback_ids:
             detail = "No pending or failed governance notice deliveries."
-        elif queue_result["queue_failed"]:
+        elif delivery_result["failed"]:
             detail = (
-                "Some governance notice retries could not be queued. "
-                "Pending rows remain available for another retry."
+                "Some governance notice deliveries failed. "
+                "Failed rows remain available for another retry."
             )
         else:
-            detail = "Governance notice delivery retry queued."
+            detail = "Governance notice delivery completed."
 
         return Response(
             {
-                **queue_result,
+                **delivery_result,
                 "detail": detail,
             },
             status=status.HTTP_200_OK,
