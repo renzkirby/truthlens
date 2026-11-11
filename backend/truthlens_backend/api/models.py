@@ -201,6 +201,7 @@ class UserProfile(models.Model):
         "Claim", related_name="saved_by_users", blank=True
     )
     has_completed_onboarding = models.BooleanField(default=False)
+    workspace_guide_version_seen = models.PositiveSmallIntegerField(default=0)
 
     def __str__(self):
         return f"UserProfile {self.id} - User: {self.user.username} - Trust Score: {self.trust_score}"
