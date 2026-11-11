@@ -89,6 +89,11 @@ _CONTEXTUAL_BASIS_KINDS = frozenset({
     "SATIRE_PROVENANCE",
     "SATIRE_ORIGIN_OF_MISINFORMATION",
 })
+_MISLEADING_MATERIALITY_BASIS_KINDS = frozenset({
+    "MISSING_CONTEXT",
+    "PARTIAL_TRUTH",
+    "FALSE_CONTEXT",
+})
 
 OFFICIAL_FACT_CHECK_RESOLUTION_NONE = "NONE"
 OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE = "SATIRE"
@@ -1879,6 +1884,20 @@ def build_persisted_evidence_prompt(
     - FAKE requires affirmative contradiction, fabrication, or false attribution.
       Failure to corroborate a claim alone is not sufficient for FAKE.
     - MISLEADING applies to partial truth, omitted material context, or false context.
+    - Materiality is claim-scoped: omitted or corrective context is material only
+      when it changes the truth, ordinary meaning, or factual impression of an
+      assertion the submitted claim actually states or necessarily entails.
+    - Do NOT widen the claim into a broader topic-level implication. If every
+      explicit material assertion in the submitted claim is supported and the
+      additional evidence merely adds background, nuance, consequences, later
+      developments, or qualifications about a broader topic, return FACT rather
+      than MISLEADING.
+    - A statement that an official status, declaration, policy, emergency, case,
+      program, or event ended does not by itself assert that every underlying
+      condition, risk, consequence, or related issue also ended.
+    - If the exact submitted proposition is not sufficiently established, return
+      UNVERIFIED rather than using broader context to manufacture a misleading
+      relationship.
     - Preserve entity, event, location, and time scope. Evidence about a separate
       event or time period must not be used as the explanation for the claim unless
       the supplied evidence explicitly connects them.
@@ -2014,6 +2033,134 @@ def _enforce_satire_verdict_eligibility(
     return result
 
 
+def _misleading_materiality_unverified_result():
+    return {
+        "reasoning": (
+            "The proposed misleading verdict could not be confirmed as material "
+            "to the exact submitted proposition using the persisted evidence."
+        ),
+        "verdict": "UNVERIFIED",
+        "summary": (
+            "The available evidence does not establish a sufficiently clear "
+            "claim-scoped basis for a misleading verdict."
+        ),
+        "confidence_score": 0,
+        "score_context": (
+            "The misleading-materiality audit did not establish a reliable "
+            "claim-scoped conclusion."
+        ),
+        "contextual_basis_kind": "NONE",
+        "contextual_basis_evidence_ids": [],
+    }
+
+
+def _audit_misleading_materiality(
+    original_claim,
+    evidence_context,
+    proposed_result,
+):
+    """Re-check claim scope before accepting a contextual MISLEADING verdict.
+
+    This stage uses the same persisted dossier and performs no retrieval. It is
+    intentionally narrow: a contextual verdict may survive only when the omitted
+    or corrective context materially changes the proposition actually submitted.
+    """
+    system_instructions = """
+    Role: You are the TruthLens misleading-materiality auditor.
+
+    Re-evaluate the exact submitted claim using ONLY the supplied persisted
+    evidence. Do not use pre-trained knowledge, external facts, or assumptions.
+
+    This is a second-stage scope audit. The first evaluator proposed MISLEADING,
+    but that proposal is not authoritative and may have widened the claim.
+
+    CLAIM-SCOPE MATERIALITY RULES:
+    - Judge only assertions explicitly stated by the submitted claim or necessarily
+      entailed by its ordinary wording.
+    - Do not import a stronger, broader, or more dramatic implication merely
+      because the evidence discusses the same topic.
+    - Broader background, nuance, consequences, later developments, or continuing
+      risks are not enough for MISLEADING when the exact submitted proposition is
+      fully supported.
+    - MISLEADING is allowed only when the claim contains a true or partly true
+      element AND an omission, qualification, framing choice, or false context
+      materially changes the truth or ordinary factual impression of that same
+      proposition.
+    - If the exact proposition is fully supported and the disputed context only
+      qualifies a broader topic, return FACT.
+    - If the exact proposition is not sufficiently established from the dossier,
+      return UNVERIFIED.
+    - Do not return FAKE or SATIRE from this audit. Those verdicts are outside this
+      stage's authority.
+    - A MISLEADING result must use exactly one of MISSING_CONTEXT, PARTIAL_TRUTH,
+      or FALSE_CONTEXT and cite one or more exact Evidence link IDs from the
+      supplied dossier that establish the material relationship.
+    - FACT and UNVERIFIED must use contextual_basis_kind="NONE" and an empty
+      contextual_basis_evidence_ids list.
+
+    Return only a valid JSON object with exactly these fields:
+    {
+        "reasoning": "Claim-scoped evidence explanation",
+        "verdict": "FACT, MISLEADING, or UNVERIFIED",
+        "summary": "Concise user-facing factual summary",
+        "confidence_score": <numeric percentage 0 to 100>,
+        "score_context": "Concise explanation of the confidence score",
+        "contextual_basis_kind": "NONE, MISSING_CONTEXT, PARTIAL_TRUTH, or FALSE_CONTEXT",
+        "contextual_basis_evidence_ids": ["Exact Evidence link ID copied from the dossier"]
+    }
+    """
+    system_instructions = _with_user_facing_summary_rules(system_instructions)
+
+    proposed_basis_kind = proposed_result.get("contextual_basis_kind", "NONE")
+    proposed_basis_ids = proposed_result.get("contextual_basis_evidence_ids", [])
+    user_data = (
+        f"<claim>{original_claim}</claim>\n\n"
+        f"<proposed_basis_kind>{proposed_basis_kind}</proposed_basis_kind>\n"
+        f"<proposed_basis_evidence_ids>{json.dumps(proposed_basis_ids)}</proposed_basis_evidence_ids>\n\n"
+        f"<persisted_evidence>{evidence_context}</persisted_evidence>"
+    )
+
+    try:
+        response_text = call_llm_with_fallback(
+            system_instructions,
+            user_data,
+            operation="persisted_evidence_evaluation",
+            gemini_timeout_ms=PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
+        )
+        audited = _parse_llm_json(response_text)
+        required_fields = {
+            "reasoning",
+            "verdict",
+            "summary",
+            "confidence_score",
+            "score_context",
+        }
+        if not isinstance(audited, dict) or not required_fields.issubset(audited):
+            raise ValueError("Misleading materiality audit returned an invalid result")
+        if audited.get("verdict") not in {"FACT", "MISLEADING", "UNVERIFIED"}:
+            raise ValueError("Misleading materiality audit exceeded its verdict authority")
+        audited["confidence_score"] = _normalize_verdict_confidence_score(
+            audited["confidence_score"]
+        )
+        audited = _normalize_contextual_basis_metadata(audited)
+        if audited["verdict"] == "MISLEADING":
+            if (
+                audited["contextual_basis_kind"]
+                not in _MISLEADING_MATERIALITY_BASIS_KINDS
+                or not audited["contextual_basis_evidence_ids"]
+            ):
+                raise ValueError(
+                    "Misleading materiality audit lacked a valid material basis"
+                )
+        return audited
+    except Exception as exc:
+        logger.warning(
+            "Misleading materiality audit abstained (%s).",
+            _provider_error_label(exc),
+        )
+        return _misleading_materiality_unverified_result()
+
+
 def evaluate_claim_with_persisted_evidence(
     original_claim,
     evidence_context,
@@ -2072,7 +2219,18 @@ def evaluate_claim_with_persisted_evidence(
             article_stance,
             official_fact_check_resolution,
         )
-        return _normalize_contextual_basis_metadata(parsed_result)
+        parsed_result = _normalize_contextual_basis_metadata(parsed_result)
+        if (
+            parsed_result.get("verdict") == "MISLEADING"
+            and parsed_result.get("contextual_basis_kind")
+            != "SATIRE_ORIGIN_OF_MISINFORMATION"
+        ):
+            return _audit_misleading_materiality(
+                original_claim,
+                evidence_context,
+                parsed_result,
+            )
+        return parsed_result
     except LLMProviderUnavailableError:
         raise
     except Exception as exc:
