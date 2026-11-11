@@ -76,7 +76,29 @@ function OrganizationGovernanceSection({
       supporting_references: "",
       other_factor_explanation: "",
    });
+   const [validationTouched, setValidationTouched] = useState({
+      suspend: {},
+      reinstate: {},
+      end: {},
+   });
    const { mutate, pending, error, reset } = useManagementMutation();
+
+   const markValidationTouched = (form, field) => {
+      setValidationTouched((current) => ({
+         ...current,
+         [form]: {
+            ...current[form],
+            [field]: true,
+         },
+      }));
+   };
+
+   const resetValidationTouched = (form) => {
+      setValidationTouched((current) => ({
+         ...current,
+         [form]: {},
+      }));
+   };
 
    const lifecycleLabels = {
       ACTIVE_PARTNER: "Active Partner",
@@ -434,6 +456,96 @@ function OrganizationGovernanceSection({
             && ["HIGH", "CRITICAL"].includes(endingForm.severity)
          )
       )
+   );
+
+   const suspensionValidationErrors = {
+      suspension_type: suspensionForm.suspension_type ? "" : "Suspension type is required.",
+      factors: suspensionForm.factors.length ? "" : "Select at least one suspension factor.",
+      severity: suspensionForm.severity ? "" : "Severity is required.",
+      rationale: suspensionForm.rationale.trim().length >= 20
+         ? ""
+         : "Rationale must be at least 20 characters.",
+      policy_basis: suspensionForm.policy_basis.trim() ? "" : "Policy basis is required.",
+      supporting_basis: suspensionForm.supporting_basis.trim()
+         ? ""
+         : "Internal supporting basis is required.",
+      other_factor_explanation: !suspensionHasOther || suspensionForm.other_factor_explanation.trim()
+         ? ""
+         : "Explain the underlying standard for the Other factor.",
+      remediation_problem: suspensionForm.suspension_type !== "REMEDIAL" || suspensionForm.remediation_problem.trim()
+         ? ""
+         : "Problem to correct is required for a remedial suspension.",
+      remediation_required_action: suspensionForm.suspension_type !== "REMEDIAL" || suspensionForm.remediation_required_action.trim()
+         ? ""
+         : "Required action is required for a remedial suspension.",
+      remediation_evidence_required: suspensionForm.suspension_type !== "REMEDIAL" || suspensionForm.remediation_evidence_required.trim()
+         ? ""
+         : "Evidence of compliance is required for a remedial suspension.",
+      remediation_deadline: suspensionForm.suspension_type !== "REMEDIAL" || suspensionForm.remediation_deadline
+         ? ""
+         : "Remediation deadline is required for a remedial suspension.",
+      remediation_review_method: suspensionForm.suspension_type !== "REMEDIAL" || suspensionForm.remediation_review_method.trim()
+         ? ""
+         : "Review method is required for a remedial suspension.",
+      remediation_failure_consequence: suspensionForm.suspension_type !== "REMEDIAL" || suspensionForm.remediation_failure_consequence.trim()
+         ? ""
+         : "Consequence if unresolved is required for a remedial suspension.",
+      review_date: suspensionForm.suspension_type !== "PRECAUTIONARY" || suspensionForm.review_date
+         ? ""
+         : "Review date is required for a precautionary suspension.",
+   };
+
+   const reinstatementValidationErrors = {
+      basis: reinstatementForm.basis ? "" : "Basis for reinstatement is required.",
+      rationale: reinstatementForm.rationale.trim().length >= 20
+         ? ""
+         : "Rationale must be at least 20 characters.",
+      supporting_basis: reinstatementForm.supporting_basis.trim()
+         ? ""
+         : "Internal supporting basis is required.",
+      completed_remediation: reinstatementForm.basis !== "REMEDIATION_COMPLETED" || reinstatementForm.completed_remediation.trim()
+         ? ""
+         : "Completed remediation is required for this reinstatement basis.",
+      monitoring_end_date: !reinstatementForm.continuing_conditions.trim() || reinstatementForm.monitoring_end_date
+         ? ""
+         : "Monitoring end date is required when continuing conditions are set.",
+      monitoring_success_criteria: !reinstatementForm.continuing_conditions.trim() || reinstatementForm.monitoring_success_criteria.trim()
+         ? ""
+         : "Success criteria are required when continuing conditions are set.",
+      monitoring_recurrence_consequence: !reinstatementForm.continuing_conditions.trim() || reinstatementForm.monitoring_recurrence_consequence.trim()
+         ? ""
+         : "A recurrence consequence is required when continuing conditions are set.",
+   };
+
+   const endingValidationErrors = {
+      ending_type: endingForm.ending_type ? "" : "Ending type is required.",
+      ground: endingForm.ground ? "" : "Ground is required.",
+      factors: endingForm.ending_type !== "TERMINATION_FOR_CAUSE" || endingForm.factors.length
+         ? ""
+         : "Select at least one factor for a termination for cause.",
+      severity: endingForm.ending_type !== "TERMINATION_FOR_CAUSE" || ["HIGH", "CRITICAL"].includes(endingForm.severity)
+         ? ""
+         : "Severity must be High or Critical for a termination for cause.",
+      rationale: endingForm.rationale.trim().length >= 20
+         ? ""
+         : "Rationale must be at least 20 characters.",
+      policy_basis: endingForm.policy_basis.trim() ? "" : "Policy basis is required.",
+      supporting_basis: endingForm.supporting_basis.trim()
+         ? ""
+         : "Internal supporting basis is required.",
+      other_factor_explanation: !endingHasOther || endingForm.other_factor_explanation.trim()
+         ? ""
+         : "Explain the underlying standard for the Other factor.",
+   };
+
+   const visibleValidationErrors = (form, errors) => {
+      const touched = validationTouched[form] || {};
+      if (!Object.keys(touched).length) return [];
+      return [...new Set(Object.values(errors).filter(Boolean))];
+   };
+
+   const isTouchedInvalid = (form, field, errors) => Boolean(
+      validationTouched[form]?.[field] && errors[field]
    );
 
    return (
