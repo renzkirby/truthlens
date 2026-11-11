@@ -292,6 +292,9 @@ WORKSPACE_CAPABILITIES = {
 }
 
 
+CURRENT_WORKSPACE_GUIDE_VERSION = 1
+
+
 def get_workspace_access_context(user):
     """
     Build the authorization context used by the
@@ -308,6 +311,8 @@ def get_workspace_access_context(user):
             "platform_capabilities": [],
             "memberships": [],
             "default_organization_id": None,
+            "guide_current_version": CURRENT_WORKSPACE_GUIDE_VERSION,
+            "guide_version_seen": 0,
         }
 
     is_platform_safety_moderator = _has_system_moderator_role(user)
@@ -377,4 +382,6 @@ def get_workspace_access_context(user):
         "platform_capabilities": (platform_capabilities),
         "memberships": membership_contexts,
         "default_organization_id": (default_organization_id),
+        "guide_current_version": CURRENT_WORKSPACE_GUIDE_VERSION,
+        "guide_version_seen": int(getattr(user.profile, "workspace_guide_version_seen", 0) or 0),
     }

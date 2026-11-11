@@ -117,7 +117,9 @@ from .platform_identity_service import (
     platform_staff_identity_q,
 )
 from .organization_service import (
+    CURRENT_WORKSPACE_GUIDE_VERSION,
     PartnerCapability,
+    get_workspace_access_context,
     has_capability,
 )
 from .notification_service import (
@@ -965,6 +967,30 @@ def register_user(request):
 def get_current_user(request):
     serializer = CurrentUserSerializer(request.user)
     return Response(serializer.data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def complete_workspace_guide(request):
+    workspace_context = get_workspace_access_context(request.user)
+    if not workspace_context["memberships"]:
+        return Response(
+            {"detail": "An active Partner Organization membership is required."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    profile = request.user.profile
+    if profile.workspace_guide_version_seen < CURRENT_WORKSPACE_GUIDE_VERSION:
+        profile.workspace_guide_version_seen = CURRENT_WORKSPACE_GUIDE_VERSION
+        profile.save(update_fields=["workspace_guide_version_seen"])
+
+    return Response(
+        {
+            "guide_current_version": CURRENT_WORKSPACE_GUIDE_VERSION,
+            "guide_version_seen": profile.workspace_guide_version_seen,
+        },
+        status=status.HTTP_200_OK,
+    )
 
 
 @api_view(["GET"])
