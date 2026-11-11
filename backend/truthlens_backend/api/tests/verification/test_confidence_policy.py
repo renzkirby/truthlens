@@ -6,6 +6,7 @@ from api.models import VerificationEvidence
 from api.verification.confidence_policy import (
     calibrate_verdict_confidence,
     enforce_noneditable_fallback_evidence_support,
+    has_claim_scoped_misleading_support,
 )
 from api.verification.evidence_dossier import (
     ReasoningEvidenceGroup,
@@ -355,6 +356,54 @@ class ConfidencePolicyTests(SimpleTestCase):
         self.assertIn("supports this verdict", fake["score_context"])
         self.assertNotIn("contributes assessed evidence", fact["score_context"])
         self.assertNotIn("contributes assessed evidence", fake["score_context"])
+
+    def test_claim_scoped_misleading_backstop_requires_support_and_refutation(self):
+        support = _item(stance=VerificationEvidence.Stance.SUPPORTS)
+        refute = _item(stance=VerificationEvidence.Stance.REFUTES)
+        result = _verdict(
+            verdict="MISLEADING",
+            contextual_basis_kind="FALSE_CONTEXT",
+            contextual_basis_evidence_ids=[str(refute.evidence_link_id)],
+        )
+
+        self.assertTrue(
+            has_claim_scoped_misleading_support(
+                result,
+                [_group(support), _group(refute)],
+            )
+        )
+
+    def test_claim_scoped_misleading_backstop_rejects_context_only_nuance(self):
+        support = _item(stance=VerificationEvidence.Stance.SUPPORTS)
+        context = _item(stance=VerificationEvidence.Stance.CONTEXT)
+        result = _verdict(
+            verdict="MISLEADING",
+            contextual_basis_kind="MISSING_CONTEXT",
+            contextual_basis_evidence_ids=[str(context.evidence_link_id)],
+        )
+
+        self.assertFalse(
+            has_claim_scoped_misleading_support(
+                result,
+                [_group(support), _group(context)],
+            )
+        )
+
+    def test_claim_scoped_misleading_backstop_requires_real_basis_evidence(self):
+        support = _item(stance=VerificationEvidence.Stance.SUPPORTS)
+        refute = _item(stance=VerificationEvidence.Stance.REFUTES)
+        result = _verdict(
+            verdict="MISLEADING",
+            contextual_basis_kind="FALSE_CONTEXT",
+            contextual_basis_evidence_ids=[str(uuid.uuid4())],
+        )
+
+        self.assertFalse(
+            has_claim_scoped_misleading_support(
+                result,
+                [_group(support), _group(refute)],
+            )
+        )
 
     def test_satire_uses_only_validated_satire_provenance(self):
         item = _item(stance=VerificationEvidence.Stance.CONTEXT)

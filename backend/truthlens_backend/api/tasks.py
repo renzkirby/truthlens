@@ -329,6 +329,8 @@ def _evaluate_persisted_with_official_rating_policy(
     evidence_context,
     article_stance,
     official_rating_policy,
+    *,
+    evidence_groups=(),
 ):
     if (
         official_rating_policy["resolution"]
@@ -338,6 +340,7 @@ def _evaluate_persisted_with_official_rating_policy(
             claim_text,
             evidence_context,
             article_stance,
+            evidence_groups=evidence_groups,
         )
     return evaluate_claim_with_persisted_evidence(
         claim_text,
@@ -345,6 +348,7 @@ def _evaluate_persisted_with_official_rating_policy(
         article_stance,
         official_rating_policy["resolution"],
         official_rating_policy["satire_evidence_ids"],
+        evidence_groups=evidence_groups,
     )
 
 
@@ -1836,6 +1840,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                                 evidence_context,
                                 article_stance,
                                 official_rating_policy,
+                                evidence_groups=fact_check_groups,
                             )
                             ai_verdict = calibrate_verdict_confidence(
                                 ai_verdict,
@@ -2059,12 +2064,14 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                                 evidence_context,
                                 article_stance,
                                 official_rating_policy,
+                                evidence_groups=evaluation_groups,
                             )
                             if gfc_evidence_assessed
                             else evaluate_claim_with_persisted_evidence(
                                 cleaned_claim,
                                 evidence_context,
                                 article_stance,
+                                evidence_groups=evaluation_groups,
                             )
                         )
                         ai_verdict = calibrate_verdict_confidence(
@@ -2772,6 +2779,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                             evidence_context,
                             article_stance,
                             official_rating_policy,
+                            evidence_groups=fact_check_groups,
                         )
                         ai_verdict = calibrate_verdict_confidence(
                             ai_verdict,
@@ -3021,12 +3029,14 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                             evidence_context,
                             article_stance,
                             official_rating_policy,
+                            evidence_groups=evaluation_groups,
                         )
                         if gfc_evidence_assessed
                         else evaluate_claim_with_persisted_evidence(
                             cleaned_claim,
                             evidence_context,
                             article_stance,
+                            evidence_groups=evaluation_groups,
                         )
                     )
                     ai_verdict = calibrate_verdict_confidence(

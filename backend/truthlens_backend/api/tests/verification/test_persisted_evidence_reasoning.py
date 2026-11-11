@@ -291,7 +291,227 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
             ["11111111-1111-1111-1111-111111111111"],
         )
 
-    def test_duplicate_contextual_basis_ids_fail_closed_without_changing_verdict(self):
+    def test_materiality_audit_turns_narrow_supported_claim_into_fact(self):
+        evidence_id = "11111111-1111-1111-1111-111111111111"
+        initial = {
+            **self.result,
+            "verdict": "MISLEADING",
+            "reasoning": "The evidence adds broader continuing-risk context.",
+            "summary": "The claim is true but omits broader context.",
+            "contextual_basis_kind": "MISSING_CONTEXT",
+            "contextual_basis_evidence_ids": [evidence_id],
+        }
+        audited = {
+            **self.result,
+            "verdict": "FACT",
+            "reasoning": (
+                "The evidence directly supports the exact submitted proposition; "
+                "the additional material concerns a broader topic not asserted."
+            ),
+            "summary": "The exact submitted proposition is supported.",
+            "confidence_score": 94,
+            "score_context": "The exact claim is directly supported by the dossier.",
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        }
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            side_effect=[json.dumps(initial), json.dumps(audited)],
+        ) as call_llm:
+            result = evaluate_claim_with_persisted_evidence(
+                "The agency ended the declared emergency on May 5.",
+                (
+                    f"Evidence link ID: {evidence_id}\n"
+                    "The agency ended the declared emergency on May 5. "
+                    "Officials separately noted that underlying risks continued."
+                ),
+            )
+
+        self.assertEqual(result["verdict"], "FACT")
+        self.assertEqual(result["contextual_basis_kind"], "NONE")
+        self.assertEqual(result["contextual_basis_evidence_ids"], [])
+        self.assertEqual(call_llm.call_count, 2)
+        audit_system = call_llm.call_args_list[1].args[0]
+        audit_user = call_llm.call_args_list[1].args[1]
+        self.assertIn("CLAIM-SCOPE MATERIALITY RULES", audit_system)
+        self.assertIn("do not import a stronger, broader", audit_system.lower())
+        self.assertIn("<claim>The agency ended the declared emergency on May 5.</claim>", audit_user)
+        self.assertIn("underlying risks continued", audit_user)
+
+    def test_materiality_audit_preserves_broader_materially_distorted_claim(self):
+        evidence_id = "22222222-2222-2222-2222-222222222222"
+        initial = {
+            **self.result,
+            "verdict": "MISLEADING",
+            "reasoning": "The claim overstates what ending the declaration meant.",
+            "summary": "The declaration ended, but the underlying risk did not.",
+            "contextual_basis_kind": "FALSE_CONTEXT",
+            "contextual_basis_evidence_ids": [evidence_id],
+        }
+        audited = {
+            **initial,
+            "confidence_score": 91,
+            "score_context": "The cited evidence establishes the material false context.",
+        }
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            side_effect=[json.dumps(initial), json.dumps(audited)],
+        ):
+            result = evaluate_claim_with_persisted_evidence(
+                (
+                    "The agency ended the declared emergency on May 5, meaning "
+                    "the underlying public-health risk was completely over."
+                ),
+                (
+                    f"Evidence link ID: {evidence_id}\n"
+                    "The declaration ended on May 5, but officials explicitly "
+                    "said the underlying risk and response needs continued."
+                ),
+            )
+
+        self.assertEqual(result["verdict"], "MISLEADING")
+        self.assertEqual(result["contextual_basis_kind"], "FALSE_CONTEXT")
+        self.assertEqual(result["contextual_basis_evidence_ids"], [evidence_id])
+
+    def test_materiality_audit_abstains_when_exact_proposition_is_not_established(self):
+        evidence_id = "33333333-3333-3333-3333-333333333333"
+        initial = {
+            **self.result,
+            "verdict": "MISLEADING",
+            "reasoning": "Related evidence provides context but not direct support.",
+            "summary": "The claim may omit context.",
+            "contextual_basis_kind": "MISSING_CONTEXT",
+            "contextual_basis_evidence_ids": [evidence_id],
+        }
+        audited = {
+            **self.result,
+            "verdict": "UNVERIFIED",
+            "reasoning": "The dossier does not establish the exact submitted proposition.",
+            "summary": "The exact claim is not established by the available evidence.",
+            "confidence_score": 35,
+            "score_context": "The dossier is related but insufficient for the exact claim.",
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        }
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            side_effect=[json.dumps(initial), json.dumps(audited)],
+        ):
+            result = evaluate_claim_with_persisted_evidence(
+                "The agency ended a specific national declaration on May 5.",
+                (
+                    f"Evidence link ID: {evidence_id}\n"
+                    "The source discusses the agency's emergency policy generally "
+                    "but does not establish the specified declaration or date."
+                ),
+            )
+
+        self.assertEqual(result["verdict"], "UNVERIFIED")
+        self.assertEqual(result["contextual_basis_kind"], "NONE")
+        self.assertEqual(result["contextual_basis_evidence_ids"], [])
+
+    def test_materiality_audit_provider_failure_preserves_strong_claim_scoped_misleading(self):
+        evidence_id = "55555555-5555-5555-5555-555555555555"
+        initial = {
+            **self.result,
+            "verdict": "MISLEADING",
+            "reasoning": "The claim contains a supported statement and a refuted implication.",
+            "summary": "The emergency ended, but the claim overstates what that meant.",
+            "confidence_score": 96,
+            "contextual_basis_kind": "FALSE_CONTEXT",
+            "contextual_basis_evidence_ids": [evidence_id],
+        }
+
+        with (
+            patch(
+                "api.services.call_llm_with_fallback",
+                side_effect=[
+                    json.dumps(initial),
+                    LLMProviderUnavailableError("audit providers unavailable"),
+                ],
+            ),
+            patch(
+                "api.services.has_claim_scoped_misleading_support",
+                return_value=True,
+            ) as support,
+        ):
+            result = evaluate_claim_with_persisted_evidence(
+                "The emergency ended, meaning the underlying risk was completely over.",
+                f"Evidence link ID: {evidence_id}\nPersisted evidence.",
+                evidence_groups=("assessed-group",),
+            )
+
+        support.assert_called_once_with(initial, ("assessed-group",))
+        self.assertEqual(result["verdict"], "MISLEADING")
+        self.assertEqual(result["confidence_score"], 85)
+        self.assertEqual(result["contextual_basis_kind"], "FALSE_CONTEXT")
+        self.assertIn("supported and refuted material elements", result["score_context"])
+
+    def test_materiality_audit_provider_failure_still_abstains_without_strong_backstop(self):
+        evidence_id = "66666666-6666-6666-6666-666666666666"
+        initial = {
+            **self.result,
+            "verdict": "MISLEADING",
+            "reasoning": "The claim may omit broader context.",
+            "summary": "The claim is true but broader context exists.",
+            "contextual_basis_kind": "MISSING_CONTEXT",
+            "contextual_basis_evidence_ids": [evidence_id],
+        }
+
+        with (
+            patch(
+                "api.services.call_llm_with_fallback",
+                side_effect=[
+                    json.dumps(initial),
+                    LLMProviderUnavailableError("audit providers unavailable"),
+                ],
+            ),
+            patch(
+                "api.services.has_claim_scoped_misleading_support",
+                return_value=False,
+            ),
+        ):
+            result = evaluate_claim_with_persisted_evidence(
+                "The emergency declaration ended.",
+                f"Evidence link ID: {evidence_id}\nPersisted evidence.",
+                evidence_groups=("assessed-group",),
+            )
+
+        self.assertEqual(result["verdict"], "UNVERIFIED")
+        self.assertEqual(result["confidence_score"], 0)
+        self.assertEqual(result["contextual_basis_kind"], "NONE")
+
+    def test_materiality_audit_invalid_misleading_basis_fails_closed(self):
+        evidence_id = "44444444-4444-4444-4444-444444444444"
+        initial = {
+            **self.result,
+            "verdict": "MISLEADING",
+            "contextual_basis_kind": "MISSING_CONTEXT",
+            "contextual_basis_evidence_ids": [evidence_id],
+        }
+        invalid_audit = {
+            **initial,
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        }
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            side_effect=[json.dumps(initial), json.dumps(invalid_audit)],
+        ):
+            result = evaluate_claim_with_persisted_evidence(
+                "Example claim.",
+                f"Evidence link ID: {evidence_id}\nPersisted evidence.",
+            )
+
+        self.assertEqual(result["verdict"], "UNVERIFIED")
+        self.assertEqual(result["confidence_score"], 0)
+        self.assertEqual(result["contextual_basis_kind"], "NONE")
+
+    def test_duplicate_contextual_basis_ids_fail_closed_through_materiality_audit(self):
         duplicate_id = "11111111-1111-1111-1111-111111111111"
         contextual = {
             **self.result,
@@ -308,8 +528,8 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
                 "Persisted evidence.",
             )
 
-        self.assertEqual(result["verdict"], "MISLEADING")
-        self.assertEqual(result["confidence_score"], 92)
+        self.assertEqual(result["verdict"], "UNVERIFIED")
+        self.assertEqual(result["confidence_score"], 0)
         self.assertEqual(result["contextual_basis_kind"], "NONE")
         self.assertEqual(result["contextual_basis_evidence_ids"], [])
 
@@ -355,6 +575,9 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         self.assertIn("FAKE_CONFLICT", system_prompt)
         self.assertIn("Failure to corroborate a claim alone is not sufficient", system_prompt)
         self.assertIn("Preserve entity, event, location, and time scope", system_prompt)
+        self.assertIn("Materiality is claim-scoped", system_prompt)
+        self.assertIn("Do NOT widen the claim", system_prompt)
+        self.assertIn("official status, declaration, policy, emergency", system_prompt)
         self.assertIn("Evidence link ID", system_prompt)
         self.assertIn("USER-FACING SUMMARY RULES", system_prompt)
         self.assertIn("Start with the best-supported factual reality", system_prompt)

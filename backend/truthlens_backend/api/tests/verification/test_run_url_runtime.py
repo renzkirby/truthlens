@@ -698,6 +698,7 @@ class VerificationRunURLRuntimeTests(TestCase):
             self.cleaned["cleaned_claim"],
             "Persisted evidence context.",
             "NEUTRAL",
+            evidence_groups=self.filter_dossier.return_value,
         )
         self.calibrate_confidence.assert_called_once_with(
             self.verdict,
@@ -749,6 +750,7 @@ class VerificationRunURLRuntimeTests(TestCase):
             "NEUTRAL",
             services.OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
             (evidence_id,),
+            evidence_groups=self.filter_dossier.return_value,
         )
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, "SATIRE")
@@ -798,6 +800,7 @@ class VerificationRunURLRuntimeTests(TestCase):
             "NEUTRAL",
             services.OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
             (evidence_id,),
+            evidence_groups=self.filter_dossier.return_value,
         )
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, "SATIRE")
@@ -932,6 +935,7 @@ class VerificationRunURLRuntimeTests(TestCase):
             self.cleaned["cleaned_claim"],
             "Persisted evidence context.",
             "NEUTRAL",
+            evidence_groups=self.filter_dossier.return_value,
         )
         self.calibrate_confidence.assert_called_once_with(
             self.verdict,
@@ -953,6 +957,7 @@ class VerificationRunURLRuntimeTests(TestCase):
             self.cleaned["cleaned_claim"],
             "Persisted Tavily evidence.",
             "NEUTRAL",
+            evidence_groups=self.filter_dossier_roles.return_value,
         )
         stages = [call.args[1] for call in self.log_stage.call_args_list]
         self.assertIn("url_gfc_persisted_evidence_unavailable", stages)

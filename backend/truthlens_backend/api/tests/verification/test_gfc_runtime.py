@@ -313,6 +313,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             cleaned_claim,
             "Persisted GFC content. Rating: False",
             "NEUTRAL",
+            evidence_groups=["persisted fact-check group"],
         )
         evaluate_legacy_gfc.assert_not_called()
 
@@ -480,6 +481,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             cleaned_claim,
             "Persisted Tavily evidence.",
             "NEUTRAL",
+            evidence_groups=["persisted secondary group"],
         )
         evaluate_legacy_tavily.assert_not_called()
 
@@ -678,6 +680,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             cleaned_claim,
             "Persisted URL GFC content. Rating: False",
             "NEUTRAL",
+            evidence_groups=["persisted fact-check group"],
         )
         evaluate_legacy_gfc.assert_not_called()
 
@@ -867,6 +870,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             cleaned_claim,
             "Persisted URL Tavily evidence.",
             "NEUTRAL",
+            evidence_groups=["persisted secondary group"],
         )
         evaluate_legacy_tavily.assert_not_called()
 
