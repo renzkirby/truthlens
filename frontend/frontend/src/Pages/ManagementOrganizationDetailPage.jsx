@@ -1339,7 +1339,7 @@ function GovernanceContactSection({
          { method: "POST", body: {} },
       );
       if (!result.ok) return;
-      onFeedback(result.data.detail || "Governance notice retry queued.");
+      onFeedback(result.data.detail || "Governance notice delivery completed.");
       onRefresh();
    };
 
