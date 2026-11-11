@@ -361,6 +361,7 @@ class ThreadDetailApiTests(TestCase):
                 "evidence_caption_rich": evidence_rich,
                 "evidence_url": "https://example.com/rich-evidence",
                 "evidence_type": EvidenceSubmission.EvidenceType.PROVIDES_CONTEXT,
+                "evidence_verdict": AdjudicationDecision.Verdict.FACT,
             }
         )
         self.assertTrue(evidence_serializer.is_valid(), evidence_serializer.errors)
@@ -368,6 +369,31 @@ class ThreadDetailApiTests(TestCase):
             evidence_serializer.validated_data["evidence_caption"],
             "Formatted evidence explanation.",
         )
+
+    def test_evidence_submission_restricts_human_assessment_verdicts(self):
+        _claim, thread = self._create_thread("evidence assessment choices")
+        base_data = {
+            "thread_id": str(thread.id),
+            "evidence_caption": "Assessment evidence.",
+            "evidence_type": EvidenceSubmission.EvidenceType.PROVIDES_CONTEXT,
+        }
+
+        missing = EvidenceSubmissionSerializer(data=base_data)
+        self.assertFalse(missing.is_valid())
+        self.assertIn("evidence_verdict", missing.errors)
+
+        for verdict in ("UNVERIFIED", "OUT_OF_SCOPE", "ARBITRARY"):
+            serializer = EvidenceSubmissionSerializer(
+                data={**base_data, "evidence_verdict": verdict}
+            )
+            self.assertFalse(serializer.is_valid())
+            self.assertIn("evidence_verdict", serializer.errors)
+
+        for verdict in ("FACT", "FAKE", "MISLEADING", "SATIRE"):
+            serializer = EvidenceSubmissionSerializer(
+                data={**base_data, "evidence_verdict": verdict}
+            )
+            self.assertTrue(serializer.is_valid(), serializer.errors)
 
     def test_rich_and_plain_mismatch_is_rejected(self):
         claim = Claim.objects.create(
