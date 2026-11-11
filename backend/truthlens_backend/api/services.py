@@ -34,6 +34,7 @@ from .verification.cloudflare_pilot import (
     PILOT_OPERATION,
 )
 from .verification.provider_audit_metrics import validate_user_facing_evaluation
+from .verification.confidence_policy import has_claim_scoped_misleading_support
 from .verification.classification_contract import CLASSIFICATION_OPERATION
 from .verification.provider_hierarchy import (
     hierarchy_enabled,
@@ -2058,6 +2059,7 @@ def _audit_misleading_materiality(
     original_claim,
     evidence_context,
     proposed_result,
+    evidence_groups=(),
 ):
     """Re-check claim scope before accepting a contextual MISLEADING verdict.
 
@@ -2155,9 +2157,26 @@ def _audit_misleading_materiality(
         return audited
     except Exception as exc:
         logger.warning(
-            "Misleading materiality audit abstained (%s).",
+            "Misleading materiality audit unavailable (%s).",
             _provider_error_label(exc),
         )
+        if has_claim_scoped_misleading_support(
+            proposed_result,
+            evidence_groups,
+        ):
+            result = dict(proposed_result)
+            result["confidence_score"] = min(
+                _normalize_verdict_confidence_score(
+                    result.get("confidence_score", 0)
+                ),
+                85,
+            )
+            result["score_context"] = (
+                "Assessed evidence contains both supported and refuted material "
+                f"elements for the submitted claim; final confidence is "
+                f"{result['confidence_score']:g}%."
+            )
+            return result
         return _misleading_materiality_unverified_result()
 
 
@@ -2167,6 +2186,8 @@ def evaluate_claim_with_persisted_evidence(
     article_stance="NEUTRAL",
     official_fact_check_resolution=OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
     official_satire_evidence_ids=(),
+    *,
+    evidence_groups=(),
 ):
     """Evaluate a claim using only the rendered persisted-evidence dossier."""
     unavailable_result = {
@@ -2229,6 +2250,7 @@ def evaluate_claim_with_persisted_evidence(
                 original_claim,
                 evidence_context,
                 parsed_result,
+                evidence_groups,
             )
         return parsed_result
     except LLMProviderUnavailableError:
