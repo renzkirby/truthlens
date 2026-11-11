@@ -1023,14 +1023,15 @@ function WorkspacePage() {
                )}
             </section>
          </div>
-         <WorkspaceGuideModal
-            open={workspaceGuideOpen}
-            firstVisit={workspaceGuideFirstVisit}
-            organizationName={selectedOrganization?.name}
-            roleLabel={selectedMembership ? formatRole(selectedMembership.role) : "Partner member"}
-            sectionGroups={visibleSectionGroups}
-            onDismiss={dismissWorkspaceGuide}
-         />
+         {workspaceGuideOpen ? (
+            <WorkspaceGuideModal
+               firstVisit={workspaceGuideFirstVisit}
+               organizationName={selectedOrganization?.name}
+               roleLabel={selectedMembership ? formatRole(selectedMembership.role) : "Partner member"}
+               sectionGroups={visibleSectionGroups}
+               onDismiss={dismissWorkspaceGuide}
+            />
+         ) : null}
          <CorrectionDialog
             open={navigationPromptOpen}
             title="Discard unsaved correction proposal changes?"
