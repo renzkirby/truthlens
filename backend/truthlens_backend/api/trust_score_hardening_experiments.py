@@ -445,6 +445,8 @@ def historical_vote_stability(calibration=DEFAULT_CALIBRATION):
 
 
 def provisional_policy_comparison(calibration=DEFAULT_CALIBRATION):
+    """Compare the legacy volume-only gate with current production progression."""
+
     scenarios = (
         TrustScenario(
             name="three_failures",
@@ -469,14 +471,11 @@ def provisional_policy_comparison(calibration=DEFAULT_CALIBRATION):
             scenario,
             calibration,
         )
-        current_rank = result["current_rank"]
-
-        positive_evidence_rank = current_rank
-        if (
-            scenario.resolved_actions >= 3
-            and scenario.validated_actions < 1
-        ):
-            positive_evidence_rank = "Provisional"
+        legacy_volume_only_rank = _rank_for_score(
+            result["trust_score"],
+            scenario.resolved_actions,
+            calibration,
+        )
 
         rows.append(
             {
@@ -484,13 +483,12 @@ def provisional_policy_comparison(calibration=DEFAULT_CALIBRATION):
                 "score": result["trust_score"],
                 "resolved_actions": scenario.resolved_actions,
                 "validated_actions": scenario.validated_actions,
-                "current_rank": current_rank,
-                "positive_evidence_gate_rank": positive_evidence_rank,
+                "legacy_volume_only_rank": legacy_volume_only_rank,
+                "production_rank": result["current_rank"],
             }
         )
 
     return rows
-
 
 def legitimate_influence_comparison(calibration=DEFAULT_CALIBRATION):
     """Measure how much candidate policies attenuate established-user feedback."""
@@ -584,9 +582,11 @@ def selected_candidate_checks(calibration=DEFAULT_CALIBRATION):
         },
         {
             "id": "H3",
-            "name": "All-failure history remains Provisional",
+            "name": "Production rank gate keeps all-failure history Provisional",
             "passed": (
-                provisional["three_failures"]["positive_evidence_gate_rank"]
+                provisional["three_failures"]["legacy_volume_only_rank"]
+                == "New Contributor"
+                and provisional["three_failures"]["production_rank"]
                 == "Provisional"
             ),
         },
@@ -620,10 +620,10 @@ def build_hardening_experiment_report(calibration=DEFAULT_CALIBRATION):
                 "Strongest simple anti-Sybil gate tested, but suppresses all "
                 "reputation influence from users below Contributor depth."
             ),
-            "positive_evidence_gate": (
-                "Keeps three resolved actions as the sample-size requirement "
-                "but requires at least one successful resolved action to leave "
-                "Provisional."
+            "production_rank_gate": (
+                "Production keeps three resolved actions as the sample-size "
+                "requirement and also requires at least one successful "
+                "resolved action to leave Provisional."
             ),
         },
     }
