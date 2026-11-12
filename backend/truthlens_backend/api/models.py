@@ -1822,6 +1822,29 @@ class FlagResolutionLog(models.Model):
 
     class Meta:
         ordering = ["-resolved_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(report_outcome__isnull=True, safety_decision__isnull=True)
+                    | models.Q(report_outcome__isnull=False, safety_decision__isnull=False)
+                ),
+                name="flag_report_decision_pair_ck",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(report_outcome__isnull=True)
+                    | models.Q(
+                        report_outcome="CONFIRMED",
+                        is_valid_report=True,
+                    )
+                    | models.Q(
+                        report_outcome__in=["NOT_CONFIRMED", "NO_VIOLATION"],
+                        is_valid_report=False,
+                    )
+                ),
+                name="flag_report_outcome_valid_ck",
+            ),
+        ]
 
 
 class EvidenceSubmission(models.Model):
@@ -2242,6 +2265,18 @@ class CommunitySafetyDecision(models.Model):
             models.Index(
                 fields=["violation_code", "-decided_at"],
                 name="community_safety_violation_idx",
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(action="DISMISS", violation_code="")
+                    | (
+                        models.Q(action="REMOVE")
+                        & ~models.Q(violation_code="")
+                    )
+                ),
+                name="comm_safety_action_violation",
             ),
         ]
 
