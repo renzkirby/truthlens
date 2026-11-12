@@ -71,11 +71,7 @@ class VoteReputationSnapshotApiTests(TestCase):
             verified_at=timezone.now(),
         )
 
-    @patch("api.views.recompute_user_trust_score_task.delay")
-    def test_create_vote_snapshots_live_trust_history_and_final_weight(
-        self,
-        recompute_delay,
-    ):
+    def test_create_vote_snapshots_live_trust_history_and_final_weight(self):
         expected = calculate_trust_components(self.voter)
 
         with self.captureOnCommitCallbacks(execute=True):
@@ -101,27 +97,20 @@ class VoteReputationSnapshotApiTests(TestCase):
             vote.vote_trust_snapshot,
             self.voter.profile.trust_score,
         )
-        self.assertEqual(
-            vote.vote_resolved_actions_snapshot,
-            3,
-        )
-        self.assertEqual(
-            vote.vote_validated_actions_snapshot,
-            3,
-        )
+        self.assertEqual(vote.vote_resolved_actions_snapshot, 3)
+        self.assertEqual(vote.vote_validated_actions_snapshot, 3)
         self.assertAlmostEqual(
             vote.vote_reputation_weight_snapshot,
             (0.5 + expected["trust_score"] / 200.0) * (3 / 7),
         )
-        recompute_delay.assert_called_once_with(
-            self.contributor.pk,
+
+        self.contributor.profile.refresh_from_db()
+        self.assertEqual(
+            self.contributor.profile.trust_score,
+            calculate_trust_components(self.contributor)["trust_score"],
         )
 
-    @patch("api.views.recompute_user_trust_score_task.delay")
-    def test_changing_vote_refreshes_snapshots_from_live_reputation(
-        self,
-        recompute_delay,
-    ):
+    def test_changing_vote_refreshes_snapshots_from_live_reputation(self):
         with self.captureOnCommitCallbacks(execute=True):
             create_response = self.client.post(
                 reverse("vote-list"),
@@ -165,28 +154,20 @@ class VoteReputationSnapshotApiTests(TestCase):
             vote.vote_trust_snapshot,
             self.voter.profile.trust_score,
         )
-        self.assertEqual(
-            vote.vote_resolved_actions_snapshot,
-            10,
-        )
-        self.assertEqual(
-            vote.vote_validated_actions_snapshot,
-            10,
-        )
+        self.assertEqual(vote.vote_resolved_actions_snapshot, 10)
+        self.assertEqual(vote.vote_validated_actions_snapshot, 10)
         self.assertAlmostEqual(
             vote.vote_reputation_weight_snapshot,
             (0.5 + expected["trust_score"] / 200.0) * (10 / 14),
         )
+
+        self.contributor.profile.refresh_from_db()
         self.assertEqual(
-            recompute_delay.call_count,
-            2,
+            self.contributor.profile.trust_score,
+            calculate_trust_components(self.contributor)["trust_score"],
         )
 
-    @patch("api.views.recompute_user_trust_score_task.delay")
-    def test_noop_patch_does_not_refresh_vote_weight(
-        self,
-        recompute_delay,
-    ):
+    def test_noop_patch_does_not_refresh_vote_weight(self):
         with self.captureOnCommitCallbacks(execute=True):
             create_response = self.client.post(
                 reverse("vote-list"),
@@ -222,40 +203,18 @@ class VoteReputationSnapshotApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         vote.refresh_from_db()
         self.assertTrue(vote.vote_value)
-        self.assertEqual(
-            vote.vote_trust_snapshot,
-            original_trust_snapshot,
-        )
-        self.assertEqual(
-            vote.vote_resolved_actions_snapshot,
-            3,
-        )
-        self.assertEqual(
-            vote.vote_validated_actions_snapshot,
-            3,
-        )
-        self.assertEqual(
-            vote.vote_reputation_weight_snapshot,
-            original_weight,
-        )
-        self.assertEqual(
-            recompute_delay.call_count,
-            2,
-        )
+        self.assertEqual(vote.vote_trust_snapshot, original_trust_snapshot)
+        self.assertEqual(vote.vote_resolved_actions_snapshot, 3)
+        self.assertEqual(vote.vote_validated_actions_snapshot, 3)
+        self.assertEqual(vote.vote_reputation_weight_snapshot, original_weight)
 
-    @patch("api.views.recompute_user_trust_score_task.delay")
-    def test_failed_history_does_not_gain_reputation_vote_weight(
-        self,
-        recompute_delay,
-    ):
+    def test_failed_history_does_not_gain_reputation_vote_weight(self):
         failed_voter = User.objects.create_user(
             username="vote-snapshot-failed-voter",
             password="pass1234",
         )
         failed_voter.profile.trust_score = 99.0
-        failed_voter.profile.save(
-            update_fields=["trust_score"],
-        )
+        failed_voter.profile.save(update_fields=["trust_score"])
 
         for index in range(25):
             claim = Claim.objects.create(
@@ -295,34 +254,22 @@ class VoteReputationSnapshotApiTests(TestCase):
             evidence=self.target_evidence,
             voter=failed_voter,
         )
-        self.assertEqual(
-            vote.vote_trust_snapshot,
-            expected["trust_score"],
-        )
+        self.assertEqual(vote.vote_trust_snapshot, expected["trust_score"])
         self.assertNotEqual(
             vote.vote_trust_snapshot,
             failed_voter.profile.trust_score,
         )
-        self.assertEqual(
-            vote.vote_resolved_actions_snapshot,
-            25,
-        )
-        self.assertEqual(
-            vote.vote_validated_actions_snapshot,
-            0,
-        )
-        self.assertEqual(
-            vote.vote_reputation_weight_snapshot,
-            0.0,
-        )
+        self.assertEqual(vote.vote_resolved_actions_snapshot, 25)
+        self.assertEqual(vote.vote_validated_actions_snapshot, 0)
+        self.assertEqual(vote.vote_reputation_weight_snapshot, 0.0)
 
     @patch(
-        "api.views.recompute_user_trust_score_task.delay",
-        side_effect=ConnectionError("Redis unavailable"),
+        "api.views.recompute_user_trust_score",
+        side_effect=RuntimeError("Trust calculation unavailable"),
     )
-    def test_vote_succeeds_and_persists_score_when_async_refresh_fails(
+    def test_vote_remains_successful_when_direct_trust_refresh_fails(
         self,
-        recompute_delay,
+        recompute,
     ):
         with self.assertLogs("api.views", level="ERROR"):
             with self.captureOnCommitCallbacks(execute=True):
@@ -342,18 +289,9 @@ class VoteReputationSnapshotApiTests(TestCase):
                 voter=self.voter,
             ).exists()
         )
-        self.contributor.profile.refresh_from_db()
-        self.assertEqual(
-            self.contributor.profile.trust_score,
-            calculate_trust_components(self.contributor)["trust_score"],
-        )
-        recompute_delay.assert_called_once_with(self.contributor.pk)
+        recompute.assert_called_once_with(self.contributor.pk)
 
-    @patch("api.views.recompute_user_trust_score_task.delay")
-    def test_vote_snapshot_fields_are_read_only(
-        self,
-        recompute_delay,
-    ):
+    def test_vote_snapshot_fields_are_read_only(self):
         expected = calculate_trust_components(self.voter)
 
         with self.captureOnCommitCallbacks(execute=True):
@@ -375,19 +313,7 @@ class VoteReputationSnapshotApiTests(TestCase):
             evidence=self.target_evidence,
             voter=self.voter,
         )
-        self.assertEqual(
-            vote.vote_trust_snapshot,
-            expected["trust_score"],
-        )
-        self.assertEqual(
-            vote.vote_resolved_actions_snapshot,
-            3,
-        )
-        self.assertEqual(
-            vote.vote_validated_actions_snapshot,
-            3,
-        )
-        self.assertLess(
-            vote.vote_reputation_weight_snapshot,
-            1.0,
-        )
+        self.assertEqual(vote.vote_trust_snapshot, expected["trust_score"])
+        self.assertEqual(vote.vote_resolved_actions_snapshot, 3)
+        self.assertEqual(vote.vote_validated_actions_snapshot, 3)
+        self.assertLess(vote.vote_reputation_weight_snapshot, 1.0)
