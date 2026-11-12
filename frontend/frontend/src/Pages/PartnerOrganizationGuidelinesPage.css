@@ -50,6 +50,20 @@
    position: static;
 }
 
+.partner-guidelines-sidebar--toc .partner-guidelines-sidebar__sticky {
+   max-height: calc(100vh - 112px);
+   overflow-y: auto;
+   overscroll-behavior: contain;
+   scrollbar-width: none;
+   -ms-overflow-style: none;
+}
+
+.partner-guidelines-sidebar--toc .partner-guidelines-sidebar__sticky::-webkit-scrollbar {
+   width: 0;
+   height: 0;
+   display: none;
+}
+
 .partner-guidelines-sidebar__eyebrow {
    display: block;
    margin-bottom: var(--tl-space-3);
@@ -89,14 +103,16 @@
 
 .partner-guidelines-access-note {
    margin-top: var(--tl-space-5);
-   padding: var(--tl-space-4);
-   border: 1px solid var(--tl-color-border-default);
-   border-radius: var(--tl-radius-md);
-   background: var(--tl-color-bg-subtle);
+   padding: var(--tl-space-1) 0 var(--tl-space-1) var(--tl-space-4);
+   border-left: 2px solid var(--tl-color-border-default);
 }
 
 .partner-guidelines-access-note strong {
-   font-size: var(--tl-text-ui);
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-xs);
+   font-weight: 800;
+   letter-spacing: 0.06em;
+   text-transform: uppercase;
 }
 
 .partner-guidelines-access-note p {
@@ -170,18 +186,6 @@
 .partner-governance-document-card__title-row strong {
    font-size: var(--tl-text-sm);
    line-height: 1.35;
-}
-
-.partner-governance-document-card__title-row span {
-   flex: 0 0 auto;
-   padding: 2px 7px;
-   border-radius: 999px;
-   color: var(--tl-color-brand-primary);
-   background: color-mix(in srgb, var(--tl-color-brand-primary) 12%, transparent);
-   font-size: 0.68rem;
-   font-weight: 800;
-   letter-spacing: 0.04em;
-   text-transform: uppercase;
 }
 
 .partner-governance-document-card p {
@@ -325,6 +329,11 @@
 
    .partner-guidelines-sidebar {
       position: static;
+   }
+
+   .partner-guidelines-sidebar--toc .partner-guidelines-sidebar__sticky {
+      max-height: none;
+      overflow: visible;
    }
 
    .partner-guidelines-sidebar--toc {
