@@ -22,6 +22,10 @@ function CommunityModerationOutcomePage() {
    const { authFetch } = useAuth();
    const [outcome, setOutcome] = useState(null);
    const [error, setError] = useState(null);
+   const [requestOpen, setRequestOpen] = useState(false);
+   const [requestStatement, setRequestStatement] = useState("");
+   const [requestError, setRequestError] = useState("");
+   const [submittingRequest, setSubmittingRequest] = useState(false);
 
    useEffect(() => {
       let active = true;
@@ -33,14 +37,51 @@ function CommunityModerationOutcomePage() {
             setOutcome(payload);
             setError(null);
          })
-         .catch((requestError) => {
-            if (active) setError(requestError);
+         .catch((requestErrorValue) => {
+            if (active) setError(requestErrorValue);
          });
 
       return () => {
          active = false;
       };
    }, [authFetch, decisionId]);
+
+   const handleRequestSubmit = async (event) => {
+      event.preventDefault();
+      const statement = requestStatement.trim();
+
+      if (statement.length < 20) {
+         setRequestError("Explain why the removal should be reviewed again in at least 20 characters.");
+         return;
+      }
+
+      setSubmittingRequest(true);
+      setRequestError("");
+
+      try {
+         const payload = await authFetch(
+            resolveApiEndpoint("COMMUNITY_MODERATION_RECONSIDERATION", decisionId),
+            {
+               method: "POST",
+               body: { request_statement: statement },
+            },
+         );
+         setOutcome(payload);
+         setRequestOpen(false);
+         setRequestStatement("");
+      } catch (requestErrorValue) {
+         setRequestError(
+            userFacingErrorMessage(requestErrorValue, {
+               fallback: "We couldn't submit this reconsideration request. Try again.",
+               conflictMessage: "This removal can no longer accept a reconsideration request.",
+               permissionMessage: "This moderation outcome cannot be reconsidered by this account.",
+               serviceMessage: "Reconsideration is temporarily unavailable. Try again shortly.",
+            }),
+         );
+      } finally {
+         setSubmittingRequest(false);
+      }
+   };
 
    if (error) {
       return (
@@ -72,6 +113,21 @@ function CommunityModerationOutcomePage() {
    const removed = outcome.action === "REMOVE";
    const isAuthor = outcome.role === "AUTHOR";
    const report = outcome.report;
+   const reconsideration = outcome.reconsideration;
+   const reversed = reconsideration?.outcome === "REVERSED";
+   const reconsiderationPending = reconsideration?.status === "SUBMITTED";
+
+   const heading = (() => {
+      if (reversed) {
+         return isAuthor ? "Your discussion was restored" : "Moderation decision updated";
+      }
+      if (isAuthor) {
+         return removed ? "Your discussion was removed" : "Safety review completed";
+      }
+      if (report?.outcome === "CONFIRMED") return "Your report was confirmed";
+      if (report?.outcome === "NOT_CONFIRMED") return "The content you reported was removed";
+      return "Your report was reviewed";
+   })();
 
    return (
       <main className="community-outcome-page">
@@ -80,22 +136,14 @@ function CommunityModerationOutcomePage() {
 
             <header className="community-outcome-header">
                <span>Platform Safety</span>
-               <h1>
-                  {isAuthor
-                     ? removed ? "Your discussion was removed" : "Safety review completed"
-                     : report?.outcome === "CONFIRMED"
-                       ? "Your report was confirmed"
-                       : report?.outcome === "NOT_CONFIRMED"
-                         ? "The content you reported was removed"
-                         : "Your report was reviewed"}
-               </h1>
-               <p>Decision recorded {formatDate(outcome.decided_at)}</p>
+               <h1>{heading}</h1>
+               <p>Original decision recorded {formatDate(outcome.decided_at)}</p>
             </header>
 
             <section className="community-outcome-card">
                <div className="community-outcome-heading">
                   <div>
-                     <span>Decision</span>
+                     <span>Original decision</span>
                      <h2>{removed ? "Content removed" : "No violation found"}</h2>
                   </div>
                   <strong>{removed ? "Removed" : "Dismissed"}</strong>
@@ -122,12 +170,135 @@ function CommunityModerationOutcomePage() {
                <Link to="/community-guidelines">Read the Community Guidelines</Link>
             </section>
 
+            {reconsideration ? (
+               <section className="community-outcome-card community-reconsideration-card">
+                  <span className="community-outcome-eyebrow">Reconsideration</span>
+                  <div className="community-outcome-heading">
+                     <div>
+                        <h2>
+                           {reconsiderationPending
+                              ? "Reconsideration requested"
+                              : reconsideration.outcome === "REVERSED"
+                                ? "Removal reversed"
+                                : "Removal upheld"}
+                        </h2>
+                     </div>
+                     <strong>
+                        {reconsiderationPending
+                           ? "Under review"
+                           : reconsideration.outcome === "REVERSED"
+                             ? "Restored"
+                             : "Upheld"}
+                     </strong>
+                  </div>
+
+                  {reconsiderationPending ? (
+                     <p>
+                        Platform Safety will review the original removal again. The discussion remains removed
+                        while the reconsideration is pending.
+                     </p>
+                  ) : (
+                     <>
+                        <p>
+                           {reconsideration.outcome === "REVERSED"
+                              ? "Platform Safety reversed the original removal and restored the discussion to its prior state."
+                              : "Platform Safety reviewed the request and kept the original removal in place."}
+                        </p>
+                        <div className="community-outcome-rationale">
+                           <h3>Reconsideration explanation</h3>
+                           <p>{reconsideration.resolution_rationale}</p>
+                        </div>
+                     </>
+                  )}
+
+                  {isAuthor && reconsideration.request_statement ? (
+                     <div className="community-reconsideration-request">
+                        <h3>Your request</h3>
+                        <p>{reconsideration.request_statement}</p>
+                        <small>Submitted {formatDate(reconsideration.submitted_at)}</small>
+                     </div>
+                  ) : null}
+               </section>
+            ) : null}
+
+            {isAuthor && outcome.can_request_reconsideration ? (
+               <section className="community-outcome-card">
+                  <span className="community-outcome-eyebrow">Reconsideration</span>
+                  <h2>Think this removal was a mistake?</h2>
+                  <p>
+                     You can request one reconsideration of this removal. Explain what Platform Safety
+                     should review again. The discussion stays removed while the request is reviewed.
+                  </p>
+
+                  {!requestOpen ? (
+                     <button
+                        type="button"
+                        className="community-outcome-primary-action"
+                        onClick={() => {
+                           setRequestOpen(true);
+                           setRequestError("");
+                        }}
+                     >
+                        Request reconsideration
+                     </button>
+                  ) : (
+                     <form className="community-reconsideration-form" onSubmit={handleRequestSubmit}>
+                        <label htmlFor="community-reconsideration-statement">
+                           Why should this decision be reconsidered?
+                        </label>
+                        <textarea
+                           id="community-reconsideration-statement"
+                           value={requestStatement}
+                           minLength={20}
+                           maxLength={2000}
+                           rows={6}
+                           required
+                           disabled={submittingRequest}
+                           onChange={(event) => {
+                              setRequestStatement(event.target.value);
+                              setRequestError("");
+                           }}
+                        />
+                        <div className="community-reconsideration-form-meta">
+                           <span>{requestStatement.length}/2000</span>
+                           {requestError ? <strong role="alert">{requestError}</strong> : null}
+                        </div>
+                        <div className="community-reconsideration-actions">
+                           <button
+                              type="button"
+                              className="community-outcome-secondary-action"
+                              disabled={submittingRequest}
+                              onClick={() => {
+                                 setRequestOpen(false);
+                                 setRequestStatement("");
+                                 setRequestError("");
+                              }}
+                           >
+                              Cancel
+                           </button>
+                           <button
+                              type="submit"
+                              className="community-outcome-primary-action"
+                              disabled={submittingRequest}
+                           >
+                              {submittingRequest ? "Submitting…" : "Submit request"}
+                           </button>
+                        </div>
+                     </form>
+                  )}
+               </section>
+            ) : null}
+
             {isAuthor && outcome.content ? (
                <section className="community-outcome-card">
                   <span className="community-outcome-eyebrow">Affected discussion</span>
                   <h2>Content reviewed by Platform Safety</h2>
                   <blockquote>{outcome.content.excerpt || "Content excerpt unavailable."}</blockquote>
-                  {removed ? (
+                  {reversed ? (
+                     <p className="community-outcome-helper">
+                        The discussion was restored after reconsideration.
+                     </p>
+                  ) : removed ? (
                      <p className="community-outcome-helper">
                         The original discussion is no longer available in the Community feed.
                      </p>
@@ -150,7 +321,9 @@ function CommunityModerationOutcomePage() {
                         <dd>
                            {report.counts_toward_reputation
                               ? "Counts as a confirmed report"
-                              : "No reputation change"}
+                              : reversed && report.outcome === "CONFIRMED"
+                                ? "No longer counts toward reputation"
+                                : "No reputation change"}
                         </dd>
                      </div>
                   </dl>
