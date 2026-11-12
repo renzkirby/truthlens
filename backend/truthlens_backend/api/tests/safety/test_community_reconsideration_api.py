@@ -1,5 +1,6 @@
 from django.contrib.auth.models import User
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
@@ -363,11 +364,24 @@ class CommunitySafetyReconsiderationApiTests(APITestCase):
         self.assertEqual(reporter_components["validated_actions"], 0)
         self.assertEqual(reporter_components["trust_score"], 50.0)
 
-    def test_reversal_restores_closed_thread_to_closed_not_open(self):
+    def test_reversal_restores_closed_thread_and_prior_moderation_metadata(self):
         thread, case, _, report_two = self._reported_thread(
             "Originally closed discussion",
             thread_status=Thread.Status.CLOSED,
         )
+        prior_moderated_at = timezone.now()
+        prior_notes = "Prior professional adjudication context."
+        thread.moderated_by = self.other_moderator
+        thread.moderated_at = prior_moderated_at
+        thread.moderator_notes = prior_notes
+        thread.save(
+            update_fields=[
+                "moderated_by",
+                "moderated_at",
+                "moderator_notes",
+            ]
+        )
+
         decision = self._remove(
             case=case,
             report_to_confirm=report_two,
@@ -375,6 +389,18 @@ class CommunitySafetyReconsiderationApiTests(APITestCase):
         self.assertEqual(
             decision.pre_removal_thread_status,
             Thread.Status.CLOSED,
+        )
+        self.assertEqual(
+            decision.pre_removal_moderated_by,
+            self.other_moderator,
+        )
+        self.assertEqual(
+            decision.pre_removal_moderated_at,
+            prior_moderated_at,
+        )
+        self.assertEqual(
+            decision.pre_removal_moderator_notes,
+            prior_notes,
         )
 
         self._request(decision)
@@ -386,6 +412,9 @@ class CommunitySafetyReconsiderationApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         thread.refresh_from_db()
         self.assertEqual(thread.status, Thread.Status.CLOSED)
+        self.assertEqual(thread.moderated_by, self.other_moderator)
+        self.assertEqual(thread.moderated_at, prior_moderated_at)
+        self.assertEqual(thread.moderator_notes, prior_notes)
 
     def test_reporter_projection_hides_author_request_and_reflects_reversal(self):
         decision = self._remove()
