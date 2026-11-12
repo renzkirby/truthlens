@@ -1,6 +1,6 @@
 # TruthLens Trust Score — Hardening Experiments
 
-Status: selected hardening candidate implemented on feature branch; pending validation and merge  
+Status: selected hardening package implemented in production; retained as the experiment and validation record  
 Research basis: `docs/TRUST_SCORE_REPUTATION_DEEP_RESEARCH.md`  
 Baseline validation: `docs/TRUST_SCORE_CALIBRATION_VALIDATION.md`  
 Experiment implementation: `backend/truthlens_backend/api/trust_score_hardening_experiments.py`
@@ -14,7 +14,7 @@ The baseline validation found two material failures:
 
 This document compares narrow hardening policies intended to solve those failures **without redesigning the Bayesian contribution-quality core**.
 
-No candidate in this document is active in production.
+The selected H1-H3 package documented later in this file is active in production. Alternative candidates remain offline comparison tools and are not production policy.
 
 ---
 
@@ -737,9 +737,9 @@ npm run build -> PASS
 
 ---
 
-# 18. Decision standard
+# 18. Historical decision standard
 
-These candidates should be implemented in production **only after**:
+The selected package was approved for production only after:
 
 1. automated experiment tests pass;
 2. production-parity tests remain green;
