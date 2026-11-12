@@ -1537,31 +1537,18 @@ def schedule_evidence_review_trust_updates(result):
     evidence_id = getattr(evidence, "pk", None)
     case_id = getattr(case, "pk", None)
 
-    try:
-        from .trust_service import recompute_user_trust_score
-
-        recompute_user_trust_score(contributor_id)
-    except Exception:
-        logger.exception(
-            "Failed immediate post-commit Evidence trust recomputation for "
-            "user_id=%s evidence_id=%s case_id=%s.",
-            contributor_id,
-            evidence_id,
-            case_id,
-        )
-
-    def dispatch_trust_update():
+    def refresh_trust_score():
         try:
-            from .tasks import recompute_user_trust_score_task
+            from .trust_service import recompute_user_trust_score
 
-            recompute_user_trust_score_task.delay(contributor_id)
+            recompute_user_trust_score(contributor_id)
         except Exception:
             logger.exception(
-                "Failed to enqueue post-commit Evidence trust recomputation for "
+                "Failed post-commit Evidence Trust recomputation for "
                 "user_id=%s evidence_id=%s case_id=%s.",
                 contributor_id,
                 evidence_id,
                 case_id,
             )
 
-    transaction.on_commit(dispatch_trust_update, robust=True)
+    transaction.on_commit(refresh_trust_score, robust=True)
