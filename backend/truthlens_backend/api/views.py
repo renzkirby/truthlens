@@ -72,7 +72,6 @@ from .tasks import (
     snippet_fact_check_process,
     url_fact_check_process,
     text_fact_check_process,
-    recompute_user_trust_score_task,
     dispatch_evidence_url_preview,
 )
 from .models import (
@@ -3804,24 +3803,14 @@ class ThreadFlagViewSet(viewsets.ModelViewSet):
 
 
 def _schedule_vote_target_trust_refresh(user_id, *, action):
-    """Refresh vote-target reputation without making the vote action depend on it."""
+    """Refresh vote-target reputation directly after the vote transaction commits."""
 
     def refresh():
         try:
             recompute_user_trust_score(user_id)
         except Exception:
             logger.exception(
-                "Failed immediate vote-triggered Trust recomputation for "
-                "user_id=%s action=%s.",
-                user_id,
-                action,
-            )
-
-        try:
-            recompute_user_trust_score_task.delay(user_id)
-        except Exception:
-            logger.exception(
-                "Failed to enqueue vote-triggered Trust recomputation for "
+                "Failed post-commit vote-triggered Trust recomputation for "
                 "user_id=%s action=%s.",
                 user_id,
                 action,
