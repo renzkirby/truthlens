@@ -85,7 +85,9 @@ function CommunityModerationOutcomePage() {
                      ? removed ? "Your discussion was removed" : "Safety review completed"
                      : report?.outcome === "CONFIRMED"
                        ? "Your report was confirmed"
-                       : "Your report was reviewed"}
+                       : report?.outcome === "NOT_CONFIRMED"
+                         ? "The content you reported was removed"
+                         : "Your report was reviewed"}
                </h1>
                <p>Decision recorded {formatDate(outcome.decided_at)}</p>
             </header>
