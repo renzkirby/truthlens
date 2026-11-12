@@ -34,6 +34,7 @@ from api.models import (
     VerificationRun,
 )
 from api.verification_assignment_service import release_verification_assignment
+from api.trust_service import calculate_trust_components
 
 
 class AdjudicationContractFixtures:
@@ -688,6 +689,8 @@ class AdjudicationActionApiContractTests(
         context = self.make_context(
             evidence_statuses=[EvidenceSubmission.EvidenceStatus.VERIFIED]
         )
+        self.contributor.profile.trust_score = 1.0
+        self.contributor.profile.save(update_fields=["trust_score"])
 
         with patch(
             "api.tasks.recompute_user_trust_score_task.delay",
@@ -708,6 +711,11 @@ class AdjudicationActionApiContractTests(
             AdjudicationDecision.Verdict.FAKE,
         )
         self.assertEqual(context["case"].status, ModerationCase.Status.RESOLVED)
+        self.contributor.profile.refresh_from_db()
+        self.assertEqual(
+            self.contributor.profile.trust_score,
+            calculate_trust_components(self.contributor)["trust_score"],
+        )
 
     def test_trust_dispatch_targets_each_distinct_contributor_once(self):
         context = self.make_context(
