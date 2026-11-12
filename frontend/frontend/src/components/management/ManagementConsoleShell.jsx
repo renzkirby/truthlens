@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import LogoImage from "../../assets/truthlens_logo.png";
 import { useAuth } from "../../hooks/useAuth";
@@ -60,12 +60,14 @@ function ManagementNavigation({ label, onNavigate, firstLinkRef, items }) {
 function ManagementConsoleShell() {
    const { user, logout } = useAuth();
    const navigate = useNavigate();
+   const location = useLocation();
    const isPlatformAdmin = canAccessManagementConsole(user);
    const isSafetyModerator = isPlatformSafetyModerator(user);
    const navigationItems = NAVIGATION_ITEMS.filter((item) =>
       isPlatformAdmin ? true : item.access === "safety",
    );
    const homePath = isPlatformAdmin ? "/management" : "/management/safety";
+   const documentationView = location.pathname === "/management/partner-guidelines";
    const explicitLogoutRef = useRef(false);
    const menuTriggerRef = useRef(null);
    const mobileDrawerRef = useRef(null);
@@ -147,18 +149,20 @@ function ManagementConsoleShell() {
                </span>
             </Link>
             <div className="management-shell__account">
-               <button
-                  ref={menuTriggerRef}
-                  type="button"
-                  className="management-shell__menu-trigger"
-                  aria-label="Open Management Console navigation"
-                  aria-expanded={mobileNavigationOpen}
-                  aria-controls={MOBILE_NAVIGATION_ID}
-                  onClick={() => setMobileNavigationOpen(true)}
-               >
-                  <Icons name="panel-left" size={19} />
-                  <span>Menu</span>
-               </button>
+               {!documentationView ? (
+                  <button
+                     ref={menuTriggerRef}
+                     type="button"
+                     className="management-shell__menu-trigger"
+                     aria-label="Open Management Console navigation"
+                     aria-expanded={mobileNavigationOpen}
+                     aria-controls={MOBILE_NAVIGATION_ID}
+                     onClick={() => setMobileNavigationOpen(true)}
+                  >
+                     <Icons name="panel-left" size={19} />
+                     <span>Menu</span>
+                  </button>
+               ) : null}
                <span className="management-shell__username">@{user?.username}</span>
                <Button
                   variant="ghost"
@@ -173,17 +177,22 @@ function ManagementConsoleShell() {
             </div>
          </header>
 
-         <div className="management-shell__body">
-            <aside className="management-shell__sidebar management-shell__sidebar--desktop">
-               <ManagementNavigation label="Management Console" items={navigationItems} />
-            </aside>
+         <div className={`management-shell__body ${documentationView ? "management-shell__body--documentation" : ""}`}>
+            {!documentationView ? (
+               <aside className="management-shell__sidebar management-shell__sidebar--desktop">
+                  <ManagementNavigation label="Management Console" items={navigationItems} />
+               </aside>
+            ) : null}
 
-            <main className="management-shell__main" id="management-main">
+            <main
+               className={`management-shell__main ${documentationView ? "management-shell__main--documentation" : ""}`}
+               id="management-main"
+            >
                <Outlet />
             </main>
          </div>
 
-         {mobileNavigationOpen ? (
+         {!documentationView && mobileNavigationOpen ? (
             <div className="management-mobile-navigation">
                <button
                   type="button"
