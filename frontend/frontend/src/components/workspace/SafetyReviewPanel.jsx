@@ -128,6 +128,8 @@ function SafetyReviewPanel() {
    const [confirmingRelease, setConfirmingRelease] = useState(false);
    const [decisionAction, setDecisionAction] = useState(null);
    const [decisionNotes, setDecisionNotes] = useState("");
+   const [decisionViolationCode, setDecisionViolationCode] = useState("");
+   const [confirmedReportIds, setConfirmedReportIds] = useState([]);
 
    const queueRequestIdRef = useRef(0);
    const detailRequestIdRef = useRef(0);
@@ -564,11 +566,26 @@ function SafetyReviewPanel() {
       decisionReturnFocusRef.current = action;
       setActionError("");
       setDecisionAction(action);
+      setDecisionNotes("");
+      setDecisionViolationCode("");
+      setConfirmedReportIds([]);
    };
 
    const handleCancelDecision = () => {
       setDecisionAction(null);
       setDecisionNotes("");
+      setDecisionViolationCode("");
+      setConfirmedReportIds([]);
+      setActionError("");
+   };
+
+   const toggleConfirmedReport = (reportId) => {
+      const normalizedId = String(reportId);
+      setConfirmedReportIds((current) => (
+         current.includes(normalizedId)
+            ? current.filter((id) => id !== normalizedId)
+            : [...current, normalizedId]
+      ));
       setActionError("");
    };
 
@@ -698,6 +715,11 @@ function SafetyReviewPanel() {
          return;
       }
 
+      if (action === "REMOVE" && !decisionViolationCode) {
+         setActionError("Select the Community Guidelines violation that supports this removal.");
+         return;
+      }
+
       const caseId = detail.id;
       const generation = safetyGenerationRef.current;
       setPendingOperation({ caseId, kind: "action", action });
@@ -705,12 +727,18 @@ function SafetyReviewPanel() {
       setNotice("");
 
       try {
+         const requestBody = {
+            action,
+            notes,
+         };
+         if (action === "REMOVE") {
+            requestBody.violation_code = decisionViolationCode;
+            requestBody.confirmed_report_ids = confirmedReportIds;
+         }
+
          const updatedCase = await safetyFetch(resolveApiEndpoint("SAFETY_CASE_ACTION", caseId), {
             method: "POST",
-            body: {
-               action,
-               notes,
-            },
+            body: requestBody,
          });
 
          if (generation !== safetyGenerationRef.current) {
@@ -726,6 +754,8 @@ function SafetyReviewPanel() {
          restoreReleaseFocusRef.current = false;
          setDecisionAction(null);
          setDecisionNotes("");
+         setDecisionViolationCode("");
+         setConfirmedReportIds([]);
          setConfirmingRelease(false);
 
          if (action === "ESCALATE") {
@@ -1239,9 +1269,76 @@ function SafetyReviewPanel() {
                                        <p id="safety-decision-consequence">{selectedActionDetail.consequence}</p>
                                     </div>
 
+                                    {decisionAction === "REMOVE" && (
+                                       <div className="safety-removal-details">
+                                          <label htmlFor="safety-violation-code">
+                                             Confirmed Community Guidelines violation *
+                                          </label>
+                                          <Select
+                                             id="safety-violation-code"
+                                             density="standard"
+                                             value={decisionViolationCode}
+                                             required
+                                             disabled={isBusy}
+                                             onChange={(event) => {
+                                                setDecisionViolationCode(event.target.value);
+                                                setActionError("");
+                                             }}
+                                          >
+                                             <option value="">Select a rule</option>
+                                             {(detail.community_policy?.rules || []).map((rule) => (
+                                                <option key={rule.code} value={rule.code}>
+                                                   {rule.title}
+                                                </option>
+                                             ))}
+                                          </Select>
+                                          <p className="safety-policy-helper">
+                                             Choose the rule Platform Safety actually confirmed, not simply the concern a reporter selected.{" "}
+                                             <Link to="/community-guidelines" target="_blank" rel="noopener noreferrer">
+                                                Read Community Guidelines
+                                             </Link>
+                                          </p>
+
+                                          <fieldset className="safety-report-confirmation">
+                                             <legend>Which reports identified this issue?</legend>
+                                             <p>
+                                                Select only reports that materially identified the confirmed issue.
+                                                It is valid to select none.
+                                             </p>
+                                             <div className="safety-report-confirmation-list">
+                                                {(detail.reports || []).map((report) => {
+                                                   const reportId = String(report.id);
+                                                   return (
+                                                      <label key={report.id}>
+                                                         <input
+                                                            type="checkbox"
+                                                            checked={confirmedReportIds.includes(reportId)}
+                                                            disabled={isBusy}
+                                                            onChange={() => toggleConfirmedReport(reportId)}
+                                                         />
+                                                         <span>
+                                                            <strong>{report.reason_label || formatLabel(report.reason)}</strong>
+                                                            <small>
+                                                               {report.notes || "No additional report notes were provided."}
+                                                            </small>
+                                                         </span>
+                                                      </label>
+                                                   );
+                                                })}
+                                             </div>
+                                          </fieldset>
+                                       </div>
+                                    )}
+
                                     <label htmlFor="safety-moderator-notes">
-                                       Review notes {selectedActionDetail.notesRequired ? "(required)" : "(optional)"}
+                                       {decisionAction === "ESCALATE" ? "Escalation notes" : "Decision explanation"}{" "}
+                                       {selectedActionDetail.notesRequired ? "(required)" : "(optional)"}
                                     </label>
+                                    {decisionAction !== "ESCALATE" && (
+                                       <p className="safety-decision-explanation-helper">
+                                          This explanation is shown to affected users. Keep it concise and do not include internal-only details.
+                                       </p>
+                                    )}
                                     <Textarea
                                        ref={decisionNotesRef}
                                        id="safety-moderator-notes"

@@ -1,0 +1,125 @@
+.community-guidelines-page {
+   width: min(1120px, calc(100% - 40px));
+   margin: 0 auto;
+   padding: 56px 0 72px;
+}
+
+.community-guidelines-hero {
+   max-width: 760px;
+   margin-bottom: 38px;
+}
+
+.community-guidelines-hero > span {
+   color: var(--brand-primary);
+   font-size: 0.75rem;
+   font-weight: 800;
+   letter-spacing: 0.08em;
+   text-transform: uppercase;
+}
+
+.community-guidelines-hero h1 {
+   margin: 8px 0 12px;
+   color: var(--text-main);
+   font-size: clamp(2rem, 5vw, 3.2rem);
+   line-height: 1.05;
+}
+
+.community-guidelines-hero p,
+.community-guidelines-content p,
+.community-guidelines-state p {
+   color: var(--text-body);
+   line-height: 1.7;
+}
+
+.community-guidelines-hero small {
+   color: var(--text-muted);
+}
+
+.community-guidelines-layout {
+   display: grid;
+   grid-template-columns: minmax(190px, 240px) minmax(0, 760px);
+   gap: 42px;
+   align-items: start;
+}
+
+.community-guidelines-toc {
+   position: sticky;
+   top: 24px;
+   padding: 18px;
+   border: 1px solid var(--border-default);
+   border-radius: 12px;
+   background: var(--bg-surface);
+}
+
+.community-guidelines-toc strong {
+   display: block;
+   margin-bottom: 10px;
+   color: var(--text-main);
+}
+
+.community-guidelines-toc nav {
+   display: grid;
+   gap: 8px;
+}
+
+.community-guidelines-toc a {
+   color: var(--text-muted);
+   font-size: 0.82rem;
+   line-height: 1.35;
+   text-decoration: none;
+}
+
+.community-guidelines-toc a:hover {
+   color: var(--brand-primary);
+}
+
+.community-guidelines-content {
+   display: grid;
+   gap: 10px;
+}
+
+.community-guidelines-content section {
+   scroll-margin-top: 24px;
+   padding: 22px 0;
+   border-bottom: 1px solid var(--border-default);
+}
+
+.community-guidelines-content h2 {
+   margin: 0 0 10px;
+   color: var(--text-main);
+   font-size: 1.2rem;
+}
+
+.community-guidelines-content p {
+   margin: 0;
+}
+
+.community-guidelines-callout {
+   padding: 20px !important;
+   border: 1px solid var(--tl-color-status-info-border) !important;
+   border-radius: 12px;
+   background: var(--tl-color-status-info-bg);
+}
+
+.community-guidelines-state {
+   min-height: 280px;
+   display: grid;
+   place-content: center;
+   text-align: center;
+}
+
+@media (max-width: 760px) {
+   .community-guidelines-page {
+      width: min(100% - 28px, 760px);
+      padding-top: 36px;
+   }
+
+   .community-guidelines-layout {
+      grid-template-columns: 1fr;
+      gap: 20px;
+   }
+
+   .community-guidelines-toc {
+      position: static;
+   }
+}

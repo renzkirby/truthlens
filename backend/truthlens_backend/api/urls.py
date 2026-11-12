@@ -8,6 +8,16 @@ from . import organization_governance_notice_views
 
 urlpatterns = [
     path(
+        "community/guidelines/",
+        views.community_guidelines,
+        name="community_guidelines",
+    ),
+    path(
+        "community/moderation/outcomes/<uuid:decision_id>/",
+        views.community_moderation_outcome,
+        name="community_moderation_outcome",
+    ),
+    path(
         "governance/notices/",
         organization_governance_notice_views.GovernanceNoticeListView.as_view(),
         name="governance_notice_list",

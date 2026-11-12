@@ -4836,3 +4836,16 @@ html[data-theme="dark"] .thread-detail-page.thread-detail-page--classic .thread-
     background: transparent;
 }
 
+
+
+.thread-detail-report-helper {
+   margin: 0;
+   color: var(--text-muted);
+   font-size: 0.76rem;
+   line-height: 1.5;
+}
+
+.thread-detail-report-helper a {
+   color: var(--brand-primary);
+   font-weight: 700;
+}

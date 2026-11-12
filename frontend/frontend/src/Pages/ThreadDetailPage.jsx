@@ -1796,6 +1796,12 @@ export default function ThreadDetailPage() {
             <h2 id="thread-detail-report-title">Report this thread</h2>
             <p id="thread-detail-report-description">Send this thread to Platform Safety reviewers for a safety review.</p>
             <div className="thread-detail-field"><label htmlFor="thread-report-reason">Reason</label><select id="thread-report-reason" data-dialog-initial value={reportReason} onChange={(event) => setReportReason(event.target.value)} disabled={reporting}><option value="INAPPROPRIATE">Inappropriate</option><option value="SPAM">Spam</option><option value="HARASSMENT">Harassment</option><option value="OTHER">Other</option></select></div>
+            <p className="thread-detail-report-helper">
+               Choose the concern that best describes your report. Platform Safety makes the final policy finding after review.{" "}
+               <Link to="/community-guidelines" target="_blank" rel="noopener noreferrer">
+                  Read Community Guidelines
+               </Link>
+            </p>
             <div className="thread-detail-field"><label htmlFor="thread-report-notes">Notes (optional)</label><textarea id="thread-report-notes" rows={4} value={reportNotes} onChange={(event) => setReportNotes(event.target.value)} disabled={reporting} /></div>
             <div className="thread-detail-dialog-actions"><button type="button" className="thread-detail-text-button" onClick={() => setReportDialogOpen(false)} disabled={reporting}>Cancel</button><button type="button" className="thread-detail-primary-button" onClick={submitReport} disabled={reporting}>{reporting ? "Submitting…" : "Submit report"}</button></div>
          </AccessibleDialog>

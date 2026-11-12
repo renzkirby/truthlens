@@ -1,0 +1,127 @@
+.community-outcome-page {
+   width: 100%;
+   padding: 34px 24px 64px;
+}
+
+.community-outcome-content {
+   width: min(820px, 100%);
+   margin: 0 auto;
+}
+
+.community-outcome-back {
+   display: inline-flex;
+   margin-bottom: 24px;
+   color: var(--text-muted);
+   text-decoration: none;
+}
+
+.community-outcome-header {
+   margin-bottom: 24px;
+}
+
+.community-outcome-header > span,
+.community-outcome-eyebrow,
+.community-outcome-heading span {
+   color: var(--brand-primary);
+   font-size: 0.7rem;
+   font-weight: 800;
+   letter-spacing: 0.07em;
+   text-transform: uppercase;
+}
+
+.community-outcome-header h1 {
+   margin: 8px 0;
+   color: var(--text-main);
+   font-size: clamp(1.8rem, 5vw, 2.6rem);
+}
+
+.community-outcome-header p,
+.community-outcome-helper {
+   color: var(--text-muted);
+}
+
+.community-outcome-card {
+   margin-bottom: 16px;
+   padding: 22px;
+   border: 1px solid var(--border-default);
+   border-radius: 12px;
+   background: var(--bg-surface);
+}
+
+.community-outcome-card h2,
+.community-outcome-card h3 {
+   color: var(--text-main);
+}
+
+.community-outcome-heading {
+   display: flex;
+   align-items: flex-start;
+   justify-content: space-between;
+   gap: 16px;
+}
+
+.community-outcome-heading h2 {
+   margin: 4px 0 0;
+}
+
+.community-outcome-heading > strong {
+   padding: 5px 9px;
+   border-radius: 999px;
+   background: var(--bg-subtle);
+   color: var(--text-muted);
+   font-size: 0.72rem;
+}
+
+.community-outcome-details {
+   display: grid;
+   gap: 12px;
+   margin: 20px 0;
+}
+
+.community-outcome-details div {
+   display: grid;
+   gap: 3px;
+}
+
+.community-outcome-details dt {
+   color: var(--text-muted);
+   font-size: 0.72rem;
+   font-weight: 700;
+}
+
+.community-outcome-details dd {
+   margin: 0;
+   color: var(--text-main);
+}
+
+.community-outcome-rationale {
+   margin: 20px 0;
+   padding-top: 18px;
+   border-top: 1px solid var(--border-default);
+}
+
+.community-outcome-rationale h3 {
+   margin: 0 0 8px;
+   font-size: 0.9rem;
+}
+
+.community-outcome-rationale p,
+.community-outcome-card > p,
+.community-outcome-card blockquote {
+   color: var(--text-body);
+   line-height: 1.65;
+}
+
+.community-outcome-card blockquote {
+   margin: 14px 0 0;
+   padding: 14px 16px;
+   border-left: 3px solid var(--brand-primary);
+   background: var(--bg-subtle);
+}
+
+.community-outcome-state {
+   min-height: 320px;
+   display: grid;
+   place-content: center;
+   text-align: center;
+}

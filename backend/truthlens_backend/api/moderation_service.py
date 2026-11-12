@@ -2,7 +2,13 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from .community_policy import (
+    COMMUNITY_POLICY_TITLE,
+    COMMUNITY_POLICY_VERSION,
+    get_community_violation,
+)
 from .models import (
+    CommunitySafetyDecision,
     FlagResolutionLog,
     ModerationCase,
     ModerationEvent,
@@ -437,12 +443,21 @@ def escalate_safety_case(
     )
 
 
+def _community_safety_content_excerpt(thread):
+    value = (thread.caption or "").strip()
+    if not value and thread.claim_id:
+        value = (thread.claim.context_text or "").strip()
+    return " ".join(value.split())[:500]
+
+
 def resolve_safety_case(
     *,
     thread,
     actor,
     action,
     notes="",
+    violation_code="",
+    confirmed_report_ids=None,
 ):
     if action not in {
         SAFETY_ACTION_DISMISS,
@@ -452,12 +467,35 @@ def resolve_safety_case(
             "Safety resolution must be DISMISS or REMOVE."
         )
 
+    if action == SAFETY_ACTION_REMOVE:
+        violation = get_community_violation(violation_code)
+        if violation is None:
+            raise ModerationCaseError(
+                "A valid Community Guidelines violation is required when removing content."
+            )
+        if confirmed_report_ids is None:
+            raise ModerationCaseError(
+                "Confirmed report selections are required when removing content."
+            )
+    else:
+        violation = None
+        if violation_code or confirmed_report_ids not in (None, []):
+            raise ModerationCaseError(
+                "Dismissed Safety cases cannot include a confirmed violation or confirmed reports."
+            )
+
     with transaction.atomic():
-        locked_thread = (
-            Thread.objects
-            .select_for_update()
-            .get(pk=thread.pk)
-        )
+        try:
+            locked_thread = (
+                Thread.objects
+                .select_for_update()
+                .select_related("author", "claim")
+                .get(pk=thread.pk)
+            )
+        except Thread.DoesNotExist as error:
+            raise ModerationCaseError(
+                "The Safety case thread no longer exists."
+            ) from error
 
         case = get_active_safety_case(
             locked_thread,
@@ -482,7 +520,26 @@ def resolve_safety_case(
                 resolved_at__isnull=True,
             )
             .select_related("flagged_by")
+            .order_by("flagged_at", "id")
         )
+
+        active_flags_by_id = {
+            str(flag.id): flag
+            for flag in active_flags
+        }
+        raw_confirmed_ids = list(confirmed_report_ids or [])
+        confirmed_ids = {str(report_id) for report_id in raw_confirmed_ids}
+
+        if len(confirmed_ids) != len(raw_confirmed_ids):
+            raise ModerationCaseError(
+                "Confirmed report selections cannot contain duplicates."
+            )
+
+        unknown_confirmed_ids = confirmed_ids - set(active_flags_by_id)
+        if unknown_confirmed_ids:
+            raise ModerationCaseError(
+                "Confirmed reports must belong to the active Safety review cycle."
+            )
 
         reporter_ids = {
             flag.flagged_by_id
@@ -501,8 +558,8 @@ def resolve_safety_case(
 
         now = timezone.now()
 
-        # Preserve the existing legacy moderation fields
-        # during the migration period.
+        # Preserve existing compatibility fields while the Community Safety
+        # decision record becomes the authoritative policy finding.
         locked_thread.moderated_by = actor
         locked_thread.moderated_at = now
 
@@ -518,8 +575,8 @@ def resolve_safety_case(
             )
 
         if action == SAFETY_ACTION_REMOVE:
-            # Compatibility state for now.
-            # Later Thread.REJECTED will become REMOVED.
+            # Compatibility state: rejected threads are excluded from Community
+            # circulation by ThreadViewSet.
             locked_thread.status = Thread.Status.REJECTED
             thread_update_fields.append("status")
 
@@ -527,21 +584,79 @@ def resolve_safety_case(
             update_fields=thread_update_fields
         )
 
-        resolved_logs = [
-            FlagResolutionLog(
-                thread=locked_thread,
-                flagged_by=flag.flagged_by,
-                reason=flag.reason,
-                notes=flag.notes,
-                flagged_at=flag.flagged_at,
-                resolved_action=action,
-                is_valid_report=(
-                    action == SAFETY_ACTION_REMOVE
-                ),
-                resolved_by=actor,
+        if action == SAFETY_ACTION_DISMISS:
+            resolution_code = (
+                SAFETY_RESOLUTION_NO_VIOLATION
             )
-            for flag in active_flags
-        ]
+            default_summary = (
+                "No Community Guidelines violation was found."
+            )
+            violation_code_snapshot = ""
+            violation_label_snapshot = ""
+        else:
+            resolution_code = (
+                SAFETY_RESOLUTION_CONTENT_REMOVED
+            )
+            violation_code_snapshot = violation["code"]
+            violation_label_snapshot = violation["title"]
+            default_summary = (
+                f"Content was removed for {violation_label_snapshot}."
+            )
+
+        decision = CommunitySafetyDecision.objects.create(
+            moderation_case=case,
+            action=action,
+            violation_code=violation_code_snapshot,
+            policy_title_snapshot=COMMUNITY_POLICY_TITLE,
+            policy_version=COMMUNITY_POLICY_VERSION,
+            violation_label_snapshot=violation_label_snapshot,
+            thread_id_snapshot=locked_thread.pk,
+            thread_author=locked_thread.author,
+            author_username_snapshot=locked_thread.author.username,
+            content_excerpt_snapshot=_community_safety_content_excerpt(
+                locked_thread
+            ),
+            rationale=notes or default_summary,
+            decided_by=actor,
+            decided_at=now,
+        )
+
+        report_outcomes = []
+        resolved_logs = []
+        for flag in active_flags:
+            if action == SAFETY_ACTION_DISMISS:
+                report_outcome = FlagResolutionLog.ReportOutcome.NO_VIOLATION
+            elif str(flag.id) in confirmed_ids:
+                report_outcome = FlagResolutionLog.ReportOutcome.CONFIRMED
+            else:
+                report_outcome = FlagResolutionLog.ReportOutcome.NOT_CONFIRMED
+
+            is_confirmed = (
+                report_outcome
+                == FlagResolutionLog.ReportOutcome.CONFIRMED
+            )
+            resolved_logs.append(
+                FlagResolutionLog(
+                    thread=locked_thread,
+                    flagged_by=flag.flagged_by,
+                    reason=flag.reason,
+                    notes=flag.notes,
+                    flagged_at=flag.flagged_at,
+                    resolved_action=action,
+                    is_valid_report=is_confirmed,
+                    report_outcome=report_outcome,
+                    safety_decision=decision,
+                    resolved_by=actor,
+                )
+            )
+            report_outcomes.append(
+                {
+                    "report_id": flag.id,
+                    "reporter_id": flag.flagged_by_id,
+                    "reason": flag.reason,
+                    "outcome": report_outcome,
+                }
+            )
 
         if resolved_logs:
             FlagResolutionLog.objects.bulk_create(
@@ -559,14 +674,6 @@ def resolve_safety_case(
             )
 
         if action == SAFETY_ACTION_DISMISS:
-            resolution_code = (
-                SAFETY_RESOLUTION_NO_VIOLATION
-            )
-
-            default_summary = (
-                "No policy violation was found."
-            )
-
             ModerationEvent.objects.create(
                 case=case,
                 actor=actor,
@@ -580,20 +687,14 @@ def resolve_safety_case(
                 reason_code=action,
                 notes=notes or None,
                 metadata={
+                    "decision_id": str(decision.id),
                     "report_count": len(active_flags),
+                    "confirmed_report_count": 0,
+                    "policy_version": COMMUNITY_POLICY_VERSION,
                 },
             )
 
         else:
-            resolution_code = (
-                SAFETY_RESOLUTION_CONTENT_REMOVED
-            )
-
-            default_summary = (
-                "A policy violation was confirmed "
-                "and the thread was removed."
-            )
-
             ModerationEvent.objects.create(
                 case=case,
                 actor=actor,
@@ -604,10 +705,14 @@ def resolve_safety_case(
                 ),
                 from_status=case.status,
                 to_status=case.status,
-                reason_code=action,
+                reason_code=violation_code_snapshot,
                 notes=notes or None,
                 metadata={
+                    "decision_id": str(decision.id),
                     "report_count": len(active_flags),
+                    "confirmed_report_count": len(confirmed_ids),
+                    "violation_code": violation_code_snapshot,
+                    "policy_version": COMMUNITY_POLICY_VERSION,
                 },
             )
 
@@ -622,9 +727,12 @@ def resolve_safety_case(
                 from_status=case.status,
                 to_status=case.status,
                 metadata={
+                    "decision_id": str(decision.id),
                     "thread_id": str(
                         locked_thread.id
                     ),
+                    "violation_code": violation_code_snapshot,
+                    "policy_version": COMMUNITY_POLICY_VERSION,
                 },
             )
 
@@ -643,7 +751,14 @@ def resolve_safety_case(
         return {
             "case": case,
             "thread": locked_thread,
+            "decision": decision,
+            "report_outcomes": report_outcomes,
             "reporter_ids": reporter_ids,
+            "confirmed_reporter_ids": {
+                row["reporter_id"]
+                for row in report_outcomes
+                if row["outcome"] == FlagResolutionLog.ReportOutcome.CONFIRMED
+            },
             "contributor_ids": contributor_ids,
             "author_id": locked_thread.author_id,
         }

@@ -219,6 +219,11 @@ class NotificationFoundationTests(TestCase):
         self.assertEqual(notification_destination(row), f"/analysis/{row.target_id}")
         row.target_type = Notification.TargetType.WORKSPACE
         self.assertEqual(notification_destination(row), "/workspace")
+        row.target_type = Notification.TargetType.MODERATION_OUTCOME
+        self.assertEqual(
+            notification_destination(row),
+            f"/community/moderation/outcomes/{row.target_id}",
+        )
         row.target_type = Notification.TargetType.OFFICIAL_FACT_CHECK
         self.assertIsNone(notification_destination(row))
         row.target_type = Notification.TargetType.ORGANIZATION

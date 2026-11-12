@@ -1288,6 +1288,8 @@ class ModerationCaseFoundationTests(APITestCase):
             actor=self.moderator,
             action="REMOVE",
             notes="Confirmed policy violation.",
+            violation_code="HARASSMENT_TARGETED_ABUSE",
+            confirmed_report_ids=[flag.id],
         )
 
         self.thread.refresh_from_db()
@@ -1308,6 +1310,11 @@ class ModerationCaseFoundationTests(APITestCase):
         log = FlagResolutionLog.objects.get(thread=self.thread)
 
         self.assertTrue(log.is_valid_report)
+        self.assertEqual(
+            log.report_outcome,
+            FlagResolutionLog.ReportOutcome.CONFIRMED,
+        )
+        self.assertIsNotNone(log.safety_decision_id)
 
     def test_same_user_can_report_again_after_resolution(self):
         from api.moderation_service import (
@@ -1350,8 +1357,13 @@ class ModerationCaseFoundationTests(APITestCase):
         self.assertIsNone(second_flag.resolved_at)
 
     def test_reporting_thread_does_not_change_community_status(self):
+        reporter = User.objects.create_user(
+            username="casereporter",
+            email="casereporter@test.com",
+            password="pass1234",
+        )
         client = APIClient()
-        client.force_authenticate(user=self.author)
+        client.force_authenticate(user=reporter)
 
         self.assertEqual(
             self.thread.status,

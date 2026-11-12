@@ -814,3 +814,87 @@
       animation: none;
    }
 }
+
+
+/* Phase B: reveal policy-specific controls only while confirming removal. */
+.safety-removal-details {
+   display: grid;
+   gap: 10px;
+   padding: 14px;
+   border: 1px solid var(--border-default);
+   border-radius: 10px;
+   background: var(--bg-subtle);
+}
+
+.safety-removal-details > label,
+.safety-report-confirmation legend {
+   color: var(--text-main);
+   font-size: 0.74rem;
+   font-weight: 750;
+}
+
+.safety-policy-helper,
+.safety-report-confirmation > p {
+   margin: 0;
+   color: var(--text-muted);
+   font-size: 0.72rem;
+   line-height: 1.5;
+}
+
+.safety-policy-helper a {
+   color: var(--brand-primary);
+   font-weight: 700;
+}
+
+.safety-report-confirmation {
+   min-width: 0;
+   margin: 4px 0 0;
+   padding: 0;
+   border: 0;
+}
+
+.safety-report-confirmation-list {
+   display: grid;
+   gap: 8px;
+   margin-top: 9px;
+}
+
+.safety-report-confirmation-list label {
+   display: flex;
+   align-items: flex-start;
+   gap: 9px;
+   padding: 10px;
+   border: 1px solid var(--border-default);
+   border-radius: 9px;
+   background: var(--bg-surface);
+   cursor: pointer;
+}
+
+.safety-report-confirmation-list input {
+   margin-top: 2px;
+}
+
+.safety-report-confirmation-list span {
+   min-width: 0;
+   display: grid;
+   gap: 2px;
+}
+
+.safety-report-confirmation-list strong {
+   color: var(--text-main);
+   font-size: 0.76rem;
+}
+
+.safety-report-confirmation-list small {
+   color: var(--text-muted);
+   line-height: 1.4;
+   overflow-wrap: anywhere;
+}
+
+
+.safety-decision-explanation-helper {
+   margin: -4px 0 0;
+   color: var(--text-muted);
+   font-size: 0.72rem;
+   line-height: 1.5;
+}
