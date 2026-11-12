@@ -1331,8 +1331,14 @@ function SafetyReviewPanel() {
                                     )}
 
                                     <label htmlFor="safety-moderator-notes">
-                                       Review notes {selectedActionDetail.notesRequired ? "(required)" : "(optional)"}
+                                       {decisionAction === "ESCALATE" ? "Escalation notes" : "Decision explanation"}{" "}
+                                       {selectedActionDetail.notesRequired ? "(required)" : "(optional)"}
                                     </label>
+                                    {decisionAction !== "ESCALATE" && (
+                                       <p className="safety-decision-explanation-helper">
+                                          This explanation is shown to affected users. Keep it concise and do not include internal-only details.
+                                       </p>
+                                    )}
                                     <Textarea
                                        ref={decisionNotesRef}
                                        id="safety-moderator-notes"
