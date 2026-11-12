@@ -447,6 +447,7 @@ def invariant_results(calibration=DEFAULT_CALIBRATION):
     expert_depth_probe = _progression(
         95.0,
         25,
+        25,
         calibration,
     )
 
