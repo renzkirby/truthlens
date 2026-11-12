@@ -271,7 +271,7 @@ function GovernanceNoticePage() {
                         <p>{notice.rationale || "No additional rationale was recorded."}</p>
                      </div>
                      <p className="tl-governance-policy-link">
-                        <Link to="/partner-guidelines">Read the Partner Organization Guidelines</Link>
+                        <Link to="/partner-guidelines?document=governance">Read the Partnership Governance & Enforcement Policy</Link>
                      </p>
                      {governanceEntries.length ? (
                         <dl className="tl-governance-detail-list">
