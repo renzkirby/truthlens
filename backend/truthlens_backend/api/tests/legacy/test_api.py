@@ -425,6 +425,7 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
                 "evidence_caption": "Allowed evidence",
                 "evidence_url": "https://proof.example.com",
                 "evidence_type": EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
+                "evidence_verdict": AdjudicationDecision.Verdict.FACT,
                 "contributor_trust_snapshot": 9999,
             },
             format="json",
@@ -462,6 +463,7 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
                 "evidence_caption": "Safety moderator community evidence",
                 "evidence_url": "https://safety-proof.example.com",
                 "evidence_type": EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
+                "evidence_verdict": AdjudicationDecision.Verdict.FACT,
             },
             format="json",
         )
@@ -485,6 +487,7 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
                 "evidence_caption": "Owner evidence",
                 "evidence_url": "https://owner-proof.example.com",
                 "evidence_type": EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
+                "evidence_verdict": AdjudicationDecision.Verdict.FACT,
             },
             format="json",
         )
