@@ -101,7 +101,9 @@ A separate parity test verifies that the simulator's mathematical output matches
 | 49 verified / 1 rejected | 77.22 | Trusted Contributor | +22.22 | 0.00 | +5 | 0 |
 | 50 verified + one removed thread | 73.15 | Trusted Contributor | +23.15 | 0.00 | +5 | -5 |
 | 25 valid Safety reports only | 76.55 | Trusted Contributor | +21.55 | 0.00 | +5 | 0 |
-| 25 invalid Safety reports only | 28.45 | New Contributor | -21.55 | 0.00 | 0 | 0 |
+| 25 dismissed Safety reports only | 50.00 | Provisional | 0.00 | 0.00 | 0 | 0 |
+
+> **Report-semantics update:** dismissed Safety reports are neutral. They remain in moderation history but are excluded from Trust Score resolved-action depth, quality success/failure counts, successful-month history, and vote-weight maturation. Confirmed Safety reports remain positive reputation actions.
 | 18 verified / 7 rejected, no votes | 64.48 | Contributor | +9.48 | 0.00 | +5 | 0 |
 | Same 18/7 + ten fresh-account upvotes | 75.49 | Trusted Contributor | +9.48 | +11.01 | +5 | 0 |
 | 25/25 verified + ten fresh-account downvotes | 65.54 | Contributor | +21.55 | -11.01 | +5 | 0 |
