@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
@@ -532,14 +532,20 @@ function PartnerOrganizationGuidelinesPage() {
    const { user } = useAuth();
    const [searchParams] = useSearchParams();
    const requestedDocument = searchParams.get("document") || "guidelines";
-   const currentDocument = governanceDocuments.find((document) => document.key === requestedDocument)
-      || governanceDocuments[0];
-   const currentSections = currentDocument.key === "guidelines"
-      ? sections
-      : (currentDocument.sectionTitles || []).map((title, index) => ({
-         id: `policy-section-${index + 1}`,
-         title,
-      }));
+   const currentDocument = useMemo(
+      () => governanceDocuments.find((document) => document.key === requestedDocument)
+         || governanceDocuments[0],
+      [requestedDocument],
+   );
+   const currentSections = useMemo(
+      () => currentDocument.key === "guidelines"
+         ? sections
+         : (currentDocument.sectionTitles || []).map((title, index) => ({
+            id: `policy-section-${index + 1}`,
+            title,
+         })),
+      [currentDocument],
+   );
    const [activeSection, setActiveSection] = useState(currentSections[0]?.id || "");
 
    const location = useLocation();
@@ -572,7 +578,7 @@ function PartnerOrganizationGuidelinesPage() {
 
       sectionNodes.forEach((node) => observer.observe(node));
       return () => observer.disconnect();
-   }, [requestedDocument]);
+   }, [currentSections]);
 
    if (!canView) {
       return <Navigate to="/community" replace />;
