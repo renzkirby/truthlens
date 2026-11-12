@@ -705,8 +705,8 @@ def diagnostic_results(calibration=DEFAULT_CALIBRATION):
         "failed_actions_leave_provisional": {
             "scenario": failed_only,
             "finding": (
-                "Three resolved failures currently satisfy the action-volume "
-                "gate for New Contributor."
+                "Three resolved failures remain Provisional because current "
+                "production progression requires at least one validated action."
             ),
         },
         "evidence_report_equivalence": {
