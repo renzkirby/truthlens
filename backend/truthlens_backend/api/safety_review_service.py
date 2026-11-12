@@ -318,6 +318,18 @@ def schedule_safety_resolution_trust_updates(result, *, action=None):
         for contributor_id in result.get("contributor_ids", set())
     )
 
+    # The same account can legitimately appear in more than one affected role
+    # (for example reporter and evidence contributor). Recompute each user only
+    # once per committed Safety resolution.
+    deduped_targets = []
+    seen_user_ids = set()
+    for target_type, user_id in targets:
+        if user_id in seen_user_ids:
+            continue
+        seen_user_ids.add(user_id)
+        deduped_targets.append((target_type, user_id))
+    targets = deduped_targets
+
     case = result.get("case")
     thread = result.get("thread")
     case_id = getattr(case, "pk", None)
