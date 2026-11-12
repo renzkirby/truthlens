@@ -20,6 +20,7 @@ from api.models import (
     UserProfile,
 )
 from api.moderation_service import ModerationCaseError, create_moderation_case
+from api.trust_service import calculate_trust_components
 
 
 class SafetyCaseApiTests(APITestCase):
@@ -693,6 +694,13 @@ class SafetyCaseApiTests(APITestCase):
     def test_dismiss_remains_successful_when_trust_dispatch_fails(self, delay):
         delay.side_effect = ConnectionError("Redis unavailable")
         self._claim_case()
+        for user in (
+            self.reporter_one,
+            self.reporter_two,
+            self.contributor,
+        ):
+            user.profile.trust_score = 1.0
+            user.profile.save(update_fields=["trust_score"])
 
         with self.assertLogs("api.safety_review_service", level="ERROR") as logs:
             with self.captureOnCommitCallbacks(execute=True):
@@ -723,6 +731,16 @@ class SafetyCaseApiTests(APITestCase):
                 self.contributor.id,
             },
         )
+        for user in (
+            self.reporter_one,
+            self.reporter_two,
+            self.contributor,
+        ):
+            user.profile.refresh_from_db()
+            self.assertEqual(
+                user.profile.trust_score,
+                calculate_trust_components(user)["trust_score"],
+            )
         self.assertTrue(
             any(
                 f"case_id={self.case.id}" in message
@@ -735,6 +753,14 @@ class SafetyCaseApiTests(APITestCase):
     def test_remove_remains_successful_when_trust_dispatch_fails(self, delay):
         delay.side_effect = ConnectionError("Redis unavailable")
         self._claim_case()
+        for user in (
+            self.reporter_one,
+            self.reporter_two,
+            self.author,
+            self.contributor,
+        ):
+            user.profile.trust_score = 1.0
+            user.profile.save(update_fields=["trust_score"])
 
         with self.captureOnCommitCallbacks(execute=True):
             response = self._client_for(self.moderator).post(
@@ -760,6 +786,17 @@ class SafetyCaseApiTests(APITestCase):
                 self.contributor.id,
             },
         )
+        for user in (
+            self.reporter_one,
+            self.reporter_two,
+            self.author,
+            self.contributor,
+        ):
+            user.profile.refresh_from_db()
+            self.assertEqual(
+                user.profile.trust_score,
+                calculate_trust_components(user)["trust_score"],
+            )
 
     @patch("api.tasks.recompute_user_trust_score_task.delay")
     @patch("api.safety_review_service.resolve_safety_case")
