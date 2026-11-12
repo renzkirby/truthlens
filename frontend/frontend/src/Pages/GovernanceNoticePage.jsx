@@ -271,7 +271,7 @@ function GovernanceNoticePage() {
                         <p>{notice.rationale || "No additional rationale was recorded."}</p>
                      </div>
                      <p className="tl-governance-policy-link">
-                        <Link to="/partner-guidelines">Read the Partner Organization Guidelines</Link>
+                        <Link to="/partner-guidelines?document=governance">Read the Partnership Governance & Enforcement Policy</Link>
                      </p>
                      {governanceEntries.length ? (
                         <dl className="tl-governance-detail-list">
@@ -364,9 +364,9 @@ function GovernanceNoticePage() {
                <section className="tl-governance-card tl-governance-card--quiet">
                   <h2>Review of a partnership ending</h2>
                   <p>
-                     This notice does not provide a self-service termination appeal portal.
-                     Contact TruthLens through the established organization channel if a serious
-                     dispute requires administrative review.
+                     The current in-system reconsideration workflow does not apply to
+                     partnership-ending decisions. This notice does not provide a self-service
+                     termination reconsideration workflow.
                   </p>
                </section>
             ) : null}

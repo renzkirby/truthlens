@@ -1,282 +1,2050 @@
-// Generated from the authoritative TruthLens governance policy source documents.
+// Canonical operational representation of the TruthLens Partner policy set.
+// Keep external exports derived from this structured source to avoid policy drift.
 
-export const partnershipGovernanceFrameworkSections = [
+export const partnerGovernanceDocuments = [
    {
-      "id": "policy-section-1",
-      "title": "1. Purpose",
-      "body": "The TruthLens Partnership Governance Framework establishes the standards, decision\nfactors, enforcement principles, and lifecycle procedures governing Partner Organizations\nparticipating in the TruthLens professional verification ecosystem.\n\nIts purpose is to ensure that decisions affecting a Partner Organization—including corrective\naction, suspension, reinstatement, and ending of partnership—are based on defined\nstandards and documented reasons rather than arbitrary administrative discretion.\n\nThe framework applies specifically to an organization's status as a TruthLens Partner\nOrganization. Enforcement against an organization does not automatically constitute\nenforcement against the personal TruthLens accounts of its individual members unless those\nindividuals independently violate applicable platform rules."
+      "key": "guidelines",
+      "title": "Partner Organization Guidelines",
+      "description": "Professional and organizational standards for recognized Partner Organizations.",
+      "intro": "Professional and organizational standards for recognized TruthLens Partner Organizations and members acting through professional TruthLens privileges.",
+      "metadata": {
+         "version": "Draft 1.0",
+         "status": "Draft",
+         "effectiveDate": null,
+         "lastUpdated": "November 13, 2026"
+      },
+      "changeHistory": [
+         {
+            "version": "Draft 1.0",
+            "date": "November 13, 2026",
+            "summary": "Reorganized the Partner Organization Guidelines to separate professional Partner standards from partnership governance procedures. Governance actions are governed by the TruthLens Partnership Governance & Enforcement Policy."
+         }
+      ],
+      "sections": [
+         {
+            "id": "GUIDE-PURPOSE",
+            "anchor": "purpose",
+            "title": "1. Purpose",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "The TruthLens Partner Organization Guidelines establish the professional and organizational standards expected of organizations granted Partner Organization status within TruthLens."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Partner Organizations are entrusted with professional verification responsibilities and access to the TruthLens Verification Workspace. These responsibilities require standards beyond those applicable to ordinary Community Platform participation."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "These Guidelines are intended to promote accurate, transparent, impartial, accountable, secure, and responsible professional verification while preserving confidence in the TruthLens verification process."
+               }
+            ]
+         },
+         {
+            "id": "GUIDE-SCOPE",
+            "anchor": "scope",
+            "title": "2. Scope",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "These Guidelines apply to:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "recognized TruthLens Partner Organizations;",
+                     "authorized Organization Administrators and Owners;",
+                     "Lead Verifiers;",
+                     "Researchers; and",
+                     "other organization members exercising professional TruthLens privileges where applicable."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Individual organization members remain independently subject to applicable TruthLens Community Platform, account, privacy, and security policies."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "An organization's partnership status and an individual member's personal TruthLens account status are separate matters unless the circumstances independently justify action against both."
+               }
+            ]
+         },
+         {
+            "id": "GUIDE-VERIFICATION-INTEGRITY",
+            "anchor": "verification-integrity",
+            "title": "3. Professional Verification Integrity",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Partner Organizations must perform professional verification carefully, honestly, and using reasonable evidentiary standards."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Organizations are expected to:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "evaluate claims based on available evidence rather than a preferred outcome;",
+                     "ensure conclusions are reasonably supported by the evidence reviewed;",
+                     "distinguish established evidence from speculation, assumption, or unsupported inference;",
+                     "consider relevant information that both supports and contradicts a claim;",
+                     "accurately represent the contents, limitations, and context of evidence;",
+                     "avoid knowingly misleading conclusions;",
+                     "maintain professional review practices appropriate to the organization's verification responsibilities; and",
+                     "correct material verification errors when credible evidence demonstrates that correction is warranted."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "A Partner Organization must not knowingly:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "fabricate evidence or sources;",
+                     "materially alter evidence in a deceptive manner;",
+                     "suppress material contradictory evidence for the purpose of producing a preferred conclusion;",
+                     "misrepresent what a source states;",
+                     "knowingly publish a professional conclusion unsupported by the evidence reviewed; or",
+                     "manipulate professional verification outcomes for an improper purpose."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Good-faith disagreement, reasonable differences in professional judgment, and isolated errors that are responsibly addressed do not by themselves establish professional misconduct."
+               }
+            ]
+         },
+         {
+            "id": "GUIDE-EVIDENCE-METHODOLOGY",
+            "anchor": "sources-methodology",
+            "title": "4. Sources, Evidence, and Verification Methodology",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Partner Organizations should maintain sufficient evidentiary transparency for professional verification decisions to be understood and reviewed."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Where reasonably appropriate, professional verification should:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "identify significant sources relied upon;",
+                     "link to accessible sources where possible;",
+                     "favor suitable primary or authoritative evidence when reasonably available;",
+                     "assess the reliability and relevance of important sources;",
+                     "explain material limitations in the available evidence;",
+                     "avoid presenting weak or unreliable evidence as authoritative;",
+                     "distinguish direct evidence from secondary reporting or interpretation;",
+                     "consider credible evidence that may contradict the expected conclusion; and",
+                     "retain sufficient evidence and reasoning to support subsequent professional review."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Source confidentiality, privacy, security, copyright, legal restrictions, and legitimate safety concerns may limit what information can be publicly disclosed."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Such limitations do not remove the organization's responsibility to maintain an adequate internal evidentiary basis for its professional work."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Partner Organizations should apply verification methods consistently enough that substantially similar claims are not evaluated under intentionally different standards without a legitimate reason."
+               }
+            ]
+         },
+         {
+            "id": "GUIDE-IMPARTIALITY",
+            "anchor": "impartiality",
+            "title": "5. Impartiality and Conflicts of Interest",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Partner Organizations must apply substantially equivalent standards of evidence and verification regardless of the person, organization, political group, institution, commercial interest, or viewpoint associated with a claim."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Professional verification must not be used to:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "promote partisan interests through intentionally distorted verification;",
+                     "target individuals or groups using deliberately unequal evidentiary standards;",
+                     "shield favored persons or organizations from legitimate scrutiny;",
+                     "manipulate conclusions for political, commercial, organizational, or personal advantage; or",
+                     "allow an undisclosed material conflict of interest to determine a professional verification outcome."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Where a material conflict of interest could reasonably affect professional independence, the organization should disclose, manage, or appropriately reassign the affected work."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "The existence of a relationship, affiliation, or potential conflict does not automatically establish misconduct. The relevant concern is whether professional independence or fair treatment was materially compromised."
+               }
+            ]
+         },
+         {
+            "id": "GUIDE-CORRECTIONS",
+            "anchor": "corrections",
+            "title": "6. Corrections and Professional Accountability",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Partner Organizations are expected to respond responsibly when credible evidence demonstrates that professional verification work contains a material error."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Where correction is warranted, the organization should:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "acknowledge the material error;",
+                     "correct the affected professional record or publication using available TruthLens mechanisms;",
+                     "ensure that a corrected conclusion is distinguishable from the previous conclusion where applicable;",
+                     "document the basis for a material correction; and",
+                     "take reasonable measures to reduce recurrence when the issue demonstrates a process weakness."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "TruthLens should distinguish between:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "an isolated good-faith error that is appropriately corrected;",
+                     "repeated negligent failures;",
+                     "refusal to address a substantiated material error;",
+                     "concealment of a known material error; and",
+                     "deliberate falsification or manipulation."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "An error alone does not necessarily establish misconduct."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Professional accountability also includes reasonable cooperation when a legitimate review of professional work is necessary."
+               }
+            ]
+         },
+         {
+            "id": "GUIDE-TRANSPARENCY",
+            "anchor": "organizational-transparency",
+            "title": "7. Organizational Transparency and Public Representation",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Partner Organizations must provide materially accurate information concerning their identity and relationship with TruthLens."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Organizations must not deliberately misrepresent:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "their organizational identity;",
+                     "authorized representatives;",
+                     "professional credentials;",
+                     "ownership or controlling relationships where materially relevant;",
+                     "eligibility information supplied to TruthLens;",
+                     "their current organizational status;",
+                     "their current TruthLens partnership status; or",
+                     "other information material to recognition as a Partner Organization."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Authorized Partner Organization members may be identified through their professional organizational affiliation within supported TruthLens interfaces."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Professional identity should accurately reflect:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "the member's current Partner Organization;",
+                     "the member's current professional role where displayed; and",
+                     "the organization's current partnership status."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "A suspended or Former Partner must not represent itself as currently holding unrestricted Active Partner privileges."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Organization names, logos, professional labels, and other identity information displayed by TruthLens are identity and provenance aids. Their display does not by itself constitute endorsement of every statement, publication, or activity associated with the organization."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Historical professional work should preserve the organizational affiliation that was valid when the work was performed."
+               }
+            ]
+         },
+         {
+            "id": "GUIDE-WORKSPACE",
+            "anchor": "workspace-use",
+            "title": "8. Responsible Use of the Verification Workspace",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "TruthLens professional capabilities must be used only for authorized verification and organizational purposes."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Partner Organization members must not knowingly:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "access professional functionality they are not authorized to use;",
+                     "circumvent organization or role restrictions;",
+                     "misuse investigation information;",
+                     "impersonate another professional user;",
+                     "manipulate assignment, evidence, review, adjudication, or publication mechanisms;",
+                     "exploit vulnerabilities or security weaknesses;",
+                     "provide unauthorized persons with professional account access;",
+                     "falsify professional records; or",
+                     "use the Verification Workspace for malicious, fraudulent, or unrelated purposes."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Professional access credentials must be appropriately protected."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Suspected compromise of a professional account should be reported and addressed promptly."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "A suspected security compromise is not automatically treated as misconduct by the affected organization. TruthLens may restrict professional access when reasonably necessary to protect the platform while the incident is assessed."
+               }
+            ]
+         },
+         {
+            "id": "GUIDE-PRIVACY",
+            "anchor": "privacy-data-handling",
+            "title": "9. Privacy, Confidentiality, and Responsible Data Handling",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Partner Organizations and their authorized members may encounter information submitted or maintained for professional verification purposes."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Such information must be handled responsibly and only for legitimate professional purposes."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Partner Organization members must not:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "disclose restricted verification information without authorization;",
+                     "use user-submitted verification material for an unrelated purpose;",
+                     "unnecessarily expose personal, confidential, or security-sensitive information;",
+                     "use professional access to obtain information for personal, commercial, political, or malicious purposes; or",
+                     "intentionally circumvent applicable privacy or access controls."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Where verification materials contain personal or sensitive information, Partner Organizations should limit access and disclosure to what is reasonably necessary for the professional task."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Privacy, legal, security, and safety requirements may appropriately limit public disclosure of evidence even when the evidence is relevant to professional verification."
+               }
+            ]
+         },
+         {
+            "id": "GUIDE-AI-RESPONSIBILITY",
+            "anchor": "ai-responsibility",
+            "title": "10. AI-Assisted Professional Responsibility",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "TruthLens may use artificial intelligence and automated systems to assist with tasks such as evidence discovery, analysis, organization, or preliminary verification assessment."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "AI assistance does not replace professional responsibility."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Partner Organizations remain responsible for professional conclusions and institutional publications issued through their professional authority."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Professional users should:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "review relevant evidence before adopting an AI-assisted conclusion;",
+                     "consider the reliability and limitations of AI-generated analysis;",
+                     "avoid treating generated statements as verified evidence merely because they were produced by an AI system;",
+                     "verify important citations, sources, and factual claims where necessary;",
+                     "correct unsupported or misleading AI-assisted output before professional use; and",
+                     "preserve the distinction between AI assistance, human professional adjudication, and institutional publication."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Partner Organizations must not knowingly present fabricated AI-generated evidence as authentic evidence."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "They must not knowingly represent an automated assessment as though it were an independent human professional determination when that representation would be materially misleading."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Misuse involving AI is evaluated according to the underlying conduct rather than through a separate AI-specific governance category."
+               }
+            ]
+         },
+         {
+            "id": "GUIDE-CAPACITY",
+            "anchor": "governance-capacity",
+            "title": "11. Organizational Governance and Capacity",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "A Partner Organization must retain sufficient organizational capacity to responsibly exercise its TruthLens partnership privileges."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "The organization should maintain:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "identifiable responsible leadership;",
+                     "appropriate administration of organization membership, access, and roles;",
+                     "reasonable internal accountability;",
+                     "the ability to perform its professional verification responsibilities;",
+                     "current means for TruthLens to communicate material partnership matters; and",
+                     "sufficient organizational continuity to support Active Partner status."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Temporary organizational difficulty does not automatically constitute misconduct."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Governance or capacity becomes a partnership concern when it materially prevents the organization from fulfilling professional responsibilities or creates a significant integrity, security, operational, or accountability risk."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Organizations should inform TruthLens of material changes that substantially affect their ability to satisfy partnership responsibilities."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Examples may include:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "organizational dissolution;",
+                     "cessation of relevant verification operations;",
+                     "material restructuring affecting responsible leadership;",
+                     "permanent or significant loss of operational capacity;",
+                     "serious security compromise affecting professional access; or",
+                     "a decision by the organization to conclude its partnership."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Routine organizational changes do not require governance action unless they materially affect the partnership."
+               }
+            ]
+         },
+         {
+            "id": "GUIDE-RESPONSIVENESS",
+            "anchor": "responsiveness",
+            "title": "12. Responsiveness and Cooperation",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Partner Organizations are expected to maintain reasonable communication concerning material partnership obligations."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Organizations should respond within a reasonable period to matters involving:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "serious professional verification concerns;",
+                     "professional access or security issues;",
+                     "required remediation;",
+                     "organizational-status inquiries;",
+                     "partnership governance;",
+                     "significant corrections; and",
+                     "other material communications related to their professional responsibilities."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Temporary inactivity or delayed communication does not automatically establish a violation."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "However, prolonged inactivity, abandonment of partnership responsibilities, or persistent non-responsiveness to necessary governance matters may affect continued Active Partner status."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "When TruthLens has a reasonable basis to review a possible partnership issue, the Partner Organization is expected to cooperate in good faith."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Depending on the issue, cooperation may include:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "responding to identified concerns;",
+                     "providing relevant non-privileged information;",
+                     "clarifying professional decisions;",
+                     "identifying corrective measures;",
+                     "addressing security concerns;",
+                     "completing reasonable remediation requirements; or",
+                     "updating materially important organizational information."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Requests for information should be proportionate to the matter being reviewed."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "TruthLens should not require disclosure of information unrelated to the governance concern."
+               }
+            ]
+         },
+         {
+            "id": "GUIDE-RESPONSIBILITY",
+            "anchor": "organizational-responsibility",
+            "title": "13. Organizational Responsibility and Individual Conduct",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "TruthLens distinguishes misconduct attributable to an individual organization member from conduct properly attributable to the Partner Organization."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "An isolated unauthorized action by one member should not automatically be considered institutional misconduct."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Relevant considerations may include whether:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "organization leadership authorized the conduct;",
+                     "the conduct resulted from an organizational policy or established practice;",
+                     "multiple members engaged in similar conduct;",
+                     "leadership knew of the problem and failed to reasonably address it;",
+                     "the organization attempted to conceal the conduct;",
+                     "the issue demonstrates a systemic organizational failure; or",
+                     "the organization appropriately investigated and corrected the individual conduct."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "This distinction protects Partner Organizations from disproportionate institutional consequences for isolated unauthorized conduct while preserving accountability for systemic or organization-authorized failures."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Individual members remain independently accountable under applicable Community Platform and account rules where their own conduct warrants action."
+               }
+            ]
+         },
+         {
+            "id": "GUIDE-GOVERNANCE-RELATIONSHIP",
+            "anchor": "relationship-governance",
+            "title": "14. Relationship to Partnership Governance",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Potential violations of these Guidelines are handled under the TruthLens Partnership Governance & Enforcement Policy."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "The Governance & Enforcement Policy defines:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "the governance factors used to classify concerns;",
+                     "severity assessment;",
+                     "suspension procedures;",
+                     "remediation requirements;",
+                     "reinstatement;",
+                     "partnership-ending procedures;",
+                     "governance notices;",
+                     "reconsideration;",
+                     "reviewer independence;",
+                     "governance information visibility;",
+                     "historical preservation; and",
+                     "governance auditability."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "These Guidelines define what Partner Organizations are expected to do."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "The Governance & Enforcement Policy defines how TruthLens responds when a material partnership concern arises."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "The two documents should therefore be interpreted together without treating overlapping text as separate or additional obligations."
+               }
+            ]
+         },
+         {
+            "id": "GUIDE-PRINCIPLE",
+            "anchor": "guiding-principle",
+            "title": "15. Guiding Principle",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "TruthLens Partner status represents an ongoing professional relationship based on evidence-based verification, impartiality, transparency, accountability, responsible platform use, organizational integrity, and continued capacity to fulfill professional responsibilities."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "The purpose of these Guidelines is not to punish good-faith mistakes or reasonable professional disagreement."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Their purpose is to protect the reliability and integrity of professional verification while giving Partner Organizations clear standards by which their participation can be understood, evaluated, corrected, and governed."
+               }
+            ]
+         }
+      ]
    },
    {
-      "id": "policy-section-2",
-      "title": "2. Core Governance Principles",
-      "body": "TruthLens partnership governance should follow the following principles:\n\n         Principle                                      Meaning\n\n Evidence-based               Administrative actions must be supported by identifiable facts\n decisions                    or evidence.\n\n Proportionality              The response should reflect the severity, context, harm,\n                              history, and remediability of the issue.\n\n Consistency                  Comparable circumstances should generally be assessed\n                              using the same standards.\n\n Documented rationale         Suspension, reinstatement, and ending of partnership require\n                              a recorded rationale.\n\n Opportunity to               Correctable problems should ordinarily be given a\n remediate                    reasonable path toward compliance.\n\n Protection against             TruthLens may temporarily restrict partnership privileges\n urgent risk                    when credible serious risks require immediate action while\n                                review continues.\n\n Transparency to the            The organization should be informed of the applicable factor,\n affected organization          reason, consequences, and any corrective requirements.\n\n Human administrative           Automated signals may identify possible concerns but should\n responsibility                 not automatically suspend or terminate a Partner\n                                Organization.\n\n Historical integrity           Governance actions must not erase legitimate historical\n                                attribution, completed verification work, or institutional\n                                provenance."
-   },
-   {
-      "id": "policy-section-3",
-      "title": "3. Partner Organization Standards",
-      "body": "Partner Organizations are expected to comply with eight major standards.\n\nStandard A — Verification Integrity and Methodology\nPartner Organizations must conduct professional verification using reasonable,\nevidence-based, and consistently applied methods.\n\nRelevant expectations include reliable sourcing, appropriate use of primary evidence,\nconsideration of evidence both supporting and contradicting a claim, accurate representation\nof sources, appropriately supported conclusions, and avoidance of knowingly misleading\nverification results.\n\nStandard B — Impartiality and Conflicts of Interest\nPartner Organizations must exercise their verification responsibilities independently and\nfairly.\n\nOrganizations should not manipulate verification outcomes to favor political, commercial,\norganizational, or personal interests. Material conflicts of interest affecting a verification\nshould be disclosed or appropriately managed.\n\nStandard C — Transparency and Honest\nRepresentation\nPartner Organizations must provide truthful information about their identity, organizational\nstatus, representatives, credentials, and other information materially relevant to their\nTruthLens partnership.\n\nDeliberate concealment or falsification of material partnership information may constitute a\nserious integrity violation.\n\nStandard D — Corrections and Accountability\nPartner Organizations are expected to acknowledge and correct material verification errors\nwhen credible evidence establishes that a correction is warranted.\n\nAn isolated error that is responsibly corrected should not be treated the same as repeated\nerrors, concealment of errors, or refusal to address substantiated problems.\n\nStandard E — Platform and Partnership Compliance\nPartner Organizations and authorized members must use TruthLens professional tools in\naccordance with applicable platform rules and partnership requirements.\n\nThis includes appropriate use of the Verification Workspace, professional access privileges,\ninvestigation information, publication functionality, and other restricted capabilities.\n\nStandard F — Organizational Governance and Capacity\nA Partner Organization must remain sufficiently operational and accountable to perform its\nprofessional responsibilities.\n\nRelevant concerns can include loss of responsible organizational leadership, inability to\nmaintain verification operations, serious internal governance failures affecting the\npartnership, or failure to maintain necessary organizational contacts.\n\nOrganizational difficulty by itself should not be treated as misconduct. The relevant question\nis whether it materially prevents the organization from fulfilling its TruthLens responsibilities.\n\nStandard G — Security, Legal, and Institutional Integrity\nPartner Organizations must not use the partnership to facilitate fraud, malicious activity,\nsecurity abuse, or other serious misconduct materially relevant to TruthLens.\n\nSecurity incidents such as suspected account compromise should initially be treated as\nrisk-management matters rather than proof that the organization itself acted maliciously.\n\nStandard H — Responsiveness and Partnership\nContinuity\nPartner Organizations are expected to remain reasonably responsive to material\ncommunications concerning their partnership and to maintain sufficient participation to justify\ncontinued active Partner status.\n\nTemporary inactivity should not automatically trigger suspension. Persistent or prolonged\ninactivity, abandonment of partnership responsibilities, or repeated failure to respond to\nnecessary governance communications may warrant administrative intervention."
-   },
-   {
-      "id": "policy-section-4",
-      "title": "4. Partnership Violation Factors",
-      "body": "When an organization is subject to a governance action, TruthLens should classify the\nunderlying issue using standardized factors.\n\n                      Code                             Partnership             Examples\n                                                         factor\n\n VERIFICATION_STANDARDS                             Verification           Unsupported\n                                                    Standards              conclusions, serious\n                                                    Violation              sourcing failures,\n                                                                           manipulation of\n                                                                           evidence, repeated\n                                                                           methodological\n                                                                           departures\n\n IMPARTIALITY_CONFLICT                              Impartiality or        Undisclosed\n                                                    Conflict-of-Interest   material conflicts,\n                                                    Violation              preferential\n                                                                           verification\n                                                                           standards, improper\n                                                                           external influence\n\n TRANSPARENCY_MISREPRESENTATION                Transparency or       Materially false\n                                               Misrepresentation     organizational\n                                               Violation             information,\n                                                                     deliberate\n                                                                     concealment, false\n                                                                     credentials\n\n CORRECTIONS_ACCOUNTABILITY                    Correction or         Refusal to correct a\n                                               Accountability        substantiated\n                                               Failure               material error,\n                                                                     concealment of\n                                                                     known errors,\n                                                                     recurring unresolved\n                                                                     correction failures\n\n PLATFORM_PARTNERSHIP                          Platform or           Misuse of\n                                               Partnership Policy    professional tools,\n                                               Violation             unauthorized\n                                                                     access or actions,\n                                                                     violation of\n                                                                     partnership\n                                                                     requirements\n\n GOVERNANCE_CAPACITY                           Organizational        Loss of responsible\n                                               Governance or         administration,\n                                               Capacity Concern      inability to perform\n                                                                     partnership\n                                                                     responsibilities,\n                                                                     unresolved\n                                                                     governance\n                                                                     breakdown\n\n SECURITY_INTEGRITY                            Security, Legal, or   Fraud, malicious\n                                               Institutional         platform activity,\n                                               Integrity Risk        compromised\n                                                                     professional access,\n                                                                     serious misconduct\n                                                                     relevant to\n                                                                     partnership\n\n INACTIVITY_RESPONSIVENESS                     Inactivity or         Prolonged inactivity,\n                                               Non-responsivene      abandoned\n                                               ss                    responsibilities,\n                                                                     persistent failure to\n                                                                     respond to required\n                                                                     communications\n\nA governance action may involve more than one factor when genuinely necessary.\n\nAn “Other” classification should be available only as a controlled exception and should\nrequire a detailed explanation and identification of the partnership standard involved.\n\nReputational harm alone is not a valid violation factor. A concern about reputation must\nbe traced to an objective underlying conduct or standard."
-   },
-   {
-      "id": "policy-section-5",
-      "title": "5. Severity Assessment",
-      "body": "The violation factor answers what type of problem occurred.\n\nSeverity answers how serious the particular occurrence is.\n\nTruthLens should assess severity using the following considerations:\n\n      Assessment                                       Question\n     consideration\n\n Nature                   What standard was breached and what actually occurred?\n\n Actual or potential      What harm resulted, or could reasonably have resulted?\n harm\n\n Intent                   Was the conduct accidental, negligent, reckless, or deliberate?\n\n Scope                    Was this isolated or systemic across multiple investigations,\n                          members, or activities?\n\n History                  Is there a relevant pattern of similar prior issues?\n\n Correctability           Can the problem reasonably be fixed?\n\n Response                 Did the organization acknowledge and meaningfully address the\n                          issue?\n\n Prior remediation        Were earlier warnings or remediation requirements ignored or\n                          unsuccessful?\n\n Evidence confidence      How strong is the evidence supporting the finding?\n\n Urgency                  Does continuing normal partnership access create an immediate\n                          material risk?\n\nThese factors should inform administrative judgment rather than produce an automatic\nnumerical score."
-   },
-   {
-      "id": "policy-section-6",
-      "title": "6. Severity Levels",
-      "body": "Severity                     General definition                      Typical governance\n                                                                           response\n\n Low          Isolated, limited-impact, non-systemic issue        Guidance, notice, or\n              that can readily be corrected                       documented corrective\n                                                                  instruction\n\n Moderat      Meaningful violation, recurring minor issue, or     Formal warning and\n e            conduct requiring formal correction                 remediation\n\n High         Serious professional, integrity, compliance,        Suspension and formal\n              governance, or security concern that remains        remediation\n              potentially correctable\n\n Critical     Severe, deliberate, systemic, fraudulent,           Immediate protective\n              dangerous, or fundamentally incompatible            suspension and/or\n              conduct, or a serious condition that cannot         consideration of ending\n              reasonably be remedied                              partnership\n\nSeverity does not automatically determine the outcome.\n\nA first violation may be Critical.\n\nSeveral Low-level violations may remain Low or become more serious if they demonstrate\nan unresolved pattern.\n\nTruthLens therefore should not implement a fixed rule such as “three violations automatically\nend the partnership.”"
-   },
-   {
-      "id": "policy-section-7",
-      "title": "7. Enforcement Lifecycle",
-      "body": "TruthLens should use a progressive governance lifecycle when circumstances allow.\n\n         Stage                                          Purpose\n\n Notice / Guidance        Inform the organization of a limited issue and expected standard\n\n Formal Corrective        Identify an established concern and specify necessary remediation\n Action\n\n Suspension               Temporarily pause active partnership privileges because a serious\n                          issue requires correction, investigation, or administrative resolution\n\n Reinstatement /        Restore active partnership after necessary conditions have been\n Monitoring             satisfied, with additional monitoring where appropriate\n\n End Partnership        Conclude the organization's active Partner status when continued\n                        partnership is no longer appropriate or possible\n\nProgression through every stage is not mandatory.\n\nA sufficiently serious matter may justify immediate suspension or, in exceptional cases,\npartnership termination."
-   },
-   {
-      "id": "policy-section-8",
-      "title": "8. Suspension",
-      "body": "Suspension is a temporary partnership status and must not be treated as synonymous\nwith permanent termination.\n\nEvery suspension must have a documented factor, severity assessment, reason, and\nadministrative purpose.\n\nTruthLens recognizes three forms of suspension.\n\n Suspension type                  Purpose                      Typical circumstances\n\n Remedial            Provide time for an organization    Serious but correctable\n Suspension          to correct an established serious   verification, governance,\n                     problem                             transparency, or compliance\n                                                         failure\n\n Precautionary       Temporarily reduce risk while a     Suspected security compromise,\n Suspension          credible serious concern is         credible serious misconduct\n                     investigated                        allegation, uncertain high-risk\n                                                         situation\n\n Administrative      Address circumstances where         Prolonged inactivity, loss of\n Suspension          the organization cannot currently   required organizational contact,\n                     fulfill partnership requirements    temporary operational incapacity\n\nA precautionary suspension is not itself a finding of guilt or misconduct."
-   },
-   {
-      "id": "policy-section-9",
-      "title": "9. Required Suspension Record",
-      "body": "Before confirming suspension, the Platform Admin should record the following governance\ninformation:\n\n             Information                                Requirement\n\n Action                                  Suspend Partnership\n\n Suspension type                         Remedial, Precautionary, or Administrative\n\n Factor(s)                               Required\n\n Severity                                Required\n\n Reason / rationale                      Required\n\n Relevant policy provision               Required where available\n\n Supporting basis                        Required internally\n\n Required remediation                    Required for remedial suspension\n\n Review or deadline date                 Required when applicable\n\n Effective date                          Required\n\n Responsible administrator               Automatically recorded\n\n Previous relevant governance            Associated where applicable\n actions\n\nThe reason must contain enough information to explain the decision.\n\nEntries such as “Policy violation,” “Bad behavior,” “Admin decision,” or “Failed\nstandards” are insufficient by themselves."
-   },
-   {
-      "id": "policy-section-10",
-      "title": "10. Effects of Suspension",
-      "body": "Suspension affects the organization's professional Partner privileges, not the historical\nexistence of the organization.\n\nHistorical published fact-checks, completed professional reviews, attribution, audit\ninformation, and institutional provenance should remain preserved.\n\nThe exact handling of ongoing investigations, new assignments, member Workspace\naccess, publications, and professional identity should be defined according to the technical\ncapabilities and continuity requirements of TruthLens.\n\nIndividual organization members should not automatically lose their ordinary personal\nTruthLens accounts solely because their organization's partnership was suspended."
-   },
-   {
-      "id": "policy-section-11",
-      "title": "11. Remediation",
-      "body": "Where an issue is correctable, TruthLens should clearly communicate what the organization\nmust do to return to compliance.\n\nA remediation requirement should identify:\n\n          Element                                     Purpose\n\n Problem                    What must be corrected\n\n Required action            What the organization needs to do\n\n Evidence of compliance     How TruthLens will determine that remediation succeeded\n\n Deadline                   When remediation should be completed\n\n Review                     How compliance will be reassessed\n\n Consequence                What may occur if remediation is not completed\n\nFailure to complete reasonable remediation may be considered when determining whether\nstronger action is necessary.\n\nFailure should not automatically trigger termination if circumstances justify additional time or\nanother proportionate response."
-   },
-   {
-      "id": "policy-section-12",
-      "title": "12. Reinstatement",
-      "body": "Reinstatement means that an organization previously suspended has regained active\nPartner status.\n\nReinstatement may occur when the underlying risk has been resolved, required corrective\nactions have been completed, the organization has returned to compliance, or investigation\nestablishes that continued suspension is no longer justified.\n\nThe reinstatement decision should itself be recorded.\n\nThe record should state why reinstatement was appropriate and, where relevant, whether\nadditional monitoring or conditions remain in place.\n\nReinstatement does not erase the historical suspension record."
-   },
-   {
-      "id": "policy-section-13",
-      "title": "13. Ending a Partnership",
-      "body": "Ending a partnership is distinct from suspension because the organization ceases to hold\nactive Partner Organization status.\n\nTruthLens should recognize three broad forms of partnership ending.\n\n    Ending type                                      Meaning\n\n Voluntary             The organization requests to leave the partnership\n Withdrawal\n\n Administrative        The organization no longer satisfies fundamental operational or\n Conclusion            eligibility requirements without necessarily having committed\n                       misconduct\n\n Termination for       TruthLens concludes that serious conduct, repeated\n Cause                 noncompliance, failed remediation, or another established violation\n                       makes continued partnership inappropriate\n\nThis distinction prevents an organization that voluntarily leaves TruthLens from being\ninaccurately represented as having been terminated for misconduct."
-   },
-   {
-      "id": "policy-section-14",
-      "title": "14. Grounds for Ending Partnership",
-      "body": "Ending partnership may be justified when one or more of the following thresholds are\nsatisfied.\n\n              Ground                                        Meaning\n\n Severe non-remediable               A Critical violation fundamentally incompatible with\n violation                           continued partnership\n\n Repeated or systemic serious        A demonstrated pattern establishes that the\n violations                          organization is not maintaining required standards\n\n Failed remediation                  Serious established problems remain unresolved after\n                                     reasonable corrective requirements and opportunity to\n                                     comply\n\n Permanent loss of eligibility or   The organization can no longer meaningfully satisfy\n operational capacity               fundamental partnership requirements\n\n Organization dissolution or        The organization no longer exists or no longer\n cessation of relevant              performs the activity underlying the partnership\n operations\n\n Voluntary withdrawal               The Partner Organization requests conclusion of the\n                                    partnership\n\nTermination for cause should not be based exclusively on vague concerns such as\nembarrassment, disagreement with TruthLens, public criticism, or reputational discomfort."
-   },
-   {
-      "id": "policy-section-15",
-      "title": "15. Required Partnership-Ending Record",
-      "body": "For any partnership ending, TruthLens should record:\n\n          Information                                  Requirement\n\n Action                      End Partnership\n\n Ending type                 Voluntary Withdrawal, Administrative Conclusion, or\n                             Termination for Cause\n\n Ground                      Required\n\n Partnership factor(s)       Required when an actual violation or compliance failure forms\n                             part of the decision\n\n Severity                    Required for termination based on violations\n\n Reason / rationale          Required\n\n Policy basis                Required where applicable\n\n Supporting basis            Required internally\n\n Prior remediation or        Associated where relevant\n suspension\n\n Effective date              Required\n\n Responsible                 Automatically recorded\n administrator"
-   },
-   {
-      "id": "policy-section-16",
-      "title": "16. Reason / Rationale Standard",
-      "body": "The structured factor and the written reason serve different purposes.\n\nFactor: identifies the standardized category of concern.\n\nReason: describes what actually happened and why the administrative action is justified.\n\nA sufficient rationale should state the material facts, relevant standard, and context\nnecessary to understand the decision.\n\nExample:\n\n      Factor: Verification Standards Violation​\n      Severity: High​\n      Reason: Multiple completed investigations relied primarily on unsupported\n      secondary evidence despite available authoritative sources. Two earlier\n      corrective notices concerning the same sourcing practice remained unresolved.​\n      Action: Remedial Suspension​\n      Required remediation: Review affected investigations and submit an updated\n      evidence-review procedure before reinstatement review.\n\nA reason should use neutral factual language and avoid unnecessary personal or sensitive\ninformation."
-   },
-   {
-      "id": "policy-section-17",
-      "title": "17. Notice to the Partner Organization",
-      "body": "When an organization is suspended or its partnership is ended, it should receive a durable\nnotice containing, as applicable:\n\n     Notice information                Requirement\n\n Governance action               Required\n\n Effective date                  Required\n\n Factor or ending basis          Required\n\n Severity                        Where applicable\n\n Reason                          Required\n\n Relevant policy standard        Required where\n                                 applicable\n\n Consequences                    Required\n\n Remediation requirements      For remedial action\n\n Deadline/review date          Where applicable\n\n Reconsideration information   Where supported\n\nThe organization should remain able to access the governance notice even when its\nprofessional privileges have been restricted."
-   },
-   {
-      "id": "policy-section-18",
-      "title": "18. Review, Reconsideration, and Reinstatement",
-      "body": "TruthLens should distinguish between two concepts.\n\nReconsideration applies when an organization believes that the administrative decision\nwas factually or procedurally incorrect.\n\nReinstatement applies when the organization accepts that a problem existed but\ndemonstrates that the underlying issue has been resolved and seeks restoration of active\npartnership.\n\nThe initial capstone implementation does not need to include a complex appellate tribunal or\nautomated appeals system. However, governance records and policies should preserve the\nability for a Partner Organization to request review and for an authorized Platform Admin to\ndocument the result.\n\nWhere practicable in future deployments, review of a disputed serious enforcement decision\nshould involve an authorized reviewer who did not make the original determination."
-   },
-   {
-      "id": "policy-section-19",
-      "title": "19. Public, Partner, and Internal Information",
-      "body": "Governance information should use three disclosure levels.\n\n          Level                                Appropriate information\n\n Internal Platform          Complete evidence, internal administrative notes,\n Governance                 security-sensitive information, decision history\n\n Affected Partner            Action, factor, rationale, policy basis, consequences,\n Organization                remediation requirements, deadlines\n\n Public Community            Partnership status and, where appropriate, a concise\n                             non-confidential explanation\n\nPrivate evidence, security details, personal information, or other sensitive material should\nnot automatically become public merely because a partnership action occurred.\n\nTruthLens should maintain accurate historical status without unnecessarily publicizing\nconfidential governance material."
-   },
-   {
-      "id": "policy-section-20",
-      "title": "20. Historical Preservation",
-      "body": "Suspension or ending of partnership must not rewrite historical facts.\n\nTruthLens should preserve completed verification activity, published fact-checks, institutional\nattribution, audit records, historical membership/role provenance where appropriate, and\nprior governance actions.\n\nAn organization whose partnership has ended should be represented as a Former Partner\nrather than deleted or retroactively treated as though it had never been a legitimate Partner\nOrganization."
-   },
-   {
-      "id": "policy-section-21",
-      "title": "21. Automated Signals and Human Decisions",
-      "body": "TruthLens may eventually use system data to identify potential governance concerns such\nas prolonged inactivity, repeated unresolved corrections, unusual professional account\nbehavior, or missed governance requirements.\n\nSuch signals should create review indicators, not automatic punishments.\n\nFinal suspension, reinstatement, and partnership-ending decisions remain accountable\nadministrative actions."
-   },
-   {
-      "id": "policy-section-22",
-      "title": "22. Administrative Authority",
-      "body": "Within the current TruthLens governance model, suspension, reinstatement, and ending of\nPartner Organization status are Platform Governance responsibilities.\n\nThe Platform Admin is the authorized role for these lifecycle decisions.\n\nSafety Moderators may handle reported community content within their assigned\nresponsibilities but should not independently alter Partner Organization partnership status\nunless TruthLens later explicitly expands their authority."
-   },
-   {
-      "id": "policy-section-23",
-      "title": "23. Governance Auditability",
-      "body": "Every material partnership lifecycle change should generate an immutable or appropriately\nprotected governance history record containing the decision, actor, timestamp, rationale, and\nrelevant lifecycle transition.\n\nThe current organization state answers:\n\n      “What is the organization's status now?”\n\nThe governance history answers:\n\n      “Why, when, and by whom did that status change?”\n\nBoth are necessary for administrative accountability."
-   },
-   {
-      "id": "policy-section-24",
-      "title": "24. Guiding Enforcement Rule",
-      "body": "The central TruthLens enforcement rule is:\n\n      A Partner Organization should receive the least severe action that\n      reasonably protects the integrity, security, reliability, and professional\n      standards of TruthLens, while allowing correctable problems a meaningful\n      opportunity for remediation. More severe action is justified when the\n      violation itself is severe, the risk requires immediate intervention,\n      comparable violations recur, remediation fails, or continued partnership is\n      no longer reasonably compatible with TruthLens standards."
+      "key": "governance",
+      "aliases": [
+         "framework",
+         "enforcement"
+      ],
+      "title": "Partnership Governance & Enforcement Policy",
+      "description": "Governance factors, severity, suspension, reinstatement, partnership ending, reconsideration, and audit safeguards.",
+      "intro": "Policy governing proportionate, documented, reviewable, and human-controlled governance involving TruthLens Partner Organizations.",
+      "metadata": {
+         "version": "Draft 1.0",
+         "status": "Draft",
+         "effectiveDate": null,
+         "lastUpdated": "November 13, 2026"
+      },
+      "changeHistory": [
+         {
+            "version": "Draft 1.0",
+            "date": "November 13, 2026",
+            "summary": "Consolidated the former Partnership Governance Framework and Partnership Enforcement Policy. Updated the policy to reflect the implemented lifecycle, suspension reconsideration, reviewer-independence safeguards, current system limitations, and readable policy references."
+         }
+      ],
+      "sections": [
+         {
+            "id": "GOV-PURPOSE",
+            "anchor": "governance-purpose",
+            "title": "1. Purpose",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "The TruthLens Partnership Governance & Enforcement Policy establishes how concerns involving Partner Organizations are classified, assessed, documented, communicated, reviewed, and resolved."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Its purpose is to ensure that decisions affecting Partner Organization status are based on identifiable standards and documented reasons rather than arbitrary administrative discretion."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "The Policy governs matters including:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "governance-factor classification;",
+                     "severity assessment;",
+                     "suspension;",
+                     "remediation;",
+                     "reinstatement;",
+                     "ending partnership;",
+                     "governance notices;",
+                     "suspension reconsideration;",
+                     "reviewer independence;",
+                     "information visibility;",
+                     "historical preservation; and",
+                     "governance auditability."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "This Policy applies to the organization's relationship with TruthLens as a Partner Organization."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Governance action against an organization does not automatically constitute enforcement against the personal TruthLens accounts of its individual members unless their individual conduct independently justifies such action."
+               }
+            ]
+         },
+         {
+            "id": "GOV-LIFECYCLE",
+            "anchor": "scope-lifecycle",
+            "title": "2. Scope and Partnership Lifecycle",
+            "blocks": [
+               {
+                  "type": "table",
+                  "caption": "Partner Organization lifecycle statuses",
+                  "columns": [
+                     "Status",
+                     "Meaning"
+                  ],
+                  "rows": [
+                     [
+                        "Active Partner",
+                        "The organization currently holds active professional partnership privileges."
+                     ],
+                     [
+                        "Suspended Partner",
+                        "The organization's active professional privileges are temporarily restricted because of a governance, remediation, security, precautionary, or administrative matter."
+                     ],
+                     [
+                        "Former Partner",
+                        "The organization's current active partnership has ended."
+                     ]
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "The lifecycle can generally be represented as:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "No Partnership → Active Partner",
+                     "Active Partner → Suspended Partner",
+                     "Suspended Partner → Active Partner through governed reinstatement.",
+                     "Active Partner or Suspended Partner → Former Partner through the End Partnership process."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Suspension is temporary and is distinct from ending a partnership."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "A Former Partner cannot be restored through the suspension-reinstatement workflow. Any future relationship would require a separate governance decision outside the current reinstatement process."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "This Policy does not replace:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "ordinary Community Platform moderation;",
+                     "individual account enforcement;",
+                     "editorial correction procedures for a particular publication; or",
+                     "other independently applicable TruthLens policies."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "The same underlying incident may result in separate actions under different policies only where each action is independently justified."
+               }
+            ]
+         },
+         {
+            "id": "GOV-PRINCIPLES",
+            "anchor": "governance-principles",
+            "title": "3. Core Governance Principles",
+            "blocks": [
+               {
+                  "type": "definitions",
+                  "items": [
+                     {
+                        "term": "Evidence-Based Decisions",
+                        "description": "Material governance actions must have an identifiable factual or evidentiary basis."
+                     },
+                     {
+                        "term": "Proportionality",
+                        "description": "The response should reflect the seriousness, context, potential or actual harm, history, urgency, and correctability of the issue."
+                     },
+                     {
+                        "term": "Consistency",
+                        "description": "Comparable circumstances should generally be evaluated using comparable standards while allowing meaningful factual differences to affect the outcome."
+                     },
+                     {
+                        "term": "Documented Rationale",
+                        "description": "Material lifecycle decisions require a recorded rationale explaining the circumstances supporting the decision."
+                     },
+                     {
+                        "term": "Opportunity to Correct Remediable Problems",
+                        "description": "Where a meaningful problem can reasonably be corrected, TruthLens should ordinarily provide a meaningful path toward correction unless immediate stronger action is necessary."
+                     },
+                     {
+                        "term": "Protection Against Urgent Risk",
+                        "description": "TruthLens may temporarily restrict professional privileges where credible serious circumstances make unrestricted access inappropriate while review continues."
+                     },
+                     {
+                        "term": "Transparency to the Affected Organization",
+                        "description": "The affected Partner Organization should receive sufficient information to understand the governance action, its substantive basis, its consequences, and any available corrective or review process."
+                     },
+                     {
+                        "term": "Human Administrative Responsibility",
+                        "description": "Automated indicators or AI-assisted tools may support governance review but do not independently suspend, reinstate, or end a Partner Organization's status."
+                     },
+                     {
+                        "term": "Historical Integrity",
+                        "description": "Governance action must not improperly rewrite legitimate historical professional work, authorship, institutional attribution, or audit provenance."
+                     }
+                  ]
+               }
+            ]
+         },
+         {
+            "id": "GOV-AUTHORITY",
+            "anchor": "decision-authority",
+            "title": "4. Decision Authority",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Partner Organization lifecycle decisions are Platform Governance responsibilities."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Authorized Platform Administrators may perform governance actions supported by the TruthLens system, including:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "suspending a Partner Organization;",
+                     "reinstating a suspended Partner Organization;",
+                     "ending a partnership;",
+                     "reviewing eligible suspension reconsideration requests; and",
+                     "documenting governance decisions and their basis."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Other roles do not independently alter Partner Organization lifecycle status unless specifically authorized by the platform's governance model."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Where reviewer independence is relevant, the safeguards in Section 16 apply."
+               }
+            ]
+         },
+         {
+            "id": "GOV-FACTORS",
+            "anchor": "governance-factors",
+            "title": "5. Governance Factors",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Governance concerns are classified using standardized factors."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "A matter may involve more than one factor where genuinely necessary."
+               },
+               {
+                  "type": "table",
+                  "caption": "Governance factor mapping",
+                  "columns": [
+                     "System code",
+                     "Factor",
+                     "Primary Guidelines relationship"
+                  ],
+                  "rows": [
+                     [
+                        "VERIFICATION_STANDARDS",
+                        "Verification Standards Violation",
+                        "Professional Verification Integrity; Sources, Evidence, and Verification Methodology; AI-Assisted Professional Responsibility"
+                     ],
+                     [
+                        "IMPARTIALITY_CONFLICT",
+                        "Impartiality or Conflict-of-Interest Violation",
+                        "Impartiality and Conflicts of Interest"
+                     ],
+                     [
+                        "TRANSPARENCY_MISREPRESENTATION",
+                        "Transparency or Misrepresentation Violation",
+                        "Organizational Transparency and Public Representation"
+                     ],
+                     [
+                        "CORRECTIONS_ACCOUNTABILITY",
+                        "Correction or Accountability Failure",
+                        "Corrections and Professional Accountability"
+                     ],
+                     [
+                        "PLATFORM_PARTNERSHIP",
+                        "Platform or Partnership Policy Violation",
+                        "Verification Workspace use; Privacy, Confidentiality, and Responsible Data Handling"
+                     ],
+                     [
+                        "GOVERNANCE_CAPACITY",
+                        "Organizational Governance or Capacity Concern",
+                        "Organizational Governance and Capacity; Institutional Responsibility"
+                     ],
+                     [
+                        "SECURITY_INTEGRITY",
+                        "Security, Legal, or Institutional Integrity Risk",
+                        "Verification Workspace security and responsible access"
+                     ],
+                     [
+                        "INACTIVITY_RESPONSIVENESS",
+                        "Inactivity or Non-Responsiveness",
+                        "Responsiveness and Cooperation"
+                     ],
+                     [
+                        "OTHER",
+                        "Other",
+                        "Requires a specific explanation of the underlying partnership standard"
+                     ]
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Verification Standards Violation applies to significant failures involving professional verification methodology, evidence, sourcing, or conclusions. Examples may include materially unsupported professional conclusions, serious sourcing failures, material misrepresentation of evidence, systematic failure to consider important contradictory evidence, fabrication of evidence or sources, or deliberate manipulation of professional verification outcomes."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Impartiality or Conflict-of-Interest Violation applies where professional independence or fair treatment has been materially compromised. Examples may include an undisclosed material conflict affecting professional judgment, intentionally unequal verification standards, improper political, financial, organizational, or personal influence, or manipulation intended to favor or disadvantage a particular person or group."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Transparency or Misrepresentation Violation applies to material dishonesty or concealment concerning the organization, its professional identity, or its relationship with TruthLens. Examples may include materially false eligibility information, false professional credentials, deliberate concealment of information material to partnership governance, fraudulent representation, or knowingly misrepresenting current TruthLens partnership status."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Correction or Accountability Failure applies where an organization fails to responsibly address an established material error or legitimate accountability concern. Examples may include refusing to correct a substantiated material error, concealing a known material error, repeatedly failing to implement required corrections, or deliberately obstructing a legitimate accountability review."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Platform or Partnership Policy Violation applies to misuse of TruthLens professional systems or material partnership requirements. Examples may include unauthorized use of restricted professional functionality, deliberate circumvention of role or organization restrictions, misuse of investigation information, unauthorized sharing of professional access, or serious abuse of Verification Workspace capabilities."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Organizational Governance or Capacity Concern applies where an organization's internal condition materially compromises its ability to fulfill partnership responsibilities. This factor does not necessarily imply misconduct."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Security, Legal, or Institutional Integrity Risk applies to serious security, fraud, malicious activity, falsification, or other integrity concerns relevant to the partnership. A security compromise should be distinguished from intentional misconduct by the affected organization."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Inactivity or Non-Responsiveness applies where continued inactivity or lack of communication materially prevents responsible administration of an Active Partnership. Temporary inactivity or an isolated delayed response is insufficient by itself."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "When OTHER is selected, a specific explanation is required. The explanation should identify the underlying partnership standard and explain why the established factors do not adequately describe the concern. OTHER must not be used simply to avoid selecting a more appropriate existing factor."
+               }
+            ]
+         },
+         {
+            "id": "GOV-SEVERITY",
+            "anchor": "severity",
+            "title": "6. Severity Assessment",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "The governance factor describes the type of concern."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Severity describes the seriousness of the particular circumstances."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Relevant considerations may include:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "nature of the concern;",
+                     "actual or reasonably foreseeable harm;",
+                     "intent;",
+                     "scope;",
+                     "relevant history;",
+                     "correctability;",
+                     "organizational response;",
+                     "previous remediation;",
+                     "strength of available evidence; and",
+                     "urgency."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "These considerations inform administrative judgment rather than producing an automatic numerical outcome."
+               },
+               {
+                  "type": "table",
+                  "caption": "Severity levels",
+                  "columns": [
+                     "Severity",
+                     "General meaning"
+                  ],
+                  "rows": [
+                     [
+                        "Low",
+                        "An isolated or limited-impact issue that can readily be corrected and does not indicate a significant systemic concern."
+                     ],
+                     [
+                        "Moderate",
+                        "A meaningful issue, recurring lower-level concern, or failure requiring more substantial corrective attention."
+                     ],
+                     [
+                        "High",
+                        "A serious professional, compliance, governance, security, or integrity concern that may remain correctable."
+                     ],
+                     [
+                        "Critical",
+                        "A severe, deliberate, systemic, fraudulent, dangerous, or fundamentally incompatible concern, or an urgent condition creating substantial risk."
+                     ]
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Severity informs the governance decision but does not automatically determine the outcome."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "A first incident may be Critical."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Several Low-severity matters do not automatically become Critical merely because of their number."
+               }
+            ]
+         },
+         {
+            "id": "GOV-RESPONSES",
+            "anchor": "governance-responses",
+            "title": "7. Governance Responses and No Automatic Strike Rule",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "TruthLens does not use a fixed automatic strike rule under which a predetermined number of violations automatically results in partnership termination."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Repeated concerns may be relevant because they can demonstrate:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "a recurring pattern;",
+                     "inability or unwillingness to comply;",
+                     "failure of prior remediation; or",
+                     "increased risk."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "However, repetition must be evaluated together with seriousness and context."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "One Critical matter may justify stronger governance action than several unrelated Low-severity matters."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "TruthLens may communicate guidance, clarification, or corrective requests without changing an organization's partnership status. These communications are not separate partnership lifecycle states under the current governance model."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Where circumstances require a lifecycle action, TruthLens may use suspension, reinstatement, or End Partnership as defined by this Policy."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "TruthLens is not required to use every possible lesser response before taking stronger action."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Serious or urgent circumstances may justify immediate protective suspension."
+               }
+            ]
+         },
+         {
+            "id": "GOV-SUSP",
+            "anchor": "suspension",
+            "title": "8. Suspension",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Suspension temporarily restricts the organization's active professional partnership privileges."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Suspension is not equivalent to termination."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Every suspension must be classified as Remedial Suspension, Precautionary Suspension, or Administrative Suspension."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Every suspension requires a governance factor, severity assessment, rationale, policy basis, and supporting basis."
+               }
+            ]
+         },
+         {
+            "id": "GOV-SUSP-REMEDIAL",
+            "anchor": "remedial-suspension",
+            "title": "8.1 Remedial Suspension",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Remedial Suspension is appropriate where:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "a serious problem has been established;",
+                     "the problem can reasonably be corrected; and",
+                     "unrestricted professional activity is inappropriate until remediation occurs."
+                  ]
+               },
+               {
+                  "type": "definitions",
+                  "items": [
+                     {
+                        "term": "Problem",
+                        "description": "The established issue requiring correction."
+                     },
+                     {
+                        "term": "Required Action",
+                        "description": "The specific steps expected of the organization."
+                     },
+                     {
+                        "term": "Evidence of Compliance",
+                        "description": "What information or outcome will demonstrate satisfactory remediation."
+                     },
+                     {
+                        "term": "Deadline",
+                        "description": "The required date or period for completing the remediation."
+                     },
+                     {
+                        "term": "Review Method",
+                        "description": "How TruthLens will determine whether the remediation requirement has been satisfied."
+                     },
+                     {
+                        "term": "Failure Consequence",
+                        "description": "The possible governance consequence if required remediation remains unresolved."
+                     }
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Remediation requirements should be sufficiently clear for the Partner Organization to understand what it must do for reinstatement to be considered."
+               }
+            ]
+         },
+         {
+            "id": "GOV-SUSP-PRECAUTIONARY",
+            "anchor": "precautionary-suspension",
+            "title": "8.2 Precautionary Suspension",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Precautionary Suspension is appropriate where:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "a credible serious concern exists;",
+                     "additional investigation or verification is required; and",
+                     "maintaining unrestricted professional access creates an unacceptable interim risk."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Precautionary Suspension is a protective measure."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "It does not itself establish that misconduct occurred."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "A Precautionary Suspension requires a review date."
+               },
+               {
+                  "type": "callout",
+                  "title": "Review-date limitation",
+                  "text": "The review date identifies when the suspension is expected to be reassessed. TruthLens records this review date, but the current system does not automatically trigger, complete, or enforce a governance action solely because that date has been reached. The underlying matter must still be reviewed through accountable human governance processes."
+               }
+            ]
+         },
+         {
+            "id": "GOV-SUSP-ADMINISTRATIVE",
+            "anchor": "administrative-suspension",
+            "title": "8.3 Administrative Suspension",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Administrative Suspension is appropriate where:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "active partnership requirements cannot presently be satisfied;",
+                     "the issue is operational or administrative rather than necessarily misconduct; and",
+                     "temporary restriction is appropriate while the matter is resolved."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Examples may include prolonged inactivity or temporary inability to maintain responsible organizational administration."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Administrative Suspension still requires an applicable governance factor, severity, rationale, policy basis, and supporting basis."
+               },
+               {
+                  "type": "callout",
+                  "title": "Meaning of severity",
+                  "text": "Severity for Administrative Suspension describes the seriousness, operational impact, or urgency of the circumstances. It does not itself imply misconduct, blame, or wrongdoing."
+               }
+            ]
+         },
+         {
+            "id": "GOV-SUSP-RECORD",
+            "anchor": "suspension-record-effects",
+            "title": "9. Suspension Record and Effects",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "A suspension record should identify, as supported by the system:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "suspension type;",
+                     "factor or factors;",
+                     "severity;",
+                     "factual reason or rationale;",
+                     "applicable policy basis;",
+                     "internal supporting basis;",
+                     "remediation information where applicable;",
+                     "review date or deadline where applicable;",
+                     "effective date;",
+                     "responsible Platform Administrator; and",
+                     "relevant governance history where applicable."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Vague explanations such as “policy violation,” “admin decision,” or “other issue” are not sufficient by themselves."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "The rationale should identify the material circumstances supporting the decision."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "While suspended, the organization cannot exercise Active Partner professional authority to the extent restricted by TruthLens system rules."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Suspension does not automatically:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "erase previously completed professional reviews;",
+                     "invalidate previously published work;",
+                     "erase institutional attribution;",
+                     "erase historical membership or role provenance; or",
+                     "terminate individual members' personal Community Platform accounts."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Suspended Partner professional identities must retain access to governance documentation and applicable governance notices through the interfaces made available by TruthLens."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Active investigation work must be handled in a manner that preserves continuity and prevents unresolved work from becoming inaccessible."
+               }
+            ]
+         },
+         {
+            "id": "GOV-REMEDIATION",
+            "anchor": "remediation",
+            "title": "10. Remediation",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Remediation exists to provide a meaningful path toward correcting an established and correctable partnership problem."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Remediation requirements should be proportionate to the issue."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Failure to complete required remediation may be considered when deciding whether continued suspension or stronger governance action is appropriate."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Failure to satisfy remediation does not create an automatic termination rule."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "TruthLens must still evaluate the applicable circumstances and select a proportionate governance action."
+               }
+            ]
+         },
+         {
+            "id": "GOV-REINSTATEMENT",
+            "anchor": "reinstatement",
+            "title": "11. Reinstatement and Monitoring",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Reinstatement restores an eligible Suspended Partner to Active Partner status."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Reinstatement may be appropriate where:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "required remediation has been satisfactorily completed;",
+                     "the underlying security or integrity risk has been resolved;",
+                     "investigation does not justify continued suspension;",
+                     "the organization again satisfies necessary operational requirements; or",
+                     "other circumstances establish that continued restriction is no longer proportionate."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Reinstatement is a separate governance decision and must be documented."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "The reinstatement record should identify, where applicable:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "the prior suspension;",
+                     "basis for reinstatement;",
+                     "remediation completed;",
+                     "effective date;",
+                     "any continuing conditions or monitoring; and",
+                     "the responsible Platform Administrator."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Reinstatement does not erase the historical suspension."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Where continuing conditions or monitoring are documented, they should be understandable to the affected organization and should not operate as indefinite hidden punishment."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Monitoring does not create a separate Partner lifecycle status under the current model."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "A Former Partner is not eligible for reinstatement through this suspension-reinstatement process."
+               }
+            ]
+         },
+         {
+            "id": "GOV-END",
+            "anchor": "ending-partnership",
+            "title": "12. Ending Partnership",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Ending partnership concludes the organization's current active Partner relationship with TruthLens."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "An organization whose partnership ends becomes a Former Partner."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "TruthLens recognizes three distinct partnership-ending types:"
+               },
+               {
+                  "type": "list",
+                  "ordered": true,
+                  "items": [
+                     "Voluntary Withdrawal;",
+                     "Administrative Conclusion; and",
+                     "Termination for Cause."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "These categories must remain distinguishable so that non-disciplinary partnership endings are not incorrectly represented as disciplinary termination."
+               }
+            ]
+         },
+         {
+            "id": "GOV-END-VOLUNTARY",
+            "anchor": "voluntary-withdrawal",
+            "title": "12.1 Voluntary Withdrawal",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Voluntary Withdrawal applies where the Partner Organization chooses to end its relationship with TruthLens."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Voluntary Withdrawal:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "does not imply misconduct;",
+                     "is not treated as disciplinary termination;",
+                     "does not require a violation factor;",
+                     "does not use disciplinary severity; and",
+                     "results in Former Partner status when completed."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Historical professional work and institutional attribution remain preserved."
+               }
+            ]
+         },
+         {
+            "id": "GOV-END-ADMINISTRATIVE",
+            "anchor": "administrative-conclusion",
+            "title": "12.2 Administrative Conclusion",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Administrative Conclusion applies where continued partnership is no longer viable for a non-disciplinary or primarily operational reason."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Relevant grounds may include:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "permanent loss of eligibility;",
+                     "organizational dissolution;",
+                     "prolonged abandonment; or",
+                     "another supported administrative circumstance under which continued Active Partnership is no longer possible."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Administrative Conclusion does not itself imply misconduct."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Disciplinary severity is not required for an Administrative Conclusion."
+               }
+            ]
+         },
+         {
+            "id": "GOV-END-CAUSE",
+            "anchor": "termination-for-cause",
+            "title": "12.3 Termination for Cause",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Termination for Cause applies where established misconduct or serious noncompliance makes continued partnership inappropriate."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Recognized grounds may include:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "severe non-remediable violation;",
+                     "repeated systemic violations; or",
+                     "failed remediation."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Termination for Cause requires:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "at least one applicable governance factor; and",
+                     "severity assessed as High or Critical."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Relevant circumstances may include:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "deliberate fraud;",
+                     "serious professional manipulation;",
+                     "repeated or systemic serious failures;",
+                     "unsuccessful reasonable remediation;",
+                     "deliberate concealment of material partnership information;",
+                     "serious malicious conduct; or",
+                     "another established High or Critical concern incompatible with continued partnership."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Termination should be based on the totality of the circumstances."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Public criticism, disagreement with TruthLens, controversy, embarrassment, or generalized reputational concern is not by itself sufficient grounds for Termination for Cause."
+               }
+            ]
+         },
+         {
+            "id": "GOV-END-RECORD",
+            "anchor": "partnership-ending-record",
+            "title": "13. Partnership-Ending Record and Effects",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "A partnership-ending decision should record, as applicable:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "ending type;",
+                     "recognized ground;",
+                     "factor or factors where required;",
+                     "severity where required;",
+                     "reason or rationale;",
+                     "policy basis;",
+                     "internal supporting basis;",
+                     "relevant prior remediation or suspension;",
+                     "effective date; and",
+                     "responsible Platform Administrator."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "When End Partnership is completed, the current TruthLens system may perform operational consequences necessary to conclude active professional authority, including:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "changing the organization to Former Partner status;",
+                     "ending current organization memberships associated with the partnership;",
+                     "cancelling pending organization invitations;",
+                     "releasing active investigation ownership;",
+                     "returning affected investigations to available intake where applicable; and",
+                     "preserving historical professional and governance records."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Historical authorship, professional work, institutional provenance, and appropriate audit history remain preserved."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "TruthLens prevents completion of End Partnership while an active factual correction that must first be resolved is present."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "A Former Partner cannot be restored through the suspension-reinstatement workflow."
+               }
+            ]
+         },
+         {
+            "id": "GOV-NOTICES",
+            "anchor": "governance-notices",
+            "title": "14. Governance Notices",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "An affected Partner Organization should receive a durable governance notice for suspension and partnership-ending decisions."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "The notice should contain, where applicable:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "action taken;",
+                     "effective date;",
+                     "applicable factor or ending basis;",
+                     "severity where applicable;",
+                     "factual rationale;",
+                     "relevant policy basis;",
+                     "immediate consequences;",
+                     "remediation requirements;",
+                     "review date or deadline; and",
+                     "available reconsideration or reinstatement information."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Internal evidence does not need to be disclosed where disclosure would create a legitimate privacy, security, legal, confidentiality, or safety risk."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "However, sufficient information should ordinarily be provided for the affected organization to understand the substantive basis of the action."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Governance notices remain distinct from private internal governance notes and supporting evidence."
+               }
+            ]
+         },
+         {
+            "id": "GOV-RECONSIDERATION",
+            "anchor": "suspension-reconsideration",
+            "title": "15. Suspension Reconsideration",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Reconsideration allows an eligible Partner Organization to challenge whether a current suspension decision was correct."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "The current in-system reconsideration process applies to suspension decisions."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "It does not apply to partnership-ending decisions."
+               },
+               {
+                  "type": "table",
+                  "caption": "Eligible reconsideration grounds",
+                  "columns": [
+                     "System code",
+                     "Ground",
+                     "Meaning"
+                  ],
+                  "rows": [
+                     [
+                        "MATERIAL_FACTS_INCORRECT",
+                        "Material Facts Incorrect",
+                        "Material facts relied upon in the suspension decision were materially inaccurate."
+                     ],
+                     [
+                        "RELEVANT_EVIDENCE_OVERLOOKED",
+                        "Relevant Evidence Overlooked",
+                        "Relevant evidence capable of materially affecting the decision was not adequately considered."
+                     ],
+                     [
+                        "POLICY_MISAPPLIED",
+                        "Policy Misapplied",
+                        "The applicable Partner policy or governance standard was materially misapplied."
+                     ],
+                     [
+                        "SIGNIFICANT_PROCEDURAL_ERROR",
+                        "Significant Procedural Error",
+                        "A significant procedural error materially affected the suspension decision."
+                     ]
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Reconsideration differs from reinstatement."
+               },
+               {
+                  "type": "callout",
+                  "title": "Reconsideration vs. reinstatement",
+                  "text": "Reconsideration asks whether the original suspension decision was correct. Reinstatement accepts that restriction may have been justified but asks whether current circumstances now support restoring Active Partner status."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Under the current system:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "the request must concern the relevant current suspension;",
+                     "the requesting user must hold an eligible current Partner administrative role;",
+                     "the request is made through the applicable suspension governance notice;",
+                     "only one open reconsideration request may exist for the same suspension at a time; and",
+                     "a reconsideration that can no longer provide effective review because the underlying suspension is no longer current may become moot."
+                  ]
+               },
+               {
+                  "type": "table",
+                  "caption": "Reconsideration outcomes",
+                  "columns": [
+                     "Outcome",
+                     "Effect"
+                  ],
+                  "rows": [
+                     [
+                        "UPHELD",
+                        "The suspension remains supported."
+                     ],
+                     [
+                        "REVOKED",
+                        "The suspension decision is overturned."
+                     ]
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Where a suspension is revoked, the system performs governed reinstatement based on the determination that the investigation or review did not justify continued suspension."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "The original suspension and reconsideration records remain preserved as governance history."
+               }
+            ]
+         },
+         {
+            "id": "GOV-REVIEW-INDEPENDENCE",
+            "anchor": "reviewer-independence",
+            "title": "16. Reviewer Independence",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "TruthLens should provide independent review of a disputed suspension where reasonably possible."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "When the Platform Administrator who made the original suspension decision would also review its reconsideration, reviewer-independence safeguards apply."
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "If another active Platform Administrator is available, self-review requires a documented independence-override rationale explaining why the original decision-maker is nevertheless performing the review.",
+                     "If no other active Platform Administrator is available, the reviewer must document why independent review is unavailable."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "These requirements preserve accountability without making the governance process unusable where the Platform Governance team is small."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Reviewer independence does not require multiple Platform Administrators to approve every ordinary governance decision."
+               }
+            ]
+         },
+         {
+            "id": "GOV-VISIBILITY",
+            "anchor": "information-visibility",
+            "title": "17. Governance Information Visibility",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "TruthLens separates governance information according to audience."
+               },
+               {
+                  "type": "definitions",
+                  "items": [
+                     {
+                        "term": "Internal Platform Governance",
+                        "description": "May include supporting evidence, internal notes, sensitive security details, complete governance history, and restricted administrative information."
+                     },
+                     {
+                        "term": "Affected Partner Organization",
+                        "description": "Should normally receive sufficient information concerning the governance action, applicable factor or ending basis, factual rationale, policy basis, consequences, remediation requirements, relevant deadlines or review dates, and available review information."
+                     },
+                     {
+                        "term": "Public Community",
+                        "description": "May receive current partnership status and an appropriate non-confidential explanation where public disclosure is justified."
+                     }
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Sensitive governance information must not automatically become public merely because governance action occurred."
+               }
+            ]
+         },
+         {
+            "id": "GOV-HISTORY",
+            "anchor": "historical-preservation",
+            "title": "18. Historical Preservation",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Governance action does not erase legitimate historical activity."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "TruthLens preserves appropriate historical records including:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "completed professional reviews;",
+                     "published fact-checks;",
+                     "institutional attribution;",
+                     "historical professional authorship;",
+                     "historical membership and role provenance where appropriate;",
+                     "governance decisions; and",
+                     "relevant audit history."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "An organization whose partnership has ended is represented as a Former Partner rather than being deleted or retroactively treated as though it had never been a legitimate Partner Organization."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "A specific professional publication may still be corrected, revised, or otherwise handled through the appropriate editorial process when independently justified."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Historical governance records must preserve what was actually recorded at the time."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "TruthLens should not rewrite an existing historical policy reference merely because the naming, numbering, or formatting of the current policy later changes."
+               }
+            ]
+         },
+         {
+            "id": "GOV-AUDIT",
+            "anchor": "governance-auditability",
+            "title": "19. Governance Auditability",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Material partnership lifecycle transitions should generate protected governance history."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Governance history should make it possible to determine, as supported by the system:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "what action occurred;",
+                     "which organization was affected;",
+                     "when the action occurred;",
+                     "who authorized the action;",
+                     "which governance factor or ending basis applied;",
+                     "why the action occurred;",
+                     "what the previous and resulting statuses were; and",
+                     "what later governance action, if any, modified the decision."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Current status and governance history are separate concepts."
+               },
+               {
+                  "type": "definitions",
+                  "items": [
+                     {
+                        "term": "Current status",
+                        "description": "What is the organization's status now?"
+                     },
+                     {
+                        "term": "Governance history",
+                        "description": "Why, when, and by whom did that status change?"
+                     }
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Both are necessary for accountable governance."
+               }
+            ]
+         },
+         {
+            "id": "GOV-AUTOMATION",
+            "anchor": "automated-indicators",
+            "title": "20. Automated Indicators and Human Decisions",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "TruthLens systems may use automated or AI-assisted information to support governance review."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Where such indicators are used, they may help identify circumstances that warrant human attention."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "They must not independently:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "suspend a Partner Organization;",
+                     "reinstate a Partner Organization;",
+                     "terminate a partnership; or",
+                     "decide a suspension reconsideration."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Final Partner lifecycle decisions remain accountable human governance decisions."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "The existence of an automated indicator is not by itself proof that a policy violation occurred."
+               }
+            ]
+         },
+         {
+            "id": "GOV-VERSIONING",
+            "anchor": "policy-versioning",
+            "title": "21. Policy References, Versioning, and Changes",
+            "blocks": [
+               {
+                  "type": "paragraph",
+                  "text": "Governance records should reference policies in a way that remains understandable to affected organizations and administrators."
+               },
+               {
+                  "type": "callout",
+                  "title": "Readable policy reference",
+                  "text": "New user-facing references should use readable wording such as “TruthLens Partnership Governance & Enforcement Policy, Section 8.1 — Remedial Suspension” rather than legal-style section symbols."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Historical governance records are not retroactively rewritten solely to match later policy naming or numbering."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Important governance sections may also use stable internal technical identifiers within the application so that system references can remain consistent even when visible section numbering changes."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Policy revisions should maintain version information, effective date, last-updated information, and an appropriate change history."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "A revised policy does not become effective merely because a draft exists."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "The effective date should be established when the revised policy is actually approved and published."
+               }
+            ]
+         },
+         {
+            "id": "GOV-GUIDING-RULE",
+            "anchor": "guiding-enforcement-rule",
+            "title": "22. Guiding Enforcement Rule",
+            "blocks": [
+               {
+                  "type": "callout",
+                  "title": "Governing principle",
+                  "text": "A Partner Organization should receive the least severe governance action that reasonably protects the integrity, security, reliability, and professional standards of TruthLens while giving correctable problems a meaningful opportunity for remediation."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "More severe governance action may be appropriate where:"
+               },
+               {
+                  "type": "list",
+                  "ordered": false,
+                  "items": [
+                     "the conduct itself is serious;",
+                     "urgent intervention is necessary;",
+                     "similar serious failures recur;",
+                     "reasonable remediation has failed;",
+                     "the organization cannot restore necessary capacity; or",
+                     "continued partnership is no longer reasonably compatible with TruthLens professional standards."
+                  ]
+               },
+               {
+                  "type": "paragraph",
+                  "text": "The purpose of Partner Governance is not to create automatic punishment."
+               },
+               {
+                  "type": "paragraph",
+                  "text": "Its purpose is to provide an evidence-based, proportionate, documented, reviewable, and auditable process for protecting the professional integrity of the TruthLens Partner ecosystem."
+               }
+            ]
+         }
+      ]
    }
 ];
 
-export const partnershipEnforcementPolicySections = [
-   {
-      "id": "policy-section-1",
-      "title": "1. Purpose",
-      "body": "The TruthLens Partnership Enforcement Policy governs how potential Partner Organization\nnoncompliance is assessed and how partnership governance actions are selected,\ndocumented, communicated, reviewed, and preserved.\n\nThe Policy is designed to ensure that Partner Organization suspension or termination is:\n\n   ●​   based on identifiable standards;\n   ●​   supported by evidence;\n   ●​   proportionate to the circumstances;\n   ●​   documented with a meaningful reason;\n   ●​   subject to remediation where appropriate; and\n   ●​   preserved as part of the organization's governance history."
-   },
-   {
-      "id": "policy-section-2",
-      "title": "2. Scope",
-      "body": "This Policy applies to governance actions affecting the status of a TruthLens Partner\nOrganization.\n\nIt does not replace:\n\n   ●​   ordinary Community Platform moderation;\n   ●​   individual account enforcement;\n   ●​   editorial correction procedures for an individual fact-check; or\n   ●​   Safety Review procedures for reported community content.\n\nThe same incident may create separate consequences under more than one policy where\nindependently justified."
-   },
-   {
-      "id": "policy-section-3",
-      "title": "3. Decision Authority",
-      "body": "Partner Organization lifecycle decisions are Platform Governance responsibilities.\n\nThe Platform Admin is authorized to:\n\n   ●​   issue formal partnership corrective actions;\n   ●​   suspend a Partner Organization;\n   ●​   reinstate a suspended organization;\n   ●​   end an active partnership; and\n   ●​   document the basis and outcome of those actions.\n\nSafety Moderators do not independently suspend, reinstate, or terminate Partner\nOrganizations solely through their Safety Review authority."
-   },
-   {
-      "id": "policy-section-4",
-      "title": "4. Enforcement Principles",
-      "body": "TruthLens applies the following principles to partnership governance.\n\n4.1 Evidence\nMaterial governance actions must have a reasonable factual basis.\n\n4.2 Proportionality\nThe action taken should correspond to the seriousness and circumstances of the issue.\n\n4.3 Consistency\nSimilar cases should normally be evaluated under the same standards while allowing\nrelevant factual differences to affect the outcome.\n\n4.4 Remediation\nWhere a meaningful problem can reasonably be corrected, TruthLens should ordinarily\nprovide an opportunity for correction unless immediate stronger action is justified.\n\n4.5 Urgent Protection\nTruthLens may take temporary protective action when continued professional access creates\na credible serious security, integrity, or operational risk.\n\n4.6 Documented Accountability\nMaterial lifecycle actions require a recorded factor and rationale.\n\n4.7 Human Decision-Making\nAutomated indicators may assist review but may not independently suspend or terminate a\nPartner Organization."
-   },
-   {
-      "id": "policy-section-5",
-      "title": "5. Partnership Factors",
-      "body": "Every enforcement action involving an established concern should be classified according to\none or more applicable partnership factors.\n\nA. Verification Standards Violation\nApplies to significant failures involving professional verification methodology, evidence,\nsourcing, or conclusions.\n\nExamples include:\n\n   ●​   materially unsupported conclusions;\n   ●​   repeated failure to use available authoritative evidence;\n   ●​   material misrepresentation of evidence;\n   ●​   systematic failure to consider contradictory evidence;\n   ●​   fabrication of evidence or sources; or\n   ●​   deliberate manipulation of professional verification outcomes.\n\nB. Impartiality or Conflict-of-Interest Violation\nApplies where professional independence or equivalent treatment has been materially\ncompromised.\n\nExamples include:\n\n   ●​   undisclosed material conflicts affecting a decision;\n   ●​   intentionally unequal evidentiary standards;\n   ●​   improper political, financial, personal, or organizational influence; or\n   ●​   manipulation intended to favor or disadvantage a particular party.\n\nC. Transparency or Misrepresentation Violation\nApplies to material dishonesty or concealment concerning the organization or its partnership.\n\nExamples include:\n\n   ●​   materially false eligibility information;\n   ●​   false credentials;\n   ●​   deliberate concealment of information required for partnership governance;\n   ●​   impersonation or fraudulent representation; or\n   ●​   knowingly misrepresenting current TruthLens partnership status.\n\nD. Correction or Accountability Failure\nApplies where an organization fails to responsibly address established material errors or\ngovernance concerns.\n\nExamples include:\n\n   ●​   refusing to correct a substantiated material error;\n   ●​   concealing a known material error;\n   ●​   repeatedly failing to implement required corrections; or\n   ●​   deliberately obstructing legitimate accountability review.\n\nE. Platform or Partnership Policy Violation\nApplies to misuse of TruthLens professional systems or violation of material partnership\nrequirements.\n\nExamples include:\n\n   ●​   unauthorized use of restricted professional functionality;\n   ●​   deliberate circumvention of organization or role restrictions;\n   ●​   misuse of investigation information;\n   ●​   unauthorized sharing of professional access; or\n   ●​   serious abuse of Verification Workspace capabilities.\n\nF. Organizational Governance or Capacity Concern\nApplies where the organization's internal condition materially compromises its ability to fulfill\npartnership responsibilities.\n\nExamples include:\n\n   ●​ absence of accountable leadership;\n   ●​ inability to administer professional access;\n\n   ●​ serious unresolved governance failures;\n   ●​ inability to continue verification operations; or\n   ●​ loss of organizational capacity required for active partnership.\n\nThis factor does not necessarily imply misconduct.\n\nG. Security, Legal, or Institutional Integrity Risk\nApplies to serious security, fraud, malicious activity, or other integrity concerns relevant to\nthe partnership.\n\nExamples include:\n\n   ●​   professional account compromise;\n   ●​   fraud;\n   ●​   intentional security abuse;\n   ●​   malicious system activity;\n   ●​   falsification of professional records; or\n   ●​   other serious conduct fundamentally affecting institutional integrity.\n\nSecurity compromise should be distinguished from intentional misconduct by the affected\norganization.\n\nH. Inactivity or Non-Responsiveness\nApplies where an organization's continued lack of activity or communication materially\nprevents administration of an active partnership.\n\nExamples include:\n\n   ●​   prolonged abandonment of professional activity;\n   ●​   persistent failure to respond to material partnership communications;\n   ●​   repeated failure to maintain a responsible organizational contact; or\n   ●​   extended inactivity demonstrating that active partnership responsibilities are no\n        longer being fulfilled.\n\nTemporary inactivity alone is insufficient."
-   },
-   {
-      "id": "policy-section-6",
-      "title": "6. Other Factor",
-      "body": "An Other factor may be used only when the concern genuinely falls outside the established\ncategories.\n\nUse of Other requires:\n\n   ●​   a detailed description;\n   ●​   identification of the underlying Partner Organization standard;\n   ●​   explanation of why an existing factor is insufficient; and\n   ●​   sufficient rationale for the resulting action.\n\nOther must not become a mechanism for bypassing established policy categories."
-   },
-   {
-      "id": "policy-section-7",
-      "title": "7. Severity Assessment",
-      "body": "Severity is assessed independently from the violation category.\n\nTruthLens should consider the following factors.\n\nNature\nWhat happened and what professional or organizational standard was affected?\n\nHarm\nWhat actual harm occurred, and what reasonably foreseeable harm could have occurred?\n\nIntent\nWas the conduct accidental, negligent, reckless, knowing, or deliberate?\n\nScope\nWas the issue isolated or did it affect multiple members, investigations, publications, or\norganizational processes?\n\nHistory\nDoes the organization have relevant prior governance actions involving similar conduct?\n\nRemediability\n\nCan the problem reasonably be corrected?\n\nOrganizational Response\nDid the organization cooperate, acknowledge the issue, and take meaningful corrective\naction?\n\nPrevious Remediation\nHave prior corrective requirements concerning the same or similar issue failed?\n\nEvidence Strength\nHow reliable and complete is the evidence supporting the determination?\n\nUrgency\nWould maintaining normal professional privileges create an immediate material risk?"
-   },
-   {
-      "id": "policy-section-8",
-      "title": "8. Severity Levels",
-      "body": "Low\nAn isolated or limited-impact problem that can readily be corrected and does not indicate a\nsignificant systemic concern.\n\nTypical response:\n\n   ●​ guidance;\n   ●​ notice; or\n   ●​ minor corrective instruction.\n\nModerate\nA meaningful violation, recurring lower-level concern, or failure requiring documented\ncorrective action.\n\nTypical response:\n\n   ●​ formal warning;\n   ●​ corrective requirements; and\n\n   ●​ monitoring where appropriate.\n\nHigh\nA serious professional, compliance, security, governance, or integrity concern that may\nremain correctable.\n\nTypical response:\n\n   ●​ formal remediation;\n   ●​ suspension where necessary; and\n   ●​ structured review before reinstatement.\n\nCritical\nA severe, deliberate, systemic, fraudulent, dangerous, or fundamentally incompatible\nviolation, or an urgent condition creating substantial risk.\n\nTypical response:\n\n   ●​ immediate precautionary suspension;\n   ●​ formal investigation; and/or\n   ●​ consideration of termination for cause.\n\nSeverity informs but does not automatically determine the administrative action."
-   },
-   {
-      "id": "policy-section-9",
-      "title": "9. No Automatic Strike Rule",
-      "body": "TruthLens does not use a fixed rule such as:\n\n        Three violations automatically result in partnership termination.\n\nRepeated violations are relevant because they may establish:\n\n   ●​    a recurring pattern;\n   ●​    inability or unwillingness to comply;\n   ●​    failure of earlier remediation; or\n   ●​    increased risk.\n\nHowever, repetition is evaluated together with seriousness and context.\n\nOne Critical incident may justify stronger action than several unrelated Low-severity\nincidents."
-   },
-   {
-      "id": "policy-section-10",
-      "title": "10. Governance Action Ladder",
-      "body": "When appropriate, TruthLens may use the following progression:\n\nGuidance or Notice\n\n→ Formal Corrective Action\n\n→ Suspension\n\n→ Reinstatement / Monitoring\n\nor\n\n→ End Partnership\n\nTruthLens is not required to use every preceding stage.\n\nSerious or urgent circumstances may justify immediate suspension.\n\nExceptional circumstances may justify direct consideration of termination for cause."
-   },
-   {
-      "id": "policy-section-11",
-      "title": "11. Guidance or Notice",
-      "body": "Guidance or notice is appropriate where:\n\n     ●​   the issue is limited;\n     ●​   the organization appears willing to comply;\n     ●​   immediate restriction is unnecessary; and\n     ●​   clarification or correction is likely to prevent recurrence.\n\nA notice may identify:\n\n     ●​   the concern;\n     ●​   applicable standard;\n     ●​   expected correction; and\n     ●​   any recommended follow-up."
-   },
-   {
-      "id": "policy-section-12",
-      "title": "12. Formal Corrective Action",
-      "body": "Formal corrective action may be appropriate for:\n\n   ●​   Moderate violations;\n   ●​   repeated lower-level issues;\n   ●​   failures requiring documented remediation; or\n   ●​   circumstances where informal guidance has not resolved the concern.\n\nThe corrective action should specify:\n\n   ●​   the established issue;\n   ●​   applicable factor;\n   ●​   relevant policy provision;\n   ●​   required correction;\n   ●​   reasonable completion deadline where applicable; and\n   ●​   possible consequences of continued noncompliance."
-   },
-   {
-      "id": "policy-section-13",
-      "title": "13. Suspension",
-      "body": "Suspension temporarily restricts the organization's active professional partnership privileges.\n\nSuspension is not equivalent to termination.\n\nEvery suspension must be classified as one of the following.\n\n13.1 Remedial Suspension\nUsed when:\n\n   ●​ a serious problem has been established;\n   ●​ the problem can reasonably be corrected; and\n   ●​ continued unrestricted professional activity is inappropriate until remediation occurs.\n\nThe suspension notice must identify the requirements for possible reinstatement.\n\n13.2 Precautionary Suspension\nUsed when:\n\n   ●​ a credible serious concern exists;\n   ●​ additional investigation or verification is required; and\n   ●​ maintaining unrestricted professional access creates an unacceptable interim risk.\n\nPrecautionary suspension is a protective measure and does not itself establish that\nmisconduct occurred.\n\nThe review should proceed without unnecessary delay.\n\n13.3 Administrative Suspension\nUsed where:\n\n   ●​ active partnership requirements cannot presently be satisfied;\n   ●​ the problem is operational or administrative rather than necessarily misconduct; and\n   ●​ temporary restriction is appropriate while the status is resolved.\n\nExamples may include prolonged inactivity or temporary inability to maintain responsible\norganizational administration."
-   },
-   {
-      "id": "policy-section-14",
-      "title": "14. Required Suspension Information",
-      "body": "A suspension decision must record:\n\n   ●​   suspension type;\n   ●​   factor or factors;\n   ●​   severity;\n   ●​   factual reason or rationale;\n   ●​   applicable policy basis;\n   ●​   internal supporting basis or evidence;\n   ●​   required remediation where applicable;\n   ●​   review date or deadline where applicable;\n   ●​   effective date;\n   ●​   administrator responsible for the decision; and\n   ●​   relevant prior governance actions.\n\nThe Platform Admin must not rely exclusively on vague entries such as:\n\n   ●​   “policy violation”;\n   ●​   “bad organization”;\n   ●​   “admin decision”;\n   ●​   “failed verification”; or\n   ●​   “other issues.”\n\nThe rationale must identify the material circumstances supporting the decision."
-   },
-   {
-      "id": "policy-section-15",
-      "title": "15. Suspension Effects",
-      "body": "While suspended, the organization ceases to exercise active professional authority to the\nextent defined by TruthLens system rules.\n\nSuspension should restrict prospective professional privileges without rewriting historical\nrecords.\n\nThe organization retains historical attribution for legitimate work completed while it was an\nactive Partner.\n\nSuspension does not automatically:\n\n   ●​   delete published fact-checks;\n   ●​   delete completed evidence reviews;\n   ●​   erase institutional attribution;\n   ●​   delete organization membership history; or\n   ●​   terminate individual members' personal Community Platform accounts.\n\nHandling of active investigations must protect continuity and prevent an unresolved case\nfrom becoming permanently inaccessible.\n\nTruthLens may reassign or otherwise preserve unfinished professional work according to\napplicable investigation-continuity procedures."
-   },
-   {
-      "id": "policy-section-16",
-      "title": "16. Remediation Plan",
-      "body": "A remedial action should define:\n\nProblem\nThe established issue requiring correction.\n\nRequired Action\nThe specific steps expected of the organization.\n\nEvidence of Compliance\nWhat information or outcome will demonstrate satisfactory remediation.\n\nDeadline\n\nA reasonable date or period for completion when time limits are necessary.\n\nReview\nHow TruthLens will determine whether the requirement has been satisfied.\n\nConsequence of Failure\nThe possible next governance action if the issue remains unresolved.\n\nRemediation requirements should be clear enough that the Partner Organization can\nreasonably understand how compliance may be restored."
-   },
-   {
-      "id": "policy-section-17",
-      "title": "17. Reinstatement",
-      "body": "A suspended Partner Organization may be reinstated where:\n\n   ●​   required remediation has been satisfactorily completed;\n   ●​   the underlying security or integrity risk has been resolved;\n   ●​   investigation does not justify continued suspension;\n   ●​   the organization again satisfies necessary operational requirements; or\n   ●​   other circumstances establish that continued restriction is no longer proportionate.\n\nReinstatement is a new governance decision and must be documented.\n\nThe reinstatement record should include:\n\n   ●​   the prior suspension;\n   ●​   basis for reinstatement;\n   ●​   remediation completed where applicable;\n   ●​   effective date;\n   ●​   any continuing conditions or monitoring; and\n   ●​   responsible Platform Admin.\n\nHistorical suspension records remain preserved after reinstatement."
-   },
-   {
-      "id": "policy-section-18",
-      "title": "18. Continued Monitoring or Probation",
-      "body": "Where appropriate, reinstatement may include a defined monitoring period.\n\nMonitoring may be appropriate when:\n\n   ●​ the organization has returned to compliance but continued observation is reasonable;\n   ●​ remediation is complete but its effectiveness should be verified; or\n   ●​ organizational stability remains relevant.\n\nMonitoring must not create indefinite hidden punishment.\n\nWhere formal conditions exist, the organization should know:\n\n   ●​   what conditions apply;\n   ●​   how long they apply;\n   ●​   what constitutes successful completion; and\n   ●​   what may occur if the same serious problem recurs."
-   },
-   {
-      "id": "policy-section-19",
-      "title": "19. Ending Partnership",
-      "body": "Ending partnership permanently concludes the organization's current active Partner\nrelationship with TruthLens.\n\nTruthLens recognizes three distinct ending types.\n\n19.1 Voluntary Withdrawal\nUsed when the Partner Organization chooses to end its relationship with TruthLens.\n\nVoluntary withdrawal:\n\n   ●​ does not imply misconduct;\n   ●​ must not be represented as disciplinary termination; and\n   ●​ results in Former Partner status once completed.\n\n19.2 Administrative Conclusion\nUsed when continued partnership is no longer viable for a non-disciplinary or primarily\noperational reason.\n\nExamples may include:\n\n   ●​   dissolution of the organization;\n   ●​   cessation of relevant verification operations;\n   ●​   permanent loss of required organizational capacity;\n   ●​   prolonged abandonment of the partnership; or\n\n   ●​ permanent inability to satisfy fundamental eligibility requirements.\n\nAdministrative Conclusion does not necessarily imply wrongdoing.\n\n19.3 Termination for Cause\nUsed where established misconduct or noncompliance makes continued partnership\ninappropriate.\n\nTermination for Cause may be considered where there is:\n\n   ●​   a severe non-remediable violation;\n   ●​   deliberate fraud or serious professional manipulation;\n   ●​   repeated or systemic serious violations;\n   ●​   failure of reasonable prior remediation;\n   ●​   deliberate concealment of material partnership information;\n   ●​   serious malicious or integrity-related conduct; or\n   ●​   another Critical violation fundamentally incompatible with continued partnership."
-   },
-   {
-      "id": "policy-section-20",
-      "title": "20. Factors Supporting Partnership Termination",
-      "body": "Termination should be based on the totality of circumstances.\n\nRelevant considerations include:\n\n   ●​   seriousness of the underlying violation;\n   ●​   deliberate or fraudulent intent;\n   ●​   scale of affected professional work;\n   ●​   actual or foreseeable harm;\n   ●​   systemic organizational involvement;\n   ●​   relevant previous violations;\n   ●​   repeated failure to correct similar problems;\n   ●​   unsuccessful remediation;\n   ●​   refusal to cooperate with necessary governance review;\n   ●​   permanent loss of operational capacity; and\n   ●​   whether continued partnership can reasonably be made safe and reliable.\n\nA controversial decision, public criticism, disagreement with TruthLens, or generalized\nreputational concern is not independently sufficient grounds for termination."
-   },
-   {
-      "id": "policy-section-21",
-      "title": "21. Required Partnership-Ending Information",
-      "body": "Every partnership-ending decision must record:\n\n   ●​   ending type;\n   ●​   ground for ending;\n   ●​   factor or factors where applicable;\n   ●​   severity where the decision concerns misconduct;\n   ●​   reason or rationale;\n   ●​   policy basis where applicable;\n   ●​   internal supporting basis;\n   ●​   prior relevant remediation or suspension;\n   ●​   effective date; and\n   ●​   responsible Platform Admin.\n\nVoluntary Withdrawal must clearly remain distinguishable from disciplinary termination."
-   },
-   {
-      "id": "policy-section-22",
-      "title": "22. Emergency or Immediate Action",
-      "body": "TruthLens may impose immediate precautionary suspension before completing the ordinary\nreview sequence when there is a credible risk involving:\n\n   ●​   serious system security;\n   ●​   compromised professional access;\n   ●​   fraud;\n   ●​   deliberate manipulation of professional verification;\n   ●​   malicious platform use;\n   ●​   substantial ongoing harm; or\n   ●​   another urgent threat that cannot reasonably wait for ordinary remediation.\n\nImmediate restriction should be temporary unless and until sufficient review supports a final\ngovernance determination.\n\nThe urgency of the action does not eliminate the requirement to document and review the\nbasis for the restriction."
-   },
-   {
-      "id": "policy-section-23",
-      "title": "23. Notice",
-      "body": "An affected organization should receive a durable notice for suspension and\npartnership-ending decisions.\n\nThe notice should contain, where applicable:\n\n   ●​   action taken;\n   ●​   effective date;\n   ●​   factor;\n   ●​   severity;\n   ●​   factual reason;\n   ●​   relevant policy provision;\n   ●​   immediate consequences;\n   ●​   required remediation;\n   ●​   review or remediation deadline; and\n   ●​   available reconsideration or reinstatement process.\n\nInternal confidential evidence does not need to be disclosed where doing so would create a\nlegitimate security, privacy, legal, or safety risk.\n\nHowever, sufficient information should ordinarily be provided for the organization to\nunderstand the substantive basis of the action."
-   },
-   {
-      "id": "policy-section-24",
-      "title": "24. Reconsideration",
-      "body": "Reconsideration applies when an organization believes that:\n\n   ●​   material facts were incorrect;\n   ●​   relevant evidence was overlooked;\n   ●​   the applicable policy was incorrectly applied; or\n   ●​   a significant procedural error affected the decision.\n\nReconsideration differs from reinstatement.\n\nA reconsideration request challenges the correctness of the original action.\n\nA reinstatement request accepts that the restriction may have been justified but asserts that\nthe underlying problem has since been resolved.\n\nTruthLens may initially support reconsideration through an administrative process rather than\na dedicated in-system appeals feature."
-   },
-   {
-      "id": "policy-section-25",
-      "title": "25. Review of Serious Decisions",
-      "body": "Where operationally practicable, a disputed serious suspension or termination decision\nshould be reviewed by an authorized person who did not make the original determination.\n\nWhere independent internal review is not possible because of the size of the platform staff,\nthe decision and review basis should at minimum be separately documented to preserve\naccountability."
-   },
-   {
-      "id": "policy-section-26",
-      "title": "26. Governance Information Visibility",
-      "body": "TruthLens separates governance information according to audience.\n\nInternal Platform Governance\nMay include:\n\n   ●​   supporting evidence;\n   ●​   internal notes;\n   ●​   sensitive security details;\n   ●​   complete governance history; and\n   ●​   restricted administrative information.\n\nAffected Partner Organization\nShould normally receive:\n\n   ●​   action;\n   ●​   applicable factor;\n   ●​   factual rationale;\n   ●​   policy basis;\n   ●​   consequences;\n   ●​   remediation requirements;\n   ●​   deadlines; and\n   ●​   review information.\n\nPublic Community\nMay receive:\n\n   ●​ current partnership status; and\n   ●​ an appropriate non-confidential explanation where public disclosure is justified.\n\nSensitive governance information must not automatically become public."
-   },
-   {
-      "id": "policy-section-27",
-      "title": "27. Historical Preservation",
-      "body": "Governance action does not erase legitimate historical activity.\n\nTruthLens preserves:\n\n   ●​   completed professional reviews;\n   ●​   published fact-checks;\n   ●​   institutional attribution;\n   ●​   historical membership and role provenance where appropriate;\n   ●​   governance decisions; and\n   ●​   relevant audit history.\n\nAn organization whose partnership has ended becomes a Former Partner rather than being\ndeleted.\n\nPublished work may still undergo appropriate editorial correction where independently\nwarranted."
-   },
-   {
-      "id": "policy-section-28",
-      "title": "28. Governance Audit Trail",
-      "body": "Every material lifecycle transition should generate a protected governance record.\n\nThe audit record should answer:\n\n   ●​   what action occurred;\n   ●​   what organization was affected;\n   ●​   when it occurred;\n   ●​   who authorized it;\n   ●​   what factor applied;\n   ●​   why it occurred;\n   ●​   what the previous and resulting statuses were; and\n   ●​   what later action, if any, modified the decision.\n\nCurrent status and governance history must remain separate concepts."
-   },
-   {
-      "id": "policy-section-29",
-      "title": "29. Automated Indicators",
-      "body": "TruthLens systems may identify conditions that warrant governance attention.\n\nExamples may include:\n\n   ●​    prolonged inactivity;\n   ●​    unresolved remediation deadlines;\n   ●​    repeated correction events;\n   ●​    unusual professional-account activity; or\n   ●​    missing required organizational information.\n\nSuch indicators may create alerts or review tasks.\n\nThey must not automatically suspend or terminate a Partner Organization."
-   },
-   {
-      "id": "policy-section-30",
-      "title": "30. Enforcement Decision Rule",
-      "body": "TruthLens applies the following governing rule:\n\n        A Partner Organization should receive the least severe governance action that\n        reasonably protects the integrity, security, reliability, and professional standards\n        of TruthLens while providing a meaningful opportunity to correct remediable\n        problems.\n\nMore severe action is appropriate where:\n\n   ●​    the conduct itself is severe;\n   ●​    urgent intervention is necessary;\n   ●​    similar serious failures recur;\n   ●​    corrective action has failed;\n   ●​    the organization cannot restore required capacity; or\n   ●​    continued partnership is no longer reasonably compatible with TruthLens\n         professional standards."
-   },
-   {
-      "id": "policy-section-31",
-      "title": "31. Policy Review",
-      "body": "TruthLens should periodically review this Policy as:\n\n   ●​    professional verification practices evolve;\n   ●​    platform functionality changes;\n   ●​    new governance risks are identified;\n   ●​    Partner Organization workflows mature; or\n   ●​    implementation experience demonstrates that clarification is necessary.\n\nChanges to enforcement standards should be documented and communicated appropriately\nbefore being applied to future cases, except where urgent security or legal requirements\nnecessitate immediate measures."
-   }
-];
+export const resolvePartnerGovernanceDocumentKey = (requestedKey) => {
+   if (requestedKey === "framework" || requestedKey === "enforcement") return "governance";
+   return requestedKey === "governance" ? "governance" : "guidelines";
+};
+
+export const partnerGovernanceSectionIds = Object.freeze({
+   remedialSuspension: "GOV-SUSP-REMEDIAL",
+   precautionarySuspension: "GOV-SUSP-PRECAUTIONARY",
+   administrativeSuspension: "GOV-SUSP-ADMINISTRATIVE",
+   voluntaryWithdrawal: "GOV-END-VOLUNTARY",
+   administrativeConclusion: "GOV-END-ADMINISTRATIVE",
+   terminationForCause: "GOV-END-CAUSE",
+   reconsideration: "GOV-RECONSIDERATION",
+   reviewerIndependence: "GOV-REVIEW-INDEPENDENCE",
+});
