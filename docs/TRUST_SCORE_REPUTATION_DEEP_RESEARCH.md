@@ -86,7 +86,7 @@ Current component bounds:
 | Component | Current range | Purpose |
 |---|---:|---|
 | Neutral baseline | 50 | Cold-start position |
-| Contribution Quality | -25 to +25 | Resolved evidence quality and confirmed Safety reports |
+| Contribution Quality | -25 to +25 | Resolved evidence quality and confirmed non-self Safety reports |
 | Community Reception | approximately -15 to +15 | Trust-weighted votes on verified evidence |
 | Sustained History | 0 to +5 | Successful participation across distinct months |
 | Moderation Penalty | 0 to -30 | Confirmed removed/rejected authored threads |
@@ -342,77 +342,52 @@ Those constants need empirical sensitivity testing.
 
 ---
 
-# 5. The vote snapshot issue
+# 5. Vote snapshot and persisted-score integrity
 
-TruthLens stores:
+TruthLens stores event-time vote reputation fields:
 
 ```python
 Vote.vote_trust_snapshot
+Vote.vote_resolved_actions_snapshot
+Vote.vote_validated_actions_snapshot
+Vote.vote_reputation_weight_snapshot
 ```
 
-when a vote is cast.
+New votes and changed vote values use the canonical live Trust calculation at
+the time of the action. The event-time snapshot therefore does not depend on
+the possibly stale denormalized `UserProfile.trust_score` cache.
 
-However, the current Trust Score calculation does not use the snapshot. It retrieves the voter's **current persisted Trust Score** whenever the target contributor is recalculated.
+The final reputation weight is frozen with the vote. Later changes to the
+voter's Trust Score do not reinterpret that historical action.
 
-Current behavior can therefore be:
+This preserves:
 
-```text
-Alice votes when Trust = 50
-vote_trust_snapshot = 50
+- historical reproducibility;
+- auditability;
+- bounded vote influence;
+- independence from temporary persisted-score lag.
 
-Alice later becomes Trust = 90
+The persisted profile score still exists because public profile/search/feed
+surfaces need an efficient projection. Trust-changing actions therefore use a
+best-effort immediate recomputation plus the existing asynchronous Celery
+refresh where appropriate. The management command remains a reconciliation
+tool for detecting and correcting any residual projection drift.
 
-Bob's score is recalculated
-Alice's old vote is now weighted using 90
-```
-
-This creates two problems.
-
-## 5.1 Historical interpretation changes retroactively
-
-An old action changes meaning because the actor's later reputation changed.
-
-That reduces auditability.
-
-## 5.2 Recalculation dependency becomes incomplete
-
-Alice's Trust Score changing does not automatically cause every contributor historically voted on by Alice to be recomputed.
-
-Therefore:
-
-```text
-persisted public score
-```
-
-can temporarily differ from:
-
-```text
-score obtained by recalculating the formula today
-```
+Legacy votes that predate the full snapshot fields retain their documented
+compatibility behavior because their exact original action depth cannot be
+reconstructed reliably.
 
 ### Research relevance
 
-Manipulation-resistant reputation research emphasizes reliable feedback aggregation and resistance to strategic manipulation. Deterministic historical evidence is also easier to audit than dynamically reinterpreted old actions.
+Manipulation-resistant reputation research emphasizes reliable feedback
+aggregation and resistance to strategic manipulation. Deterministic historical
+evidence is also easier to audit than dynamically reinterpreted old actions.
 
 Relevant sources:
 
 - Friedman, Resnick & Sami (2011), **Manipulation-Resistant Reputation Systems**, in *Algorithmic Game Theory*: https://www.cambridge.org/core/books/abs/algorithmic-game-theory/manipulationresistant-reputation-systems/13DBDA298DFFD00E6DA230C48267BBF1
 - Dellarocas (2000), **Mechanisms for Coping with Unfair Ratings and Discriminatory Behavior in Online Reputation Reporting Systems**: https://aisel.aisnet.org/icis2000/52/
 - Hoffman, Zage & Nita-Rotaru, **A Survey of Attack and Defense Techniques for Reputation Systems**: https://www.cerias.purdue.edu/apps/reports_and_papers/view/3319
-
-### Current recommendation
-
-This research strongly motivates evaluating:
-
-```text
-vote_trust_snapshot
-```
-
-as the authoritative historical weighting input.
-
-This change should still be validated through sensitivity and abuse-case simulations before implementation.
-
----
 
 # 6. Manipulation resistance: Sybil, collusion, ballot stuffing, whitewashing
 
@@ -455,44 +430,41 @@ Source:
 TruthLens already has several useful defenses:
 
 - users cannot vote on their own evidence;
+- users cannot report their own threads through the Community reporting API;
+- historical confirmed self-reports are excluded from positive reputation;
 - one vote per voter/evidence pair is enforced;
 - votes affect reputation only if evidence becomes professionally VERIFIED;
+- new/changed votes freeze canonical event-time Trust and action-depth snapshots;
+- fresh accounts with no validated reputation history have zero reputation vote influence;
 - Community Reception is bounded;
 - contribution quality has more maximum positive influence than reception;
-- rank promotion requires both score and resolved-action volume;
+- first-rank promotion requires resolved depth and at least one validated action;
 - professional authority is not granted through Trust Score.
 
 These properties make simple popularity manipulation less powerful than in a raw upvote system.
 
 ## 6.3 Remaining exposure
 
-A new TruthLens account begins at Trust Score 50.
-
-Under current weighting:
-
-```text
-new account vote weight = 0.75
-```
-
-That is relatively high for an identity with little demonstrated history.
-
-This raises an important future research question:
-
-> Should vote influence depend on both reputation score and reputation confidence/sample size?
-
-For example, a conceptual model could eventually distinguish:
+The hardened vote policy gives a fresh account with no validated Community
+history:
 
 ```text
-high score + little evidence
+reputation vote weight = 0
 ```
 
-from:
+That closes the simplest fresh-account vote-influence path, but it does not
+make TruthLens Sybil-proof. An attacker may still try to build successful
+history across multiple accounts, coordinate established users, or compromise
+legitimate accounts.
 
-```text
-high score + extensive evidence
-```
+Self-generated reporting is also blocked as a reputation source: users cannot
+report their own threads through the API, and historical confirmed self-reports
+are ignored by Trust Score even though the moderation records remain intact.
 
-No formula should be adopted yet. This should be tested through Sybil/collusion simulations.
+These controls reduce obvious self-promotion paths while preserving the
+important distinction that Community reputation is not professional authority.
+Broader coordinated-abuse detection remains a platform-governance concern
+rather than something the Trust formula alone can solve.
 
 ---
 
