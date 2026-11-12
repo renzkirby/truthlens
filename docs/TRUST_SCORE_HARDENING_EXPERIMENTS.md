@@ -378,15 +378,16 @@ All snapshot-based candidates fix I9.
 
 # 9. Provisional graduation experiment
 
-Current rule:
+This experiment originally compared the legacy volume-only first-rank rule with
+the positive-action gate that is now implemented in production.
+
+Historical pre-H3 rule:
 
 ```text
 resolved actions >= 3
 ```
 
-is sufficient to leave Provisional because New Contributor has no meaningful score floor above zero.
-
-Observed current behavior:
+Under that legacy rule:
 
 ```text
 3 failures
@@ -394,7 +395,7 @@ Trust Score 39.29
 -> New Contributor
 ```
 
-Candidate:
+Current production rule:
 
 ```text
 resolved actions >= 3
@@ -402,29 +403,18 @@ AND
 validated actions >= 1
 ```
 
-Results:
+Current results:
 
-| Scenario | Current | Positive-evidence gate |
+| Scenario | Legacy volume-only rule | Current production |
 |---|---|---|
 | 3 failures | New Contributor | **Provisional** |
 | 1 success + 2 failures | New Contributor | New Contributor |
 | 3 successes | New Contributor | New Contributor |
 
-This candidate separates:
-
-```text
-sample size
-```
-
-from:
-
-```text
-positive qualification for first rank
-```
-
-without changing higher-rank score/action thresholds.
-
-This appears more semantically coherent than the current rule and is simple to explain.
+The current production rule separates sample size from positive qualification
+for the first Community rank. The experiment remains in the repository as the
+historical comparison that justified H3; it is no longer an unimplemented
+candidate.
 
 ---
 
@@ -477,7 +467,7 @@ Recommendation:
 | Snapshot only | ✅ | ❌ | ✅ | ✅ | Necessary integrity fix, insufficient alone |
 | Snapshot × validated-history factor | ✅ | ✅ | ✅ | ✅ | **Best current trade-off** |
 | Snapshot + Contributor gate | ✅ | ✅ | ❌ | ✅ | Effective but likely too restrictive |
-| Positive-evidence Provisional gate | n/a | n/a | ✅ | ✅ | Strong first-rank candidate |
+| Positive-action Provisional gate (H3) | n/a | n/a | ✅ | ✅ | **Implemented in production** |
 
 ---
 
