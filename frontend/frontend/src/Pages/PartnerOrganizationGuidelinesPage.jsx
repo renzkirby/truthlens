@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
@@ -481,12 +481,44 @@ function PartnerOrganizationGuidelinesPage() {
       [currentDocument],
    );
    const [activeSection, setActiveSection] = useState(currentSections[0]?.id || "");
+   const [showFloatingBack, setShowFloatingBack] = useState(false);
+   const lastScrollYRef = useRef(0);
+   const upwardDistanceRef = useRef(0);
 
    const location = useLocation();
    const isPlatformAdmin = canAccessManagementConsole(user);
    const professionalIdentity = user?.community_identity?.professional_identity || null;
    const canView = isPlatformAdmin || Boolean(professionalIdentity);
    const managementView = location.pathname.startsWith("/management/");
+
+   useEffect(() => {
+      lastScrollYRef.current = window.scrollY;
+      upwardDistanceRef.current = 0;
+
+      const handleScroll = () => {
+         const currentY = Math.max(window.scrollY, 0);
+         const previousY = lastScrollYRef.current;
+         const delta = currentY - previousY;
+
+         if (currentY <= 96) {
+            setShowFloatingBack(false);
+            upwardDistanceRef.current = 0;
+         } else if (delta < 0) {
+            upwardDistanceRef.current += Math.abs(delta);
+            if (upwardDistanceRef.current >= 28) {
+               setShowFloatingBack(true);
+            }
+         } else if (delta > 0) {
+            upwardDistanceRef.current = 0;
+            setShowFloatingBack(false);
+         }
+
+         lastScrollYRef.current = currentY;
+      };
+
+      window.addEventListener("scroll", handleScroll, { passive: true });
+      return () => window.removeEventListener("scroll", handleScroll);
+   }, []);
 
    useEffect(() => {
       setActiveSection(currentSections[0]?.id || "");
@@ -533,6 +565,15 @@ function PartnerOrganizationGuidelinesPage() {
       <main className={`partner-guidelines-page ${managementView ? "partner-guidelines-page--management" : ""}`}>
          <div className="partner-guidelines-page__content">
             <Link className="partner-guidelines-back" to={backTo}>
+               ← {backLabel}
+            </Link>
+
+            <Link
+               className={`partner-guidelines-floating-back ${showFloatingBack ? "is-visible" : ""}`}
+               to={backTo}
+               aria-hidden={!showFloatingBack}
+               tabIndex={showFloatingBack ? 0 : -1}
+            >
                ← {backLabel}
             </Link>
 
