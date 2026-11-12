@@ -563,8 +563,9 @@ function PartnerOrganizationGuidelinesPage() {
                      <div className="partner-guidelines-access-note">
                         <strong>Read-only policy</strong>
                         <p>
-                           These Guidelines apply to Partner Organizations, Organization Administrators,
-                           Lead Verifiers, Researchers, and other members using professional privileges.
+                           {currentDocument.key === "guidelines"
+                              ? "These Guidelines apply to Partner Organizations, Organization Administrators, Lead Verifiers, Researchers, and other members using professional privileges."
+                              : "This governance document is presented from the authoritative TruthLens policy source and is available here as a read-only reference."}
                         </p>
                      </div>
                   </header>
