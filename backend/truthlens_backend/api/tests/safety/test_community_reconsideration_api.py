@@ -229,6 +229,79 @@ class CommunitySafetyReconsiderationApiTests(APITestCase):
             ).exists()
         )
 
+    def test_dismissed_decision_cannot_be_reconsidered(self):
+        claim_response = self._claim(self.case, self.moderator)
+        self.assertEqual(claim_response.status_code, status.HTTP_200_OK)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            dismiss_response = self._client_for(self.moderator).post(
+                reverse("safety_case_action", kwargs={"case_id": self.case.pk}),
+                {
+                    "action": "DISMISS",
+                },
+                format="json",
+            )
+        self.assertEqual(dismiss_response.status_code, status.HTTP_200_OK)
+
+        decision = CommunitySafetyDecision.objects.get(moderation_case=self.case)
+        response = self._request(decision)
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertFalse(
+            CommunitySafetyReconsideration.objects.filter(
+                safety_decision=decision,
+            ).exists()
+        )
+
+    def test_reconsideration_must_be_claimed_before_resolution(self):
+        decision = self._remove()
+        self._request(decision)
+
+        response = self._client_for(self.other_moderator).post(
+            reverse(
+                "safety_case_reconsideration_resolve",
+                kwargs={"case_id": self.case.pk},
+            ),
+            {
+                "outcome": "UPHELD",
+                "resolution_rationale": (
+                    "The reconsideration cannot be resolved before a reviewer "
+                    "claims the reopened Safety case."
+                ),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        reconsideration = CommunitySafetyReconsideration.objects.get(
+            safety_decision=decision,
+        )
+        self.assertEqual(reconsideration.outcome, "")
+
+    def test_original_qualified_reviewer_may_resolve_reconsideration(self):
+        decision = self._remove(moderator=self.moderator)
+        self._request(decision)
+
+        response = self._resolve(
+            self.case,
+            outcome=CommunitySafetyReconsideration.Outcome.UPHELD,
+            moderator=self.moderator,
+            rationale=(
+                "A second review of the context still supports the original "
+                "Community Guidelines finding."
+            ),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        reconsideration = CommunitySafetyReconsideration.objects.get(
+            safety_decision=decision,
+        )
+        self.assertEqual(
+            reconsideration.outcome,
+            CommunitySafetyReconsideration.Outcome.UPHELD,
+        )
+        self.assertEqual(reconsideration.reviewed_by, self.moderator)
+
     def test_normal_safety_actions_are_blocked_during_reconsideration(self):
         decision = self._remove()
         self._request(decision)
