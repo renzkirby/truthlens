@@ -55,6 +55,27 @@ class Migration(migrations.Migration):
                 null=True,
             ),
         ),
+        migrations.AddField(
+            model_name="communitysafetydecision",
+            name="pre_removal_moderated_by",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="+",
+                to=settings.AUTH_USER_MODEL,
+            ),
+        ),
+        migrations.AddField(
+            model_name="communitysafetydecision",
+            name="pre_removal_moderated_at",
+            field=models.DateTimeField(blank=True, null=True),
+        ),
+        migrations.AddField(
+            model_name="communitysafetydecision",
+            name="pre_removal_moderator_notes",
+            field=models.TextField(blank=True, null=True),
+        ),
         migrations.RunPython(
             backfill_pre_removal_thread_status,
             migrations.RunPython.noop,
