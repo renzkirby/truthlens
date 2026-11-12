@@ -366,7 +366,7 @@ def schedule_safety_resolution_notifications(result):
                     dedupe_key=f"community-safety:{decision.pk}:author",
                     title="Your discussion was removed",
                     message=(
-                        "Platform Safety found "
+                        "Platform Safety found a Community Guidelines violation: "
                         f"{decision.violation_label_snapshot}. "
                         "Open the moderation outcome to review the reason and policy."
                     ),
@@ -393,7 +393,8 @@ def schedule_safety_resolution_notifications(result):
                 title = "The content you reported was removed"
                 message = (
                     "Platform Safety removed the content for a Community Guidelines "
-                    "violation, but your report was not confirmed for Community reputation."
+                    "violation, but your report did not identify the issue that was "
+                    "confirmed. Your Community reputation was not changed."
                 )
             else:
                 title = "Your report was reviewed"
