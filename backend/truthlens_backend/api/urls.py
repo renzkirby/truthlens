@@ -18,6 +18,11 @@ urlpatterns = [
         name="community_moderation_outcome",
     ),
     path(
+        "community/moderation/outcomes/<uuid:decision_id>/reconsideration/",
+        views.community_moderation_reconsideration,
+        name="community_moderation_reconsideration",
+    ),
+    path(
         "governance/notices/",
         organization_governance_notice_views.GovernanceNoticeListView.as_view(),
         name="governance_notice_list",
@@ -366,6 +371,11 @@ urlpatterns = [
         "moderation/safety/cases/<uuid:case_id>/action/",
         views.safety_case_action,
         name="safety_case_action",
+    ),
+    path(
+        "moderation/safety/cases/<uuid:case_id>/reconsideration/resolve/",
+        views.safety_case_reconsideration_resolve,
+        name="safety_case_reconsideration_resolve",
     ),
     path(
         "moderation/evidence/cases/",
