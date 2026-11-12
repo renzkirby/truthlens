@@ -3645,6 +3645,13 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
         except Thread.DoesNotExist:
             raise NotFound("Thread not found.")
 
+        # Snapshot canonical live reputation before entering the claim-locking
+        # transaction so an old persisted profile cache cannot become
+        # historical evidence metadata.
+        contributor_trust_snapshot = calculate_trust_components(
+            self.request.user,
+        )["trust_score"]
+
         with transaction.atomic():
             # Coordinate new evidence with action-time adjudication readiness.
             locked_claim = Claim.objects.select_for_update().get(
@@ -3658,7 +3665,7 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
             evidence = serializer.save(
                 contributor=self.request.user,
                 thread=thread,
-                contributor_trust_snapshot=(self.request.user.profile.trust_score),
+                contributor_trust_snapshot=contributor_trust_snapshot,
                 evidence_status=(EvidenceSubmission.EvidenceStatus.UNVERIFIED),
             )
 
@@ -3778,6 +3785,9 @@ class ThreadFlagViewSet(viewsets.ModelViewSet):
         except Thread.DoesNotExist:
             raise NotFound("Thread not found.")
 
+        if thread.author_id == self.request.user.id:
+            raise ValidationError({"detail": "You cannot report your own thread."})
+
         try:
             with transaction.atomic():
                 serializer.save(
@@ -3791,6 +3801,33 @@ class ThreadFlagViewSet(viewsets.ModelViewSet):
                 )
         except IntegrityError:
             raise ValidationError({"detail": "You already flagged this thread."})
+
+
+def _schedule_vote_target_trust_refresh(user_id, *, action):
+    """Refresh vote-target reputation without making the vote action depend on it."""
+
+    def refresh():
+        try:
+            recompute_user_trust_score(user_id)
+        except Exception:
+            logger.exception(
+                "Failed immediate vote-triggered Trust recomputation for "
+                "user_id=%s action=%s.",
+                user_id,
+                action,
+            )
+
+        try:
+            recompute_user_trust_score_task.delay(user_id)
+        except Exception:
+            logger.exception(
+                "Failed to enqueue vote-triggered Trust recomputation for "
+                "user_id=%s action=%s.",
+                user_id,
+                action,
+            )
+
+    transaction.on_commit(refresh, robust=True)
 
 
 class VoteViewSet(viewsets.ModelViewSet):
@@ -3824,7 +3861,10 @@ class VoteViewSet(viewsets.ModelViewSet):
         except IntegrityError:
             raise ValidationError({"detail": "You already voted on this evidence."})
 
-        recompute_user_trust_score_task.delay(vote.evidence.contributor_id)
+        _schedule_vote_target_trust_refresh(
+            vote.evidence.contributor_id,
+            action="CREATE",
+        )
 
     def perform_update(self, serializer):
         current_vote = serializer.instance
@@ -3846,12 +3886,18 @@ class VoteViewSet(viewsets.ModelViewSet):
                 vote_reputation_weight_snapshot=snapshot["reputation_weight"],
             )
 
-        recompute_user_trust_score_task.delay(vote.evidence.contributor_id)
+        _schedule_vote_target_trust_refresh(
+            vote.evidence.contributor_id,
+            action="UPDATE",
+        )
 
     def perform_destroy(self, instance):
         contributor_id = instance.evidence.contributor_id
         instance.delete()
-        recompute_user_trust_score_task.delay(contributor_id)
+        _schedule_vote_target_trust_refresh(
+            contributor_id,
+            action="DELETE",
+        )
 
 
 # FOR AI-GENERATED IMAGE DETECTION
