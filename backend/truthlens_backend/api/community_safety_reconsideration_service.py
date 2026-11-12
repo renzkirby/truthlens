@@ -276,9 +276,9 @@ def resolve_reconsideration(*, case, actor, outcome, resolution_rationale):
                 "The original thread state cannot be restored safely."
             )
         thread.status = decision.pre_removal_thread_status
-        thread.moderated_by = None
-        thread.moderated_at = None
-        thread.moderator_notes = None
+        thread.moderated_by_id = decision.pre_removal_moderated_by_id
+        thread.moderated_at = decision.pre_removal_moderated_at
+        thread.moderator_notes = decision.pre_removal_moderator_notes
         thread.save(
             update_fields=[
                 "status",
