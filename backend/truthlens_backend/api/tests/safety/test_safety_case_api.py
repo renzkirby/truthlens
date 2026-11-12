@@ -161,6 +161,19 @@ class SafetyCaseApiTests(APITestCase):
         self.assertEqual(anonymous_response.status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertEqual(ordinary_response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_community_guidelines_are_public_and_versioned(self):
+        response = APIClient().get(reverse("community_guidelines"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["title"], "TruthLens Community Guidelines")
+        self.assertEqual(response.data["version"], "1.0")
+        self.assertEqual(len(response.data["rules"]), 7)
+        self.assertIn(
+            "HARASSMENT_TARGETED_ABUSE",
+            {rule["code"] for rule in response.data["rules"]},
+        )
+        self.assertIn("verification", response.data["verification_boundary"].lower())
+
     def test_partner_factual_role_cannot_access_safety_endpoints(self):
         client = self._client_for(self.partner_lead)
         requests = [
@@ -526,11 +539,26 @@ class SafetyCaseApiTests(APITestCase):
                 thread=self.thread, resolved_at__isnull=True
             ).exists()
         )
-        self.assertEqual(FlagResolutionLog.objects.filter(thread=self.thread).count(), 2)
+        logs = FlagResolutionLog.objects.filter(thread=self.thread)
+        self.assertEqual(logs.count(), 2)
+        self.assertEqual(
+            set(logs.values_list("report_outcome", flat=True)),
+            {FlagResolutionLog.ReportOutcome.NO_VIOLATION},
+        )
+        self.assertFalse(logs.filter(is_valid_report=True).exists())
         self.assertTrue(
             self.case.events.filter(
                 event_type=ModerationEvent.EventType.SAFETY_DISMISSED
             ).exists()
+        )
+        decision = CommunitySafetyDecision.objects.get(moderation_case=self.case)
+        self.assertEqual(decision.action, CommunitySafetyDecision.Action.DISMISS)
+        notifications = Notification.objects.filter(
+            notification_type=Notification.NotificationType.COMMUNITY_MODERATION_OUTCOME
+        )
+        self.assertEqual(
+            set(notifications.values_list("recipient_id", flat=True)),
+            {self.reporter_one.id, self.reporter_two.id},
         )
         self.assertGreaterEqual(recompute.call_count, 3)
 
