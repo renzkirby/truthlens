@@ -685,17 +685,19 @@ class AdjudicationActionApiContractTests(
             AdjudicationDecision.objects.filter(claim=context["claim"]).exists()
         )
 
-    def test_broker_failure_does_not_turn_committed_action_into_http_500(self):
+    @patch(
+        "api.trust_service.recompute_user_trust_score",
+        side_effect=RuntimeError("Trust calculation unavailable"),
+    )
+    def test_direct_trust_failure_does_not_turn_committed_action_into_http_500(
+        self,
+        recompute,
+    ):
         context = self.make_context(
             evidence_statuses=[EvidenceSubmission.EvidenceStatus.VERIFIED]
         )
-        self.contributor.profile.trust_score = 1.0
-        self.contributor.profile.save(update_fields=["trust_score"])
 
-        with patch(
-            "api.tasks.recompute_user_trust_score_task.delay",
-            side_effect=ConnectionError("broker unavailable"),
-        ):
+        with self.assertLogs("api.adjudication_service", level="ERROR"):
             with self.captureOnCommitCallbacks(execute=True):
                 response = self.client.post(
                     self.action_url(context),
@@ -711,11 +713,7 @@ class AdjudicationActionApiContractTests(
             AdjudicationDecision.Verdict.FAKE,
         )
         self.assertEqual(context["case"].status, ModerationCase.Status.RESOLVED)
-        self.contributor.profile.refresh_from_db()
-        self.assertEqual(
-            self.contributor.profile.trust_score,
-            calculate_trust_components(self.contributor)["trust_score"],
-        )
+        recompute.assert_called_once_with(self.contributor.id)
 
     def test_trust_dispatch_targets_each_distinct_contributor_once(self):
         context = self.make_context(
@@ -747,8 +745,8 @@ class AdjudicationActionApiContractTests(
         )
 
         with patch(
-            "api.tasks.recompute_user_trust_score_task.delay",
-        ) as dispatch:
+            "api.trust_service.recompute_user_trust_score",
+        ) as recompute:
             with self.captureOnCommitCallbacks(execute=True) as callbacks:
                 response = self.client.post(
                     self.action_url(context),
@@ -758,9 +756,9 @@ class AdjudicationActionApiContractTests(
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(callbacks), 1)
-        self.assertEqual(dispatch.call_count, 2)
+        self.assertEqual(recompute.call_count, 2)
         self.assertEqual(
-            {call.args[0] for call in dispatch.call_args_list},
+            {call.args[0] for call in recompute.call_args_list},
             {self.contributor.id, self.second_contributor.id},
         )
 
