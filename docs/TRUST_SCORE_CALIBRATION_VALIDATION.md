@@ -103,13 +103,14 @@ A separate parity test verifies that the simulator's mathematical output matches
 | 25 valid Safety reports only | 76.55 | Trusted Contributor | +21.55 | 0.00 | +5 | 0 |
 | 25 dismissed Safety reports only | 50.00 | Provisional | 0.00 | 0.00 | 0 | 0 |
 
-> **Report-semantics update:** dismissed Safety reports are neutral. They remain in moderation history but are excluded from Trust Score resolved-action depth, quality success/failure counts, successful-month history, and vote-weight maturation. Confirmed Safety reports remain positive reputation actions.
 | 18 verified / 7 rejected, no votes | 64.48 | Contributor | +9.48 | 0.00 | +5 | 0 |
 | Same 18/7 + ten fresh-account upvotes | 75.49 | Trusted Contributor | +9.48 | +11.01 | +5 | 0 |
 | 25/25 verified + ten fresh-account downvotes | 65.54 | Contributor | +21.55 | -11.01 | +5 | 0 |
 | Five early failures | 36.11 | New Contributor | -13.89 | 0.00 | 0 | 0 |
 | Five failures + twenty later successes | 67.93 | Contributor | +12.93 | 0.00 | +5 | 0 |
 | Three failed resolved actions | 39.29 | New Contributor | -10.71 | 0.00 | 0 | 0 |
+
+> **Report-semantics update:** dismissed Safety reports are neutral. They remain in moderation history but are excluded from Trust Score resolved-action depth, quality success/failure counts, successful-month history, and vote-weight maturation. Confirmed Safety reports remain positive reputation actions.
 
 "Fresh account" in these probes means an otherwise eligible Community identity with the default Trust Score of 50. Current Community participation checks require an active authenticated non-platform-staff identity; they do not require an established reputation history.
 
