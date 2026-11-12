@@ -193,6 +193,9 @@ export const API_ENDPOINTS = {
    THREADS: "threads/",
 
    // Moderation
+   COMMUNITY_GUIDELINES: "community/guidelines/",
+   COMMUNITY_MODERATION_OUTCOME: (decisionId) =>
+      `community/moderation/outcomes/${encodeURIComponent(decisionId)}/`,
    SAFETY_CASES: "moderation/safety/cases/",
    SAFETY_CASE_DETAIL: (caseId) => `moderation/safety/cases/${encodeURIComponent(caseId)}/`,
    SAFETY_CASE_CLAIM: (caseId) => `moderation/safety/cases/${encodeURIComponent(caseId)}/claim/`,
