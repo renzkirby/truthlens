@@ -70,6 +70,10 @@ from .profile_avatar_service import (
     validate_profile_avatar_data_url,
 )
 from .moderation_service import ACTIVE_CASE_STATUSES
+from .community_policy import (
+    COMMUNITY_VIOLATION_CHOICES,
+    community_policy_payload,
+)
 from .adjudication_provenance import (
     AdjudicationProvenance,
     get_adjudication_decision_provenance,
@@ -1790,9 +1794,24 @@ class SafetyCaseActionSerializer(serializers.Serializer):
         max_length=2000,
         default="",
     )
+    violation_code = serializers.ChoiceField(
+        choices=COMMUNITY_VIOLATION_CHOICES,
+        required=False,
+    )
+    confirmed_report_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=False,
+        allow_empty=True,
+    )
 
     def validate(self, attrs):
-        unsupported_fields = set(self.initial_data) - {"action", "notes"}
+        supported_fields = {
+            "action",
+            "notes",
+            "violation_code",
+            "confirmed_report_ids",
+        }
+        unsupported_fields = set(self.initial_data) - supported_fields
         if unsupported_fields:
             raise serializers.ValidationError(
                 {
@@ -1801,7 +1820,12 @@ class SafetyCaseActionSerializer(serializers.Serializer):
                 }
             )
 
-        if attrs["action"] in {"REMOVE", "ESCALATE"} and not attrs["notes"]:
+        action = attrs["action"]
+        notes = attrs["notes"]
+        violation_code = attrs.get("violation_code")
+        confirmed_report_ids = attrs.get("confirmed_report_ids")
+
+        if action in {"REMOVE", "ESCALATE"} and not notes:
             raise serializers.ValidationError(
                 {
                     "notes": (
@@ -1810,6 +1834,52 @@ class SafetyCaseActionSerializer(serializers.Serializer):
                     )
                 }
             )
+
+        if action == "REMOVE":
+            if not violation_code:
+                raise serializers.ValidationError(
+                    {
+                        "violation_code": (
+                            "Select the Community Guidelines violation "
+                            "that supports this removal."
+                        )
+                    }
+                )
+            if "confirmed_report_ids" not in self.initial_data:
+                raise serializers.ValidationError(
+                    {
+                        "confirmed_report_ids": (
+                            "Explicitly review which reports identified "
+                            "the confirmed issue. An empty list is allowed."
+                        )
+                    }
+                )
+            values = [str(value) for value in (confirmed_report_ids or [])]
+            if len(values) != len(set(values)):
+                raise serializers.ValidationError(
+                    {
+                        "confirmed_report_ids": (
+                            "Confirmed report selections cannot contain duplicates."
+                        )
+                    }
+                )
+        else:
+            if violation_code is not None:
+                raise serializers.ValidationError(
+                    {
+                        "violation_code": (
+                            "Only removed content can record a confirmed violation."
+                        )
+                    }
+                )
+            if confirmed_report_ids is not None:
+                raise serializers.ValidationError(
+                    {
+                        "confirmed_report_ids": (
+                            "Only removed content can confirm individual reports."
+                        )
+                    }
+                )
 
         return attrs
 
@@ -1923,6 +1993,7 @@ class SafetyCaseSummarySerializer(serializers.ModelSerializer):
 class SafetyCaseDetailSerializer(SafetyCaseSummarySerializer):
     reports = serializers.SerializerMethodField()
     events = serializers.SerializerMethodField()
+    community_policy = serializers.SerializerMethodField()
 
     def get_reports(self, obj):
         return SafetyReportDetailSerializer(
@@ -1934,8 +2005,15 @@ class SafetyCaseDetailSerializer(SafetyCaseSummarySerializer):
         events = getattr(obj, "recent_safety_events", [])[:50]
         return SafetyModerationEventSerializer(events, many=True).data
 
+    def get_community_policy(self, obj):
+        return community_policy_payload()
+
     class Meta(SafetyCaseSummarySerializer.Meta):
-        fields = SafetyCaseSummarySerializer.Meta.fields + ["reports", "events"]
+        fields = SafetyCaseSummarySerializer.Meta.fields + [
+            "reports",
+            "events",
+            "community_policy",
+        ]
         read_only_fields = fields
 
 

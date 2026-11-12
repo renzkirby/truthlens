@@ -210,7 +210,15 @@ def release_safety_case(*, case, actor):
         return released_case
 
 
-def perform_safety_case_action(*, case, actor, action, notes=""):
+def perform_safety_case_action(
+    *,
+    case,
+    actor,
+    action,
+    notes="",
+    violation_code="",
+    confirmed_report_ids=None,
+):
     ensure_can_review_safety(actor)
 
     if not case.thread_id:
@@ -267,20 +275,44 @@ def perform_safety_case_action(*, case, actor, action, notes=""):
         previous_case_status = locked_case.status
         previous_thread_status = locked_thread.status
 
-        result = resolve_safety_case(
-            thread=locked_thread,
-            actor=actor,
-            action=action,
-            notes=notes,
-        )
+        try:
+            result = resolve_safety_case(
+                thread=locked_thread,
+                actor=actor,
+                action=action,
+                notes=notes,
+                violation_code=violation_code,
+                confirmed_report_ids=confirmed_report_ids,
+            )
+        except Exception as error:
+            from .moderation_service import ModerationCaseError
+            if isinstance(error, ModerationCaseError):
+                raise SafetyCaseConflict(str(error)) from error
+            raise
+
         result["action"] = action
         resolved_case = result["case"]
         resolved_thread = result["thread"]
+        decision = result.get("decision")
         action_type = (
             AccountabilityEvent.ActionType.SAFETY_CONTENT_REMOVED
             if action == "REMOVE"
             else AccountabilityEvent.ActionType.SAFETY_DISMISSED
         )
+        context = {
+            "thread_id": str(resolved_thread.pk),
+            "decision_id": str(decision.pk) if decision else None,
+            "confirmed_report_count": len(
+                result.get("confirmed_reporter_ids", set())
+            ),
+        }
+        if decision:
+            context.update(
+                {
+                    "violation_code": decision.violation_code or None,
+                    "policy_version": decision.policy_version,
+                }
+            )
         record_accountability_event(
             action_type=action_type,
             resource_type=AccountabilityEvent.ResourceType.MODERATION_CASE,
@@ -298,9 +330,102 @@ def perform_safety_case_action(*, case, actor, action, notes=""):
             },
             reason_code=action,
             notes=notes,
-            context={"thread_id": str(resolved_thread.pk)},
+            context=context,
         )
         return result
+
+
+def schedule_safety_resolution_notifications(result):
+    decision = result.get("decision")
+    if decision is None:
+        return
+
+    report_outcomes = tuple(result.get("report_outcomes", ()))
+    author_id = result.get("author_id")
+
+    def deliver():
+        try:
+            from .notification_service import (
+                Target,
+                Type,
+                create_notification_once,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to load Community moderation notification service "
+                "for decision_id=%s.",
+                decision.pk,
+            )
+            return
+
+        if decision.action == "REMOVE" and author_id:
+            try:
+                create_notification_once(
+                    recipient_id=author_id,
+                    notification_type=Type.COMMUNITY_MODERATION_OUTCOME,
+                    target_type=Target.MODERATION_OUTCOME,
+                    target_id=decision.pk,
+                    dedupe_key=f"community-safety:{decision.pk}:author",
+                    title="Your discussion was removed",
+                    message=(
+                        "Platform Safety found "
+                        f"{decision.violation_label_snapshot}. "
+                        "Open the moderation outcome to review the reason and policy."
+                    ),
+                )
+            except Exception:
+                logger.exception(
+                    "Failed Community moderation author notification "
+                    "for decision_id=%s user_id=%s.",
+                    decision.pk,
+                    author_id,
+                )
+
+        for report in report_outcomes:
+            reporter_id = report["reporter_id"]
+            outcome = report["outcome"]
+            if outcome == "CONFIRMED":
+                title = "Your report was confirmed"
+                message = (
+                    "Platform Safety removed the reported content and confirmed "
+                    "that your report identified the policy issue. This report "
+                    "counts toward your Community reputation."
+                )
+            elif outcome == "NOT_CONFIRMED":
+                title = "The content you reported was removed"
+                message = (
+                    "Platform Safety removed the content for a Community Guidelines "
+                    "violation, but your report was not confirmed for Community reputation."
+                )
+            else:
+                title = "Your report was reviewed"
+                message = (
+                    "Platform Safety did not find a Community Guidelines violation. "
+                    "Your Community reputation was not changed."
+                )
+
+            try:
+                create_notification_once(
+                    recipient_id=reporter_id,
+                    notification_type=Type.COMMUNITY_MODERATION_OUTCOME,
+                    target_type=Target.MODERATION_OUTCOME,
+                    target_id=decision.pk,
+                    dedupe_key=(
+                        f"community-safety:{decision.pk}:report:{report['report_id']}"
+                    ),
+                    title=title,
+                    message=message,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed Community moderation reporter notification "
+                    "for decision_id=%s report_id=%s user_id=%s.",
+                    decision.pk,
+                    report["report_id"],
+                    reporter_id,
+                )
+
+    transaction.on_commit(deliver, robust=True)
 
 
 def schedule_safety_resolution_trust_updates(result, *, action=None):

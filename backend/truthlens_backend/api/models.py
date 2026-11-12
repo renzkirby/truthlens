@@ -128,6 +128,10 @@ class Notification(models.Model):
         THREAD_COMMENTED = "THREAD_COMMENTED", "Thread commented"
         EVIDENCE_REVIEWED = "EVIDENCE_REVIEWED", "Evidence reviewed"
         USER_FOLLOWED = "USER_FOLLOWED", "User followed"
+        COMMUNITY_MODERATION_OUTCOME = (
+            "COMMUNITY_MODERATION_OUTCOME",
+            "Community moderation outcome",
+        )
 
     class TargetType(models.TextChoices):
         CLAIM = "CLAIM", "Claim"
@@ -137,6 +141,7 @@ class Notification(models.Model):
         ORGANIZATION = "ORGANIZATION", "Organization"
         GOVERNANCE_NOTICE = "GOVERNANCE_NOTICE", "Governance notice"
         USER_PROFILE = "USER_PROFILE", "User profile"
+        MODERATION_OUTCOME = "MODERATION_OUTCOME", "Moderation outcome"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
@@ -161,11 +166,11 @@ class Notification(models.Model):
                 "ARTICLE_RETURNED_FOR_REWORK", "FACT_CHECK_PUBLISHED",
                 "FACTUAL_CORRECTION_PUBLISHED", "ORGANIZATION_MEMBERSHIP_CHANGED",
                 "ORGANIZATION_GOVERNANCE_CHANGED", "THREAD_COMMENTED",
-                "EVIDENCE_REVIEWED", "USER_FOLLOWED",
+                "EVIDENCE_REVIEWED", "USER_FOLLOWED", "COMMUNITY_MODERATION_OUTCOME",
             ]), name="notification_type_valid"),
             models.CheckConstraint(condition=Q(target_type__in=[
                 "CLAIM", "THREAD", "OFFICIAL_FACT_CHECK", "WORKSPACE", "ORGANIZATION",
-                "GOVERNANCE_NOTICE", "USER_PROFILE",
+                "GOVERNANCE_NOTICE", "USER_PROFILE", "MODERATION_OUTCOME",
             ]), name="notification_target_valid"),
         ]
         indexes = [
@@ -1776,6 +1781,11 @@ class FlagResolutionLog(models.Model):
         REMOVE = "REMOVE", "Remove"
         ESCALATE = "ESCALATE", "Escalate"
 
+    class ReportOutcome(models.TextChoices):
+        CONFIRMED = "CONFIRMED", "Confirmed"
+        NOT_CONFIRMED = "NOT_CONFIRMED", "Not confirmed"
+        NO_VIOLATION = "NO_VIOLATION", "No violation found"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     thread = models.ForeignKey(
         Thread, on_delete=models.CASCADE, related_name="flag_resolution_logs"
@@ -1788,6 +1798,19 @@ class FlagResolutionLog(models.Model):
     flagged_at = models.DateTimeField()
     resolved_action = models.CharField(max_length=20, choices=ResolutionAction.choices)
     is_valid_report = models.BooleanField(default=False)
+    report_outcome = models.CharField(
+        max_length=20,
+        choices=ReportOutcome.choices,
+        null=True,
+        blank=True,
+    )
+    safety_decision = models.ForeignKey(
+        "CommunitySafetyDecision",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="report_outcomes",
+    )
     resolved_by = models.ForeignKey(
         "auth.User",
         on_delete=models.SET_NULL,
@@ -2173,6 +2196,85 @@ class ModerationCase(models.Model):
 
     def __str__(self):
         return f"{self.get_case_type_display()} " f"{self.id} - {self.status}"
+
+
+class CommunitySafetyDecision(models.Model):
+    """Immutable authoritative outcome for one Platform Safety case."""
+
+    class Action(models.TextChoices):
+        DISMISS = "DISMISS", "Dismiss"
+        REMOVE = "REMOVE", "Remove"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    moderation_case = models.OneToOneField(
+        ModerationCase,
+        on_delete=models.PROTECT,
+        related_name="community_safety_decision",
+    )
+    action = models.CharField(max_length=20, choices=Action.choices)
+    violation_code = models.CharField(max_length=64, blank=True, default="")
+    policy_title_snapshot = models.CharField(max_length=160)
+    policy_version = models.CharField(max_length=20)
+    violation_label_snapshot = models.CharField(max_length=160, blank=True, default="")
+    thread_id_snapshot = models.UUIDField()
+    thread_author = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="community_safety_decisions",
+    )
+    author_username_snapshot = models.CharField(max_length=150, blank=True, default="")
+    content_excerpt_snapshot = models.TextField(blank=True, default="")
+    rationale = models.TextField()
+    decided_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="community_safety_decisions_made",
+    )
+    decided_at = models.DateTimeField(default=timezone.now, editable=False)
+
+    class Meta:
+        ordering = ["-decided_at"]
+        indexes = [
+            models.Index(
+                fields=["violation_code", "-decided_at"],
+                name="community_safety_violation_idx",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.moderation_case_id and self.moderation_case.case_type != ModerationCase.CaseType.SAFETY:
+            raise ValidationError(
+                {"moderation_case": "Community Safety decisions require a Safety case."}
+            )
+        if self.action == self.Action.REMOVE and not self.violation_code:
+            raise ValidationError(
+                {"violation_code": "A removed-content decision requires a violation."}
+            )
+        if self.action == self.Action.DISMISS and self.violation_code:
+            raise ValidationError(
+                {"violation_code": "A dismissed Safety case cannot record a violation."}
+            )
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError(
+                "Community Safety decisions are immutable and cannot be modified."
+            )
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            "Community Safety decisions are immutable and cannot be deleted directly."
+        )
+
+    def __str__(self):
+        return f"{self.action} - Safety case {self.moderation_case_id}"
 
 
 class EvidenceReviewDecision(models.Model):

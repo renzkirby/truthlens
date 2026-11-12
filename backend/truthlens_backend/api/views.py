@@ -106,6 +106,7 @@ from .safety_review_service import (
     get_safety_case_queryset,
     perform_safety_case_action,
     release_safety_case,
+    schedule_safety_resolution_notifications,
     schedule_safety_resolution_trust_updates,
 )
 from .platform_identity_service import (
@@ -127,6 +128,11 @@ from .notification_service import (
     notify_user_followed,
 )
 from .notification_realtime import publish_notification_inbox_changed
+from .community_policy import community_policy_payload
+from .community_moderation_outcome_service import (
+    CommunityModerationOutcomeNotFound,
+    get_community_moderation_outcome,
+)
 from .verification_metrics_query_service import (
     VerificationMetricsAuthorizationError,
     VerificationMetricsCompositionError,
@@ -1247,6 +1253,31 @@ def safety_case_detail(request, case_id):
     return _safety_case_detail_response(case_id)
 
 
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def community_guidelines(request):
+    return Response(
+        community_policy_payload(),
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def community_moderation_outcome(request, decision_id):
+    try:
+        payload = get_community_moderation_outcome(
+            actor=request.user,
+            decision_id=decision_id,
+        )
+    except CommunityModerationOutcomeNotFound as error:
+        raise NotFound(
+            "This moderation outcome is not available to this account."
+        ) from error
+
+    return Response(payload, status=status.HTTP_200_OK)
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, CanReviewSafety])
 def safety_case_claim(request, case_id):
@@ -1302,6 +1333,7 @@ def safety_case_action(request, case_id):
         return _safety_case_conflict_response(error)
 
     if payload.validated_data["action"] != "ESCALATE":
+        schedule_safety_resolution_notifications(result)
         schedule_safety_resolution_trust_updates(result)
 
     return _safety_case_detail_response(case_id)

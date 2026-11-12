@@ -35,6 +35,7 @@ NOTIFICATION_METADATA = {
     Type.THREAD_COMMENTED: ("COMMUNITY", "SOCIAL"),
     Type.EVIDENCE_REVIEWED: ("COMMUNITY", "INFORMATIONAL"),
     Type.USER_FOLLOWED: ("COMMUNITY", "SOCIAL"),
+    Type.COMMUNITY_MODERATION_OUTCOME: ("COMMUNITY", "IMPORTANT"),
 }
 
 
@@ -93,6 +94,10 @@ def notification_destination(notification):
         return f"/governance/{notification.target_id}"
     if target == Target.WORKSPACE:
         return "/workspace"
+    if target == Target.MODERATION_OUTCOME:
+        if notification.target_id is None:
+            return None
+        return f"/community/moderation/outcomes/{notification.target_id}"
     if target == Target.USER_PROFILE:
         if notification.actor_id is None:
             return None
