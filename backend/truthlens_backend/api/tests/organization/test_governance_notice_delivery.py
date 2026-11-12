@@ -101,7 +101,7 @@ class GovernanceNoticeDeliveryTests(APITestCase):
                 "governance": {
                     "suspension_type": "REMEDIAL",
                     "severity": "HIGH",
-                    "policy_basis": "Partnership Enforcement Policy §13.1",
+                    "policy_basis": "Partnership Governance & Enforcement Policy, Section 8.1 — Remedial Suspension",
                 }
             },
         )
@@ -263,7 +263,7 @@ class GovernanceNoticeDeliveryTests(APITestCase):
                 "Repeated sourcing failures require temporary remediation before "
                 "professional access resumes."
             ),
-            "policy_basis": "Partnership Enforcement Policy §13.1",
+            "policy_basis": "Partnership Governance & Enforcement Policy, Section 8.1 — Remedial Suspension",
             "supporting_basis": (
                 "Internal review of affected investigations and prior corrective "
                 "guidance."
@@ -377,7 +377,7 @@ class GovernanceNoticeDeliveryTests(APITestCase):
                 "The organization currently lacks accountable administration for "
                 "continued professional access."
             ),
-            "policy_basis": "Partnership Enforcement Policy §13.3",
+            "policy_basis": "Partnership Governance & Enforcement Policy, Section 8.3 — Administrative Suspension",
             "supporting_basis": "Internal organization-contact review.",
             "supporting_references": ["NO-ADMIN-001"],
         }
@@ -413,7 +413,7 @@ class GovernanceNoticeDeliveryTests(APITestCase):
                 "The organization currently lacks accountable administration for "
                 "continued professional access."
             ),
-            "policy_basis": "Partnership Enforcement Policy §13.3",
+            "policy_basis": "Partnership Governance & Enforcement Policy, Section 8.3 — Administrative Suspension",
             "supporting_basis": "Internal organization-contact review.",
             "supporting_references": ["NO-CONTACT-001"],
         }
@@ -479,7 +479,7 @@ class GovernanceNoticeDeliveryTests(APITestCase):
                 "The organization currently lacks accountable administration for "
                 "continued professional access."
             ),
-            "policy_basis": "Partnership Enforcement Policy §13.3",
+            "policy_basis": "Partnership Governance & Enforcement Policy, Section 8.3 — Administrative Suspension",
             "supporting_basis": "Internal organization-contact review.",
             "supporting_references": ["NO-ADMIN-SENT-001"],
         }
