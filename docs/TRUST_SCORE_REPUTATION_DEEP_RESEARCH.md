@@ -369,9 +369,12 @@ This preserves:
 
 The persisted profile score still exists because public profile/search/feed
 surfaces need an efficient projection. Trust-changing actions therefore use a
-best-effort immediate recomputation plus the existing asynchronous Celery
-refresh where appropriate. The management command remains a reconciliation
-tool for detecting and correcting any residual projection drift.
+best-effort direct recomputation after the authoritative transaction commits.
+Trust synchronization does not depend on Redis or Celery. If the direct
+projection refresh fails, the authoritative moderation, adjudication, evidence
+review, or vote action remains committed and the management recomputation
+command remains the reconciliation tool for detecting and correcting residual
+projection drift.
 
 Legacy votes that predate the full snapshot fields retain their documented
 compatibility behavior because their exact original action depth cannot be
