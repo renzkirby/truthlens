@@ -1313,6 +1313,8 @@ export default function ThreadDetailPage() {
    const confidence = Number(confidenceValue);
    const hasConfidence = confidenceValue !== null && confidenceValue !== "" && Number.isFinite(confidence);
    const authorUsername = thread.author?.username || "Unknown";
+   const isThreadOwner = thread.author?.id === user?.id;
+   const canReportThread = canParticipateInCommunity && !isThreadOwner;
    const authorProfessionalAffiliation = thread.author?.partner_affiliations?.[0] || null;
    const authorTrustVisible =
       thread.author?.trust_score !== null && thread.author?.trust_score !== undefined;
@@ -1774,7 +1776,7 @@ export default function ThreadDetailPage() {
                )}
 
                <div className="thread-detail-sidebar-actions thread-detail-sidebar-actions--classic" role="group" aria-label="Thread actions">
-                  {canParticipateInCommunity && (
+                  {canReportThread && (
                      <button type="button" className="is-danger" onClick={() => setReportDialogOpen(true)}><Icons name="flag" size={15} /> Report</button>
                   )}
                   <button type="button" onClick={shareThread}><Icons name="share-2" size={15} /> Share</button>
@@ -1789,7 +1791,7 @@ export default function ThreadDetailPage() {
             <div className="thread-detail-dialog-actions"><button type="button" className="thread-detail-text-button" data-dialog-initial onClick={() => setConfirmDialog({ open: false, type: null, targetId: null })} disabled={dialogBusy}>Cancel</button><button type="button" className="thread-detail-danger-button" onClick={performDelete} disabled={dialogBusy}>{dialogBusy ? "Deleting…" : "Delete"}</button></div>
          </AccessibleDialog>
 
-         <AccessibleDialog open={canParticipateInCommunity && reportDialogOpen} busy={reporting} labelledBy="thread-detail-report-title" describedBy="thread-detail-report-description" onClose={() => setReportDialogOpen(false)} fallbackFocusRef={pageRef}>
+         <AccessibleDialog open={canReportThread && reportDialogOpen} busy={reporting} labelledBy="thread-detail-report-title" describedBy="thread-detail-report-description" onClose={() => setReportDialogOpen(false)} fallbackFocusRef={pageRef}>
             <p className="thread-detail-dialog-kicker">Platform safety</p>
             <h2 id="thread-detail-report-title">Report this thread</h2>
             <p id="thread-detail-report-description">Send this thread to Platform Safety reviewers for a safety review.</p>
