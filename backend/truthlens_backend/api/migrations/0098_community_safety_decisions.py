@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import migrations, models
 import django.db.models.deletion
+from django.utils import timezone
 import uuid
 
 
@@ -71,7 +72,7 @@ class Migration(migrations.Migration):
                 ),
                 ("content_excerpt_snapshot", models.TextField(blank=True, default="")),
                 ("rationale", models.TextField()),
-                ("decided_at", models.DateTimeField(editable=False)),
+                ("decided_at", models.DateTimeField(default=timezone.now, editable=False)),
                 (
                     "decided_by",
                     models.ForeignKey(
