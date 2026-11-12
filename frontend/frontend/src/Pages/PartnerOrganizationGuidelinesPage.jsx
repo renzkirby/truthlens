@@ -497,16 +497,21 @@ function PartnerOrganizationGuidelinesPage() {
    }
 
    const backTo = managementView
-      ? "/management/organizations"
+      ? "/management"
       : canAccessWorkspace(user)
          ? "/workspace"
          : "/community";
+   const backLabel = managementView
+      ? "Management Console"
+      : canAccessWorkspace(user)
+         ? "Verification Workspace"
+         : "Community";
 
    return (
       <main className={`partner-guidelines-page ${managementView ? "partner-guidelines-page--management" : ""}`}>
          <div className="partner-guidelines-page__content">
             <Link className="partner-guidelines-back" to={backTo}>
-               ← {managementView ? "Partner Organizations" : canAccessWorkspace(user) ? "Verification Workspace" : "Community"}
+               ← {backLabel}
             </Link>
 
             <div className="partner-guidelines-layout">
