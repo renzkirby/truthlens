@@ -1242,3 +1242,16 @@
     animation-iteration-count: 1 !important;
   }
 }
+
+
+.feed-modal-helper {
+   margin: -2px 0 12px;
+   color: var(--text-muted);
+   font-size: 0.74rem;
+   line-height: 1.5;
+}
+
+.feed-modal-helper a {
+   color: var(--brand-primary);
+   font-weight: 700;
+}
