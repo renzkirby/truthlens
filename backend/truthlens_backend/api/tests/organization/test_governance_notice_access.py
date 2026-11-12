@@ -75,7 +75,7 @@ class GovernanceNoticeAccessTests(APITestCase):
                 "Repeated sourcing failures require temporary remediation before "
                 "professional access resumes."
             ),
-            "policy_basis": "Partnership Enforcement Policy §13.1",
+            "policy_basis": "Partnership Governance & Enforcement Policy, Section 8.1 — Remedial Suspension",
             "supporting_basis": (
                 "Internal review of affected investigations and prior corrective "
                 "guidance."
@@ -110,7 +110,7 @@ class GovernanceNoticeAccessTests(APITestCase):
                 "The organization can no longer maintain an active partnership "
                 "because required operations have ceased."
             ),
-            "policy_basis": "Partnership Enforcement Policy §19.2",
+            "policy_basis": "Partnership Governance & Enforcement Policy, Section 12.2 — Administrative Conclusion",
             "supporting_basis": (
                 "Internal administrative record confirming prolonged inactivity "
                 "and loss of operational capacity."
@@ -176,7 +176,7 @@ class GovernanceNoticeAccessTests(APITestCase):
                     "suspension_type": "REMEDIAL",
                     "factors": ["VERIFICATION_STANDARDS"],
                     "severity": "HIGH",
-                    "policy_basis": "Partnership Enforcement Policy §13.1",
+                    "policy_basis": "Partnership Governance & Enforcement Policy, Section 8.1 — Remedial Suspension",
                     "remediation": {
                         "required_action": (
                             "Review affected investigations and correct the "
@@ -209,7 +209,7 @@ class GovernanceNoticeAccessTests(APITestCase):
         )
         self.assertEqual(
             response.data["governance"]["policy_basis"],
-            "Partnership Enforcement Policy §13.1",
+            "Partnership Governance & Enforcement Policy, Section 8.1 — Remedial Suspension",
         )
         self.assertIn("remediation", response.data["governance"])
         self.assertNotIn("supporting_basis", response.data)
