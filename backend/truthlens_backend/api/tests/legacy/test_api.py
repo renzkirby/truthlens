@@ -433,7 +433,8 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
         self.assertEqual(created.contributor, self.other)
         self.assertEqual(created.thread, self.thread)
         self.assertEqual(
-            created.contributor_trust_snapshot, self.other.profile.trust_score
+            created.contributor_trust_snapshot,
+            calculate_trust_components(self.other)["trust_score"],
         )
 
     def test_platform_safety_role_cannot_submit_ordinary_community_evidence(self):
