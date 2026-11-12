@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
+import {
+   partnershipEnforcementPolicySections,
+   partnershipGovernanceFrameworkSections,
+} from "../data/partnerGovernanceDocuments";
 import { canAccessManagementConsole } from "../utils/management";
 import { canAccessWorkspace } from "../utils/workspace";
 
@@ -438,73 +442,6 @@ function GuidelineSection({ section }) {
    );
 }
 
-const frameworkSections = [
-   "1. Purpose",
-   "2. Core Governance Principles",
-   "3. Partner Organization Standards",
-   "4. Partnership Violation Factors",
-   "5. Severity Assessment",
-   "6. Severity Levels",
-   "7. Enforcement Lifecycle",
-   "8. Suspension",
-   "9. Required Suspension Record",
-   "10. Effects of Suspension",
-   "11. Remediation",
-   "12. Reinstatement",
-   "13. Ending a Partnership",
-   "14. Grounds for Ending Partnership",
-   "15. Required Partnership-Ending Record",
-   "16. Reason / Rationale Standard",
-   "17. Notice to the Partner Organization",
-   "18. Review, Reconsideration, and Reinstatement",
-   "19. Public, Partner, and Internal Information",
-   "20. Historical Preservation",
-   "21. Automated Signals and Human Decisions",
-   "22. Administrative Authority",
-   "23. Governance Auditability",
-   "24. Guiding Enforcement Rule",
-];
-
-const enforcementSections = [
-   "1. Purpose",
-   "2. Scope",
-   "3. Decision Authority",
-   "4. Enforcement Principles",
-   "5. Partnership Factors",
-   "6. Other Factor",
-   "7. Severity Assessment",
-   "8. Severity Levels",
-   "9. No Automatic Strike Rule",
-   "10. Governance Action Ladder",
-   "11. Guidance or Notice",
-   "12. Formal Corrective Action",
-   "13. Suspension",
-   "13.1 Remedial Suspension",
-   "13.2 Precautionary Suspension",
-   "13.3 Administrative Suspension",
-   "14. Required Suspension Information",
-   "15. Suspension Effects",
-   "16. Remediation Plan",
-   "17. Reinstatement",
-   "18. Continued Monitoring or Probation",
-   "19. Ending Partnership",
-   "19.1 Voluntary Withdrawal",
-   "19.2 Administrative Conclusion",
-   "19.3 Termination for Cause",
-   "20. Factors Supporting Partnership Termination",
-   "21. Required Partnership-Ending Information",
-   "22. Emergency or Immediate Action",
-   "23. Notice",
-   "24. Reconsideration",
-   "25. Review of Serious Decisions",
-   "26. Governance Information Visibility",
-   "27. Historical Preservation",
-   "28. Governance Audit Trail",
-   "29. Automated Indicators",
-   "30. Enforcement Decision Rule",
-   "31. Policy Review",
-];
-
 const governanceDocuments = [
    {
       key: "guidelines",
@@ -517,14 +454,14 @@ const governanceDocuments = [
       title: "Partnership Governance Framework",
       description: "Governance principles, lifecycle standards, decision factors, and administrative safeguards.",
       intro: "Standards, decision factors, enforcement principles, and lifecycle procedures governing Partner Organizations.",
-      sectionTitles: frameworkSections,
+      sections: partnershipGovernanceFrameworkSections,
    },
    {
       key: "enforcement",
       title: "Partnership Enforcement Policy",
       description: "Enforcement factors, severity, suspension, reinstatement, partnership ending, and review standards.",
       intro: "Policy governing proportionate, documented, and human-controlled enforcement involving Partner Organizations.",
-      sectionTitles: enforcementSections,
+      sections: partnershipEnforcementPolicySections,
    },
 ];
 
@@ -540,10 +477,7 @@ function PartnerOrganizationGuidelinesPage() {
    const currentSections = useMemo(
       () => currentDocument.key === "guidelines"
          ? sections
-         : (currentDocument.sectionTitles || []).map((title, index) => ({
-            id: `policy-section-${index + 1}`,
-            title,
-         })),
+         : (currentDocument.sections || []),
       [currentDocument],
    );
    const [activeSection, setActiveSection] = useState(currentSections[0]?.id || "");
@@ -640,17 +574,11 @@ function PartnerOrganizationGuidelinesPage() {
                         {sections.map((section) => <GuidelineSection section={section} key={section.id} />)}
                      </article>
                   ) : (
-                     <article className="partner-guidelines-document partner-guidelines-document--index">
-                        <div className="partner-guidelines-policy-note">
-                           <strong>Read-only governance document</strong>
-                           <p>
-                              This view exposes the document structure from the authoritative TruthLens policy source.
-                              The policy text itself is not rewritten or summarized here.
-                           </p>
-                        </div>
+                     <article className="partner-guidelines-document">
                         {currentSections.map((section) => (
-                           <section className="partner-guidelines-section partner-guidelines-section--index" id={section.id} key={section.id}>
+                           <section className="partner-guidelines-section" id={section.id} key={section.id}>
                               <h2>{section.title}</h2>
+                              <div className="partner-guidelines-policy-body">{section.body}</div>
                            </section>
                         ))}
                      </article>
