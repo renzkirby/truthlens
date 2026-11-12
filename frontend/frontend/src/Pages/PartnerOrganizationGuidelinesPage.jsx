@@ -603,7 +603,6 @@ function PartnerOrganizationGuidelinesPage() {
                               >
                                  <div className="partner-governance-document-card__title-row">
                                     <strong>{document.title}</strong>
-                                    {isCurrent ? <span>Current</span> : null}
                                  </div>
                                  <p>{document.description}</p>
                               </Link>
