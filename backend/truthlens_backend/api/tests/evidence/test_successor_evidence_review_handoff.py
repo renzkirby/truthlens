@@ -123,7 +123,7 @@ class SuccessorEvidenceReviewHandoffTests(TestCase):
             factors=["INACTIVITY_RESPONSIVENESS"],
             severity="",
             rationale="The organization is being retired for successor-handoff testing after prolonged inactivity.",
-            policy_basis="Partnership Enforcement Policy §19.2",
+            policy_basis="Partnership Governance & Enforcement Policy, Section 12.2 — Administrative Conclusion",
             supporting_basis="Internal test fixture confirms the organization is being retired to exercise successor evidence handoff.",
             supporting_references=["SUCCESSOR-HANDOFF-TEST"],
         )
