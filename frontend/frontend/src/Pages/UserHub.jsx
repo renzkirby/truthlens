@@ -317,7 +317,7 @@ const TrustExplainerModal = ({ reputation, onClose }) => {
                      <TrustBreakdownItem
                         icon="check-circle"
                         label="Contribution Quality"
-                        description="Resolved evidence and reports can raise or lower your score based on their validation outcome."
+                        description="Resolved evidence and confirmed Safety reports shape Contribution Quality. Dismissed reports are neutral and do not affect your Trust Score."
                         value={breakdown.contribution_points}
                      />
 
