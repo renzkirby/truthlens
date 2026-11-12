@@ -9,6 +9,7 @@ from rest_framework.test import APIClient, APITestCase
 
 from api.models import (
     Claim,
+    CommunitySafetyDecision,
     EvidenceSubmission,
     FlagResolutionLog,
     ModerationCase,
@@ -18,6 +19,7 @@ from api.models import (
     Thread,
     ThreadFlag,
     UserProfile,
+    Notification,
 )
 from api.moderation_service import ModerationCaseError, create_moderation_case
 from api.trust_service import calculate_trust_components
@@ -550,7 +552,12 @@ class SafetyCaseApiTests(APITestCase):
         with self.captureOnCommitCallbacks(execute=True):
             response = self._client_for(self.moderator).post(
                 self._url("safety_case_action", self.case),
-                {"action": "REMOVE", "notes": "Confirmed targeted abuse."},
+                {
+                    "action": "REMOVE",
+                    "violation_code": "HARASSMENT_TARGETED_ABUSE",
+                    "confirmed_report_ids": [str(self.report_two.id)],
+                    "notes": "Confirmed targeted abuse.",
+                },
                 format="json",
             )
         self.case.refresh_from_db()
@@ -566,6 +573,30 @@ class SafetyCaseApiTests(APITestCase):
                 event_type=ModerationEvent.EventType.CONTENT_REMOVED
             ).exists()
         )
+        decision = CommunitySafetyDecision.objects.get(moderation_case=self.case)
+        self.assertEqual(decision.action, CommunitySafetyDecision.Action.REMOVE)
+        self.assertEqual(decision.violation_code, "HARASSMENT_TARGETED_ABUSE")
+        self.assertEqual(decision.policy_version, "1.0")
+        report_one_log = FlagResolutionLog.objects.get(
+            thread=self.thread,
+            flagged_by=self.reporter_one,
+        )
+        report_two_log = FlagResolutionLog.objects.get(
+            thread=self.thread,
+            flagged_by=self.reporter_two,
+        )
+        self.assertEqual(
+            report_one_log.report_outcome,
+            FlagResolutionLog.ReportOutcome.NOT_CONFIRMED,
+        )
+        self.assertFalse(report_one_log.is_valid_report)
+        self.assertEqual(
+            report_two_log.report_outcome,
+            FlagResolutionLog.ReportOutcome.CONFIRMED,
+        )
+        self.assertTrue(report_two_log.is_valid_report)
+        self.assertEqual(report_one_log.safety_decision, decision)
+        self.assertEqual(report_two_log.safety_decision, decision)
         called_ids = {call.args[0] for call in recompute.call_args_list}
         self.assertEqual(
             called_ids,
@@ -603,6 +634,132 @@ class SafetyCaseApiTests(APITestCase):
                 event_type=ModerationEvent.EventType.CASE_ESCALATED
             ).count(),
             1,
+        )
+
+    def test_remove_requires_violation_and_explicit_report_review(self):
+        self._claim_case()
+        client = self._client_for(self.moderator)
+
+        missing_violation = client.post(
+            self._url("safety_case_action", self.case),
+            {
+                "action": "REMOVE",
+                "confirmed_report_ids": [],
+                "notes": "Removal rationale.",
+            },
+            format="json",
+        )
+        missing_report_review = client.post(
+            self._url("safety_case_action", self.case),
+            {
+                "action": "REMOVE",
+                "violation_code": "HARASSMENT_TARGETED_ABUSE",
+                "notes": "Removal rationale.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(missing_violation.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("violation_code", missing_violation.data)
+        self.assertEqual(missing_report_review.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("confirmed_report_ids", missing_report_review.data)
+
+    def test_remove_allows_zero_confirmed_reports(self):
+        self._claim_case()
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self._client_for(self.moderator).post(
+                self._url("safety_case_action", self.case),
+                {
+                    "action": "REMOVE",
+                    "violation_code": "THREATS_DANGEROUS_CONDUCT",
+                    "confirmed_report_ids": [],
+                    "notes": "The review found a threat not identified by the reports.",
+                },
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        logs = FlagResolutionLog.objects.filter(thread=self.thread)
+        self.assertEqual(logs.count(), 2)
+        self.assertFalse(logs.filter(is_valid_report=True).exists())
+        self.assertEqual(
+            set(logs.values_list("report_outcome", flat=True)),
+            {FlagResolutionLog.ReportOutcome.NOT_CONFIRMED},
+        )
+
+    def test_moderation_outcome_is_private_and_role_specific(self):
+        self._claim_case()
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self._client_for(self.moderator).post(
+                self._url("safety_case_action", self.case),
+                {
+                    "action": "REMOVE",
+                    "violation_code": "HARASSMENT_TARGETED_ABUSE",
+                    "confirmed_report_ids": [str(self.report_two.id)],
+                    "notes": "Confirmed targeted abuse.",
+                },
+                format="json",
+            )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        decision = CommunitySafetyDecision.objects.get(moderation_case=self.case)
+        url = reverse(
+            "community_moderation_outcome",
+            kwargs={"decision_id": decision.id},
+        )
+
+        author_response = self._client_for(self.author).get(url)
+        confirmed_reporter_response = self._client_for(self.reporter_two).get(url)
+        unconfirmed_reporter_response = self._client_for(self.reporter_one).get(url)
+        unrelated_response = self._client_for(self.ordinary_user).get(url)
+
+        self.assertEqual(author_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(author_response.data["role"], "AUTHOR")
+        self.assertIn("content", author_response.data)
+        self.assertNotIn("report", author_response.data)
+
+        self.assertEqual(confirmed_reporter_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(confirmed_reporter_response.data["role"], "REPORTER")
+        self.assertTrue(
+            confirmed_reporter_response.data["report"]["counts_toward_reputation"]
+        )
+        self.assertNotIn("content", confirmed_reporter_response.data)
+
+        self.assertEqual(unconfirmed_reporter_response.status_code, status.HTTP_200_OK)
+        self.assertFalse(
+            unconfirmed_reporter_response.data["report"]["counts_toward_reputation"]
+        )
+        self.assertEqual(unrelated_response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_resolution_delivers_private_outcome_notifications(self):
+        self._claim_case()
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self._client_for(self.moderator).post(
+                self._url("safety_case_action", self.case),
+                {
+                    "action": "REMOVE",
+                    "violation_code": "HARASSMENT_TARGETED_ABUSE",
+                    "confirmed_report_ids": [str(self.report_two.id)],
+                    "notes": "Confirmed targeted abuse.",
+                },
+                format="json",
+            )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        decision = CommunitySafetyDecision.objects.get(moderation_case=self.case)
+
+        notifications = Notification.objects.filter(
+            notification_type=Notification.NotificationType.COMMUNITY_MODERATION_OUTCOME
+        )
+        self.assertEqual(
+            set(notifications.values_list("recipient_id", flat=True)),
+            {self.author.id, self.reporter_one.id, self.reporter_two.id},
+        )
+        self.assertTrue(
+            all(
+                row.target_type == Notification.TargetType.MODERATION_OUTCOME
+                and row.target_id == decision.id
+                and row.actor_id is None
+                for row in notifications
+            )
         )
 
     def test_action_requires_assignment_owner(self):
@@ -751,7 +908,12 @@ class SafetyCaseApiTests(APITestCase):
             with self.captureOnCommitCallbacks(execute=True):
                 response = self._client_for(self.moderator).post(
                     self._url("safety_case_action", self.case),
-                    {"action": "REMOVE", "notes": "Confirmed violation."},
+                    {
+                        "action": "REMOVE",
+                        "violation_code": "HARASSMENT_TARGETED_ABUSE",
+                        "confirmed_report_ids": [str(self.report_two.id)],
+                        "notes": "Confirmed violation.",
+                    },
                     format="json",
                 )
 
