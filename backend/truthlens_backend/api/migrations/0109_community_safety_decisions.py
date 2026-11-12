@@ -35,7 +35,7 @@ NOTIFICATION_TARGETS = [
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("api", "0097_reconcile_active_successor_evidence_handoffs"),
+        ("api", "0108_userprofile_workspace_guide_version_seen"),
     ]
 
     operations = [

@@ -1357,8 +1357,13 @@ class ModerationCaseFoundationTests(APITestCase):
         self.assertIsNone(second_flag.resolved_at)
 
     def test_reporting_thread_does_not_change_community_status(self):
+        reporter = User.objects.create_user(
+            username="casereporter",
+            email="casereporter@test.com",
+            password="pass1234",
+        )
         client = APIClient()
-        client.force_authenticate(user=self.author)
+        client.force_authenticate(user=reporter)
 
         self.assertEqual(
             self.thread.status,
