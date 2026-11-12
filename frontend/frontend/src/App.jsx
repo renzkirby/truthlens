@@ -17,6 +17,8 @@ import UserHub from "./Pages/UserHub.jsx";
 import NotificationPage from "./Pages/NotificationPage.jsx";
 import GovernanceNoticePage from "./Pages/GovernanceNoticePage.jsx";
 import PartnerOrganizationGuidelinesPage from "./Pages/PartnerOrganizationGuidelinesPage.jsx";
+import CommunityGuidelinesPage from "./Pages/CommunityGuidelinesPage.jsx";
+import CommunityModerationOutcomePage from "./Pages/CommunityModerationOutcomePage.jsx";
 import SettingsPage from "./Pages/SettingsPage.jsx";
 import DeepAnalysisPage from "./Pages/DeepAnalysisPage.jsx";
 import OnboardingPage from "./Pages/OnboardingPage.jsx";
@@ -76,6 +78,7 @@ function App() {
                   <Route path="/landing" element={<LandingPage />} />
                   <Route path="/landing-page" element={<Navigate to="/landing" replace />} />
                   <Route path="/partners" element={<PartnersPage />} />
+                  <Route path="/community-guidelines" element={<CommunityGuidelinesPage />} />
                   <Route path="/partners/:slug" element={<PartnerProfilePage />} />
                   <Route path="/partners/:slug/fact-checks/:publicationId" element={<PublicFactCheckPage />} />
                </Route>
@@ -153,6 +156,10 @@ function App() {
                      <Route path="/user/:username" element={<UserProfile />} />
                      <Route path="/settings" element={<SettingsPage />} />
                      <Route path="/notifications" element={<NotificationPage />} />
+                     <Route
+                        path="/community/moderation/outcomes/:decisionId"
+                        element={<CommunityModerationOutcomePage />}
+                     />
                      <Route path="/governance/:noticeId" element={<GovernanceNoticePage />} />
                      <Route path="/partner-guidelines" element={<PartnerOrganizationGuidelinesPage />} />
 
