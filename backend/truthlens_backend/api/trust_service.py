@@ -4,6 +4,7 @@ from django.contrib.auth.models import User
 from django.db.models import Count, Q
 
 from .models import (
+    CommunitySafetyReconsideration,
     EvidenceSubmission,
     FlagResolutionLog,
     Thread,
@@ -59,6 +60,21 @@ def _clamp(value, minimum, maximum):
     return max(minimum, min(maximum, value))
 
 
+def _confirmed_report_queryset(user):
+    return (
+        FlagResolutionLog.objects.filter(
+            flagged_by=user,
+            is_valid_report=True,
+        )
+        .exclude(thread__author=user)
+        .exclude(
+            safety_decision__reconsideration__outcome=(
+                CommunitySafetyReconsideration.Outcome.REVERSED
+            )
+        )
+    )
+
+
 def get_reputation_action_counts(user):
     evidence_counts = EvidenceSubmission.objects.filter(
         contributor=user,
@@ -79,14 +95,7 @@ def get_reputation_action_counts(user):
     # Dismissed reports remain preserved in FlagResolutionLog for moderation
     # history, but are neutral: they do not count as successes, failures,
     # reputation depth, or vote-weight maturation.
-    confirmed_report_count = (
-        FlagResolutionLog.objects.filter(
-            flagged_by=user,
-            is_valid_report=True,
-        )
-        .exclude(thread__author=user)
-        .count()
-    )
+    confirmed_report_count = _confirmed_report_queryset(user).count()
 
     evidence_total = evidence_counts["total"] or 0
     evidence_validated = evidence_counts["validated"] or 0
@@ -234,13 +243,7 @@ def calculate_trust_components(user):
     # enforcement; it is not, by itself, a finding that the reporter acted
     # unreliably. Keep dismissed records for moderation history, but exclude
     # them from Community reputation math.
-    confirmed_reports = (
-        FlagResolutionLog.objects.filter(
-            flagged_by=user,
-            is_valid_report=True,
-        )
-        .exclude(thread__author=user)
-    )
+    confirmed_reports = _confirmed_report_queryset(user)
 
     report_total = confirmed_reports.count()
     report_validated = report_total

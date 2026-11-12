@@ -2239,6 +2239,12 @@ class CommunitySafetyDecision(models.Model):
     policy_title_snapshot = models.CharField(max_length=160)
     policy_version = models.CharField(max_length=20)
     violation_label_snapshot = models.CharField(max_length=160, blank=True, default="")
+    pre_removal_thread_status = models.CharField(
+        max_length=20,
+        choices=Thread.Status.choices,
+        null=True,
+        blank=True,
+    )
     thread_id_snapshot = models.UUIDField()
     thread_author = models.ForeignKey(
         "auth.User",
@@ -2294,6 +2300,28 @@ class CommunitySafetyDecision(models.Model):
             raise ValidationError(
                 {"violation_code": "A dismissed Safety case cannot record a violation."}
             )
+        if self.action == self.Action.REMOVE:
+            if self.pre_removal_thread_status not in {
+                Thread.Status.PENDING,
+                Thread.Status.OPEN,
+                Thread.Status.CLOSED,
+            }:
+                raise ValidationError(
+                    {
+                        "pre_removal_thread_status": (
+                            "A removed-content decision must preserve the thread status "
+                            "that existed before removal."
+                        )
+                    }
+                )
+        elif self.pre_removal_thread_status is not None:
+            raise ValidationError(
+                {
+                    "pre_removal_thread_status": (
+                        "Only removed-content decisions preserve a pre-removal status."
+                    )
+                }
+            )
 
     def save(self, *args, **kwargs):
         if not self._state.adding:
@@ -2310,6 +2338,85 @@ class CommunitySafetyDecision(models.Model):
 
     def __str__(self):
         return f"{self.action} - Safety case {self.moderation_case_id}"
+
+
+class CommunitySafetyReconsideration(models.Model):
+    """One user-requested reconsideration of a removed Community discussion."""
+
+    class Outcome(models.TextChoices):
+        UPHELD = "UPHELD", "Removal upheld"
+        REVERSED = "REVERSED", "Removal reversed"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    safety_decision = models.OneToOneField(
+        CommunitySafetyDecision,
+        on_delete=models.PROTECT,
+        related_name="reconsideration",
+    )
+    requested_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="community_safety_reconsideration_requests",
+    )
+    request_statement = models.TextField()
+    outcome = models.CharField(
+        max_length=20,
+        choices=Outcome.choices,
+        blank=True,
+        default="",
+    )
+    resolution_rationale = models.TextField(blank=True, default="")
+    reviewed_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="community_safety_reconsiderations_reviewed",
+    )
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-submitted_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        outcome="",
+                        reviewed_by__isnull=True,
+                        resolved_at__isnull=True,
+                        resolution_rationale="",
+                    )
+                    | (
+                        models.Q(outcome__in=["UPHELD", "REVERSED"])
+                        & models.Q(reviewed_by__isnull=False)
+                        & models.Q(resolved_at__isnull=False)
+                        & ~models.Q(resolution_rationale="")
+                    )
+                ),
+                name="comm_safety_reconsideration_state_ck",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if (
+            self.safety_decision_id
+            and self.safety_decision.action != CommunitySafetyDecision.Action.REMOVE
+        ):
+            raise ValidationError(
+                {"safety_decision": "Only removed content can be reconsidered."}
+            )
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        state = self.outcome or "PENDING"
+        return f"{state} - Safety decision {self.safety_decision_id}"
 
 
 class EvidenceReviewDecision(models.Model):
