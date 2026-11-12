@@ -2245,6 +2245,15 @@ class CommunitySafetyDecision(models.Model):
         null=True,
         blank=True,
     )
+    pre_removal_moderated_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    pre_removal_moderated_at = models.DateTimeField(null=True, blank=True)
+    pre_removal_moderator_notes = models.TextField(null=True, blank=True)
     thread_id_snapshot = models.UUIDField()
     thread_author = models.ForeignKey(
         "auth.User",
