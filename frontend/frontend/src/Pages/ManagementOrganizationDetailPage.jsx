@@ -687,7 +687,7 @@ function OrganizationGovernanceSection({
                         onChange={(event) => updateSuspensionForm("policy_basis", event.target.value)}
                         disabled={pending}
                         required
-                        placeholder="e.g. Partnership Enforcement Policy §13.1"
+                        placeholder="e.g. Partnership Governance & Enforcement Policy, Section 8.1 — Remedial Suspension"
                      />
                   </label>
                   <label className="management-form-field">
@@ -1019,7 +1019,7 @@ function OrganizationGovernanceSection({
                      onChange={(event) => updateEndingForm("policy_basis", event.target.value)}
                      disabled={pending}
                      required
-                     placeholder="e.g. Partnership Enforcement Policy §19.3"
+                     placeholder="e.g. Partnership Governance & Enforcement Policy, Section 12.3 — Termination for Cause"
                   />
                </label>
                <label className="management-form-field">
