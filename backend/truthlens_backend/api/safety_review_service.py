@@ -14,6 +14,7 @@ from .models import (
 )
 from .moderation_service import (
     ACTIVE_CASE_STATUSES,
+    ModerationCaseError,
     assign_moderation_case,
     escalate_safety_case,
     resolve_safety_case,
@@ -284,11 +285,8 @@ def perform_safety_case_action(
                 violation_code=violation_code,
                 confirmed_report_ids=confirmed_report_ids,
             )
-        except Exception as error:
-            from .moderation_service import ModerationCaseError
-            if isinstance(error, ModerationCaseError):
-                raise SafetyCaseConflict(str(error)) from error
-            raise
+        except ModerationCaseError as error:
+            raise SafetyCaseConflict(str(error)) from error
 
         result["action"] = action
         resolved_case = result["case"]
