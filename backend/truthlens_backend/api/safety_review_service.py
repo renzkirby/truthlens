@@ -325,6 +325,18 @@ def schedule_safety_resolution_trust_updates(result, *, action=None):
 
     def dispatch_trust_updates():
         try:
+            from .trust_service import recompute_user_trust_score
+        except Exception:
+            logger.exception(
+                "Failed to load the post-commit Safety Trust recomputation "
+                "service for case_id=%s thread_id=%s action=%s.",
+                case_id,
+                thread_id,
+                resolved_action,
+            )
+            recompute_user_trust_score = None
+
+        try:
             from .tasks import recompute_user_trust_score_task
         except Exception:
             logger.exception(
@@ -334,22 +346,38 @@ def schedule_safety_resolution_trust_updates(result, *, action=None):
                 thread_id,
                 resolved_action,
             )
-            return
+            recompute_user_trust_score_task = None
 
         for target_type, user_id in targets:
-            try:
-                recompute_user_trust_score_task.delay(user_id)
-            except Exception:
-                logger.exception(
-                    "Failed to enqueue post-commit Safety trust recomputation "
-                    "for user_id=%s target_type=%s case_id=%s thread_id=%s "
-                    "action=%s.",
-                    user_id,
-                    target_type,
-                    case_id,
-                    thread_id,
-                    resolved_action,
-                )
+            if recompute_user_trust_score is not None:
+                try:
+                    recompute_user_trust_score(user_id)
+                except Exception:
+                    logger.exception(
+                        "Failed immediate post-commit Safety Trust "
+                        "recomputation for user_id=%s target_type=%s "
+                        "case_id=%s thread_id=%s action=%s.",
+                        user_id,
+                        target_type,
+                        case_id,
+                        thread_id,
+                        resolved_action,
+                    )
+
+            if recompute_user_trust_score_task is not None:
+                try:
+                    recompute_user_trust_score_task.delay(user_id)
+                except Exception:
+                    logger.exception(
+                        "Failed to enqueue post-commit Safety trust "
+                        "recomputation for user_id=%s target_type=%s "
+                        "case_id=%s thread_id=%s action=%s.",
+                        user_id,
+                        target_type,
+                        case_id,
+                        thread_id,
+                        resolved_action,
+                    )
 
     transaction.on_commit(dispatch_trust_updates, robust=True)
 
