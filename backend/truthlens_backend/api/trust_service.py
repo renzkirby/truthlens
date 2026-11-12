@@ -79,10 +79,14 @@ def get_reputation_action_counts(user):
     # Dismissed reports remain preserved in FlagResolutionLog for moderation
     # history, but are neutral: they do not count as successes, failures,
     # reputation depth, or vote-weight maturation.
-    confirmed_report_count = FlagResolutionLog.objects.filter(
-        flagged_by=user,
-        is_valid_report=True,
-    ).count()
+    confirmed_report_count = (
+        FlagResolutionLog.objects.filter(
+            flagged_by=user,
+            is_valid_report=True,
+        )
+        .exclude(thread__author=user)
+        .count()
+    )
 
     evidence_total = evidence_counts["total"] or 0
     evidence_validated = evidence_counts["validated"] or 0
@@ -100,23 +104,18 @@ def get_resolved_reputation_action_count(user):
 
 
 def build_vote_reputation_snapshot(user):
-    profile = getattr(user, "profile", None)
-    trust_score = float(
-        profile.trust_score
-        if profile
-        else BASE_SCORE
-    )
+    # Event-time vote snapshots must use the canonical live reputation
+    # calculation rather than the persisted UserProfile cache. This prevents a
+    # temporarily stale cached score from becoming immutable historical vote
+    # data.
+    components = calculate_trust_components(user)
     trust_score = _clamp(
-        trust_score,
+        float(components["trust_score"]),
         0.0,
         100.0,
     )
-
-    action_counts = get_reputation_action_counts(
-        user,
-    )
-    resolved_actions = action_counts["resolved_actions"]
-    validated_actions = action_counts["validated_actions"]
+    resolved_actions = int(components["resolved_actions"])
+    validated_actions = int(components["validated_actions"])
 
     prior_mass = PRIOR_SUCCESS + PRIOR_FAILURE
     denominator = resolved_actions + prior_mass
@@ -235,9 +234,12 @@ def calculate_trust_components(user):
     # enforcement; it is not, by itself, a finding that the reporter acted
     # unreliably. Keep dismissed records for moderation history, but exclude
     # them from Community reputation math.
-    confirmed_reports = FlagResolutionLog.objects.filter(
-        flagged_by=user,
-        is_valid_report=True,
+    confirmed_reports = (
+        FlagResolutionLog.objects.filter(
+            flagged_by=user,
+            is_valid_report=True,
+        )
+        .exclude(thread__author=user)
     )
 
     report_total = confirmed_reports.count()
