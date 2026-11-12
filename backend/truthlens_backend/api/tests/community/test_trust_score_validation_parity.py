@@ -4,7 +4,10 @@ from django.utils import timezone
 
 from api.models import Claim, EvidenceSubmission, Thread, Vote
 from api.trust_score_validation import TrustScenario, simulate_trust_score
-from api.trust_service import calculate_trust_components
+from api.trust_service import (
+    calculate_trust_components,
+    get_reputation_progression,
+)
 
 
 class TrustScoreProductionParityTests(TestCase):
@@ -108,3 +111,47 @@ class TrustScoreProductionParityTests(TestCase):
                 production[field],
                 msg=f"Simulator drifted from production field: {field}",
             )
+
+        production_progression = get_reputation_progression(production)
+        for field in (
+            "current_rank",
+            "next_rank",
+            "score_to_next_rank",
+            "actions_to_next_rank",
+            "validated_actions_to_next_rank",
+            "progress_percent",
+        ):
+            self.assertEqual(
+                simulated[field],
+                production_progression[field],
+                msg=f"Simulator drifted from production progression: {field}",
+            )
+        self.assertEqual(
+            simulated["confidence"],
+            production_progression["confidence"]["label"],
+        )
+
+    def test_simulator_matches_production_positive_action_gate(self):
+        simulated = simulate_trust_score(
+            TrustScenario(
+                name="three_rejected",
+                rejected_evidence=3,
+            )
+        )
+        production = get_reputation_progression(
+            {
+                "trust_score": simulated["trust_score"],
+                "resolved_actions": 3,
+                "validated_actions": 0,
+            }
+        )
+
+        self.assertEqual(simulated["current_rank"], "Provisional")
+        self.assertEqual(
+            simulated["current_rank"],
+            production["current_rank"],
+        )
+        self.assertEqual(
+            simulated["validated_actions_to_next_rank"],
+            1,
+        )
