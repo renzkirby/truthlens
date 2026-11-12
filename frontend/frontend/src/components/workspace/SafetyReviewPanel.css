@@ -890,3 +890,11 @@
    line-height: 1.4;
    overflow-wrap: anywhere;
 }
+
+
+.safety-decision-explanation-helper {
+   margin: -4px 0 0;
+   color: var(--text-muted);
+   font-size: 0.72rem;
+   line-height: 1.5;
+}
