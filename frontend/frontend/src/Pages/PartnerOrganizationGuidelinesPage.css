@@ -45,9 +45,6 @@
 .partner-guidelines-sidebar__sticky {
    position: sticky;
    top: calc(var(--tl-space-6) + 64px);
-   max-height: calc(100vh - 112px);
-   overflow: auto;
-   padding-right: var(--tl-space-2);
 }
 
 .partner-guidelines-sidebar__eyebrow {
@@ -144,15 +141,17 @@
 }
 
 .partner-governance-document-card {
-   padding: var(--tl-space-3);
-   border: 1px solid var(--tl-color-border-light);
-   border-radius: var(--tl-radius-md);
-   background: var(--tl-color-bg-surface);
+   padding: var(--tl-space-3) var(--tl-space-2) var(--tl-space-3) var(--tl-space-3);
+   border-left: 2px solid transparent;
+}
+
+.partner-governance-document-card + .partner-governance-document-card {
+   margin-top: var(--tl-space-1);
 }
 
 .partner-governance-document-card.is-current {
-   border-color: color-mix(in srgb, var(--tl-color-brand-primary) 55%, var(--tl-color-border-default));
-   background: color-mix(in srgb, var(--tl-color-brand-primary) 7%, var(--tl-color-bg-surface));
+   border-left-color: var(--tl-color-brand-primary);
+   background: color-mix(in srgb, var(--tl-color-brand-primary) 6%, transparent);
 }
 
 .partner-governance-document-card__title-row {
@@ -271,9 +270,6 @@
 
    .partner-guidelines-sidebar--documents .partner-guidelines-sidebar__sticky {
       position: static;
-      max-height: none;
-      overflow: visible;
-      padding-right: 0;
    }
 
    .partner-governance-documents {
@@ -292,9 +288,6 @@
 
    .partner-guidelines-sidebar__sticky {
       position: static;
-      max-height: none;
-      overflow: visible;
-      padding-right: 0;
    }
 
    .partner-guidelines-sidebar--toc {
