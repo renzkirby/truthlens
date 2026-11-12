@@ -29,9 +29,10 @@
 
 .partner-guidelines-layout {
    display: grid;
-   grid-template-columns: minmax(190px, 230px) minmax(0, 1fr) minmax(180px, 220px);
-   gap: var(--tl-space-7);
+   grid-template-columns: minmax(220px, 250px) minmax(0, 760px) minmax(190px, 220px);
+   column-gap: clamp(28px, 3vw, 44px);
    align-items: start;
+   justify-content: center;
 }
 
 .partner-guidelines-main {
@@ -39,12 +40,14 @@
 }
 
 .partner-guidelines-sidebar {
+   position: sticky;
+   top: 88px;
    min-width: 0;
+   align-self: start;
 }
 
 .partner-guidelines-sidebar__sticky {
-   position: sticky;
-   top: calc(var(--tl-space-6) + 64px);
+   position: static;
 }
 
 .partner-guidelines-sidebar__eyebrow {
@@ -110,12 +113,12 @@
 
 .partner-guidelines-toc a {
    display: block;
-   padding: 7px var(--tl-space-3);
+   padding: 5px var(--tl-space-2);
    border-left: 2px solid transparent;
    border-radius: 0 var(--tl-radius-sm) var(--tl-radius-sm) 0;
    color: var(--tl-color-text-muted);
-   font-size: var(--tl-text-xs);
-   line-height: 1.35;
+   font-size: 0.72rem;
+   line-height: 1.25;
    text-decoration: none;
    transition:
       color 120ms ease,
@@ -236,6 +239,13 @@
    margin-bottom: 0;
 }
 
+.partner-guidelines-policy-body {
+   color: var(--tl-color-text-body);
+   font-size: var(--tl-text-base);
+   line-height: 1.72;
+   white-space: pre-line;
+}
+
 .partner-guidelines-section h2 {
    margin: 0 0 var(--tl-space-4);
    font-size: var(--tl-text-lg);
@@ -295,7 +305,7 @@
       grid-column: 1 / -1;
    }
 
-   .partner-guidelines-sidebar--documents .partner-guidelines-sidebar__sticky {
+   .partner-guidelines-sidebar--documents {
       position: static;
    }
 
@@ -313,7 +323,7 @@
       display: block;
    }
 
-   .partner-guidelines-sidebar__sticky {
+   .partner-guidelines-sidebar {
       position: static;
    }
 
