@@ -206,8 +206,9 @@ def _get_confidence_level(resolved_actions):
 def calculate_trust_components(user):
     # ── 1. Resolved contribution quality ──
     #
-    # Pending actions are intentionally excluded.
-    # We only judge a user once moderation has resolved the action.
+    # Pending actions are intentionally excluded. Evidence contributes once it
+    # has a resolved verification outcome; Safety reports contribute only when
+    # the report is confirmed by a content-removal decision.
 
     resolved_evidence = EvidenceSubmission.objects.filter(
         contributor=user,
@@ -234,12 +235,12 @@ def calculate_trust_components(user):
     # enforcement; it is not, by itself, a finding that the reporter acted
     # unreliably. Keep dismissed records for moderation history, but exclude
     # them from Community reputation math.
-    resolved_reports = FlagResolutionLog.objects.filter(
+    confirmed_reports = FlagResolutionLog.objects.filter(
         flagged_by=user,
         is_valid_report=True,
     )
 
-    report_total = resolved_reports.count()
+    report_total = confirmed_reports.count()
     report_validated = report_total
 
     resolved_actions = evidence_total + report_total
@@ -331,9 +332,7 @@ def calculate_trust_components(user):
     )
 
     successful_dates.extend(
-        resolved_reports.filter(
-            is_valid_report=True,
-        ).values_list(
+        confirmed_reports.values_list(
             "resolved_at",
             flat=True,
         )
