@@ -414,6 +414,9 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
 
     def test_authenticated_user_can_submit_evidence_on_other_users_thread(self):
         evidence_list = reverse("evidence-list")
+        self.other.profile.trust_score = 99.0
+        self.other.profile.save(update_fields=["trust_score"])
+        expected_live_score = calculate_trust_components(self.other)["trust_score"]
 
         res = self.other_client.post(
             evidence_list,
@@ -422,6 +425,7 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
                 "evidence_caption": "Allowed evidence",
                 "evidence_url": "https://proof.example.com",
                 "evidence_type": EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
+                "evidence_verdict": AdjudicationDecision.Verdict.FACT,
                 "contributor_trust_snapshot": 9999,
             },
             format="json",
@@ -433,7 +437,12 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
         self.assertEqual(created.contributor, self.other)
         self.assertEqual(created.thread, self.thread)
         self.assertEqual(
-            created.contributor_trust_snapshot, self.other.profile.trust_score
+            created.contributor_trust_snapshot,
+            expected_live_score,
+        )
+        self.assertNotEqual(
+            created.contributor_trust_snapshot,
+            self.other.profile.trust_score,
         )
 
     def test_platform_safety_role_cannot_submit_ordinary_community_evidence(self):
@@ -454,6 +463,7 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
                 "evidence_caption": "Safety moderator community evidence",
                 "evidence_url": "https://safety-proof.example.com",
                 "evidence_type": EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
+                "evidence_verdict": AdjudicationDecision.Verdict.FACT,
             },
             format="json",
         )
@@ -477,6 +487,7 @@ class ThreadEvidenceCommentAuthorizationTests(APITestCase):
                 "evidence_caption": "Owner evidence",
                 "evidence_url": "https://owner-proof.example.com",
                 "evidence_type": EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
+                "evidence_verdict": AdjudicationDecision.Verdict.FACT,
             },
             format="json",
         )

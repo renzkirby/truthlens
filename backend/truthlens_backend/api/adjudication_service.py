@@ -1215,7 +1215,7 @@ def issue_adjudication_decision(
 
 
 def schedule_adjudication_trust_updates(result):
-    contributor_ids = tuple(result.get("contributor_ids", ()))
+    contributor_ids = tuple(dict.fromkeys(result.get("contributor_ids", ())))
     if not contributor_ids:
         return
 
@@ -1223,13 +1223,14 @@ def schedule_adjudication_trust_updates(result):
     case_id = getattr(result.get("case"), "pk", None)
     decision_id = getattr(result.get("decision"), "pk", None)
 
-    def dispatch_trust_updates():
+    def refresh_trust_scores():
         try:
-            from .tasks import recompute_user_trust_score_task
+            from .trust_service import recompute_user_trust_score
         except Exception:
             logger.exception(
-                "Failed to load the post-commit Adjudication trust task for "
-                "claim_id=%s case_id=%s decision_id=%s.",
+                "Failed to load post-commit Adjudication Trust "
+                "recomputation service for claim_id=%s case_id=%s "
+                "decision_id=%s.",
                 claim_id,
                 case_id,
                 decision_id,
@@ -1238,16 +1239,15 @@ def schedule_adjudication_trust_updates(result):
 
         for user_id in contributor_ids:
             try:
-                recompute_user_trust_score_task.delay(user_id)
+                recompute_user_trust_score(user_id)
             except Exception:
                 logger.exception(
-                    "Failed to enqueue post-commit Adjudication trust "
-                    "recomputation for user_id=%s claim_id=%s case_id=%s "
-                    "decision_id=%s.",
+                    "Failed post-commit Adjudication Trust recomputation for "
+                    "user_id=%s claim_id=%s case_id=%s decision_id=%s.",
                     user_id,
                     claim_id,
                     case_id,
                     decision_id,
                 )
 
-    transaction.on_commit(dispatch_trust_updates, robust=True)
+    transaction.on_commit(refresh_trust_scores, robust=True)

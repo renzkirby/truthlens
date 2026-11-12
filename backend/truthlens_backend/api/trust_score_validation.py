@@ -1,9 +1,10 @@
 """Deterministic Trust Score sensitivity and adversarial analysis.
 
 This module never reads or writes the database. It mirrors the production
-Trust Score mathematics using calibration defaults imported from trust_service,
-then lets us vary those calibration values without changing production
-behavior.
+contribution, history, moderation, and rank-progression mathematics using
+calibration defaults imported from trust_service. Vote inputs remain explicit
+scenario controls so pre-hardening and adversarial vote policies can still be
+compared without changing production behavior.
 """
 
 from dataclasses import dataclass, replace
@@ -103,17 +104,34 @@ def _vote_weight(score):
     return 0.5 + (bounded_score / 200.0)
 
 
-def _progression(score, resolved_actions, calibration):
+def _progression(
+    score,
+    resolved_actions,
+    validated_actions,
+    calibration,
+):
     requirements = calibration.rank_requirements
     confidence = _confidence_level(resolved_actions)
 
-    if resolved_actions < requirements[0].min_actions:
+    if (
+        resolved_actions < requirements[0].min_actions
+        or validated_actions < 1
+    ):
         next_rank = requirements[0]
-        progress_percent = _clamp(
-            (resolved_actions / next_rank.min_actions) * 100,
+        action_progress = _clamp(
+            resolved_actions / next_rank.min_actions,
             0.0,
-            100.0,
+            1.0,
         )
+        validated_progress = _clamp(
+            float(validated_actions),
+            0.0,
+            1.0,
+        )
+        progress_percent = min(
+            action_progress,
+            validated_progress,
+        ) * 100
         return {
             "status": "PROVISIONAL",
             "current_rank": "Provisional",
@@ -122,6 +140,10 @@ def _progression(score, resolved_actions, calibration):
             "actions_to_next_rank": max(
                 0,
                 next_rank.min_actions - resolved_actions,
+            ),
+            "validated_actions_to_next_rank": max(
+                0,
+                1 - validated_actions,
             ),
             "progress_percent": round(progress_percent, 2),
             "confidence": confidence,
@@ -140,6 +162,7 @@ def _progression(score, resolved_actions, calibration):
             "next_rank": None,
             "score_to_next_rank": 0.0,
             "actions_to_next_rank": 0,
+            "validated_actions_to_next_rank": 0,
             "progress_percent": 100.0,
             "confidence": confidence,
         }
@@ -160,18 +183,21 @@ def _progression(score, resolved_actions, calibration):
         "status": "ESTABLISHED",
         "current_rank": current_rank.name,
         "next_rank": next_rank.name,
-        "score_to_next_rank": round(max(0.0, next_rank.min_score - score), 2),
+        "score_to_next_rank": round(
+            max(0.0, next_rank.min_score - score),
+            2,
+        ),
         "actions_to_next_rank": max(
             0,
             next_rank.min_actions - resolved_actions,
         ),
+        "validated_actions_to_next_rank": 0,
         "progress_percent": round(
             min(score_progress, action_progress) * 100,
             2,
         ),
         "confidence": confidence,
     }
-
 
 def simulate_trust_score(scenario, calibration=DEFAULT_CALIBRATION):
     resolved_actions = scenario.resolved_actions
@@ -228,6 +254,7 @@ def simulate_trust_score(scenario, calibration=DEFAULT_CALIBRATION):
     progression = _progression(
         trust_score,
         resolved_actions,
+        validated_actions,
         calibration,
     )
 
@@ -244,8 +271,15 @@ def simulate_trust_score(scenario, calibration=DEFAULT_CALIBRATION):
         "moderation_penalty": round(float(moderation_penalty), 2),
         "raw_score": round(float(raw_score), 2),
         "trust_score": round(float(trust_score), 2),
+        "status": progression["status"],
         "current_rank": progression["current_rank"],
         "next_rank": progression["next_rank"],
+        "score_to_next_rank": progression["score_to_next_rank"],
+        "actions_to_next_rank": progression["actions_to_next_rank"],
+        "validated_actions_to_next_rank": progression[
+            "validated_actions_to_next_rank"
+        ],
+        "progress_percent": progression["progress_percent"],
         "confidence": progression["confidence"]["label"],
     }
 
@@ -412,6 +446,7 @@ def invariant_results(calibration=DEFAULT_CALIBRATION):
 
     expert_depth_probe = _progression(
         95.0,
+        25,
         25,
         calibration,
     )
@@ -671,8 +706,8 @@ def diagnostic_results(calibration=DEFAULT_CALIBRATION):
         "failed_actions_leave_provisional": {
             "scenario": failed_only,
             "finding": (
-                "Three resolved failures currently satisfy the action-volume "
-                "gate for New Contributor."
+                "Three resolved failures remain Provisional because current "
+                "production progression requires at least one validated action."
             ),
         },
         "evidence_report_equivalence": {

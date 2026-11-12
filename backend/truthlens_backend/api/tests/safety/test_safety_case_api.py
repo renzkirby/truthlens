@@ -20,6 +20,7 @@ from api.models import (
     UserProfile,
 )
 from api.moderation_service import ModerationCaseError, create_moderation_case
+from api.trust_service import calculate_trust_components
 
 
 class SafetyCaseApiTests(APITestCase):
@@ -351,10 +352,10 @@ class SafetyCaseApiTests(APITestCase):
         )
         self.assertIsNone(created_event["actor"])
 
-    @patch("api.tasks.recompute_user_trust_score_task.delay")
+    @patch("api.trust_service.recompute_user_trust_score")
     def test_case_reports_and_actions_remain_isolated_across_review_cycles(
         self,
-        delay,
+        recompute,
     ):
         self._claim_case()
         with self.captureOnCommitCallbacks(execute=True):
@@ -503,8 +504,8 @@ class SafetyCaseApiTests(APITestCase):
         self.assertEqual(owner_response.status_code, status.HTTP_200_OK)
         self.assertEqual(repeated_response.status_code, status.HTTP_409_CONFLICT)
 
-    @patch("api.tasks.recompute_user_trust_score_task.delay")
-    def test_dismiss_resolves_case_and_reports_but_keeps_content_visible(self, delay):
+    @patch("api.trust_service.recompute_user_trust_score")
+    def test_dismiss_resolves_case_and_reports_but_keeps_content_visible(self, recompute):
         self._claim_case()
         with self.captureOnCommitCallbacks(execute=True):
             response = self._client_for(self.moderator).post(
@@ -529,7 +530,7 @@ class SafetyCaseApiTests(APITestCase):
                 event_type=ModerationEvent.EventType.SAFETY_DISMISSED
             ).exists()
         )
-        self.assertGreaterEqual(delay.call_count, 3)
+        self.assertGreaterEqual(recompute.call_count, 3)
 
     def test_remove_and_escalate_require_notes(self):
         self._claim_case()
@@ -543,8 +544,8 @@ class SafetyCaseApiTests(APITestCase):
             )
             self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    @patch("api.tasks.recompute_user_trust_score_task.delay")
-    def test_remove_preserves_legacy_state_audit_and_trust_effects(self, delay):
+    @patch("api.trust_service.recompute_user_trust_score")
+    def test_remove_preserves_legacy_state_audit_and_trust_effects(self, recompute):
         self._claim_case()
         with self.captureOnCommitCallbacks(execute=True):
             response = self._client_for(self.moderator).post(
@@ -565,7 +566,7 @@ class SafetyCaseApiTests(APITestCase):
                 event_type=ModerationEvent.EventType.CONTENT_REMOVED
             ).exists()
         )
-        called_ids = {call.args[0] for call in delay.call_args_list}
+        called_ids = {call.args[0] for call in recompute.call_args_list}
         self.assertEqual(
             called_ids,
             {
@@ -622,8 +623,8 @@ class SafetyCaseApiTests(APITestCase):
         self.assertEqual(unassigned_response.status_code, status.HTTP_409_CONFLICT)
         self.assertEqual(other_owned_response.status_code, status.HTTP_409_CONFLICT)
 
-    @patch("api.tasks.recompute_user_trust_score_task.delay")
-    def test_stale_second_resolution_is_a_conflict(self, delay):
+    @patch("api.trust_service.recompute_user_trust_score")
+    def test_stale_second_resolution_is_a_conflict(self, recompute):
         self._claim_case()
         client = self._client_for(self.moderator)
         first = client.post(
@@ -689,9 +690,14 @@ class SafetyCaseApiTests(APITestCase):
             status.HTTP_405_METHOD_NOT_ALLOWED,
         )
 
-    @patch("api.tasks.recompute_user_trust_score_task.delay")
-    def test_dismiss_remains_successful_when_trust_dispatch_fails(self, delay):
-        delay.side_effect = ConnectionError("Redis unavailable")
+    @patch(
+        "api.trust_service.recompute_user_trust_score",
+        side_effect=RuntimeError("Trust calculation unavailable"),
+    )
+    def test_dismiss_remains_successful_when_direct_trust_refresh_fails(
+        self,
+        recompute,
+    ):
         self._claim_case()
 
         with self.assertLogs("api.safety_review_service", level="ERROR") as logs:
@@ -704,7 +710,7 @@ class SafetyCaseApiTests(APITestCase):
 
         self.case.refresh_from_db()
         self.thread.refresh_from_db()
-        called_ids = {call.args[0] for call in delay.call_args_list}
+        called_ids = {call.args[0] for call in recompute.call_args_list}
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(self.case.status, ModerationCase.Status.RESOLVED)
@@ -731,26 +737,35 @@ class SafetyCaseApiTests(APITestCase):
             )
         )
 
-    @patch("api.tasks.recompute_user_trust_score_task.delay")
-    def test_remove_remains_successful_when_trust_dispatch_fails(self, delay):
-        delay.side_effect = ConnectionError("Redis unavailable")
+    @patch(
+        "api.trust_service.recompute_user_trust_score",
+        side_effect=RuntimeError("Trust calculation unavailable"),
+    )
+    def test_remove_remains_successful_when_direct_trust_refresh_fails(
+        self,
+        recompute,
+    ):
         self._claim_case()
 
-        with self.captureOnCommitCallbacks(execute=True):
-            response = self._client_for(self.moderator).post(
-                self._url("safety_case_action", self.case),
-                {"action": "REMOVE", "notes": "Confirmed violation."},
-                format="json",
-            )
+        with self.assertLogs("api.safety_review_service", level="ERROR"):
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self._client_for(self.moderator).post(
+                    self._url("safety_case_action", self.case),
+                    {"action": "REMOVE", "notes": "Confirmed violation."},
+                    format="json",
+                )
 
         self.case.refresh_from_db()
         self.thread.refresh_from_db()
-        called_ids = {call.args[0] for call in delay.call_args_list}
+        called_ids = {call.args[0] for call in recompute.call_args_list}
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(self.case.status, ModerationCase.Status.RESOLVED)
         self.assertEqual(self.thread.status, Thread.Status.REJECTED)
-        self.assertEqual(FlagResolutionLog.objects.filter(thread=self.thread).count(), 2)
+        self.assertEqual(
+            FlagResolutionLog.objects.filter(thread=self.thread).count(),
+            2,
+        )
         self.assertEqual(
             called_ids,
             {
@@ -761,12 +776,12 @@ class SafetyCaseApiTests(APITestCase):
             },
         )
 
-    @patch("api.tasks.recompute_user_trust_score_task.delay")
+    @patch("api.trust_service.recompute_user_trust_score")
     @patch("api.safety_review_service.resolve_safety_case")
     def test_authoritative_resolution_failure_is_not_swallowed(
         self,
         resolve_case,
-        delay,
+        recompute,
     ):
         resolve_case.side_effect = ModerationCaseError("Resolution failed.")
         self._claim_case()
@@ -791,4 +806,4 @@ class SafetyCaseApiTests(APITestCase):
             ).count(),
             2,
         )
-        delay.assert_not_called()
+        recompute.assert_not_called()

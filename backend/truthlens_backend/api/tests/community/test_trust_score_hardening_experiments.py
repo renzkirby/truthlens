@@ -190,7 +190,7 @@ class TrustScoreHardeningExperimentTests(SimpleTestCase):
             5,
         )
 
-    def test_positive_evidence_gate_keeps_three_failures_provisional(self):
+    def test_production_gate_keeps_three_failures_provisional(self):
         report = build_hardening_experiment_report()
         rows = {
             row["scenario"]: row
@@ -198,15 +198,15 @@ class TrustScoreHardeningExperimentTests(SimpleTestCase):
         }
 
         self.assertEqual(
-            rows["three_failures"]["current_rank"],
+            rows["three_failures"]["legacy_volume_only_rank"],
             "New Contributor",
         )
         self.assertEqual(
-            rows["three_failures"]["positive_evidence_gate_rank"],
+            rows["three_failures"]["production_rank"],
             "Provisional",
         )
         self.assertEqual(
-            rows["one_success_two_failures"]["positive_evidence_gate_rank"],
+            rows["one_success_two_failures"]["production_rank"],
             "New Contributor",
         )
 
@@ -247,6 +247,18 @@ class TrustScoreHardeningExperimentTests(SimpleTestCase):
         )
         self.assertIn(
             "HISTORICAL VOTE STABILITY",
+            rendered,
+        )
+        self.assertIn(
+            "PROVISIONAL RANK GATE",
+            rendered,
+        )
+        self.assertIn(
+            "legacy_volume_only=New Contributor",
+            rendered,
+        )
+        self.assertIn(
+            "production=Provisional",
             rendered,
         )
         self.assertIn(

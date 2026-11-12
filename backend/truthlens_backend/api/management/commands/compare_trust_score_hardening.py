@@ -82,13 +82,13 @@ class Command(BaseCommand):
             )
 
         self.stdout.write("")
-        self.stdout.write("PROVISIONAL POLICY")
+        self.stdout.write("PROVISIONAL RANK GATE")
         for row in report["provisional_policy_comparison"]:
             self.stdout.write(
                 f"{row['scenario']:28} "
                 f"score={row['score']:.2f} "
-                f"current={row['current_rank']} "
-                f"positive_gate={row['positive_evidence_gate_rank']}"
+                f"legacy_volume_only={row['legacy_volume_only_rank']} "
+                f"production={row['production_rank']}"
             )
 
         self.stdout.write("")

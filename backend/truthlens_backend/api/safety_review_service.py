@@ -318,18 +318,30 @@ def schedule_safety_resolution_trust_updates(result, *, action=None):
         for contributor_id in result.get("contributor_ids", set())
     )
 
+    # The same account can legitimately appear in more than one affected role
+    # (for example reporter and evidence contributor). Recompute each user only
+    # once per committed Safety resolution.
+    deduped_targets = []
+    seen_user_ids = set()
+    for target_type, user_id in targets:
+        if user_id in seen_user_ids:
+            continue
+        seen_user_ids.add(user_id)
+        deduped_targets.append((target_type, user_id))
+    targets = deduped_targets
+
     case = result.get("case")
     thread = result.get("thread")
     case_id = getattr(case, "pk", None)
     thread_id = getattr(thread, "pk", None)
 
-    def dispatch_trust_updates():
+    def refresh_trust_scores():
         try:
-            from .tasks import recompute_user_trust_score_task
+            from .trust_service import recompute_user_trust_score
         except Exception:
             logger.exception(
-                "Failed to load the post-commit Safety trust task for "
-                "case_id=%s thread_id=%s action=%s.",
+                "Failed to load post-commit Safety Trust recomputation "
+                "service for case_id=%s thread_id=%s action=%s.",
                 case_id,
                 thread_id,
                 resolved_action,
@@ -338,11 +350,11 @@ def schedule_safety_resolution_trust_updates(result, *, action=None):
 
         for target_type, user_id in targets:
             try:
-                recompute_user_trust_score_task.delay(user_id)
+                recompute_user_trust_score(user_id)
             except Exception:
                 logger.exception(
-                    "Failed to enqueue post-commit Safety trust recomputation "
-                    "for user_id=%s target_type=%s case_id=%s thread_id=%s "
+                    "Failed post-commit Safety Trust recomputation for "
+                    "user_id=%s target_type=%s case_id=%s thread_id=%s "
                     "action=%s.",
                     user_id,
                     target_type,
@@ -351,7 +363,7 @@ def schedule_safety_resolution_trust_updates(result, *, action=None):
                     resolved_action,
                 )
 
-    transaction.on_commit(dispatch_trust_updates, robust=True)
+    transaction.on_commit(refresh_trust_scores, robust=True)
 
 
 def summarize_report_reasons(reports):

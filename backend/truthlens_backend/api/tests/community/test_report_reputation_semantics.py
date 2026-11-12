@@ -1,6 +1,8 @@
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
+from rest_framework.test import APIClient
 
 from api.models import Claim, FlagResolutionLog, Thread, ThreadFlag
 from api.trust_score_validation import TrustScenario, simulate_trust_score
@@ -48,6 +50,58 @@ class ReportReputationSemanticsTests(TestCase):
             ),
             is_valid_report=confirmed,
         )
+
+    def test_self_report_is_rejected_by_api(self):
+        client = APIClient()
+        client.force_authenticate(self.author)
+
+        response = client.post(
+            reverse("thread-flag-list"),
+            {
+                "thread_id": str(self.thread.pk),
+                "reason": ThreadFlag.Reason.OTHER,
+                "notes": "Self-report should not be accepted.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.data["detail"],
+            "You cannot report your own thread.",
+        )
+        self.assertFalse(
+            ThreadFlag.objects.filter(
+                thread=self.thread,
+                flagged_by=self.author,
+            ).exists()
+        )
+
+    def test_historical_confirmed_self_report_does_not_build_reputation(self):
+        self.thread.status = Thread.Status.REJECTED
+        self.thread.save(update_fields=["status"])
+        FlagResolutionLog.objects.create(
+            thread=self.thread,
+            flagged_by=self.author,
+            reason=ThreadFlag.Reason.OTHER,
+            notes="Historical self-report.",
+            flagged_at=timezone.now(),
+            resolved_action=FlagResolutionLog.ResolutionAction.REMOVE,
+            is_valid_report=True,
+        )
+
+        components = calculate_trust_components(self.author)
+        counts = get_reputation_action_counts(self.author)
+        vote_snapshot = build_vote_reputation_snapshot(self.author)
+
+        self.assertEqual(counts["resolved_actions"], 0)
+        self.assertEqual(counts["validated_actions"], 0)
+        self.assertEqual(components["resolved_actions"], 0)
+        self.assertEqual(components["validated_actions"], 0)
+        self.assertEqual(components["history_points"], 0.0)
+        self.assertEqual(components["moderation_penalty"], 5.0)
+        self.assertEqual(components["trust_score"], 45.0)
+        self.assertEqual(vote_snapshot["reputation_weight"], 0.0)
 
     def test_dismissed_reports_are_neutral_for_trust_score_and_reputation_depth(self):
         before = calculate_trust_components(self.reporter)
