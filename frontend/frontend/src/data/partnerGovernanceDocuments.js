@@ -9,7 +9,7 @@ export const partnerGovernanceDocuments = [
       "intro": "Professional and organizational standards for recognized TruthLens Partner Organizations and members acting through professional TruthLens privileges.",
       "metadata": {
          "version": "Draft 1.0",
-         "status": "Draft for Phase 1 implementation",
+         "status": "Draft",
          "effectiveDate": null,
          "lastUpdated": "November 13, 2026"
       },
@@ -670,7 +670,7 @@ export const partnerGovernanceDocuments = [
       "intro": "Policy governing proportionate, documented, reviewable, and human-controlled governance involving TruthLens Partner Organizations.",
       "metadata": {
          "version": "Draft 1.0",
-         "status": "Draft for Phase 1 implementation",
+         "status": "Draft",
          "effectiveDate": null,
          "lastUpdated": "November 13, 2026"
       },
