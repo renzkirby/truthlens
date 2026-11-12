@@ -490,6 +490,7 @@ def provisional_policy_comparison(calibration=DEFAULT_CALIBRATION):
 
     return rows
 
+
 def legitimate_influence_comparison(calibration=DEFAULT_CALIBRATION):
     """Measure how much candidate policies attenuate established-user feedback."""
 
