@@ -51,7 +51,6 @@ class CommunitySafetyReconsiderationConflict(CommunitySafetyReconsiderationError
 def _decision_queryset():
     return CommunitySafetyDecision.objects.select_related(
         "moderation_case",
-        "thread_author",
     )
 
 
@@ -80,10 +79,8 @@ def can_request_reconsideration(*, decision, actor):
 @transaction.atomic
 def submit_reconsideration(*, decision_id, actor, request_statement):
     try:
-        decision = (
-            _decision_queryset()
-            .select_for_update()
-            .get(pk=decision_id)
+        decision = CommunitySafetyDecision.objects.select_for_update().get(
+            pk=decision_id,
         )
     except CommunitySafetyDecision.DoesNotExist as error:
         raise CommunitySafetyReconsiderationNotFound() from error
@@ -195,13 +192,9 @@ def resolve_reconsideration(*, case, actor, outcome, resolution_rationale):
             "Platform Safety review authority is required."
         )
 
-    locked_case = (
-        ModerationCase.objects.select_for_update()
-        .select_related("thread")
-        .get(
-            pk=case.pk,
-            case_type=ModerationCase.CaseType.SAFETY,
-        )
+    locked_case = ModerationCase.objects.select_for_update().get(
+        pk=case.pk,
+        case_type=ModerationCase.CaseType.SAFETY,
     )
 
     if locked_case.assigned_to_id is None:
