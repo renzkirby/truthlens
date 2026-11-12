@@ -93,8 +93,9 @@ def validated_history_factor(
 
     The denominator keeps the same Beta(2,2) prior mass used by TruthLens
     contribution quality. The numerator counts only successful resolved
-    actions, so rejected/dismissed actions cannot be farmed merely to mature
-    somebody's influence over other users' Community reputation.
+    actions, so rejected actions cannot be farmed merely to mature
+    somebody's influence over other users' Community reputation. Dismissed
+    Safety reports are excluded from reputation-action counts entirely.
 
     This is a transparent TruthLens calibration rule, not a Bayesian credible
     interval or a literature-prescribed voting formula.
@@ -447,12 +448,12 @@ def provisional_policy_comparison(calibration=DEFAULT_CALIBRATION):
     scenarios = (
         TrustScenario(
             name="three_failures",
-            invalid_reports=3,
+            rejected_evidence=3,
         ),
         TrustScenario(
             name="one_success_two_failures",
-            valid_reports=1,
-            invalid_reports=2,
+            verified_evidence=1,
+            rejected_evidence=2,
             active_months=1,
         ),
         TrustScenario(

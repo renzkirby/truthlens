@@ -86,7 +86,7 @@ Current component bounds:
 | Component | Current range | Purpose |
 |---|---:|---|
 | Neutral baseline | 50 | Cold-start position |
-| Contribution Quality | -25 to +25 | Resolved evidence/report quality |
+| Contribution Quality | -25 to +25 | Resolved evidence quality and confirmed Safety reports |
 | Community Reception | approximately -15 to +15 | Trust-weighted votes on verified evidence |
 | Sustained History | 0 to +5 | Successful participation across distinct months |
 | Moderation Penalty | 0 to -30 | Confirmed removed/rejected authored threads |
@@ -632,19 +632,19 @@ Source:
 
 ## 9.2 TruthLens question: evidence vs Safety reports
 
-TruthLens currently treats both of these as binary quality observations:
+TruthLens treats professionally resolved evidence as positive or negative quality observations, while Safety reports enter Community reputation only when the report is confirmed by content removal:
 
 ```text
 VERIFIED evidence -> successful action
 valid Safety report -> successful action
 
 REJECTED evidence -> failed action
-dismissed Safety report -> failed action
+dismissed Safety report -> neutral / excluded from reputation math
 ```
 
-This is reasonable **only if Trust Score is interpreted broadly as Community participation reliability**.
+A dismissed Safety report means the reported content did not warrant enforcement. It is not, by itself, a finding that the reporter acted unreliably, so it does not lower Trust Score or increase reputation depth.
 
-It is weaker if Trust Score is presented as factual-verification expertise.
+This design keeps Trust Score focused on **Community participation reliability** without discouraging good-faith reporting.
 
 This is one reason the official definition should remain:
 
@@ -1082,7 +1082,7 @@ Small samples cannot instantly generate extreme quality estimates.
 
 ## 17.3 Resolved outcomes only
 
-Pending evidence and unresolved reports do not influence Contribution Quality.
+Pending evidence, unresolved reports, and dismissed Safety reports do not influence Contribution Quality. Only confirmed Safety reports become reputation-bearing report actions.
 
 ## 17.4 Professional evidence gate before reception affects reputation
 

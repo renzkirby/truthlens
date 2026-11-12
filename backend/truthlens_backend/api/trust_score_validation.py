@@ -60,7 +60,7 @@ class TrustScenario:
     verified_evidence: int = 0
     rejected_evidence: int = 0
     valid_reports: int = 0
-    invalid_reports: int = 0
+    dismissed_reports: int = 0
     upvote_trust_scores: tuple[float, ...] = ()
     downvote_trust_scores: tuple[float, ...] = ()
     active_months: int = 0
@@ -69,11 +69,12 @@ class TrustScenario:
 
     @property
     def resolved_actions(self):
+        # Dismissed Safety reports are deliberately neutral and therefore do
+        # not increase resolved-action depth or act as failed contributions.
         return (
             self.verified_evidence
             + self.rejected_evidence
             + self.valid_reports
-            + self.invalid_reports
         )
 
     @property
@@ -302,9 +303,12 @@ def baseline_scenarios():
             description="Twenty-five valid Safety reports and no evidence.",
         ),
         TrustScenario(
-            name="invalid_reports_only",
-            invalid_reports=25,
-            description="Twenty-five dismissed Safety reports.",
+            name="dismissed_reports_only",
+            dismissed_reports=25,
+            description=(
+                "Twenty-five dismissed Safety reports; these are neutral "
+                "and excluded from Community reputation."
+            ),
         ),
         TrustScenario(
             name="good_evidence_no_votes",
@@ -348,8 +352,8 @@ def baseline_scenarios():
         ),
         TrustScenario(
             name="three_failed_actions",
-            invalid_reports=3,
-            description="Three resolved failures and no successful action.",
+            rejected_evidence=3,
+            description="Three rejected evidence contributions and no successful action.",
         ),
     )
 
@@ -642,7 +646,7 @@ def diagnostic_results(calibration=DEFAULT_CALIBRATION):
     failed_only = simulate_trust_score(
         TrustScenario(
             name="three_failed_actions",
-            invalid_reports=3,
+            rejected_evidence=3,
         ),
         calibration,
     )

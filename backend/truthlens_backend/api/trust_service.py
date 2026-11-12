@@ -75,20 +75,19 @@ def get_reputation_action_counts(user):
             ),
         ),
     )
-    report_counts = FlagResolutionLog.objects.filter(
+    # Only confirmed Safety reports are reputation-bearing actions.
+    # Dismissed reports remain preserved in FlagResolutionLog for moderation
+    # history, but are neutral: they do not count as successes, failures,
+    # reputation depth, or vote-weight maturation.
+    confirmed_report_count = FlagResolutionLog.objects.filter(
         flagged_by=user,
-    ).aggregate(
-        total=Count("id"),
-        validated=Count(
-            "id",
-            filter=Q(is_valid_report=True),
-        ),
-    )
+        is_valid_report=True,
+    ).count()
 
     evidence_total = evidence_counts["total"] or 0
     evidence_validated = evidence_counts["validated"] or 0
-    report_total = report_counts["total"] or 0
-    report_validated = report_counts["validated"] or 0
+    report_total = confirmed_report_count
+    report_validated = confirmed_report_count
 
     return {
         "resolved_actions": evidence_total + report_total,
@@ -207,8 +206,9 @@ def _get_confidence_level(resolved_actions):
 def calculate_trust_components(user):
     # ── 1. Resolved contribution quality ──
     #
-    # Pending actions are intentionally excluded.
-    # We only judge a user once moderation has resolved the action.
+    # Pending actions are intentionally excluded. Evidence contributes once it
+    # has a resolved verification outcome; Safety reports contribute only when
+    # the report is confirmed by a content-removal decision.
 
     resolved_evidence = EvidenceSubmission.objects.filter(
         contributor=user,
@@ -231,20 +231,17 @@ def calculate_trust_components(user):
     evidence_total = evidence_counts["total"] or 0
     evidence_validated = evidence_counts["validated"] or 0
 
-    resolved_reports = FlagResolutionLog.objects.filter(
+    # A dismissed Safety report means the reported content did not warrant
+    # enforcement; it is not, by itself, a finding that the reporter acted
+    # unreliably. Keep dismissed records for moderation history, but exclude
+    # them from Community reputation math.
+    confirmed_reports = FlagResolutionLog.objects.filter(
         flagged_by=user,
+        is_valid_report=True,
     )
 
-    report_counts = resolved_reports.aggregate(
-        total=Count("id"),
-        validated=Count(
-            "id",
-            filter=Q(is_valid_report=True),
-        ),
-    )
-
-    report_total = report_counts["total"] or 0
-    report_validated = report_counts["validated"] or 0
+    report_total = confirmed_reports.count()
+    report_validated = report_total
 
     resolved_actions = evidence_total + report_total
     validated_actions = evidence_validated + report_validated
@@ -335,9 +332,7 @@ def calculate_trust_components(user):
     )
 
     successful_dates.extend(
-        resolved_reports.filter(
-            is_valid_report=True,
-        ).values_list(
+        confirmed_reports.values_list(
             "resolved_at",
             flat=True,
         )

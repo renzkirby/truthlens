@@ -130,9 +130,9 @@ Conclusion:
 
 # 4. Candidate B — snapshot × validated-history factor
 
-The first history-depth candidate used all resolved actions in the maturation factor. Adversarial review found a weakness: a user could accumulate rejected/dismissed actions and still increase voting influence merely by increasing the denominator's history depth.
+The first history-depth candidate used all resolved actions in the maturation factor. Adversarial review found a weakness: a user could accumulate rejected actions and still increase voting influence merely by increasing the denominator's history depth.
 
-The refined candidate therefore counts **successful resolved actions in the numerator**.
+The refined candidate therefore counts **successful resolved actions in the numerator**. Dismissed Safety reports are now neutral and excluded from reputation-action depth entirely, so they cannot be farmed to mature voting influence.
 
 Formula:
 
