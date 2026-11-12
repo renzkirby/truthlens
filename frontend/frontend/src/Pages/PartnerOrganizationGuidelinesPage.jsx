@@ -92,7 +92,8 @@ function PolicySection({ section }) {
 function PolicyMetadata({ document }) {
    const metadata = document.metadata || {};
    return (
-      <div className="partner-guidelines-policy-meta">
+      <footer className="partner-guidelines-policy-meta" aria-labelledby="partner-policy-document-information">
+         <h2 id="partner-policy-document-information">Document information</h2>
          <dl>
             <div>
                <dt>Version</dt>
@@ -125,7 +126,7 @@ function PolicyMetadata({ document }) {
                </div>
             </details>
          ) : null}
-      </div>
+      </footer>
    );
 }
 
@@ -139,7 +140,10 @@ function PartnerOrganizationGuidelinesPage() {
          || partnerGovernanceDocuments[0],
       [resolvedDocumentKey],
    );
-   const currentSections = currentDocument.sections || [];
+   const currentSections = useMemo(
+      () => currentDocument.sections || [],
+      [currentDocument],
+   );
    const [activeSection, setActiveSection] = useState(currentSections[0]?.anchor || "");
    const resolvedActiveSection = currentSections.some((section) => section.anchor === activeSection)
       ? activeSection
@@ -275,7 +279,6 @@ function PartnerOrganizationGuidelinesPage() {
                               : "This Policy defines how TruthLens classifies and handles material Partner governance concerns. It reflects the current implemented governance model and its documented limitations."}
                         </p>
                      </div>
-                     <PolicyMetadata document={currentDocument} />
                   </header>
 
                   <article className="partner-guidelines-document">
@@ -283,6 +286,8 @@ function PartnerOrganizationGuidelinesPage() {
                         <PolicySection section={section} key={section.id} />
                      ))}
                   </article>
+
+                  <PolicyMetadata document={currentDocument} />
                </div>
 
                <aside className="partner-guidelines-sidebar partner-guidelines-sidebar--documents" aria-label="Partner governance documents">
