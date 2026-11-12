@@ -1215,7 +1215,7 @@ def issue_adjudication_decision(
 
 
 def schedule_adjudication_trust_updates(result):
-    contributor_ids = tuple(result.get("contributor_ids", ()))
+    contributor_ids = tuple(dict.fromkeys(result.get("contributor_ids", ())))
     if not contributor_ids:
         return
 
@@ -1223,59 +1223,31 @@ def schedule_adjudication_trust_updates(result):
     case_id = getattr(result.get("case"), "pk", None)
     decision_id = getattr(result.get("decision"), "pk", None)
 
-    def dispatch_trust_updates():
+    def refresh_trust_scores():
         try:
             from .trust_service import recompute_user_trust_score
         except Exception:
             logger.exception(
-                "Failed to load the post-commit Adjudication Trust "
+                "Failed to load post-commit Adjudication Trust "
                 "recomputation service for claim_id=%s case_id=%s "
                 "decision_id=%s.",
                 claim_id,
                 case_id,
                 decision_id,
             )
-            recompute_user_trust_score = None
-
-        try:
-            from .tasks import recompute_user_trust_score_task
-        except Exception:
-            logger.exception(
-                "Failed to load the post-commit Adjudication trust task for "
-                "claim_id=%s case_id=%s decision_id=%s.",
-                claim_id,
-                case_id,
-                decision_id,
-            )
-            recompute_user_trust_score_task = None
+            return
 
         for user_id in contributor_ids:
-            if recompute_user_trust_score is not None:
-                try:
-                    recompute_user_trust_score(user_id)
-                except Exception:
-                    logger.exception(
-                        "Failed immediate post-commit Adjudication Trust "
-                        "recomputation for user_id=%s claim_id=%s case_id=%s "
-                        "decision_id=%s.",
-                        user_id,
-                        claim_id,
-                        case_id,
-                        decision_id,
-                    )
+            try:
+                recompute_user_trust_score(user_id)
+            except Exception:
+                logger.exception(
+                    "Failed post-commit Adjudication Trust recomputation for "
+                    "user_id=%s claim_id=%s case_id=%s decision_id=%s.",
+                    user_id,
+                    claim_id,
+                    case_id,
+                    decision_id,
+                )
 
-            if recompute_user_trust_score_task is not None:
-                try:
-                    recompute_user_trust_score_task.delay(user_id)
-                except Exception:
-                    logger.exception(
-                        "Failed to enqueue post-commit Adjudication trust "
-                        "recomputation for user_id=%s claim_id=%s case_id=%s "
-                        "decision_id=%s.",
-                        user_id,
-                        claim_id,
-                        case_id,
-                        decision_id,
-                    )
-
-    transaction.on_commit(dispatch_trust_updates, robust=True)
+    transaction.on_commit(refresh_trust_scores, robust=True)
