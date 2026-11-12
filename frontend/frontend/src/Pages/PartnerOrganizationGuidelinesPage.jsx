@@ -481,6 +481,9 @@ function PartnerOrganizationGuidelinesPage() {
       [currentDocument],
    );
    const [activeSection, setActiveSection] = useState(currentSections[0]?.id || "");
+   const resolvedActiveSection = currentSections.some((section) => section.id === activeSection)
+      ? activeSection
+      : (currentSections[0]?.id || "");
    const [showFloatingBack, setShowFloatingBack] = useState(false);
    const lastScrollYRef = useRef(0);
    const upwardDistanceRef = useRef(0);
@@ -521,7 +524,6 @@ function PartnerOrganizationGuidelinesPage() {
    }, []);
 
    useEffect(() => {
-      setActiveSection(currentSections[0]?.id || "");
       const sectionNodes = currentSections
          .map((section) => document.getElementById(section.id))
          .filter(Boolean);
@@ -586,8 +588,8 @@ function PartnerOrganizationGuidelinesPage() {
                            <a
                               href={`#${section.id}`}
                               key={section.id}
-                              className={activeSection === section.id ? "is-active" : ""}
-                              aria-current={activeSection === section.id ? "location" : undefined}
+                              className={resolvedActiveSection === section.id ? "is-active" : ""}
+                              aria-current={resolvedActiveSection === section.id ? "location" : undefined}
                            >
                               {section.title}
                            </a>
