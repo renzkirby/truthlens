@@ -91,6 +91,15 @@
   grid-template-columns: 244px minmax(0, 1fr);
 }
 
+.management-shell__body--documentation {
+  display: block;
+}
+
+.management-shell__main--documentation {
+  width: 100%;
+  padding: 0;
+}
+
 .management-shell__sidebar {
   position: sticky;
   top: 68px;

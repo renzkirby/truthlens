@@ -1,6 +1,11 @@
-import { Link, Navigate, useLocation } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
+import {
+   partnershipEnforcementPolicySections,
+   partnershipGovernanceFrameworkSections,
+} from "../data/partnerGovernanceDocuments";
 import { canAccessManagementConsole } from "../utils/management";
 import { canAccessWorkspace } from "../utils/workspace";
 
@@ -437,59 +442,222 @@ function GuidelineSection({ section }) {
    );
 }
 
+const governanceDocuments = [
+   {
+      key: "guidelines",
+      title: "Partner Organization Guidelines",
+      description: "Professional and organizational standards for recognized Partner Organizations.",
+      intro: "Professional and organizational standards for recognized TruthLens Partner Organizations and members acting through professional TruthLens privileges.",
+   },
+   {
+      key: "framework",
+      title: "Partnership Governance Framework",
+      description: "Governance principles, lifecycle standards, decision factors, and administrative safeguards.",
+      intro: "Standards, decision factors, enforcement principles, and lifecycle procedures governing Partner Organizations.",
+      sections: partnershipGovernanceFrameworkSections,
+   },
+   {
+      key: "enforcement",
+      title: "Partnership Enforcement Policy",
+      description: "Enforcement factors, severity, suspension, reinstatement, partnership ending, and review standards.",
+      intro: "Policy governing proportionate, documented, and human-controlled enforcement involving Partner Organizations.",
+      sections: partnershipEnforcementPolicySections,
+   },
+];
+
 function PartnerOrganizationGuidelinesPage() {
    const { user } = useAuth();
+   const [searchParams] = useSearchParams();
+   const requestedDocument = searchParams.get("document") || "guidelines";
+   const currentDocument = useMemo(
+      () => governanceDocuments.find((document) => document.key === requestedDocument)
+         || governanceDocuments[0],
+      [requestedDocument],
+   );
+   const currentSections = useMemo(
+      () => currentDocument.key === "guidelines"
+         ? sections
+         : (currentDocument.sections || []),
+      [currentDocument],
+   );
+   const [activeSection, setActiveSection] = useState(currentSections[0]?.id || "");
+   const resolvedActiveSection = currentSections.some((section) => section.id === activeSection)
+      ? activeSection
+      : (currentSections[0]?.id || "");
+   const [showFloatingBack, setShowFloatingBack] = useState(false);
+   const lastScrollYRef = useRef(0);
+   const upwardDistanceRef = useRef(0);
+
    const location = useLocation();
    const isPlatformAdmin = canAccessManagementConsole(user);
    const professionalIdentity = user?.community_identity?.professional_identity || null;
    const canView = isPlatformAdmin || Boolean(professionalIdentity);
+   const managementView = location.pathname.startsWith("/management/");
+
+   useEffect(() => {
+      lastScrollYRef.current = window.scrollY;
+      upwardDistanceRef.current = 0;
+
+      const handleScroll = () => {
+         const currentY = Math.max(window.scrollY, 0);
+         const previousY = lastScrollYRef.current;
+         const delta = currentY - previousY;
+
+         if (currentY <= 96) {
+            setShowFloatingBack(false);
+            upwardDistanceRef.current = 0;
+         } else if (delta < 0) {
+            upwardDistanceRef.current += Math.abs(delta);
+            if (upwardDistanceRef.current >= 28) {
+               setShowFloatingBack(true);
+            }
+         } else if (delta > 0) {
+            upwardDistanceRef.current = 0;
+            setShowFloatingBack(false);
+         }
+
+         lastScrollYRef.current = currentY;
+      };
+
+      window.addEventListener("scroll", handleScroll, { passive: true });
+      return () => window.removeEventListener("scroll", handleScroll);
+   }, []);
+
+   useEffect(() => {
+      const sectionNodes = currentSections
+         .map((section) => document.getElementById(section.id))
+         .filter(Boolean);
+      if (!sectionNodes.length) return undefined;
+
+      const observer = new IntersectionObserver(
+         (entries) => {
+            const visibleEntries = entries
+               .filter((entry) => entry.isIntersecting)
+               .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+            if (visibleEntries.length) {
+               setActiveSection(visibleEntries[0].target.id);
+            }
+         },
+         {
+            rootMargin: "-96px 0px -68% 0px",
+            threshold: [0, 0.1, 0.4],
+         },
+      );
+
+      sectionNodes.forEach((node) => observer.observe(node));
+      return () => observer.disconnect();
+   }, [currentSections]);
 
    if (!canView) {
       return <Navigate to="/community" replace />;
    }
 
-   const managementView = location.pathname.startsWith("/management/");
    const backTo = managementView
-      ? "/management/organizations"
+      ? "/management"
       : canAccessWorkspace(user)
          ? "/workspace"
          : "/community";
+   const backLabel = managementView
+      ? "Management Console"
+      : canAccessWorkspace(user)
+         ? "Verification Workspace"
+         : "Community";
 
    return (
       <main className={`partner-guidelines-page ${managementView ? "partner-guidelines-page--management" : ""}`}>
          <div className="partner-guidelines-page__content">
             <Link className="partner-guidelines-back" to={backTo}>
-               ← {managementView ? "Partner Organizations" : canAccessWorkspace(user) ? "Verification Workspace" : "Community"}
+               ← {backLabel}
             </Link>
 
-            <header className="partner-guidelines-header">
-               <span>TruthLens Partner Governance</span>
-               <h1>Partner Organization Guidelines</h1>
-               <p>
-                  Professional and organizational standards for recognized TruthLens Partner Organizations
-                  and members acting through professional TruthLens privileges.
-               </p>
-               <div className="partner-guidelines-access-note">
-                  <strong>Read-only policy</strong>
-                  <p>
-                     These Guidelines apply to Partner Organizations, Organization Administrators,
-                     Lead Verifiers, Researchers, and other members using professional privileges.
-                  </p>
-               </div>
-            </header>
+            <Link
+               className={`partner-guidelines-floating-back ${showFloatingBack ? "is-visible" : ""}`}
+               to={backTo}
+               aria-hidden={!showFloatingBack}
+               tabIndex={showFloatingBack ? 0 : -1}
+            >
+               ← {backLabel}
+            </Link>
 
-            <nav className="partner-guidelines-toc" aria-label="Partner Organization Guidelines sections">
-               <strong>On this page</strong>
-               <div>
-                  {sections.map((section) => (
-                     <a href={`#${section.id}`} key={section.id}>{section.title}</a>
-                  ))}
-               </div>
-            </nav>
+            <div className="partner-guidelines-layout">
+               <aside className="partner-guidelines-sidebar partner-guidelines-sidebar--toc" aria-label="On this page">
+                  <div className="partner-guidelines-sidebar__sticky">
+                     <span className="partner-guidelines-sidebar__eyebrow">On this page</span>
+                     <nav className="partner-guidelines-toc">
+                        {currentSections.map((section) => (
+                           <a
+                              href={`#${section.id}`}
+                              key={section.id}
+                              className={resolvedActiveSection === section.id ? "is-active" : ""}
+                              aria-current={resolvedActiveSection === section.id ? "location" : undefined}
+                           >
+                              {section.title}
+                           </a>
+                        ))}
+                     </nav>
+                  </div>
+               </aside>
 
-            <article className="partner-guidelines-document">
-               {sections.map((section) => <GuidelineSection section={section} key={section.id} />)}
-            </article>
+               <div className="partner-guidelines-main">
+                  <header className="partner-guidelines-header">
+                     <span>TruthLens Partner Governance</span>
+                     <h1>{currentDocument.title}</h1>
+                     <p>{currentDocument.intro}</p>
+                     <div className="partner-guidelines-access-note">
+                        <strong>Read-only policy</strong>
+                        <p>
+                           {currentDocument.key === "guidelines"
+                              ? "These Guidelines apply to Partner Organizations, Organization Administrators, Lead Verifiers, Researchers, and other members using professional privileges."
+                              : "This governance document is presented from the authoritative TruthLens policy source and is available here as a read-only reference."}
+                        </p>
+                     </div>
+                  </header>
+
+                  {currentDocument.key === "guidelines" ? (
+                     <article className="partner-guidelines-document">
+                        {sections.map((section) => <GuidelineSection section={section} key={section.id} />)}
+                     </article>
+                  ) : (
+                     <article className="partner-guidelines-document">
+                        {currentSections.map((section) => (
+                           <section className="partner-guidelines-section" id={section.id} key={section.id}>
+                              <h2>{section.title}</h2>
+                              <div className="partner-guidelines-policy-body">{section.body}</div>
+                           </section>
+                        ))}
+                     </article>
+                  )}
+               </div>
+
+               <aside className="partner-guidelines-sidebar partner-guidelines-sidebar--documents" aria-label="Partner governance documents">
+                  <div className="partner-guidelines-sidebar__sticky">
+                     <span className="partner-guidelines-sidebar__eyebrow">Governance documents</span>
+                     <div className="partner-governance-documents">
+                        {governanceDocuments.map((document) => {
+                           const documentHref = document.key === "guidelines"
+                              ? location.pathname
+                              : `${location.pathname}?document=${document.key}`;
+                           const isCurrent = currentDocument.key === document.key;
+                           return (
+                              <Link
+                                 key={document.key}
+                                 to={documentHref}
+                                 className={`partner-governance-document-card ${isCurrent ? "is-current" : ""}`}
+                              >
+                                 <div className="partner-governance-document-card__title-row">
+                                    <strong>{document.title}</strong>
+                                 </div>
+                                 <p>{document.description}</p>
+                              </Link>
+                           );
+                        })}
+                     </div>
+                     <p className="partner-guidelines-sidebar__note">
+                        These documents are read together as the Partner Governance reference set.
+                     </p>
+                  </div>
+               </aside>
+            </div>
          </div>
       </main>
    );
