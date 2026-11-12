@@ -295,9 +295,14 @@ function CommunityModerationOutcomePage() {
                   <h2>Content reviewed by Platform Safety</h2>
                   <blockquote>{outcome.content.excerpt || "Content excerpt unavailable."}</blockquote>
                   {reversed ? (
-                     <p className="community-outcome-helper">
-                        The discussion was restored after reconsideration.
-                     </p>
+                     <div className="community-outcome-restored">
+                        <p className="community-outcome-helper">
+                           The discussion was restored after reconsideration.
+                        </p>
+                        <Link to={`/thread/detail/${outcome.content.thread_id}`}>
+                           View restored discussion
+                        </Link>
+                     </div>
                   ) : removed ? (
                      <p className="community-outcome-helper">
                         The original discussion is no longer available in the Community feed.
