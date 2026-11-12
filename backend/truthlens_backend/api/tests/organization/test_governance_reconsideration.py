@@ -69,7 +69,7 @@ class GovernanceReconsiderationTests(APITestCase):
                     "Repeated sourcing failures require temporary remediation before "
                     "professional access resumes."
                 ),
-                policy_basis="Partnership Enforcement Policy §13.1",
+                policy_basis="Partnership Governance & Enforcement Policy, Section 8.1 — Remedial Suspension",
                 supporting_basis=(
                     "Internal review of affected investigations and corrective history."
                 ),
