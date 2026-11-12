@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, Navigate, useLocation } from "react-router-dom";
+import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
 import { canAccessManagementConsole } from "../utils/management";
@@ -438,28 +438,109 @@ function GuidelineSection({ section }) {
    );
 }
 
+const frameworkSections = [
+   "1. Purpose",
+   "2. Core Governance Principles",
+   "3. Partner Organization Standards",
+   "4. Partnership Violation Factors",
+   "5. Severity Assessment",
+   "6. Severity Levels",
+   "7. Enforcement Lifecycle",
+   "8. Suspension",
+   "9. Required Suspension Record",
+   "10. Effects of Suspension",
+   "11. Remediation",
+   "12. Reinstatement",
+   "13. Ending a Partnership",
+   "14. Grounds for Ending Partnership",
+   "15. Required Partnership-Ending Record",
+   "16. Reason / Rationale Standard",
+   "17. Notice to the Partner Organization",
+   "18. Review, Reconsideration, and Reinstatement",
+   "19. Public, Partner, and Internal Information",
+   "20. Historical Preservation",
+   "21. Automated Signals and Human Decisions",
+   "22. Administrative Authority",
+   "23. Governance Auditability",
+   "24. Guiding Enforcement Rule",
+];
+
+const enforcementSections = [
+   "1. Purpose",
+   "2. Scope",
+   "3. Decision Authority",
+   "4. Enforcement Principles",
+   "5. Partnership Factors",
+   "6. Other Factor",
+   "7. Severity Assessment",
+   "8. Severity Levels",
+   "9. No Automatic Strike Rule",
+   "10. Governance Action Ladder",
+   "11. Guidance or Notice",
+   "12. Formal Corrective Action",
+   "13. Suspension",
+   "13.1 Remedial Suspension",
+   "13.2 Precautionary Suspension",
+   "13.3 Administrative Suspension",
+   "14. Required Suspension Information",
+   "15. Suspension Effects",
+   "16. Remediation Plan",
+   "17. Reinstatement",
+   "18. Continued Monitoring or Probation",
+   "19. Ending Partnership",
+   "19.1 Voluntary Withdrawal",
+   "19.2 Administrative Conclusion",
+   "19.3 Termination for Cause",
+   "20. Factors Supporting Partnership Termination",
+   "21. Required Partnership-Ending Information",
+   "22. Emergency or Immediate Action",
+   "23. Notice",
+   "24. Reconsideration",
+   "25. Review of Serious Decisions",
+   "26. Governance Information Visibility",
+   "27. Historical Preservation",
+   "28. Governance Audit Trail",
+   "29. Automated Indicators",
+   "30. Enforcement Decision Rule",
+   "31. Policy Review",
+];
+
 const governanceDocuments = [
    {
       key: "guidelines",
       title: "Partner Organization Guidelines",
       description: "Professional and organizational standards for recognized Partner Organizations.",
-      current: true,
+      intro: "Professional and organizational standards for recognized TruthLens Partner Organizations and members acting through professional TruthLens privileges.",
    },
    {
       key: "framework",
       title: "Partnership Governance Framework",
       description: "Governance principles, lifecycle standards, decision factors, and administrative safeguards.",
+      intro: "Standards, decision factors, enforcement principles, and lifecycle procedures governing Partner Organizations.",
+      sectionTitles: frameworkSections,
    },
    {
       key: "enforcement",
       title: "Partnership Enforcement Policy",
       description: "Enforcement factors, severity, suspension, reinstatement, partnership ending, and review standards.",
+      intro: "Policy governing proportionate, documented, and human-controlled enforcement involving Partner Organizations.",
+      sectionTitles: enforcementSections,
    },
 ];
 
 function PartnerOrganizationGuidelinesPage() {
    const { user } = useAuth();
-   const [activeSection, setActiveSection] = useState(sections[0]?.id || "");
+   const [searchParams] = useSearchParams();
+   const requestedDocument = searchParams.get("document") || "guidelines";
+   const currentDocument = governanceDocuments.find((document) => document.key === requestedDocument)
+      || governanceDocuments[0];
+   const currentSections = currentDocument.key === "guidelines"
+      ? sections
+      : (currentDocument.sectionTitles || []).map((title, index) => ({
+         id: `policy-section-${index + 1}`,
+         title,
+      }));
+   const [activeSection, setActiveSection] = useState(currentSections[0]?.id || "");
 
    const location = useLocation();
    const isPlatformAdmin = canAccessManagementConsole(user);
@@ -468,7 +549,8 @@ function PartnerOrganizationGuidelinesPage() {
    const managementView = location.pathname.startsWith("/management/");
 
    useEffect(() => {
-      const sectionNodes = sections
+      setActiveSection(currentSections[0]?.id || "");
+      const sectionNodes = currentSections
          .map((section) => document.getElementById(section.id))
          .filter(Boolean);
       if (!sectionNodes.length) return undefined;
@@ -490,7 +572,7 @@ function PartnerOrganizationGuidelinesPage() {
 
       sectionNodes.forEach((node) => observer.observe(node));
       return () => observer.disconnect();
-   }, []);
+   }, [requestedDocument]);
 
    if (!canView) {
       return <Navigate to="/community" replace />;
@@ -519,7 +601,7 @@ function PartnerOrganizationGuidelinesPage() {
                   <div className="partner-guidelines-sidebar__sticky">
                      <span className="partner-guidelines-sidebar__eyebrow">On this page</span>
                      <nav className="partner-guidelines-toc">
-                        {sections.map((section) => (
+                        {currentSections.map((section) => (
                            <a
                               href={`#${section.id}`}
                               key={section.id}
@@ -536,11 +618,8 @@ function PartnerOrganizationGuidelinesPage() {
                <div className="partner-guidelines-main">
                   <header className="partner-guidelines-header">
                      <span>TruthLens Partner Governance</span>
-                     <h1>Partner Organization Guidelines</h1>
-                     <p>
-                        Professional and organizational standards for recognized TruthLens Partner Organizations
-                        and members acting through professional TruthLens privileges.
-                     </p>
+                     <h1>{currentDocument.title}</h1>
+                     <p>{currentDocument.intro}</p>
                      <div className="partner-guidelines-access-note">
                         <strong>Read-only policy</strong>
                         <p>
@@ -550,27 +629,51 @@ function PartnerOrganizationGuidelinesPage() {
                      </div>
                   </header>
 
-                  <article className="partner-guidelines-document">
-                     {sections.map((section) => <GuidelineSection section={section} key={section.id} />)}
-                  </article>
+                  {currentDocument.key === "guidelines" ? (
+                     <article className="partner-guidelines-document">
+                        {sections.map((section) => <GuidelineSection section={section} key={section.id} />)}
+                     </article>
+                  ) : (
+                     <article className="partner-guidelines-document partner-guidelines-document--index">
+                        <div className="partner-guidelines-policy-note">
+                           <strong>Read-only governance document</strong>
+                           <p>
+                              This view exposes the document structure from the authoritative TruthLens policy source.
+                              The policy text itself is not rewritten or summarized here.
+                           </p>
+                        </div>
+                        {currentSections.map((section) => (
+                           <section className="partner-guidelines-section partner-guidelines-section--index" id={section.id} key={section.id}>
+                              <h2>{section.title}</h2>
+                           </section>
+                        ))}
+                     </article>
+                  )}
                </div>
 
                <aside className="partner-guidelines-sidebar partner-guidelines-sidebar--documents" aria-label="Partner governance documents">
                   <div className="partner-guidelines-sidebar__sticky">
                      <span className="partner-guidelines-sidebar__eyebrow">Governance documents</span>
                      <div className="partner-governance-documents">
-                        {governanceDocuments.map((document) => (
-                           <article
-                              key={document.key}
-                              className={`partner-governance-document-card ${document.current ? "is-current" : ""}`}
-                           >
-                              <div className="partner-governance-document-card__title-row">
-                                 <strong>{document.title}</strong>
-                                 {document.current ? <span>Current</span> : null}
-                              </div>
-                              <p>{document.description}</p>
-                           </article>
-                        ))}
+                        {governanceDocuments.map((document) => {
+                           const documentHref = document.key === "guidelines"
+                              ? location.pathname
+                              : `${location.pathname}?document=${document.key}`;
+                           const isCurrent = currentDocument.key === document.key;
+                           return (
+                              <Link
+                                 key={document.key}
+                                 to={documentHref}
+                                 className={`partner-governance-document-card ${isCurrent ? "is-current" : ""}`}
+                              >
+                                 <div className="partner-governance-document-card__title-row">
+                                    <strong>{document.title}</strong>
+                                    {isCurrent ? <span>Current</span> : null}
+                                 </div>
+                                 <p>{document.description}</p>
+                              </Link>
+                           );
+                        })}
                      </div>
                      <p className="partner-guidelines-sidebar__note">
                         These documents are read together as the Partner Governance reference set.
