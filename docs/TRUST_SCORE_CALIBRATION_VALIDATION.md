@@ -1,6 +1,6 @@
 # TruthLens Trust Score — Calibration & Adversarial Validation
 
-Status: pre-hardening control validation used to identify I8/I9  
+Status: pre-hardening vote-weight control used to identify I8/I9; rank progression reflects the current production positive-action gate  
 Companion research: `docs/TRUST_SCORE_REPUTATION_DEEP_RESEARCH.md`  
 Candidate hardening experiments: `docs/TRUST_SCORE_HARDENING_EXPERIMENTS.md`  
 Validation implementation: `backend/truthlens_backend/api/trust_score_validation.py`  
@@ -37,15 +37,18 @@ Moderation penalty cap       30
 
 Current ranks:
 
-| Rank | Minimum score | Minimum resolved actions |
-|---|---:|---:|
-| Provisional | — | 0-2 |
-| New Contributor | 0 | 3 |
-| Contributor | 55 | 10 |
-| Trusted Contributor | 70 | 25 |
-| Expert Contributor | 85 | 50 |
+| Rank | Minimum score | Minimum resolved actions | Minimum validated actions |
+|---|---:|---:|---:|
+| Provisional | — | fewer than 3, or no validated action | — |
+| New Contributor | 0 | 3 | 1 |
+| Contributor | 55 | 10 | 1 |
+| Trusted Contributor | 70 | 25 | 1 |
+| Expert Contributor | 85 | 50 | 1 |
 
-No parameter in this document has yet been approved for change.
+The vote-weight attack scenarios in this document remain the historical
+pre-hardening control used to expose I8/I9. Rank progression, however, now
+matches production H3: leaving Provisional requires at least three resolved
+actions and at least one validated action.
 
 ---
 
@@ -107,7 +110,7 @@ A separate parity test verifies that the simulator's mathematical output matches
 | 25/25 verified + ten fresh-account downvotes | 65.54 | Contributor | +21.55 | -11.01 | +5 | 0 |
 | Five early failures | 36.11 | New Contributor | -13.89 | 0.00 | 0 | 0 |
 | Five failures + twenty later successes | 67.93 | Contributor | +12.93 | 0.00 | +5 | 0 |
-| Three failed resolved actions | 39.29 | New Contributor | -10.71 | 0.00 | 0 | 0 |
+| Three failed resolved actions | 39.29 | Provisional | -10.71 | 0.00 | 0 | 0 |
 
 > **Report-semantics update:** dismissed Safety reports are neutral. They remain in moderation history but are excluded from Trust Score resolved-action depth, quality success/failure counts, successful-month history, and vote-weight maturation. Confirmed Safety reports remain positive reputation actions.
 
