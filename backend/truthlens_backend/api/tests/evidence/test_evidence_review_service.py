@@ -223,7 +223,7 @@ class EvidenceReviewServiceTests(TestCase):
         )
         self.assertFalse(AdjudicationDecision.objects.filter(claim=self.claim).exists())
 
-    def test_safe_trust_dispatch_attempts_immediate_and_async_work(self):
+    def test_safe_trust_refresh_runs_directly_after_commit(self):
         result = {
             "evidence": self.evidence,
             "case": self.case,
@@ -231,16 +231,13 @@ class EvidenceReviewServiceTests(TestCase):
         }
         with patch(
             "api.trust_service.recompute_user_trust_score"
-        ) as immediate, patch(
-            "api.tasks.recompute_user_trust_score_task.delay"
-        ) as asynchronous:
+        ) as recompute:
             with self.captureOnCommitCallbacks(execute=True):
                 schedule_evidence_review_trust_updates(result)
 
-        immediate.assert_called_once_with(self.contributor.id)
-        asynchronous.assert_called_once_with(self.contributor.id)
+        recompute.assert_called_once_with(self.contributor.id)
 
-    def test_safe_trust_dispatch_contains_secondary_failures(self):
+    def test_safe_trust_refresh_contains_direct_failures(self):
         result = {
             "evidence": self.evidence,
             "case": self.case,
@@ -248,10 +245,8 @@ class EvidenceReviewServiceTests(TestCase):
         }
         with patch(
             "api.trust_service.recompute_user_trust_score",
-            side_effect=RuntimeError("reputation unavailable"),
-        ), patch(
-            "api.tasks.recompute_user_trust_score_task.delay",
-            side_effect=RuntimeError("broker unavailable"),
+            side_effect=RuntimeError("Trust calculation unavailable"),
         ):
-            with self.captureOnCommitCallbacks(execute=True):
-                schedule_evidence_review_trust_updates(result)
+            with self.assertLogs("api.evidence_review_service", level="ERROR"):
+                with self.captureOnCommitCallbacks(execute=True):
+                    schedule_evidence_review_trust_updates(result)
