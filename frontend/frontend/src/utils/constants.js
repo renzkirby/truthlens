@@ -193,6 +193,7 @@ export const API_ENDPOINTS = {
    THREADS: "threads/",
 
    // Moderation
+   COMMUNITY_REPORTS: "community-reports/",
    COMMUNITY_GUIDELINES: "community/guidelines/",
    COMMUNITY_MODERATION_OUTCOME: (decisionId) =>
       `community/moderation/outcomes/${encodeURIComponent(decisionId)}/`,
