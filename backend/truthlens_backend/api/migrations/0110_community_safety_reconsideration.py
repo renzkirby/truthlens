@@ -76,6 +76,11 @@ class Migration(migrations.Migration):
             name="pre_removal_moderator_notes",
             field=models.TextField(blank=True, null=True),
         ),
+        migrations.AddField(
+            model_name="communitysafetydecision",
+            name="restoration_snapshot_complete",
+            field=models.BooleanField(default=False),
+        ),
         migrations.RunPython(
             backfill_pre_removal_thread_status,
             migrations.RunPython.noop,
