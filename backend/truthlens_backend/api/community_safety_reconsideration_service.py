@@ -5,10 +5,18 @@ import logging
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from .community_safety_target_service import (
+    CommunitySafetyTargetError,
+    get_decision_target,
+    restore_target,
+    target_is_removed,
+    target_label,
+    target_state,
+)
 from .models import (
+    CommunityReportOutcome,
     CommunitySafetyDecision,
     CommunitySafetyReconsideration,
-    FlagResolutionLog,
     ModerationCase,
     Thread,
 )
@@ -57,13 +65,16 @@ def _decision_queryset():
 def can_request_reconsideration(*, decision, actor):
     if not actor or not actor.is_authenticated or not actor.is_active:
         return False
-    if decision.thread_author_id != actor.pk:
+    if decision.content_owner_id != actor.pk:
         return False
     if decision.action != CommunitySafetyDecision.Action.REMOVE:
         return False
     if not decision.restoration_snapshot_complete:
         return False
-    if decision.pre_removal_thread_status not in RESTORABLE_THREAD_STATUSES:
+    if (
+        decision.target_type == CommunitySafetyDecision.TargetType.THREAD
+        and decision.pre_removal_thread_status not in RESTORABLE_THREAD_STATUSES
+    ):
         return False
     if decision.moderation_case.status != ModerationCase.Status.RESOLVED:
         return False
@@ -72,10 +83,12 @@ def can_request_reconsideration(*, decision, actor):
     ).exists():
         return False
 
-    return Thread.objects.filter(
-        pk=decision.thread_id_snapshot,
-        status=Thread.Status.REJECTED,
-    ).exists()
+    try:
+        target = get_decision_target(decision)
+    except CommunitySafetyTargetError:
+        return False
+
+    return target_is_removed(decision.target_type, target)
 
 
 @transaction.atomic
@@ -87,7 +100,7 @@ def submit_reconsideration(*, decision_id, actor, request_statement):
     except CommunitySafetyDecision.DoesNotExist as error:
         raise CommunitySafetyReconsiderationNotFound() from error
 
-    if decision.thread_author_id != getattr(actor, "pk", None):
+    if decision.content_owner_id != getattr(actor, "pk", None):
         raise CommunitySafetyReconsiderationNotFound()
 
     if decision.action != CommunitySafetyDecision.Action.REMOVE:
@@ -101,7 +114,10 @@ def submit_reconsideration(*, decision_id, actor, request_statement):
             "and cannot be reversed safely."
         )
 
-    if decision.pre_removal_thread_status not in RESTORABLE_THREAD_STATUSES:
+    if (
+        decision.target_type == CommunitySafetyDecision.TargetType.THREAD
+        and decision.pre_removal_thread_status not in RESTORABLE_THREAD_STATUSES
+    ):
         raise CommunitySafetyReconsiderationConflict(
             "This historical removal does not have a safe restoration state."
         )
@@ -110,18 +126,15 @@ def submit_reconsideration(*, decision_id, actor, request_statement):
         pk=decision.moderation_case_id,
         case_type=ModerationCase.CaseType.SAFETY,
     )
-    try:
-        thread = Thread.objects.select_for_update().get(
-            pk=decision.thread_id_snapshot,
-        )
-    except Thread.DoesNotExist as error:
-        raise CommunitySafetyReconsiderationConflict(
-            "The removed discussion is no longer available for reconsideration."
-        ) from error
 
-    if case.thread_id != thread.pk or thread.author_id != decision.thread_author_id:
+    try:
+        target = get_decision_target(decision, lock=True)
+    except CommunitySafetyTargetError as error:
+        raise CommunitySafetyReconsiderationConflict(str(error)) from error
+
+    if case.thread_id != decision.thread_id_snapshot:
         raise CommunitySafetyReconsiderationConflict(
-            "The original Safety decision no longer matches the discussion."
+            "The original Safety decision no longer matches the discussion context."
         )
 
     if case.status != ModerationCase.Status.RESOLVED:
@@ -129,9 +142,10 @@ def submit_reconsideration(*, decision_id, actor, request_statement):
             "This Safety decision is not in a final state that can be reconsidered."
         )
 
-    if thread.status != Thread.Status.REJECTED:
+    if not target_is_removed(decision.target_type, target):
         raise CommunitySafetyReconsiderationConflict(
-            "The discussion is no longer in the removed state targeted by this decision."
+            f"The {target_label(decision.target_type)} is no longer in the removed state "
+            "targeted by this decision."
         )
 
     if CommunitySafetyReconsideration.objects.filter(
@@ -141,13 +155,21 @@ def submit_reconsideration(*, decision_id, actor, request_statement):
             "A reconsideration request has already been submitted for this removal."
         )
 
+    competing_filters = {
+        "case_type": ModerationCase.CaseType.SAFETY,
+        "status__in": ACTIVE_CASE_STATUSES,
+        "safety_target_type": decision.target_type,
+    }
+    if decision.target_type == CommunitySafetyDecision.TargetType.THREAD:
+        competing_filters["thread_id"] = decision.target_id_snapshot
+    elif decision.target_type == CommunitySafetyDecision.TargetType.COMMENT:
+        competing_filters["thread_comment_id"] = decision.target_id_snapshot
+    else:
+        competing_filters["evidence_submission_id"] = decision.target_id_snapshot
+
     competing_case_exists = (
         ModerationCase.objects.select_for_update()
-        .filter(
-            case_type=ModerationCase.CaseType.SAFETY,
-            thread=thread,
-            status__in=ACTIVE_CASE_STATUSES,
-        )
+        .filter(**competing_filters)
         .exclude(pk=case.pk)
         .exists()
     )
@@ -173,10 +195,15 @@ def submit_reconsideration(*, decision_id, actor, request_statement):
             next_status=ModerationCase.Status.REOPENED,
             actor=actor,
             reason_code="RECONSIDERATION_REQUESTED",
-            notes="The discussion author requested reconsideration of the removal.",
+            notes=(
+                f"The {target_label(decision.target_type)} owner requested "
+                "reconsideration of the removal."
+            ),
             metadata={
                 "decision_id": str(decision.pk),
                 "reconsideration_id": str(reconsideration.pk),
+                "target_type": decision.target_type,
+                "target_id": str(decision.target_id_snapshot),
             },
         )
     except (IntegrityError, InvalidModerationTransition) as error:
@@ -222,13 +249,11 @@ def resolve_reconsideration(*, case, actor, outcome, resolution_rationale):
         )
 
     try:
-        decision = (
-            CommunitySafetyDecision.objects.select_for_update()
-            .get(moderation_case=locked_case)
+        decision = CommunitySafetyDecision.objects.select_for_update().get(
+            moderation_case=locked_case
         )
-        reconsideration = (
-            CommunitySafetyReconsideration.objects.select_for_update()
-            .get(safety_decision=decision)
+        reconsideration = CommunitySafetyReconsideration.objects.select_for_update().get(
+            safety_decision=decision
         )
     except (
         CommunitySafetyDecision.DoesNotExist,
@@ -253,20 +278,18 @@ def resolve_reconsideration(*, case, actor, outcome, resolution_rationale):
         )
 
     try:
-        thread = Thread.objects.select_for_update().get(
-            pk=decision.thread_id_snapshot,
-        )
-    except Thread.DoesNotExist as error:
-        raise CommunitySafetyReconsiderationConflict(
-            "The removed discussion no longer exists."
-        ) from error
+        target = get_decision_target(decision, lock=True)
+    except CommunitySafetyTargetError as error:
+        raise CommunitySafetyReconsiderationConflict(str(error)) from error
 
-    if (
-        locked_case.thread_id != thread.pk
-        or thread.status != Thread.Status.REJECTED
-    ):
+    if locked_case.thread_id != decision.thread_id_snapshot:
         raise CommunitySafetyReconsiderationConflict(
-            "The discussion is no longer in the removed state targeted by this reconsideration."
+            "The Safety case no longer matches the original discussion context."
+        )
+    if not target_is_removed(decision.target_type, target):
+        raise CommunitySafetyReconsiderationConflict(
+            f"The {target_label(decision.target_type)} is no longer in the removed state "
+            "targeted by this reconsideration."
         )
 
     if locked_case.status == ModerationCase.Status.REOPENED:
@@ -278,27 +301,20 @@ def resolve_reconsideration(*, case, actor, outcome, resolution_rationale):
             metadata={
                 "decision_id": str(decision.pk),
                 "reconsideration_id": str(reconsideration.pk),
+                "target_type": decision.target_type,
+                "target_id": str(decision.target_id_snapshot),
             },
         )
 
-    previous_thread_status = thread.status
+    state_before = target_state(decision.target_type, target)
     if outcome == CommunitySafetyReconsideration.Outcome.REVERSED:
-        if decision.pre_removal_thread_status not in RESTORABLE_THREAD_STATUSES:
-            raise CommunitySafetyReconsiderationConflict(
-                "The original thread state cannot be restored safely."
+        try:
+            restore_target(
+                decision=decision,
+                target=target,
             )
-        thread.status = decision.pre_removal_thread_status
-        thread.moderated_by_id = decision.pre_removal_moderated_by_id
-        thread.moderated_at = decision.pre_removal_moderated_at
-        thread.moderator_notes = decision.pre_removal_moderator_notes
-        thread.save(
-            update_fields=[
-                "status",
-                "moderated_by",
-                "moderated_at",
-                "moderator_notes",
-            ]
-        )
+        except CommunitySafetyTargetError as error:
+            raise CommunitySafetyReconsiderationConflict(str(error)) from error
         resolution_code = "RECONSIDERATION_REVERSED"
     else:
         resolution_code = "RECONSIDERATION_UPHELD"
@@ -327,24 +343,27 @@ def resolve_reconsideration(*, case, actor, outcome, resolution_rationale):
         metadata={
             "decision_id": str(decision.pk),
             "reconsideration_id": str(reconsideration.pk),
-            "thread_status_before": previous_thread_status,
-            "thread_status_after": thread.status,
+            "target_type": decision.target_type,
+            "target_id": str(decision.target_id_snapshot),
+            "target_state_before": state_before,
+            "target_state_after": target_state(decision.target_type, target),
         },
     )
 
     confirmed_reporter_ids = set(
-        FlagResolutionLog.objects.filter(
+        CommunityReportOutcome.objects.filter(
             safety_decision=decision,
             is_valid_report=True,
-        ).values_list("flagged_by_id", flat=True)
+        ).values_list("reporter_id", flat=True)
     )
 
     return {
         "case": resolved_case,
-        "thread": thread,
+        "thread": locked_case.thread,
+        "target": target,
         "decision": decision,
         "reconsideration": reconsideration,
-        "author_id": decision.thread_author_id,
+        "content_owner_id": decision.content_owner_id,
         "confirmed_reporter_ids": confirmed_reporter_ids,
     }
 
@@ -352,7 +371,7 @@ def resolve_reconsideration(*, case, actor, outcome, resolution_rationale):
 def schedule_reconsideration_notifications(result):
     reconsideration = result["reconsideration"]
     decision = result["decision"]
-    author_id = result.get("author_id")
+    content_owner_id = result.get("content_owner_id")
     confirmed_reporter_ids = set(result.get("confirmed_reporter_ids", set()))
 
     def deliver():
@@ -370,9 +389,9 @@ def schedule_reconsideration_notifications(result):
             )
             return
 
-        if author_id:
+        if content_owner_id:
             if reconsideration.outcome == CommunitySafetyReconsideration.Outcome.REVERSED:
-                title = "Your discussion was restored"
+                title = f"Your {target_label(decision.target_type)} was restored"
                 message = (
                     "Platform Safety reversed the original removal after reconsideration. "
                     "Open the moderation outcome to review the decision."
@@ -386,7 +405,7 @@ def schedule_reconsideration_notifications(result):
 
             try:
                 create_notification_once(
-                    recipient_id=author_id,
+                    recipient_id=content_owner_id,
                     notification_type=Type.COMMUNITY_MODERATION_OUTCOME,
                     target_type=Target.MODERATION_OUTCOME,
                     target_id=decision.pk,
@@ -399,7 +418,7 @@ def schedule_reconsideration_notifications(result):
                     "Failed reconsideration author notification for "
                     "reconsideration_id=%s user_id=%s.",
                     reconsideration.pk,
-                    author_id,
+                    content_owner_id,
                 )
 
         if reconsideration.outcome != CommunitySafetyReconsideration.Outcome.REVERSED:
@@ -440,8 +459,8 @@ def schedule_reconsideration_trust_updates(result):
         return
 
     user_ids = set(result.get("confirmed_reporter_ids", set()))
-    if result.get("author_id"):
-        user_ids.add(result["author_id"])
+    if result.get("content_owner_id"):
+        user_ids.add(result["content_owner_id"])
 
     def refresh():
         try:
