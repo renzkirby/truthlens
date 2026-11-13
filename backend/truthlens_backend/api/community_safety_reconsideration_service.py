@@ -61,6 +61,8 @@ def can_request_reconsideration(*, decision, actor):
         return False
     if decision.action != CommunitySafetyDecision.Action.REMOVE:
         return False
+    if not decision.restoration_snapshot_complete:
+        return False
     if decision.pre_removal_thread_status not in RESTORABLE_THREAD_STATUSES:
         return False
     if decision.moderation_case.status != ModerationCase.Status.RESOLVED:
@@ -91,6 +93,12 @@ def submit_reconsideration(*, decision_id, actor, request_statement):
     if decision.action != CommunitySafetyDecision.Action.REMOVE:
         raise CommunitySafetyReconsiderationConflict(
             "Only removed Community content can be reconsidered."
+        )
+
+    if not decision.restoration_snapshot_complete:
+        raise CommunitySafetyReconsiderationConflict(
+            "This historical removal predates complete restoration snapshots "
+            "and cannot be reversed safely."
         )
 
     if decision.pre_removal_thread_status not in RESTORABLE_THREAD_STATUSES:
@@ -238,6 +246,10 @@ def resolve_reconsideration(*, case, actor, outcome, resolution_rationale):
     if decision.action != CommunitySafetyDecision.Action.REMOVE:
         raise CommunitySafetyReconsiderationConflict(
             "Only a removed-content decision can be reconsidered."
+        )
+    if not decision.restoration_snapshot_complete:
+        raise CommunitySafetyReconsiderationConflict(
+            "This historical removal does not have a complete restoration snapshot."
         )
 
     try:
