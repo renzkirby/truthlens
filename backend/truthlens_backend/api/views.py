@@ -98,6 +98,7 @@ from .models import (
     VerificationRun,
 )
 from .moderation_service import (
+    ACTIVE_CASE_STATUSES,
     ModerationCaseError,
     ensure_safety_case,
     get_active_safety_case,
@@ -3415,6 +3416,22 @@ def _ensure_no_active_safety_review(
         )
 
 
+def _ensure_thread_context_not_under_safety_review(thread, *, action_label):
+    if ModerationCase.objects.filter(
+        case_type=ModerationCase.CaseType.SAFETY,
+        thread=thread,
+        status__in=ACTIVE_CASE_STATUSES,
+    ).exists():
+        raise ValidationError(
+            {
+                "detail": (
+                    f"This discussion cannot be {action_label} while "
+                    "Platform Safety is reviewing content within it."
+                )
+            }
+        )
+
+
 class ThreadViewSet(viewsets.ModelViewSet):
     serializer_class = ThreadSerializer
     permission_classes = [
@@ -3705,17 +3722,15 @@ class ThreadViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         thread = serializer.instance
-        _ensure_no_active_safety_review(
-            target_type=ModerationCase.SafetyTargetType.THREAD,
-            thread=thread,
+        _ensure_thread_context_not_under_safety_review(
+            thread,
             action_label="edited",
         )
         serializer.save()
 
     def perform_destroy(self, instance):
-        _ensure_no_active_safety_review(
-            target_type=ModerationCase.SafetyTargetType.THREAD,
-            thread=instance,
+        _ensure_thread_context_not_under_safety_review(
+            instance,
             action_label="deleted",
         )
         super().perform_destroy(instance)
@@ -3798,6 +3813,9 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
         try:
             thread = Thread.objects.select_related("claim").get(id=thread_id)
         except Thread.DoesNotExist:
+            raise NotFound("Thread not found.")
+
+        if thread.status == Thread.Status.REJECTED:
             raise NotFound("Thread not found.")
 
         # Snapshot canonical live reputation before entering the claim-locking
@@ -3886,6 +3904,14 @@ class ThreadCommentViewSet(viewsets.ModelViewSet):
             thread = Thread.objects.get(id=thread_id)
         except Thread.DoesNotExist:
             raise NotFound("Thread not found.")
+
+        if thread.status == Thread.Status.REJECTED:
+            raise NotFound("Thread not found.")
+
+        parent = serializer.validated_data.get("parent")
+        if parent is not None and parent.safety_removed_at is not None:
+            raise NotFound("Parent comment not found.")
+
         comment = serializer.save(
             commenter=self.request.user,
             thread=thread,
