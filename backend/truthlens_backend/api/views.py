@@ -84,8 +84,8 @@ from .models import (
     EvidenceSubmission,
     ThreadComment,
     ThreadCommentLike,
-    ThreadFlag,
-    FlagResolutionLog,
+    CommunityReport,
+    CommunityReportOutcome,
     Vote,
     ModerationCase,
     Organization,
@@ -97,7 +97,11 @@ from .models import (
     VerificationAssignment,
     VerificationRun,
 )
-from .moderation_service import ModerationCaseError, ensure_safety_case
+from .moderation_service import (
+    ModerationCaseError,
+    ensure_safety_case,
+    get_active_safety_case,
+)
 from .safety_review_service import (
     SafetyCaseConflict,
     SafetyReviewAuthorizationError,
@@ -377,7 +381,7 @@ from .serializers import (
     PublicUserCommentSerializer,
     ThreadDetailSerializer,
     VoteSerializer,
-    ThreadFlagSerializer,
+    CommunityReportSerializer,
     AdjudicationActionSerializer,
     AdjudicationCaseDetailQuerySerializer,
     AdjudicationCaseDetailSerializer,
@@ -3387,6 +3391,30 @@ def verification_workload(request):
 
 
 # Viewsets
+def _ensure_no_active_safety_review(
+    *,
+    target_type,
+    thread,
+    comment=None,
+    evidence_submission=None,
+    action_label="modify",
+):
+    if get_active_safety_case(
+        thread,
+        target_type=target_type,
+        comment=comment,
+        evidence_submission=evidence_submission,
+    ):
+        raise ValidationError(
+            {
+                "detail": (
+                    f"This content cannot be {action_label} while "
+                    "Platform Safety is reviewing it."
+                )
+            }
+        )
+
+
 class ThreadViewSet(viewsets.ModelViewSet):
     serializer_class = ThreadSerializer
     permission_classes = [
@@ -3532,8 +3560,11 @@ class ThreadViewSet(viewsets.ModelViewSet):
                 ),
                 evidence_count=Count(
                     "evidence_submissions",
-                    filter=~platform_staff_identity_q(
-                        "evidence_submissions__contributor"
+                    filter=(
+                        Q(evidence_submissions__safety_removed_at__isnull=True)
+                        & ~platform_staff_identity_q(
+                            "evidence_submissions__contributor"
+                        )
                     ),
                     distinct=True,
                 ),
@@ -3544,6 +3575,9 @@ class ThreadViewSet(viewsets.ModelViewSet):
                             claim__threads__evidence_submissions__evidence_status=(
                                 EvidenceSubmission.EvidenceStatus.VERIFIED
                             )
+                        )
+                        & Q(
+                            claim__threads__evidence_submissions__safety_removed_at__isnull=True
                         )
                         & ~platform_staff_identity_q(
                             "claim__threads__evidence_submissions__contributor"
@@ -3561,6 +3595,9 @@ class ThreadViewSet(viewsets.ModelViewSet):
                             claim__threads__evidence_submissions__evidence_status=(
                                 EvidenceSubmission.EvidenceStatus.VERIFIED
                             )
+                        )
+                        & Q(
+                            claim__threads__evidence_submissions__safety_removed_at__isnull=True
                         )
                         & ~platform_staff_identity_q(
                             "claim__threads__evidence_submissions__contributor"
@@ -3583,7 +3620,9 @@ class ThreadViewSet(viewsets.ModelViewSet):
             )
             evidence_queryset = prefetch_public_partner_affiliations(
                 exclude_platform_staff_identities(
-                    EvidenceSubmission.objects.select_related(
+                    EvidenceSubmission.objects.filter(
+                        safety_removed_at__isnull=True,
+                    ).select_related(
                         "contributor__profile",
                         "verified_by__profile",
                     ).prefetch_related("votes"),
@@ -3664,6 +3703,23 @@ class ThreadViewSet(viewsets.ModelViewSet):
                 lambda claim_id=claim.pk: dispatch_classification_task(claim_id)
             )
 
+    def perform_update(self, serializer):
+        thread = serializer.instance
+        _ensure_no_active_safety_review(
+            target_type=ModerationCase.SafetyTargetType.THREAD,
+            thread=thread,
+            action_label="edited",
+        )
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        _ensure_no_active_safety_review(
+            target_type=ModerationCase.SafetyTargetType.THREAD,
+            thread=instance,
+            action_label="deleted",
+        )
+        super().perform_destroy(instance)
+
     def _find_existing_thread(self, claim):
         """
         Check if the claim (or a fingerprint-matched claim) already has an
@@ -3725,7 +3781,9 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = (
-            EvidenceSubmission.objects.select_related(
+            EvidenceSubmission.objects.filter(
+                safety_removed_at__isnull=True,
+            ).select_related(
                 "contributor__profile",
                 "verified_by__profile",
                 "thread__claim",
@@ -3778,6 +3836,13 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
                 )
 
     def perform_update(self, serializer):
+        evidence = serializer.instance
+        _ensure_no_active_safety_review(
+            target_type=ModerationCase.SafetyTargetType.EVIDENCE,
+            thread=evidence.thread,
+            evidence_submission=evidence,
+            action_label="edited",
+        )
         url_was_supplied = "evidence_url" in serializer.validated_data
         evidence = serializer.save()
         if url_was_supplied and evidence.evidence_url:
@@ -3785,6 +3850,15 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
                 lambda evidence_id=evidence.pk, evidence_url=evidence.evidence_url:
                     dispatch_evidence_url_preview(evidence_id, evidence_url)
             )
+
+    def perform_destroy(self, instance):
+        _ensure_no_active_safety_review(
+            target_type=ModerationCase.SafetyTargetType.EVIDENCE,
+            thread=instance.thread,
+            evidence_submission=instance,
+            action_label="deleted",
+        )
+        super().perform_destroy(instance)
 
 
 class ThreadCommentViewSet(viewsets.ModelViewSet):
@@ -3818,6 +3892,29 @@ class ThreadCommentViewSet(viewsets.ModelViewSet):
         )
         dispatch_after_commit(notify_thread_commented, comment)
 
+    def perform_update(self, serializer):
+        comment = serializer.instance
+        if comment.safety_removed_at is not None:
+            raise NotFound("Comment not found.")
+        _ensure_no_active_safety_review(
+            target_type=ModerationCase.SafetyTargetType.COMMENT,
+            thread=comment.thread,
+            comment=comment,
+            action_label="edited",
+        )
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        if instance.safety_removed_at is not None:
+            raise NotFound("Comment not found.")
+        _ensure_no_active_safety_review(
+            target_type=ModerationCase.SafetyTargetType.COMMENT,
+            thread=instance.thread,
+            comment=instance,
+            action_label="deleted",
+        )
+        super().perform_destroy(instance)
+
     @action(
         detail=True,
         methods=["post", "delete"],
@@ -3825,6 +3922,8 @@ class ThreadCommentViewSet(viewsets.ModelViewSet):
     )
     def like(self, request, pk=None):
         comment = self.get_object()
+        if comment.safety_removed_at is not None:
+            raise NotFound("Comment not found.")
 
         if request.method == "POST":
             try:
@@ -3856,51 +3955,100 @@ class ThreadCommentViewSet(viewsets.ModelViewSet):
         )
 
 
-class ThreadFlagViewSet(viewsets.ModelViewSet):
-    serializer_class = ThreadFlagSerializer
+class CommunityReportViewSet(viewsets.ModelViewSet):
+    serializer_class = CommunityReportSerializer
     permission_classes = [IsAuthenticated, CanParticipateInCommunity]
     http_method_names = ["get", "post", "head", "options"]
 
     def get_queryset(self):
+        queryset = CommunityReport.objects.select_related(
+            "thread",
+            "comment",
+            "evidence_submission",
+            "reporter",
+        ).order_by("-reported_at")
+
         if has_capability(
             self.request.user,
             PartnerCapability.REVIEW_SAFETY,
         ):
-            return ThreadFlag.objects.select_related("thread", "flagged_by").order_by(
-                "-flagged_at"
-            )
-        return (
-            ThreadFlag.objects.filter(flagged_by=self.request.user)
-            .select_related("thread", "flagged_by")
-            .order_by("-flagged_at")
-        )
+            return queryset
+
+        return queryset.filter(reporter=self.request.user)
 
     def perform_create(self, serializer):
+        target_type = serializer.validated_data.pop(
+            "target_type",
+            CommunityReport.TargetType.THREAD,
+        )
         thread_id = serializer.validated_data.pop("thread_id")
+        comment_id = serializer.validated_data.pop("comment_id", None)
+        evidence_id = serializer.validated_data.pop(
+            "evidence_submission_id",
+            None,
+        )
+
         try:
             thread = Thread.objects.get(id=thread_id)
-        except Thread.DoesNotExist:
-            raise NotFound("Thread not found.")
+        except Thread.DoesNotExist as error:
+            raise NotFound("Thread not found.") from error
 
         if thread.status == Thread.Status.REJECTED:
             raise NotFound("Thread not found.")
 
-        if thread.author_id == self.request.user.id:
-            raise ValidationError({"detail": "You cannot report your own thread."})
+        comment = None
+        evidence = None
+        if target_type == CommunityReport.TargetType.THREAD:
+            owner_id = thread.author_id
+        elif target_type == CommunityReport.TargetType.COMMENT:
+            try:
+                comment = ThreadComment.objects.get(
+                    pk=comment_id,
+                    thread=thread,
+                    safety_removed_at__isnull=True,
+                )
+            except ThreadComment.DoesNotExist as error:
+                raise NotFound("Comment not found.") from error
+            owner_id = comment.commenter_id
+        elif target_type == CommunityReport.TargetType.EVIDENCE:
+            try:
+                evidence = EvidenceSubmission.objects.get(
+                    pk=evidence_id,
+                    thread=thread,
+                    safety_removed_at__isnull=True,
+                )
+            except EvidenceSubmission.DoesNotExist as error:
+                raise NotFound("Evidence not found.") from error
+            owner_id = evidence.contributor_id
+        else:
+            raise ValidationError({"target_type": "Unsupported report target."})
+
+        if owner_id == self.request.user.id:
+            raise ValidationError(
+                {"detail": "You cannot report your own Community content."}
+            )
 
         try:
             with transaction.atomic():
                 serializer.save(
-                    flagged_by=self.request.user,
+                    reporter=self.request.user,
+                    target_type=target_type,
                     thread=thread,
+                    comment=comment,
+                    evidence_submission=evidence,
                 )
 
                 ensure_safety_case(
                     thread=thread,
                     actor=self.request.user,
+                    target_type=target_type,
+                    comment=comment,
+                    evidence_submission=evidence,
                 )
-        except IntegrityError:
-            raise ValidationError({"detail": "You already flagged this thread."})
+        except IntegrityError as error:
+            raise ValidationError(
+                {"detail": "You already reported this content."}
+            ) from error
 
 
 def _schedule_vote_target_trust_refresh(user_id, *, action):
@@ -3933,6 +4081,8 @@ class VoteViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         evidence = serializer.validated_data["evidence"]
+        if evidence.safety_removed_at is not None:
+            raise NotFound("Evidence not found.")
         if evidence.contributor_id == self.request.user.id:
             raise ValidationError({"detail": "You cannot vote on your own evidence."})
 
@@ -3958,6 +4108,8 @@ class VoteViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         current_vote = serializer.instance
+        if current_vote.evidence.safety_removed_at is not None:
+            raise NotFound("Evidence not found.")
         next_value = serializer.validated_data.get(
             "vote_value",
             current_vote.vote_value,
