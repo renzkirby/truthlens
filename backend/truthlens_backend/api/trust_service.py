@@ -363,7 +363,7 @@ def calculate_trust_components(user):
     # regardless of whether the removed content is a discussion, comment, or
     # evidence contribution. Reversed decisions remain historical but no
     # longer contribute a current penalty.
-    moderation_actions = (
+    current_removal_decisions = (
         CommunitySafetyDecision.objects.filter(
             content_owner=user,
             action=CommunitySafetyDecision.Action.REMOVE,
@@ -373,12 +373,28 @@ def calculate_trust_components(user):
                 CommunitySafetyReconsideration.Outcome.REVERSED
             )
         )
+    )
+    moderation_actions = current_removal_decisions.count()
+
+    # Historical compatibility: older rejected discussions can predate the
+    # authoritative CommunitySafetyDecision model. Count only rejected threads
+    # that are not already represented by a modern thread-removal decision.
+    represented_thread_ids = current_removal_decisions.filter(
+        target_type=CommunitySafetyDecision.TargetType.THREAD,
+    ).values_list("thread_id_snapshot", flat=True)
+    legacy_rejected_threads = (
+        Thread.objects.filter(
+            author=user,
+            status=Thread.Status.REJECTED,
+        )
+        .exclude(pk__in=represented_thread_ids)
         .count()
     )
 
     moderation_penalty = min(
         MODERATION_PENALTY_CAP,
-        moderation_actions * MODERATION_ACTION_PENALTY,
+        (moderation_actions + legacy_rejected_threads)
+        * MODERATION_ACTION_PENALTY,
     )
 
     # ── Final score ──
