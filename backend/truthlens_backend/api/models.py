@@ -1951,6 +1951,16 @@ class CommunityReportOutcome(models.Model):
     )
     resolved_at = models.DateTimeField(auto_now_add=True)
 
+    def save(self, *args, **kwargs):
+        if not self.target_id_snapshot:
+            if self.target_type == CommunityReport.TargetType.THREAD:
+                self.target_id_snapshot = self.thread_id
+            elif self.target_type == CommunityReport.TargetType.COMMENT:
+                self.target_id_snapshot = self.comment_id
+            elif self.target_type == CommunityReport.TargetType.EVIDENCE:
+                self.target_id_snapshot = self.evidence_submission_id
+        return super().save(*args, **kwargs)
+
     class Meta:
         ordering = ["-resolved_at"]
         constraints = [
@@ -2743,6 +2753,12 @@ class CommunitySafetyReconsideration(models.Model):
             )
 
     def save(self, *args, **kwargs):
+        if (
+            not self.target_id_snapshot
+            and self.target_type == self.TargetType.THREAD
+            and self.thread_id_snapshot
+        ):
+            self.target_id_snapshot = self.thread_id_snapshot
         self.full_clean()
         return super().save(*args, **kwargs)
 
