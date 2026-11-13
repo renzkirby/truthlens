@@ -1650,18 +1650,6 @@ class ThreadSerializer(serializers.ModelSerializer):
             resolved_at__isnull=True,
         ).count()
 
-    def get_evidence_submissions(self, obj):
-        evidence = [
-            item
-            for item in obj.evidence_submissions.all()
-            if item.safety_removed_at is None
-        ]
-        return ThreadDetailEvidenceSubmissionSerializer(
-            evidence,
-            many=True,
-            context=self.context,
-        ).data
-
     def get_evidence_count(self, obj):
         return sum(
             1
@@ -3267,8 +3255,24 @@ class ThreadDetailSerializer(serializers.ModelSerializer):
         }
         return ThreadDetailClaimSerializer(obj.claim, context=context).data
 
+    def get_evidence_submissions(self, obj):
+        evidence = [
+            item
+            for item in obj.evidence_submissions.all()
+            if item.safety_removed_at is None
+        ]
+        return ThreadDetailEvidenceSubmissionSerializer(
+            evidence,
+            many=True,
+            context=self.context,
+        ).data
+
     def get_evidence_count(self, obj):
-        return obj.evidence_submissions.count()
+        return sum(
+            1
+            for item in obj.evidence_submissions.all()
+            if item.safety_removed_at is None
+        )
 
     def get_comment_count(self, obj):
         return obj.comments.count()
