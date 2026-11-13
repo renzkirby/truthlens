@@ -4385,7 +4385,11 @@ def public_user_threads(request, username):
         .exclude(status=Thread.Status.REJECTED)
         .select_related("claim")
         .annotate(
-            evidence_count=Count("evidence_submissions", distinct=True),
+            evidence_count=Count(
+                "evidence_submissions",
+                filter=Q(evidence_submissions__safety_removed_at__isnull=True),
+                distinct=True,
+            ),
             comment_count=Count("comments", distinct=True),
         )
         .order_by("-created_at")
@@ -4409,7 +4413,10 @@ def public_user_evidence(request, username):
     )
 
     evidence_items = list(
-        EvidenceSubmission.objects.filter(contributor=target_user)
+        EvidenceSubmission.objects.filter(
+            contributor=target_user,
+            safety_removed_at__isnull=True,
+        )
         .exclude(thread__status=Thread.Status.REJECTED)
         .select_related("thread__claim")
         .order_by("-submitted_at")
