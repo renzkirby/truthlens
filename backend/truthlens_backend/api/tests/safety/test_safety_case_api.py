@@ -427,7 +427,14 @@ class SafetyCaseApiTests(APITestCase):
             for report in response.data["reports"]:
                 self.assertEqual(
                     set(report),
-                    {"id", "reason", "reason_label", "notes", "reported_at"},
+                    {
+                        "id",
+                        "target_type",
+                        "reason",
+                        "reason_label",
+                        "notes",
+                        "reported_at",
+                    },
                 )
 
         stale_action = client.post(
