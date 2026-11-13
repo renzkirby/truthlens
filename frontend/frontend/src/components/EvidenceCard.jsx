@@ -58,6 +58,7 @@ export default function EvidenceCard({
    isTop,
    onEdit,
    onDelete,
+   onReport,
    onVote,
    votingEvidenceId,
    editingId,
@@ -124,6 +125,11 @@ export default function EvidenceCard({
                      </button>
                      <button type="button" className="is-danger" onClick={() => onDelete(evidence.id)}>Delete</button>
                   </>
+               )}
+               {!isOwner && !readOnly && (
+                  <button type="button" className="is-danger" onClick={() => onReport?.(evidence)}>
+                     <Icons name="flag" size={13} /> Report
+                  </button>
                )}
             </div>
          </header>
