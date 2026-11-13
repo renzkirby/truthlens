@@ -432,34 +432,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name="moderationcase",
-            constraint=models.CheckConstraint(
-                condition=(
-                    models.Q(
-                        case_type="SAFETY",
-                        safety_target_type="THREAD",
-                        thread_comment__isnull=True,
-                        evidence_submission__isnull=True,
-                        claim__isnull=True,
-                    )
-                    | models.Q(
-                        case_type="SAFETY",
-                        safety_target_type="COMMENT",
-                        evidence_submission__isnull=True,
-                        claim__isnull=True,
-                    )
-                    | models.Q(
-                        case_type="SAFETY",
-                        safety_target_type="EVIDENCE",
-                        thread_comment__isnull=True,
-                        claim__isnull=True,
-                    )
-                    | ~models.Q(case_type="SAFETY")
-                ),
-                name="moderation_case_target_shape_ck",
-            ),
-        ),
-        migrations.AddConstraint(
-            model_name="moderationcase",
             constraint=models.UniqueConstraint(
                 condition=models.Q(
                     case_type="SAFETY",
