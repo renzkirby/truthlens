@@ -4,6 +4,7 @@ from django.contrib.auth.models import User
 from django.db.models import Count, Q
 
 from .models import (
+    CommunityReport,
     CommunityReportOutcome,
     CommunitySafetyDecision,
     CommunitySafetyReconsideration,
@@ -70,9 +71,7 @@ def _confirmed_report_queryset(user):
         .exclude(safety_decision__content_owner=user)
         .exclude(
             safety_decision__isnull=True,
-            target_type=CommunityReportOutcome._meta.get_field(
-                "target_type"
-            ).default,
+            target_type=CommunityReport.TargetType.THREAD,
             thread__author=user,
         )
         .exclude(
