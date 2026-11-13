@@ -2168,6 +2168,8 @@ class SafetyCaseSummarySerializer(serializers.ModelSerializer):
             "report_count",
             "report_reason_summary",
             "thread",
+            "safety_target_type",
+            "target",
         ]
         read_only_fields = fields
 
