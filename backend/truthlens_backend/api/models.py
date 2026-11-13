@@ -2153,6 +2153,11 @@ class ModerationCase(models.Model):
         EVIDENCE = "EVIDENCE", "Evidence Review"
         ADJUDICATION = "ADJUDICATION", "Verdict Adjudication"
 
+    class SafetyTargetType(models.TextChoices):
+        THREAD = "THREAD", "Discussion"
+        COMMENT = "COMMENT", "Comment"
+        EVIDENCE = "EVIDENCE", "Evidence"
+
     class Status(models.TextChoices):
         OPEN = "OPEN", "Open"
         IN_REVIEW = "IN_REVIEW", "In Review"
