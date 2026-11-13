@@ -2254,6 +2254,7 @@ class CommunitySafetyDecision(models.Model):
     )
     pre_removal_moderated_at = models.DateTimeField(null=True, blank=True)
     pre_removal_moderator_notes = models.TextField(null=True, blank=True)
+    restoration_snapshot_complete = models.BooleanField(default=False)
     thread_id_snapshot = models.UUIDField()
     thread_author = models.ForeignKey(
         "auth.User",
@@ -2328,6 +2329,14 @@ class CommunitySafetyDecision(models.Model):
                 {
                     "pre_removal_thread_status": (
                         "Only removed-content decisions preserve a pre-removal status."
+                    )
+                }
+            )
+        elif self.restoration_snapshot_complete:
+            raise ValidationError(
+                {
+                    "restoration_snapshot_complete": (
+                        "Only removed-content decisions can carry a restoration snapshot."
                     )
                 }
             )
