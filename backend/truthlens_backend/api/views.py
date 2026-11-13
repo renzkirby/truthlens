@@ -3722,8 +3722,9 @@ class ThreadViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         thread = serializer.instance
-        _ensure_thread_context_not_under_safety_review(
-            thread,
+        _ensure_no_active_safety_review(
+            target_type=ModerationCase.SafetyTargetType.THREAD,
+            thread=thread,
             action_label="edited",
         )
         serializer.save()
