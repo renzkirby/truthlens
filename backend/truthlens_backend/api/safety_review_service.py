@@ -5,13 +5,18 @@ from django.db import transaction
 from django.db.models import Prefetch
 
 from .accountability_service import record_accountability_event
+from .community_safety_target_service import (
+    CommunitySafetyTargetError,
+    get_case_target,
+    target_label,
+    target_state,
+)
 from .models import (
     AccountabilityEvent,
+    CommunityReport,
     CommunitySafetyReconsideration,
     ModerationCase,
     ModerationEvent,
-    Thread,
-    ThreadFlag,
 )
 from .moderation_service import (
     ACTIVE_CASE_STATUSES,
@@ -48,10 +53,10 @@ def ensure_can_review_safety(actor):
 
 
 def get_safety_case_queryset(*, include_events=False):
-    unresolved_reports = ThreadFlag.objects.filter(
+    unresolved_reports = CommunityReport.objects.filter(
         resolved_at__isnull=True,
-    ).order_by("flagged_at", "id")
-    case_linked_reports = ThreadFlag.objects.order_by("flagged_at", "id")
+    ).order_by("reported_at", "id")
+    case_linked_reports = CommunityReport.objects.order_by("reported_at", "id")
 
     queryset = (
         ModerationCase.objects.filter(
@@ -62,12 +67,16 @@ def get_safety_case_queryset(*, include_events=False):
             "thread",
             "thread__author",
             "thread__claim",
+            "thread_comment",
+            "thread_comment__commenter",
+            "evidence_submission",
+            "evidence_submission__contributor",
             "community_safety_decision",
             "community_safety_decision__reconsideration",
         )
         .prefetch_related(
             Prefetch(
-                "thread__flags",
+                "thread__community_reports",
                 queryset=unresolved_reports,
                 to_attr="unresolved_safety_reports",
             ),
@@ -121,7 +130,11 @@ def _get_locked_safety_case(case):
     try:
         return (
             ModerationCase.objects.select_for_update(of=("self",))
-            .select_related("thread")
+            .select_related(
+                "thread",
+                "thread_comment",
+                "evidence_submission",
+            )
             .get(
                 pk=case.pk,
                 case_type=ModerationCase.CaseType.SAFETY,
@@ -150,6 +163,38 @@ def _ensure_case_owner(case, actor):
         raise SafetyCaseConflict(
             "This Safety case is assigned to another reviewer."
         )
+
+
+def _case_target_arguments(case):
+    return {
+        "target_type": case.safety_target_type,
+        "comment": (
+            case.thread_comment
+            if case.safety_target_type == ModerationCase.SafetyTargetType.COMMENT
+            else None
+        ),
+        "evidence_submission": (
+            case.evidence_submission
+            if case.safety_target_type == ModerationCase.SafetyTargetType.EVIDENCE
+            else None
+        ),
+    }
+
+
+def _case_accountability_context(case):
+    target_id = None
+    if case.safety_target_type == ModerationCase.SafetyTargetType.THREAD:
+        target_id = case.thread_id
+    elif case.safety_target_type == ModerationCase.SafetyTargetType.COMMENT:
+        target_id = case.thread_comment_id
+    elif case.safety_target_type == ModerationCase.SafetyTargetType.EVIDENCE:
+        target_id = case.evidence_submission_id
+
+    return {
+        "thread_id": str(case.thread_id) if case.thread_id else None,
+        "target_type": case.safety_target_type,
+        "target_id": str(target_id) if target_id else None,
+    }
 
 
 def claim_safety_case(*, case, actor):
@@ -181,7 +226,7 @@ def claim_safety_case(*, case, actor):
             capability=PartnerCapability.REVIEW_SAFETY,
             previous_state={"assigned_to_id": None, "status": locked_case.status},
             new_state={"assigned_to_id": str(actor.pk), "status": claimed_case.status},
-            context={"thread_id": str(claimed_case.thread_id)},
+            context=_case_accountability_context(claimed_case),
         )
         return claimed_case
 
@@ -209,7 +254,7 @@ def release_safety_case(*, case, actor):
                 "status": locked_case.status,
             },
             new_state={"assigned_to_id": None, "status": released_case.status},
-            context={"thread_id": str(released_case.thread_id)},
+            context=_case_accountability_context(released_case),
         )
         return released_case
 
@@ -238,7 +283,7 @@ def perform_safety_case_action(
 
     if not case.thread_id:
         raise SafetyCaseConflict(
-            "This Safety case no longer has reviewable thread content."
+            "This Safety case no longer has reviewable Community content."
         )
 
     if action == "ESCALATE":
@@ -253,6 +298,7 @@ def perform_safety_case_action(
                 thread=locked_case.thread,
                 actor=actor,
                 notes=notes,
+                **_case_target_arguments(locked_case),
             )
 
             if previous_status != ModerationCase.Status.ESCALATED:
@@ -267,7 +313,7 @@ def perform_safety_case_action(
                     new_state={"status": escalated_case.status},
                     reason_code="NEEDS_FURTHER_REVIEW",
                     notes=notes,
-                    context={"thread_id": str(escalated_case.thread_id)},
+                    context=_case_accountability_context(escalated_case),
                 )
 
             return {
@@ -276,30 +322,30 @@ def perform_safety_case_action(
             }
 
     with transaction.atomic():
-        try:
-            locked_thread = Thread.objects.select_for_update().get(
-                pk=case.thread_id,
-            )
-        except Thread.DoesNotExist as error:
-            raise SafetyCaseConflict(
-                "This Safety case no longer has reviewable thread content."
-            ) from error
-
         locked_case = _get_locked_safety_case(case)
         _ensure_active_case(locked_case)
         _ensure_case_owner(locked_case, actor)
         _ensure_not_pending_reconsideration(locked_case)
         previous_case_status = locked_case.status
-        previous_thread_status = locked_thread.status
+
+        try:
+            target_before = get_case_target(locked_case, lock=True)
+        except CommunitySafetyTargetError as error:
+            raise SafetyCaseConflict(str(error)) from error
+        previous_target_state = target_state(
+            locked_case.safety_target_type,
+            target_before,
+        )
 
         try:
             result = resolve_safety_case(
-                thread=locked_thread,
+                thread=locked_case.thread,
                 actor=actor,
                 action=action,
                 notes=notes,
                 violation_code=violation_code,
                 confirmed_report_ids=confirmed_report_ids,
+                **_case_target_arguments(locked_case),
             )
         except ModerationCaseError as error:
             raise SafetyCaseConflict(str(error)) from error
@@ -307,6 +353,7 @@ def perform_safety_case_action(
         result["action"] = action
         resolved_case = result["case"]
         resolved_thread = result["thread"]
+        resolved_target = result["target"]
         decision = result.get("decision")
         action_type = (
             AccountabilityEvent.ActionType.SAFETY_CONTENT_REMOVED
@@ -314,7 +361,7 @@ def perform_safety_case_action(
             else AccountabilityEvent.ActionType.SAFETY_DISMISSED
         )
         context = {
-            "thread_id": str(resolved_thread.pk),
+            **_case_accountability_context(resolved_case),
             "decision_id": str(decision.pk) if decision else None,
             "confirmed_report_count": len(
                 result.get("confirmed_reporter_ids", set())
@@ -327,6 +374,7 @@ def perform_safety_case_action(
                     "policy_version": decision.policy_version,
                 }
             )
+
         record_accountability_event(
             action_type=action_type,
             resource_type=AccountabilityEvent.ResourceType.MODERATION_CASE,
@@ -336,11 +384,14 @@ def perform_safety_case_action(
             capability=PartnerCapability.REVIEW_SAFETY,
             previous_state={
                 "case_status": previous_case_status,
-                "thread_status": previous_thread_status,
+                **previous_target_state,
             },
             new_state={
                 "case_status": resolved_case.status,
-                "thread_status": resolved_thread.status,
+                **target_state(
+                    resolved_case.safety_target_type,
+                    resolved_target,
+                ),
             },
             reason_code=action,
             notes=notes,
@@ -355,7 +406,7 @@ def schedule_safety_resolution_notifications(result):
         return
 
     report_outcomes = tuple(result.get("report_outcomes", ()))
-    author_id = result.get("author_id")
+    content_owner_id = result.get("content_owner_id")
 
     def deliver():
         try:
@@ -372,15 +423,15 @@ def schedule_safety_resolution_notifications(result):
             )
             return
 
-        if decision.action == "REMOVE" and author_id:
+        if decision.action == "REMOVE" and content_owner_id:
             try:
                 create_notification_once(
-                    recipient_id=author_id,
+                    recipient_id=content_owner_id,
                     notification_type=Type.COMMUNITY_MODERATION_OUTCOME,
                     target_type=Target.MODERATION_OUTCOME,
                     target_id=decision.pk,
                     dedupe_key=f"community-safety:{decision.pk}:author",
-                    title="Your discussion was removed",
+                    title=f"Your {target_label(decision.target_type)} was removed",
                     message=(
                         "Platform Safety found a Community Guidelines violation: "
                         f"{decision.violation_label_snapshot}. "
@@ -392,7 +443,7 @@ def schedule_safety_resolution_notifications(result):
                     "Failed Community moderation author notification "
                     "for decision_id=%s user_id=%s.",
                     decision.pk,
-                    author_id,
+                    content_owner_id,
                 )
 
         for report in report_outcomes:
@@ -450,8 +501,8 @@ def schedule_safety_resolution_trust_updates(result, *, action=None):
         for reporter_id in result.get("reporter_ids", set())
     ]
 
-    if resolved_action == "REMOVE" and result.get("author_id"):
-        targets.append(("author", result["author_id"]))
+    if resolved_action == "REMOVE" and result.get("content_owner_id"):
+        targets.append(("content_owner", result["content_owner_id"]))
 
     targets.extend(
         ("evidence_contributor", contributor_id)
@@ -508,7 +559,7 @@ def schedule_safety_resolution_trust_updates(result, *, action=None):
 
 def summarize_report_reasons(reports):
     counts = Counter(report.reason for report in reports)
-    labels = dict(ThreadFlag.Reason.choices)
+    labels = dict(CommunityReport.Reason.choices)
 
     return [
         {

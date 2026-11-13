@@ -4,9 +4,11 @@ from django.contrib.auth.models import User
 from django.db.models import Count, Q
 
 from .models import (
+    CommunityReport,
+    CommunityReportOutcome,
+    CommunitySafetyDecision,
     CommunitySafetyReconsideration,
     EvidenceSubmission,
-    FlagResolutionLog,
     Thread,
     Vote,
 )
@@ -28,7 +30,10 @@ COMMUNITY_SIGNAL_SCALE = 8.0
 HISTORY_POINTS_CAP = 5.0
 
 # Moderation penalties
-REJECTED_THREAD_PENALTY = 5.0
+MODERATION_ACTION_PENALTY = 5.0
+# Temporary compatibility alias for the deterministic calibration helper,
+# which still models the historical thread-removal input by this name.
+REJECTED_THREAD_PENALTY = MODERATION_ACTION_PENALTY
 MODERATION_PENALTY_CAP = 30.0
 
 
@@ -62,11 +67,16 @@ def _clamp(value, minimum, maximum):
 
 def _confirmed_report_queryset(user):
     return (
-        FlagResolutionLog.objects.filter(
-            flagged_by=user,
+        CommunityReportOutcome.objects.filter(
+            reporter=user,
             is_valid_report=True,
         )
-        .exclude(thread__author=user)
+        .exclude(safety_decision__content_owner=user)
+        .exclude(
+            safety_decision__isnull=True,
+            target_type=CommunityReport.TargetType.THREAD,
+            thread__author=user,
+        )
         .exclude(
             safety_decision__reconsideration__outcome=(
                 CommunitySafetyReconsideration.Outcome.REVERSED
@@ -92,7 +102,7 @@ def get_reputation_action_counts(user):
         ),
     )
     # Only confirmed Safety reports are reputation-bearing actions.
-    # Dismissed reports remain preserved in FlagResolutionLog for moderation
+    # Dismissed reports remain preserved in CommunityReportOutcome for moderation
     # history, but are neutral: they do not count as successes, failures,
     # reputation depth, or vote-weight maturation.
     confirmed_report_count = _confirmed_report_queryset(user).count()
@@ -359,17 +369,46 @@ def calculate_trust_components(user):
     # Ordinary rejected evidence already lowers contribution quality.
     # We avoid penalizing it twice.
     #
-    # A rejected authored thread is treated separately because it
-    # represents a stronger moderation outcome.
+    # Current upheld Community Safety removals are one moderation signal
+    # regardless of whether the removed content is a discussion, comment, or
+    # evidence contribution. Reversed decisions remain historical but no
+    # longer contribute a current penalty.
+    current_removal_decisions = (
+        CommunitySafetyDecision.objects.filter(
+            content_owner=user,
+            action=CommunitySafetyDecision.Action.REMOVE,
+        )
+        .exclude(
+            reconsideration__outcome=(
+                CommunitySafetyReconsideration.Outcome.REVERSED
+            )
+        )
+    )
+    moderation_actions = current_removal_decisions.count()
 
+    # Historical compatibility: older rejected discussions can predate the
+    # authoritative CommunitySafetyDecision model. Count only rejected threads
+    # that are not already represented by a modern thread-removal decision.
+    represented_thread_ids = current_removal_decisions.filter(
+        target_type=CommunitySafetyDecision.TargetType.THREAD,
+    ).values_list("thread_id_snapshot", flat=True)
     rejected_threads = Thread.objects.filter(
         author=user,
         status=Thread.Status.REJECTED,
     ).count()
+    legacy_rejected_threads = (
+        Thread.objects.filter(
+            author=user,
+            status=Thread.Status.REJECTED,
+        )
+        .exclude(pk__in=represented_thread_ids)
+        .count()
+    )
 
     moderation_penalty = min(
         MODERATION_PENALTY_CAP,
-        rejected_threads * REJECTED_THREAD_PENALTY,
+        (moderation_actions + legacy_rejected_threads)
+        * MODERATION_ACTION_PENALTY,
     )
 
     # ── Final score ──

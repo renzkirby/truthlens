@@ -4849,3 +4849,17 @@ html[data-theme="dark"] .thread-detail-page.thread-detail-page--classic .thread-
    color: var(--brand-primary);
    font-weight: 700;
 }
+
+
+.thread-detail-comment-removed {
+   display: inline-flex;
+   align-items: center;
+   gap: 7px;
+   color: var(--text-muted);
+   font-size: 0.82rem;
+   font-style: italic;
+}
+
+.thread-detail-comment-removed svg {
+   flex: 0 0 auto;
+}

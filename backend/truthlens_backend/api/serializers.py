@@ -17,7 +17,7 @@ from .models import (
     EvidenceSubmission,
     Vote,
     ThreadComment,
-    ThreadFlag,
+    CommunityReport,
     ModerationEvent,
     AdjudicationDecision,
     ModerationCase,
@@ -71,6 +71,7 @@ from .profile_avatar_service import (
     validate_profile_avatar_data_url,
 )
 from .moderation_service import ACTIVE_CASE_STATUSES
+from .community_safety_target_service import target_excerpt, target_owner
 from .community_policy import (
     COMMUNITY_VIOLATION_CHOICES,
     community_policy_payload,
@@ -342,6 +343,16 @@ class PublicUserCommentSerializer(serializers.ModelSerializer):
     activity_type = serializers.CharField(default="COMMENT", read_only=True)
     activity_at = serializers.DateTimeField(source="commented_at", read_only=True)
     thread = PublicProfileThreadSummarySerializer(read_only=True)
+    safety_removed = serializers.SerializerMethodField()
+
+    def get_safety_removed(self, obj):
+        return obj.safety_removed_at is not None
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.safety_removed_at is not None:
+            data["comment_text"] = ""
+        return data
 
     class Meta:
         model = ThreadComment
@@ -351,6 +362,7 @@ class PublicUserCommentSerializer(serializers.ModelSerializer):
             "activity_at",
             "comment_text",
             "thread",
+            "safety_removed",
         ]
 
 
@@ -1624,16 +1636,27 @@ class ThreadSerializer(serializers.ModelSerializer):
 
     def get_recent_flag_reason(self, obj):
         latest_flag = (
-            obj.flags.filter(resolved_at__isnull=True).order_by("-flagged_at").first()
+            obj.community_reports.filter(
+                target_type=CommunityReport.TargetType.THREAD,
+                resolved_at__isnull=True,
+            ).order_by("-reported_at").first()
         )
 
         return latest_flag.reason if latest_flag else None
 
     def get_flag_count(self, obj):
-        return obj.flags.filter(resolved_at__isnull=True).count()
+        return obj.community_reports.filter(
+            target_type=CommunityReport.TargetType.THREAD,
+            resolved_at__isnull=True,
+        ).count()
 
     def get_evidence_count(self, obj):
-        return obj.evidence_submissions.count()
+        annotated_count = getattr(obj, "evidence_count", None)
+        if annotated_count is not None:
+            return annotated_count
+        return obj.evidence_submissions.filter(
+            safety_removed_at__isnull=True,
+        ).count()
 
     def get_comment_count(self, obj):
         return obj.comments.count()
@@ -1742,23 +1765,65 @@ class ThreadSerializer(serializers.ModelSerializer):
         ]
 
 
-class ThreadFlagSerializer(serializers.ModelSerializer):
-    flagged_by = UserSerializer(read_only=True)
-    thread = ThreadSerializer(read_only=True)
+class CommunityReportSerializer(serializers.ModelSerializer):
+    reporter = UserSerializer(read_only=True)
     thread_id = serializers.UUIDField(write_only=True)
+    comment_id = serializers.UUIDField(write_only=True, required=False)
+    evidence_submission_id = serializers.UUIDField(write_only=True, required=False)
+
+    def validate(self, attrs):
+        target_type = attrs.get(
+            "target_type",
+            CommunityReport.TargetType.THREAD,
+        )
+        comment_id = attrs.get("comment_id")
+        evidence_id = attrs.get("evidence_submission_id")
+
+        if target_type == CommunityReport.TargetType.THREAD:
+            valid_shape = comment_id is None and evidence_id is None
+        elif target_type == CommunityReport.TargetType.COMMENT:
+            valid_shape = comment_id is not None and evidence_id is None
+        elif target_type == CommunityReport.TargetType.EVIDENCE:
+            valid_shape = comment_id is None and evidence_id is not None
+        else:
+            valid_shape = False
+
+        if not valid_shape:
+            raise serializers.ValidationError(
+                {
+                    "target_type": (
+                        "Supply only the target identifier required by the "
+                        "selected Community content type."
+                    )
+                }
+            )
+
+        if (
+            attrs.get("reason") == CommunityReport.Reason.OTHER
+            and not str(attrs.get("notes") or "").strip()
+        ):
+            raise serializers.ValidationError(
+                {"notes": "Explain the concern when selecting Other."}
+            )
+
+        return attrs
 
     class Meta:
-        model = ThreadFlag
+        model = CommunityReport
         fields = [
             "id",
+            "target_type",
             "thread_id",
-            "flagged_by",
-            "thread",
+            "comment_id",
+            "evidence_submission_id",
+            "reporter",
             "reason",
             "notes",
-            "flagged_at",
+            "reported_at",
         ]
-        read_only_fields = ["id", "flagged_by", "thread"]
+        read_only_fields = ["id", "reporter", "reported_at"]
+
+
 
 
 class SafetyCaseQueueFilterSerializer(serializers.Serializer):
@@ -1958,8 +2023,15 @@ class SafetyReportDetailSerializer(serializers.ModelSerializer):
     )
 
     class Meta:
-        model = ThreadFlag
-        fields = ["id", "reason", "reason_label", "notes", "flagged_at"]
+        model = CommunityReport
+        fields = [
+            "id",
+            "target_type",
+            "reason",
+            "reason_label",
+            "notes",
+            "reported_at",
+        ]
         read_only_fields = fields
 
 
@@ -1995,6 +2067,7 @@ class SafetyModerationEventSerializer(serializers.ModelSerializer):
 class SafetyCaseSummarySerializer(serializers.ModelSerializer):
     assigned_to = SafetyUserSummarySerializer(read_only=True)
     thread = SafetyThreadSummarySerializer(read_only=True)
+    target = serializers.SerializerMethodField()
     report_count = serializers.SerializerMethodField()
     report_reason_summary = serializers.SerializerMethodField()
 
@@ -2012,9 +2085,55 @@ class SafetyCaseSummarySerializer(serializers.ModelSerializer):
         if obj.status in ACTIVE_CASE_STATUSES:
             if not obj.thread:
                 return []
-            return getattr(obj.thread, "unresolved_safety_reports", [])
+            reports = getattr(obj.thread, "unresolved_safety_reports", [])
+            if obj.safety_target_type == ModerationCase.SafetyTargetType.THREAD:
+                return [
+                    report
+                    for report in reports
+                    if report.target_type == CommunityReport.TargetType.THREAD
+                ]
+            if obj.safety_target_type == ModerationCase.SafetyTargetType.COMMENT:
+                return [
+                    report
+                    for report in reports
+                    if (
+                        report.target_type == CommunityReport.TargetType.COMMENT
+                        and report.comment_id == obj.thread_comment_id
+                    )
+                ]
+            if obj.safety_target_type == ModerationCase.SafetyTargetType.EVIDENCE:
+                return [
+                    report
+                    for report in reports
+                    if (
+                        report.target_type == CommunityReport.TargetType.EVIDENCE
+                        and report.evidence_submission_id == obj.evidence_submission_id
+                    )
+                ]
+            return []
 
         return getattr(obj, "case_linked_safety_reports", [])
+
+    def get_target(self, obj):
+        if obj.safety_target_type == ModerationCase.SafetyTargetType.THREAD:
+            target = obj.thread
+        elif obj.safety_target_type == ModerationCase.SafetyTargetType.COMMENT:
+            target = obj.thread_comment
+        elif obj.safety_target_type == ModerationCase.SafetyTargetType.EVIDENCE:
+            target = obj.evidence_submission
+        else:
+            return None
+
+        if target is None:
+            return None
+
+        owner = target_owner(obj.safety_target_type, target)
+        return {
+            "type": obj.safety_target_type,
+            "id": str(target.pk),
+            "owner": SafetyUserSummarySerializer(owner).data,
+            "excerpt": target_excerpt(obj.safety_target_type, target),
+        }
 
     def get_report_count(self, obj):
         return len(self._reports(obj))
@@ -2038,6 +2157,8 @@ class SafetyCaseSummarySerializer(serializers.ModelSerializer):
             "report_count",
             "report_reason_summary",
             "thread",
+            "safety_target_type",
+            "target",
         ]
         read_only_fields = fields
 
@@ -2081,6 +2202,8 @@ class SafetyCaseDetailSerializer(SafetyCaseSummarySerializer):
             "original_decision": {
                 "id": str(decision.id),
                 "action": decision.action,
+                "target_type": decision.target_type,
+                "target_id": str(decision.target_id_snapshot),
                 "violation_code": decision.violation_code,
                 "violation_title": decision.violation_label_snapshot,
                 "policy_title": decision.policy_title_snapshot,
@@ -2715,6 +2838,10 @@ class ThreadCommentSerializer(serializers.ModelSerializer):
     reply_to_username = serializers.SerializerMethodField()
     like_count = serializers.SerializerMethodField()
     is_liked = serializers.SerializerMethodField()
+    safety_removed = serializers.SerializerMethodField()
+
+    def get_safety_removed(self, obj):
+        return obj.safety_removed_at is not None
 
     def get_reply_to_username(self, obj):
         return obj.parent.commenter.username if obj.parent_id else None
@@ -2748,6 +2875,7 @@ class ThreadCommentSerializer(serializers.ModelSerializer):
             "commented_at",
             "like_count",
             "is_liked",
+            "safety_removed",
         ]
         read_only_fields = [
             "id",
@@ -2756,7 +2884,15 @@ class ThreadCommentSerializer(serializers.ModelSerializer):
             "commented_at",
             "like_count",
             "is_liked",
+            "safety_removed",
         ]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.safety_removed_at is not None:
+            data["comment_text"] = ""
+            data["comment_rich"] = None
+        return data
 
     def validate(self, attrs):
         if self.instance and "thread_id" in attrs:
@@ -3108,10 +3244,7 @@ class ThreadDetailEvidenceSubmissionSerializer(serializers.ModelSerializer):
 class ThreadDetailSerializer(serializers.ModelSerializer):
     author = ThreadDetailAuthorSerializer(read_only=True)
     claim = serializers.SerializerMethodField()
-    evidence_submissions = ThreadDetailEvidenceSubmissionSerializer(
-        many=True,
-        read_only=True,
-    )
+    evidence_submissions = serializers.SerializerMethodField()
     comments = ThreadCommentSerializer(many=True, read_only=True)
     evidence_count = serializers.SerializerMethodField()
     comment_count = serializers.SerializerMethodField()
@@ -3123,8 +3256,24 @@ class ThreadDetailSerializer(serializers.ModelSerializer):
         }
         return ThreadDetailClaimSerializer(obj.claim, context=context).data
 
+    def get_evidence_submissions(self, obj):
+        evidence = [
+            item
+            for item in obj.evidence_submissions.all()
+            if item.safety_removed_at is None
+        ]
+        return ThreadDetailEvidenceSubmissionSerializer(
+            evidence,
+            many=True,
+            context=self.context,
+        ).data
+
     def get_evidence_count(self, obj):
-        return obj.evidence_submissions.count()
+        return sum(
+            1
+            for item in obj.evidence_submissions.all()
+            if item.safety_removed_at is None
+        )
 
     def get_comment_count(self, obj):
         return obj.comments.count()

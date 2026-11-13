@@ -112,6 +112,15 @@ function CommunityModerationOutcomePage() {
 
    const removed = outcome.action === "REMOVE";
    const isAuthor = outcome.role === "AUTHOR";
+   const targetType = outcome.target?.type || outcome.content?.target_type || "THREAD";
+   const targetLabel = targetType === "COMMENT" ? "comment" : targetType === "EVIDENCE" ? "evidence" : "discussion";
+   const targetLabelTitle = targetLabel.charAt(0).toUpperCase() + targetLabel.slice(1);
+   const restoredTargetUrl =
+      targetType === "COMMENT"
+         ? `/thread/detail/${outcome.target?.thread_id || outcome.content?.thread_id}?tab=comments#comment-${outcome.target?.id || outcome.content?.target_id}`
+         : targetType === "EVIDENCE"
+           ? `/thread/detail/${outcome.target?.thread_id || outcome.content?.thread_id}?tab=evidence`
+           : `/thread/detail/${outcome.target?.thread_id || outcome.content?.thread_id}`;
    const report = outcome.report;
    const reconsideration = outcome.reconsideration;
    const reversed = reconsideration?.outcome === "REVERSED";
@@ -119,10 +128,10 @@ function CommunityModerationOutcomePage() {
 
    const heading = (() => {
       if (reversed) {
-         return isAuthor ? "Your discussion was restored" : "Moderation decision updated";
+         return isAuthor ? `Your ${targetLabel} was restored` : "Moderation decision updated";
       }
       if (isAuthor) {
-         return removed ? "Your discussion was removed" : "Safety review completed";
+         return removed ? `Your ${targetLabel} was removed` : "Safety review completed";
       }
       if (report?.outcome === "CONFIRMED") return "Your report was confirmed";
       if (report?.outcome === "NOT_CONFIRMED") return "The content you reported was removed";
@@ -194,14 +203,14 @@ function CommunityModerationOutcomePage() {
 
                   {reconsiderationPending ? (
                      <p>
-                        Platform Safety will review the original removal again. The discussion remains removed
+                        Platform Safety will review the original removal again. The {targetLabel} remains removed
                         while the reconsideration is pending.
                      </p>
                   ) : (
                      <>
                         <p>
                            {reconsideration.outcome === "REVERSED"
-                              ? "Platform Safety reversed the original removal and restored the discussion to its prior state."
+                              ? "Platform Safety reversed the original removal and restored the content."
                               : "Platform Safety reviewed the request and kept the original removal in place."}
                         </p>
                         <div className="community-outcome-rationale">
@@ -227,7 +236,7 @@ function CommunityModerationOutcomePage() {
                   <h2>Think this removal was a mistake?</h2>
                   <p>
                      You can request one reconsideration of this removal. Explain what Platform Safety
-                     should review again. The discussion stays removed while the request is reviewed.
+                     should review again. The content stays removed while the request is reviewed.
                   </p>
 
                   {!requestOpen ? (
@@ -291,21 +300,21 @@ function CommunityModerationOutcomePage() {
 
             {isAuthor && outcome.content ? (
                <section className="community-outcome-card">
-                  <span className="community-outcome-eyebrow">Affected discussion</span>
-                  <h2>Content reviewed by Platform Safety</h2>
+                  <span className="community-outcome-eyebrow">Affected {targetLabel}</span>
+                  <h2>{targetLabelTitle} reviewed by Platform Safety</h2>
                   <blockquote>{outcome.content.excerpt || "Content excerpt unavailable."}</blockquote>
                   {reversed ? (
                      <div className="community-outcome-restored">
                         <p className="community-outcome-helper">
-                           The discussion was restored after reconsideration.
+                           The {targetLabel} was restored after reconsideration.
                         </p>
-                        <Link to={`/thread/detail/${outcome.content.thread_id}`}>
-                           View restored discussion
+                        <Link to={restoredTargetUrl}>
+                           View restored {targetLabel}
                         </Link>
                      </div>
                   ) : removed ? (
                      <p className="community-outcome-helper">
-                        The original discussion is no longer available in the Community feed.
+                        The original {targetLabel} is no longer available in Community circulation.
                      </p>
                   ) : null}
                </section>

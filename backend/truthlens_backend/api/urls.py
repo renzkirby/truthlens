@@ -713,6 +713,8 @@ router.register(r"claims", views.ClaimViewSet, basename="claim")
 router.register(r"evidence", views.EvidenceSubmissionViewSet, basename="evidence")
 router.register(r"votes", views.VoteViewSet, basename="vote")
 router.register(r"comments", views.ThreadCommentViewSet, basename="comment")
-router.register(r"thread-flags", views.ThreadFlagViewSet, basename="thread-flag")
+router.register(r"community-reports", views.CommunityReportViewSet, basename="community-report")
+# Temporary compatibility alias for the existing thread-report client/tests.
+router.register(r"thread-flags", views.CommunityReportViewSet, basename="thread-flag")
 
 urlpatterns += router.urls

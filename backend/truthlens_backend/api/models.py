@@ -600,6 +600,11 @@ class OrganizationMembership(models.Model):
     Role.MODERATOR = "MODERATOR"
     Role.CONTRIBUTOR = "CONTRIBUTOR"
 
+    class SafetyTargetType(models.TextChoices):
+        THREAD = "THREAD", "Discussion"
+        COMMENT = "COMMENT", "Comment"
+        EVIDENCE = "EVIDENCE", "Evidence"
+
     class Status(models.TextChoices):
         PENDING = (
             "PENDING",
@@ -1736,7 +1741,12 @@ class ClaimCheckHistory(models.Model):
         return f"ClaimCheckHistory {self.id} - User: {self.user.username} - Claim ID: {self.claim.id}"
 
 
-class ThreadFlag(models.Model):
+class CommunityReport(models.Model):
+    class TargetType(models.TextChoices):
+        THREAD = "THREAD", "Discussion"
+        COMMENT = "COMMENT", "Comment"
+        EVIDENCE = "EVIDENCE", "Evidence"
+
     class Reason(models.TextChoices):
         INAPPROPRIATE = "INAPPROPRIATE", "Inappropriate Content"
         SPAM = "SPAM", "Spam"
@@ -1744,19 +1754,40 @@ class ThreadFlag(models.Model):
         OTHER = "OTHER", "Other"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    thread = models.ForeignKey(Thread, on_delete=models.CASCADE, related_name="flags")
-    flagged_by = models.ForeignKey(
-        "auth.User", on_delete=models.CASCADE, related_name="thread_flags"
+    target_type = models.CharField(
+        max_length=16,
+        choices=TargetType.choices,
+        default=TargetType.THREAD,
+        db_index=True,
+    )
+    thread = models.ForeignKey(
+        Thread,
+        on_delete=models.CASCADE,
+        related_name="community_reports",
+    )
+    comment = models.ForeignKey(
+        "ThreadComment",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="community_reports",
+    )
+    evidence_submission = models.ForeignKey(
+        "EvidenceSubmission",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="community_reports",
+    )
+    reporter = models.ForeignKey(
+        "auth.User",
+        on_delete=models.CASCADE,
+        related_name="community_reports",
     )
     reason = models.CharField(max_length=20, choices=Reason.choices)
     notes = models.TextField(blank=True, null=True)
-    flagged_at = models.DateTimeField(auto_now_add=True)
-
-    resolved_at = models.DateTimeField(
-        null=True,
-        blank=True,
-    )
-
+    reported_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
     resolution_case = models.ForeignKey(
         "ModerationCase",
         on_delete=models.SET_NULL,
@@ -1765,17 +1796,94 @@ class ThreadFlag(models.Model):
         related_name="reports",
     )
 
+    def clean(self):
+        super().clean()
+        if self.target_type == self.TargetType.THREAD:
+            valid_shape = (
+                self.thread_id is not None
+                and self.comment_id is None
+                and self.evidence_submission_id is None
+            )
+        elif self.target_type == self.TargetType.COMMENT:
+            valid_shape = (
+                self.thread_id is not None
+                and self.comment_id is not None
+                and self.evidence_submission_id is None
+                and (
+                    not self.comment_id
+                    or not self.thread_id
+                    or self.comment.thread_id == self.thread_id
+                )
+            )
+        elif self.target_type == self.TargetType.EVIDENCE:
+            valid_shape = (
+                self.thread_id is not None
+                and self.comment_id is None
+                and self.evidence_submission_id is not None
+                and (
+                    not self.evidence_submission_id
+                    or not self.thread_id
+                    or self.evidence_submission.thread_id == self.thread_id
+                )
+            )
+        else:
+            valid_shape = False
+
+        if not valid_shape:
+            raise ValidationError(
+                {"target_type": "Report target does not match the selected Community content type."}
+            )
+
     class Meta:
         constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        target_type="THREAD",
+                        comment__isnull=True,
+                        evidence_submission__isnull=True,
+                    )
+                    | models.Q(
+                        target_type="COMMENT",
+                        comment__isnull=False,
+                        evidence_submission__isnull=True,
+                    )
+                    | models.Q(
+                        target_type="EVIDENCE",
+                        comment__isnull=True,
+                        evidence_submission__isnull=False,
+                    )
+                ),
+                name="community_report_target_shape_ck",
+            ),
             models.UniqueConstraint(
-                fields=["thread", "flagged_by"],
-                condition=Q(resolved_at__isnull=True),
-                name="unique_active_flag_per_thread_user",
-            )
+                fields=["thread", "reporter"],
+                condition=models.Q(
+                    target_type="THREAD",
+                    resolved_at__isnull=True,
+                ),
+                name="uniq_active_report_thread_user",
+            ),
+            models.UniqueConstraint(
+                fields=["comment", "reporter"],
+                condition=models.Q(
+                    target_type="COMMENT",
+                    resolved_at__isnull=True,
+                ),
+                name="uniq_active_report_comment_user",
+            ),
+            models.UniqueConstraint(
+                fields=["evidence_submission", "reporter"],
+                condition=models.Q(
+                    target_type="EVIDENCE",
+                    resolved_at__isnull=True,
+                ),
+                name="uniq_active_report_evidence_user",
+            ),
         ]
 
 
-class FlagResolutionLog(models.Model):
+class CommunityReportOutcome(models.Model):
     class ResolutionAction(models.TextChoices):
         DISMISS = "DISMISS", "Dismiss"
         REMOVE = "REMOVE", "Remove"
@@ -1787,15 +1895,42 @@ class FlagResolutionLog(models.Model):
         NO_VIOLATION = "NO_VIOLATION", "No violation found"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    target_type = models.CharField(
+        max_length=16,
+        choices=CommunityReport.TargetType.choices,
+        default=CommunityReport.TargetType.THREAD,
+        db_index=True,
+    )
+    target_id_snapshot = models.UUIDField()
     thread = models.ForeignKey(
-        Thread, on_delete=models.CASCADE, related_name="flag_resolution_logs"
+        Thread,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="community_report_outcomes",
     )
-    flagged_by = models.ForeignKey(
-        "auth.User", on_delete=models.CASCADE, related_name="resolved_thread_flags"
+    comment = models.ForeignKey(
+        "ThreadComment",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="community_report_outcomes",
     )
-    reason = models.CharField(max_length=20, choices=ThreadFlag.Reason.choices)
+    evidence_submission = models.ForeignKey(
+        "EvidenceSubmission",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="community_report_outcomes",
+    )
+    reporter = models.ForeignKey(
+        "auth.User",
+        on_delete=models.CASCADE,
+        related_name="resolved_community_reports",
+    )
+    reason = models.CharField(max_length=20, choices=CommunityReport.Reason.choices)
     notes = models.TextField(blank=True, null=True)
-    flagged_at = models.DateTimeField()
+    reported_at = models.DateTimeField()
     resolved_action = models.CharField(max_length=20, choices=ResolutionAction.choices)
     is_valid_report = models.BooleanField(default=False)
     report_outcome = models.CharField(
@@ -1816,9 +1951,19 @@ class FlagResolutionLog(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="resolved_flags_moderated",
+        related_name="resolved_community_reports_moderated",
     )
     resolved_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        if not self.target_id_snapshot:
+            if self.target_type == CommunityReport.TargetType.THREAD:
+                self.target_id_snapshot = self.thread_id
+            elif self.target_type == CommunityReport.TargetType.COMMENT:
+                self.target_id_snapshot = self.comment_id
+            elif self.target_type == CommunityReport.TargetType.EVIDENCE:
+                self.target_id_snapshot = self.evidence_submission_id
+        return super().save(*args, **kwargs)
 
     class Meta:
         ordering = ["-resolved_at"]
@@ -1828,7 +1973,7 @@ class FlagResolutionLog(models.Model):
                     models.Q(report_outcome__isnull=True, safety_decision__isnull=True)
                     | models.Q(report_outcome__isnull=False, safety_decision__isnull=False)
                 ),
-                name="flag_report_decision_pair_ck",
+                name="community_report_decision_pair_ck",
             ),
             models.CheckConstraint(
                 condition=(
@@ -1842,7 +1987,25 @@ class FlagResolutionLog(models.Model):
                         is_valid_report=False,
                     )
                 ),
-                name="flag_report_outcome_valid_ck",
+                name="community_report_outcome_valid_ck",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        target_type="THREAD",
+                        comment__isnull=True,
+                        evidence_submission__isnull=True,
+                    )
+                    | models.Q(
+                        target_type="COMMENT",
+                        evidence_submission__isnull=True,
+                    )
+                    | models.Q(
+                        target_type="EVIDENCE",
+                        comment__isnull=True,
+                    )
+                ),
+                name="community_report_outcome_target_ck",
             ),
         ]
 
@@ -1973,6 +2136,14 @@ class EvidenceSubmission(models.Model):
     url_preview_final_url = models.URLField(max_length=2000, blank=True, null=True)
     url_preview_checked_at = models.DateTimeField(null=True, blank=True)
     url_preview_failure_reason = models.CharField(max_length=100, blank=True, default="")
+    safety_removed_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    safety_removed_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="safety_removed_evidence_submissions",
+    )
 
     def __str__(self):
         return f"EvidenceSubmission {self.id} - Thread ID: {self.thread.id} - Contributor: {self.contributor.username}"
@@ -1983,6 +2154,11 @@ class ModerationCase(models.Model):
         SAFETY = "SAFETY", "Safety Review"
         EVIDENCE = "EVIDENCE", "Evidence Review"
         ADJUDICATION = "ADJUDICATION", "Verdict Adjudication"
+
+    class SafetyTargetType(models.TextChoices):
+        THREAD = "THREAD", "Discussion"
+        COMMENT = "COMMENT", "Comment"
+        EVIDENCE = "EVIDENCE", "Evidence"
 
     class Status(models.TextChoices):
         OPEN = "OPEN", "Open"
@@ -2037,8 +2213,24 @@ class ModerationCase(models.Model):
         default=Source.SYSTEM,
     )
 
+    safety_target_type = models.CharField(
+        max_length=16,
+        choices=SafetyTargetType.choices,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+
     thread = models.ForeignKey(
         Thread,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="moderation_cases",
+    )
+
+    thread_comment = models.ForeignKey(
+        "ThreadComment",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -2114,44 +2306,91 @@ class ModerationCase(models.Model):
         auto_now=True,
     )
 
+    def _infer_legacy_thread_safety_target(self):
+        if (
+            self.case_type == self.CaseType.SAFETY
+            and self.safety_target_type is None
+            and self.thread_id is not None
+            and self.thread_comment_id is None
+            and self.evidence_submission_id is None
+            and self.claim_id is None
+        ):
+            self.safety_target_type = self.SafetyTargetType.THREAD
+
     def clean(self):
+        self._infer_legacy_thread_safety_target()
         super().clean()
 
-        targets = {
-            self.CaseType.SAFETY: self.thread_id,
-            self.CaseType.EVIDENCE: self.evidence_submission_id,
-            self.CaseType.ADJUDICATION: self.claim_id,
-        }
-
-        expected_target = targets.get(self.case_type)
-
-        if expected_target is None:
-            raise ValidationError(
-                {"case_type": "This moderation case does not have its required target."}
-            )
-
         if self.case_type == self.CaseType.SAFETY:
-            invalid_extra_target = (
-                self.claim_id is not None or self.evidence_submission_id is not None
-            )
+            if not self.thread_id or not self.safety_target_type:
+                raise ValidationError(
+                    {"case_type": "Safety cases require a Community content target."}
+                )
+
+            if self.claim_id is not None:
+                raise ValidationError(
+                    {"case_type": "Safety cases cannot target a claim directly."}
+                )
+
+            if self.safety_target_type == self.SafetyTargetType.THREAD:
+                valid_shape = (
+                    self.thread_comment_id is None
+                    and self.evidence_submission_id is None
+                )
+            elif self.safety_target_type == self.SafetyTargetType.COMMENT:
+                valid_shape = (
+                    self.thread_comment_id is not None
+                    and self.evidence_submission_id is None
+                    and (
+                        not self.thread_comment_id
+                        or self.thread_comment.thread_id == self.thread_id
+                    )
+                )
+            elif self.safety_target_type == self.SafetyTargetType.EVIDENCE:
+                valid_shape = (
+                    self.thread_comment_id is None
+                    and self.evidence_submission_id is not None
+                    and (
+                        not self.evidence_submission_id
+                        or self.evidence_submission.thread_id == self.thread_id
+                    )
+                )
+            else:
+                valid_shape = False
 
         elif self.case_type == self.CaseType.EVIDENCE:
-            invalid_extra_target = (
-                self.thread_id is not None or self.claim_id is not None
+            valid_shape = (
+                self.evidence_submission_id is not None
+                and self.thread_id is None
+                and self.thread_comment_id is None
+                and self.claim_id is None
+                and self.safety_target_type is None
             )
 
+        elif self.case_type == self.CaseType.ADJUDICATION:
+            valid_shape = (
+                self.claim_id is not None
+                and self.thread_id is None
+                and self.thread_comment_id is None
+                and self.evidence_submission_id is None
+                and self.safety_target_type is None
+            )
         else:
-            invalid_extra_target = (
-                self.thread_id is not None or self.evidence_submission_id is not None
-            )
+            valid_shape = False
 
-        if invalid_extra_target:
+        if not valid_shape:
             raise ValidationError(
                 {
-                    "case_type": "A moderation case must use only the target "
-                    "appropriate for its case type."
+                    "case_type": (
+                        "A moderation case must use only the target "
+                        "appropriate for its case type."
+                    )
                 }
             )
+
+    def save(self, *args, **kwargs):
+        self._infer_legacy_thread_safety_target()
+        return super().save(*args, **kwargs)
 
     class Meta:
         ordering = ["-created_at"]
@@ -2180,6 +2419,7 @@ class ModerationCase(models.Model):
                 fields=["thread"],
                 condition=Q(
                     case_type="SAFETY",
+                    safety_target_type="THREAD",
                     status__in=[
                         "OPEN",
                         "IN_REVIEW",
@@ -2188,6 +2428,34 @@ class ModerationCase(models.Model):
                     ],
                 ),
                 name="uniq_active_safety_case_thread",
+            ),
+            models.UniqueConstraint(
+                fields=["thread_comment"],
+                condition=Q(
+                    case_type="SAFETY",
+                    safety_target_type="COMMENT",
+                    status__in=[
+                        "OPEN",
+                        "IN_REVIEW",
+                        "ESCALATED",
+                        "REOPENED",
+                    ],
+                ),
+                name="uniq_active_safety_case_comment",
+            ),
+            models.UniqueConstraint(
+                fields=["evidence_submission"],
+                condition=Q(
+                    case_type="SAFETY",
+                    safety_target_type="EVIDENCE",
+                    status__in=[
+                        "OPEN",
+                        "IN_REVIEW",
+                        "ESCALATED",
+                        "REOPENED",
+                    ],
+                ),
+                name="uniq_active_safety_case_evidence",
             ),
             models.UniqueConstraint(
                 fields=["evidence_submission"],
@@ -2234,7 +2502,18 @@ class CommunitySafetyDecision(models.Model):
         on_delete=models.PROTECT,
         related_name="community_safety_decision",
     )
+    class TargetType(models.TextChoices):
+        THREAD = "THREAD", "Discussion"
+        COMMENT = "COMMENT", "Comment"
+        EVIDENCE = "EVIDENCE", "Evidence"
+
     action = models.CharField(max_length=20, choices=Action.choices)
+    target_type = models.CharField(
+        max_length=16,
+        choices=TargetType.choices,
+        default=TargetType.THREAD,
+        db_index=True,
+    )
     violation_code = models.CharField(max_length=64, blank=True, default="")
     policy_title_snapshot = models.CharField(max_length=160)
     policy_version = models.CharField(max_length=20)
@@ -2256,14 +2535,15 @@ class CommunitySafetyDecision(models.Model):
     pre_removal_moderator_notes = models.TextField(null=True, blank=True)
     restoration_snapshot_complete = models.BooleanField(default=False)
     thread_id_snapshot = models.UUIDField()
-    thread_author = models.ForeignKey(
+    target_id_snapshot = models.UUIDField()
+    content_owner = models.ForeignKey(
         "auth.User",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="community_safety_decisions",
     )
-    author_username_snapshot = models.CharField(max_length=150, blank=True, default="")
+    owner_username_snapshot = models.CharField(max_length=150, blank=True, default="")
     content_excerpt_snapshot = models.TextField(blank=True, default="")
     rationale = models.TextField()
     decided_by = models.ForeignKey(
@@ -2298,10 +2578,45 @@ class CommunitySafetyDecision(models.Model):
 
     def clean(self):
         super().clean()
-        if self.moderation_case_id and self.moderation_case.case_type != ModerationCase.CaseType.SAFETY:
-            raise ValidationError(
-                {"moderation_case": "Community Safety decisions require a Safety case."}
-            )
+        if self.moderation_case_id:
+            case = self.moderation_case
+            if case.case_type != ModerationCase.CaseType.SAFETY:
+                raise ValidationError(
+                    {"moderation_case": "Community Safety decisions require a Safety case."}
+                )
+
+            if case.safety_target_type != self.target_type:
+                raise ValidationError(
+                    {
+                        "target_type": (
+                            "The Safety decision target type must match its moderation case."
+                        )
+                    }
+                )
+
+            expected_target_id = {
+                ModerationCase.SafetyTargetType.THREAD: case.thread_id,
+                ModerationCase.SafetyTargetType.COMMENT: case.thread_comment_id,
+                ModerationCase.SafetyTargetType.EVIDENCE: case.evidence_submission_id,
+            }.get(case.safety_target_type)
+
+            if expected_target_id is None or self.target_id_snapshot != expected_target_id:
+                raise ValidationError(
+                    {
+                        "target_id_snapshot": (
+                            "The Safety decision target must match its moderation case."
+                        )
+                    }
+                )
+
+            if case.thread_id is None or self.thread_id_snapshot != case.thread_id:
+                raise ValidationError(
+                    {
+                        "thread_id_snapshot": (
+                            "The Safety decision discussion context must match its moderation case."
+                        )
+                    }
+                )
         if self.action == self.Action.REMOVE and not self.violation_code:
             raise ValidationError(
                 {"violation_code": "A removed-content decision requires a violation."}
@@ -2311,34 +2626,56 @@ class CommunitySafetyDecision(models.Model):
                 {"violation_code": "A dismissed Safety case cannot record a violation."}
             )
         if self.action == self.Action.REMOVE:
-            if self.pre_removal_thread_status not in {
-                Thread.Status.PENDING,
-                Thread.Status.OPEN,
-                Thread.Status.CLOSED,
-            }:
+            if not self.restoration_snapshot_complete:
                 raise ValidationError(
                     {
-                        "pre_removal_thread_status": (
-                            "A removed-content decision must preserve the thread status "
-                            "that existed before removal."
+                        "restoration_snapshot_complete": (
+                            "Removed Community content requires a complete restoration snapshot."
                         )
                     }
                 )
-        elif self.pre_removal_thread_status is not None:
-            raise ValidationError(
-                {
-                    "pre_removal_thread_status": (
-                        "Only removed-content decisions preserve a pre-removal status."
+            if self.target_type == self.TargetType.THREAD:
+                if self.pre_removal_thread_status not in {
+                    Thread.Status.PENDING,
+                    Thread.Status.OPEN,
+                    Thread.Status.CLOSED,
+                }:
+                    raise ValidationError(
+                        {
+                            "pre_removal_thread_status": (
+                                "A removed discussion must preserve its prior thread status."
+                            )
+                        }
                     )
-                }
-            )
-        elif self.restoration_snapshot_complete:
+            elif self.pre_removal_thread_status is not None:
+                raise ValidationError(
+                    {
+                        "pre_removal_thread_status": (
+                            "Only discussion removals preserve a thread status."
+                        )
+                    }
+                )
+        else:
+            if self.pre_removal_thread_status is not None:
+                raise ValidationError(
+                    {
+                        "pre_removal_thread_status": (
+                            "Dismissed Safety decisions cannot preserve a removal state."
+                        )
+                    }
+                )
+            if self.restoration_snapshot_complete:
+                raise ValidationError(
+                    {
+                        "restoration_snapshot_complete": (
+                            "Dismissed Safety decisions cannot carry a restoration snapshot."
+                        )
+                    }
+                )
+
+        if self.target_id_snapshot is None:
             raise ValidationError(
-                {
-                    "restoration_snapshot_complete": (
-                        "Only removed-content decisions can carry a restoration snapshot."
-                    )
-                }
+                {"target_id_snapshot": "Community Safety decisions require a target snapshot."}
             )
 
     def save(self, *args, **kwargs):
@@ -2346,6 +2683,12 @@ class CommunitySafetyDecision(models.Model):
             raise ValidationError(
                 "Community Safety decisions are immutable and cannot be modified."
             )
+        if (
+            not self.target_id_snapshot
+            and self.target_type == self.TargetType.THREAD
+            and self.thread_id_snapshot
+        ):
+            self.target_id_snapshot = self.thread_id_snapshot
         self.full_clean()
         return super().save(*args, **kwargs)
 
@@ -2359,7 +2702,7 @@ class CommunitySafetyDecision(models.Model):
 
 
 class CommunitySafetyReconsideration(models.Model):
-    """One user-requested reconsideration of a removed Community discussion."""
+    """One user-requested reconsideration of removed Community content."""
 
     class Outcome(models.TextChoices):
         UPHELD = "UPHELD", "Removal upheld"
@@ -3711,6 +4054,14 @@ class ThreadComment(models.Model):
     comment_text = models.TextField(blank=True, null=True)
     comment_rich = models.JSONField(blank=True, null=True)
     commented_at = models.DateTimeField(auto_now_add=True)
+    safety_removed_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    safety_removed_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="safety_removed_comments",
+    )
 
     def clean(self):
         super().clean()

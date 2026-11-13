@@ -316,6 +316,7 @@ function CommentItem({
    onReply,
    onLike,
    onShare,
+   onReport,
    onRetry,
    onDiscard,
    readOnly = false,
@@ -329,6 +330,7 @@ function CommentItem({
    const isSending = sendState === "sending";
    const isFailed = sendState === "failed";
    const isPersisted = !sendState;
+   const isSafetyRemoved = Boolean(comment.safety_removed);
 
    return (
       <article
@@ -382,11 +384,18 @@ function CommentItem({
                   </div>
                ) : (
                   <div className="thread-detail-comment-text">
-                     <RichTextRenderer
-                        value={comment.comment_rich}
-                        fallbackText={comment.comment_text}
-                        profile="comment"
-                     />
+                     {isSafetyRemoved ? (
+                        <span className="thread-detail-comment-removed">
+                           <Icons name="shield" size={14} aria-hidden="true" />
+                           Comment removed by Platform Safety
+                        </span>
+                     ) : (
+                        <RichTextRenderer
+                           value={comment.comment_rich}
+                           fallbackText={comment.comment_text}
+                           profile="comment"
+                        />
+                     )}
                   </div>
                )}
             </div>
@@ -398,7 +407,7 @@ function CommentItem({
                </div>
             )}
 
-            {!isEditing && isPersisted && (
+            {!isSafetyRemoved && !isEditing && isPersisted && (
                <div className="thread-detail-comment-actions" role="group" aria-label={`Actions for ${username}'s comment`}>
                   {readOnly ? (
                      <span className="thread-detail-comment-like thread-detail-comment-like--readonly" aria-label={`${comment.like_count || 0} likes`}>
@@ -427,6 +436,11 @@ function CommentItem({
                         <button type="button" className="is-owner-action" onClick={() => onStartEdit(comment)}>Edit</button>
                         <button type="button" className="is-danger is-owner-action" onClick={() => onDelete(comment.id)}>Delete</button>
                      </>
+                  )}
+                  {!readOnly && !isOwner && (
+                     <button type="button" className="is-danger" onClick={() => onReport?.(comment)}>
+                        Report
+                     </button>
                   )}
                </div>
             )}
@@ -458,6 +472,7 @@ function CommentThread({
    onCancelReply,
    onLike,
    onShare,
+   onReport,
    onRetry,
    onDiscard,
    onShowReplies,
@@ -490,6 +505,7 @@ function CommentThread({
             onReply={(comment) => onStartReply(comment, root.id)}
             onLike={onLike}
             onShare={onShare}
+            onReport={onReport}
             onRetry={onRetry}
             onDiscard={onDiscard}
             readOnly={readOnly}
@@ -531,8 +547,10 @@ function CommentThread({
                         onReply={(item) => onStartReply(item, root.id)}
                         onLike={onLike}
                         onShare={onShare}
+                        onReport={onReport}
                         onRetry={onRetry}
                         onDiscard={onDiscard}
+                        readOnly={readOnly}
                      />
                      {!readOnly && replyComposer?.targetId === comment.id && (
                         <InlineReplyComposer
@@ -743,6 +761,7 @@ export default function ThreadDetailPage() {
    const [confirmDialog, setConfirmDialog] = useState({ open: false, type: null, targetId: null });
    const [dialogBusy, setDialogBusy] = useState(false);
    const [reportDialogOpen, setReportDialogOpen] = useState(false);
+   const [reportTarget, setReportTarget] = useState(null);
    const [reportReason, setReportReason] = useState("OTHER");
    const [reportNotes, setReportNotes] = useState("");
    const [reporting, setReporting] = useState(false);
@@ -1270,17 +1289,47 @@ export default function ThreadDetailPage() {
       }
    }
 
+   function openReportDialog(target) {
+      if (!target?.type || !target?.id || !canParticipateInCommunity) return;
+      setReportTarget(target);
+      setReportReason("OTHER");
+      setReportNotes("");
+      setReportDialogOpen(true);
+   }
+
    async function submitReport() {
-      if (reporting) return;
+      if (reporting || !reportTarget) return;
+      if (reportReason === "OTHER" && !reportNotes.trim()) {
+         addToast({ type: "error", message: "Add a short explanation when selecting Other." });
+         return;
+      }
+
+      const body = {
+         target_type: reportTarget.type,
+         thread_id: thread.id,
+         reason: reportReason,
+         notes: reportNotes.trim(),
+      };
+      if (reportTarget.type === "COMMENT") body.comment_id = reportTarget.id;
+      if (reportTarget.type === "EVIDENCE") body.evidence_submission_id = reportTarget.id;
+
       setReporting(true);
       try {
-         await authFetch(apiUrl("thread-flags/"), { method: "POST", body: { thread_id: thread.id, reason: reportReason, notes: reportNotes.trim() } });
+         await authFetch(apiUrl("community-reports/"), {
+            method: "POST",
+            body,
+         });
          setReportDialogOpen(false);
+         setReportTarget(null);
          setReportReason("OTHER");
          setReportNotes("");
-         addToast({ type: "success", message: "Report submitted for platform safety review.", duration: 2200 });
+         addToast({
+            type: "success",
+            message: "Report submitted for Platform Safety review.",
+            duration: 2200,
+         });
       } catch (error) {
-         console.error("Failed to report thread", error);
+         console.error("Failed to report Community content", error);
          addToast({ type: "error", message: userFacingErrorMessage(error, {
                fallback: "We couldn't submit this report. Please try again.",
                notFoundMessage: "The item you tried to report is no longer available.",
@@ -1599,6 +1648,11 @@ export default function ThreadDetailPage() {
                                  onCancelReply={() => setReplyComposer(null)}
                                  onLike={handleLike}
                                  onShare={shareComment}
+                                 onReport={(comment) => openReportDialog({
+                                    type: "COMMENT",
+                                    id: comment.id,
+                                    label: "comment",
+                                 })}
                                  onRetry={retryOptimisticComment}
                                  onDiscard={discardOptimisticComment}
                                  onShowReplies={showReplies}
@@ -1716,6 +1770,11 @@ export default function ThreadDetailPage() {
                                  isTop={index === 0 && sortedEvidence.length > 1}
                                  onEdit={handleSaveEvidenceEdit}
                                  onDelete={(id) => setConfirmDialog({ open: true, type: "evidence", targetId: id })}
+                                 onReport={(evidence) => openReportDialog({
+                                    type: "EVIDENCE",
+                                    id: evidence.id,
+                                    label: "evidence",
+                                 })}
                                  onVote={handleVote}
                                  votingEvidenceId={votingEvidenceId}
                                  editingId={editingEvidenceId}
@@ -1777,7 +1836,15 @@ export default function ThreadDetailPage() {
 
                <div className="thread-detail-sidebar-actions thread-detail-sidebar-actions--classic" role="group" aria-label="Thread actions">
                   {canReportThread && (
-                     <button type="button" className="is-danger" onClick={() => setReportDialogOpen(true)}><Icons name="flag" size={15} /> Report</button>
+                     <button
+                        type="button"
+                        className="is-danger"
+                        onClick={() => openReportDialog({
+                           type: "THREAD",
+                           id: thread.id,
+                           label: "discussion",
+                        })}
+                     ><Icons name="flag" size={15} /> Report</button>
                   )}
                   <button type="button" onClick={shareThread}><Icons name="share-2" size={15} /> Share</button>
                </div>
@@ -1791,19 +1858,77 @@ export default function ThreadDetailPage() {
             <div className="thread-detail-dialog-actions"><button type="button" className="thread-detail-text-button" data-dialog-initial onClick={() => setConfirmDialog({ open: false, type: null, targetId: null })} disabled={dialogBusy}>Cancel</button><button type="button" className="thread-detail-danger-button" onClick={performDelete} disabled={dialogBusy}>{dialogBusy ? "Deleting…" : "Delete"}</button></div>
          </AccessibleDialog>
 
-         <AccessibleDialog open={canReportThread && reportDialogOpen} busy={reporting} labelledBy="thread-detail-report-title" describedBy="thread-detail-report-description" onClose={() => setReportDialogOpen(false)} fallbackFocusRef={pageRef}>
+         <AccessibleDialog
+            open={Boolean(reportDialogOpen && reportTarget)}
+            busy={reporting}
+            labelledBy="thread-detail-report-title"
+            describedBy="thread-detail-report-description"
+            onClose={() => {
+               if (reporting) return;
+               setReportDialogOpen(false);
+               setReportTarget(null);
+            }}
+            fallbackFocusRef={pageRef}
+         >
             <p className="thread-detail-dialog-kicker">Platform safety</p>
-            <h2 id="thread-detail-report-title">Report this thread</h2>
-            <p id="thread-detail-report-description">Send this thread to Platform Safety reviewers for a safety review.</p>
-            <div className="thread-detail-field"><label htmlFor="thread-report-reason">Reason</label><select id="thread-report-reason" data-dialog-initial value={reportReason} onChange={(event) => setReportReason(event.target.value)} disabled={reporting}><option value="INAPPROPRIATE">Inappropriate</option><option value="SPAM">Spam</option><option value="HARASSMENT">Harassment</option><option value="OTHER">Other</option></select></div>
+            <h2 id="thread-detail-report-title">Report this {reportTarget?.label || "content"}</h2>
+            <p id="thread-detail-report-description">
+               Send this {reportTarget?.label || "content"} to Platform Safety for review.
+            </p>
+            <div className="thread-detail-field">
+               <label htmlFor="thread-report-reason">Reason</label>
+               <select
+                  id="thread-report-reason"
+                  data-dialog-initial
+                  value={reportReason}
+                  onChange={(event) => setReportReason(event.target.value)}
+                  disabled={reporting}
+               >
+                  <option value="INAPPROPRIATE">Inappropriate</option>
+                  <option value="SPAM">Spam</option>
+                  <option value="HARASSMENT">Harassment</option>
+                  <option value="OTHER">Other</option>
+               </select>
+            </div>
             <p className="thread-detail-report-helper">
-               Choose the concern that best describes your report. Platform Safety makes the final policy finding after review.{" "}
+               Your selected reason helps Platform Safety review the content. It does not determine the final policy finding.{" "}
                <Link to="/community-guidelines" target="_blank" rel="noopener noreferrer">
                   Read Community Guidelines
                </Link>
             </p>
-            <div className="thread-detail-field"><label htmlFor="thread-report-notes">Notes (optional)</label><textarea id="thread-report-notes" rows={4} value={reportNotes} onChange={(event) => setReportNotes(event.target.value)} disabled={reporting} /></div>
-            <div className="thread-detail-dialog-actions"><button type="button" className="thread-detail-text-button" onClick={() => setReportDialogOpen(false)} disabled={reporting}>Cancel</button><button type="button" className="thread-detail-primary-button" onClick={submitReport} disabled={reporting}>{reporting ? "Submitting…" : "Submit report"}</button></div>
+            <div className="thread-detail-field">
+               <label htmlFor="thread-report-notes">
+                  Notes {reportReason === "OTHER" ? "(required)" : "(optional)"}
+               </label>
+               <textarea
+                  id="thread-report-notes"
+                  rows={4}
+                  value={reportNotes}
+                  onChange={(event) => setReportNotes(event.target.value)}
+                  disabled={reporting}
+               />
+            </div>
+            <div className="thread-detail-dialog-actions">
+               <button
+                  type="button"
+                  className="thread-detail-text-button"
+                  onClick={() => {
+                     setReportDialogOpen(false);
+                     setReportTarget(null);
+                  }}
+                  disabled={reporting}
+               >
+                  Cancel
+               </button>
+               <button
+                  type="button"
+                  className="thread-detail-primary-button"
+                  onClick={submitReport}
+                  disabled={reporting}
+               >
+                  {reporting ? "Submitting…" : "Submit report"}
+               </button>
+            </div>
          </AccessibleDialog>
       </main>
    );

@@ -32,8 +32,8 @@ from api.models import (
     VerificationEvidence,
     ModerationCase,
     ModerationEvent,
-    ThreadFlag,
-    FlagResolutionLog,
+    CommunityReport,
+    CommunityReportOutcome,
     Organization,
     OrganizationMembership,
     AdjudicationDecision,
@@ -1093,10 +1093,10 @@ class ModerationCaseFoundationTests(APITestCase):
         self.assertIsNone(case.assigned_at)
 
     def test_thread_flag_can_preserve_resolution_history(self):
-        flag = ThreadFlag.objects.create(
+        flag = CommunityReport.objects.create(
             thread=self.thread,
-            flagged_by=self.moderator,
-            reason=ThreadFlag.Reason.SPAM,
+            reporter=self.moderator,
+            reason=CommunityReport.Reason.SPAM,
             notes="Test report",
         )
 
@@ -1174,10 +1174,10 @@ class ModerationCaseFoundationTests(APITestCase):
             escalate_safety_case,
         )
 
-        flag = ThreadFlag.objects.create(
+        flag = CommunityReport.objects.create(
             thread=self.thread,
-            flagged_by=self.moderator,
-            reason=ThreadFlag.Reason.SPAM,
+            reporter=self.moderator,
+            reason=CommunityReport.Reason.SPAM,
         )
 
         case = ensure_safety_case(
@@ -1207,7 +1207,7 @@ class ModerationCaseFoundationTests(APITestCase):
         self.assertIsNone(flag.resolved_at)
 
         self.assertEqual(
-            FlagResolutionLog.objects.filter(thread=self.thread).count(),
+            CommunityReportOutcome.objects.filter(thread=self.thread).count(),
             0,
         )
 
@@ -1217,10 +1217,10 @@ class ModerationCaseFoundationTests(APITestCase):
             resolve_safety_case,
         )
 
-        flag = ThreadFlag.objects.create(
+        flag = CommunityReport.objects.create(
             thread=self.thread,
-            flagged_by=self.moderator,
-            reason=ThreadFlag.Reason.SPAM,
+            reporter=self.moderator,
+            reason=CommunityReport.Reason.SPAM,
             notes="Possible spam",
         )
 
@@ -1257,7 +1257,7 @@ class ModerationCaseFoundationTests(APITestCase):
             case,
         )
 
-        log = FlagResolutionLog.objects.get(thread=self.thread)
+        log = CommunityReportOutcome.objects.get(thread=self.thread)
 
         self.assertEqual(
             log.resolved_action,
@@ -1272,10 +1272,10 @@ class ModerationCaseFoundationTests(APITestCase):
             resolve_safety_case,
         )
 
-        flag = ThreadFlag.objects.create(
+        flag = CommunityReport.objects.create(
             thread=self.thread,
-            flagged_by=self.moderator,
-            reason=ThreadFlag.Reason.HARASSMENT,
+            reporter=self.moderator,
+            reason=CommunityReport.Reason.HARASSMENT,
         )
 
         ensure_safety_case(
@@ -1307,12 +1307,12 @@ class ModerationCaseFoundationTests(APITestCase):
 
         self.assertIsNotNone(flag.resolved_at)
 
-        log = FlagResolutionLog.objects.get(thread=self.thread)
+        log = CommunityReportOutcome.objects.get(thread=self.thread)
 
         self.assertTrue(log.is_valid_report)
         self.assertEqual(
             log.report_outcome,
-            FlagResolutionLog.ReportOutcome.CONFIRMED,
+            CommunityReportOutcome.ReportOutcome.CONFIRMED,
         )
         self.assertIsNotNone(log.safety_decision_id)
 
@@ -1322,10 +1322,10 @@ class ModerationCaseFoundationTests(APITestCase):
             resolve_safety_case,
         )
 
-        first_flag = ThreadFlag.objects.create(
+        first_flag = CommunityReport.objects.create(
             thread=self.thread,
-            flagged_by=self.moderator,
-            reason=ThreadFlag.Reason.SPAM,
+            reporter=self.moderator,
+            reason=CommunityReport.Reason.SPAM,
         )
 
         ensure_safety_case(
@@ -1343,10 +1343,10 @@ class ModerationCaseFoundationTests(APITestCase):
 
         self.assertIsNotNone(first_flag.resolved_at)
 
-        second_flag = ThreadFlag.objects.create(
+        second_flag = CommunityReport.objects.create(
             thread=self.thread,
-            flagged_by=self.moderator,
-            reason=ThreadFlag.Reason.HARASSMENT,
+            reporter=self.moderator,
+            reason=CommunityReport.Reason.HARASSMENT,
         )
 
         self.assertNotEqual(
@@ -1374,7 +1374,7 @@ class ModerationCaseFoundationTests(APITestCase):
             reverse("thread-flag-list"),
             {
                 "thread_id": str(self.thread.id),
-                "reason": (ThreadFlag.Reason.SPAM),
+                "reason": (CommunityReport.Reason.SPAM),
                 "notes": "Possible spam.",
             },
             format="json",
@@ -1402,7 +1402,7 @@ class ModerationCaseFoundationTests(APITestCase):
         )
 
         self.assertEqual(
-            ThreadFlag.objects.filter(
+            CommunityReport.objects.filter(
                 thread=self.thread,
                 resolved_at__isnull=True,
             ).count(),
@@ -1410,15 +1410,15 @@ class ModerationCaseFoundationTests(APITestCase):
         )
 
     def test_thread_flag_listing_uses_review_safety_capability(self):
-        own_report = ThreadFlag.objects.create(
+        own_report = CommunityReport.objects.create(
             thread=self.thread,
-            flagged_by=self.author,
-            reason=ThreadFlag.Reason.SPAM,
+            reporter=self.author,
+            reason=CommunityReport.Reason.SPAM,
         )
-        moderator_report = ThreadFlag.objects.create(
+        moderator_report = CommunityReport.objects.create(
             thread=self.thread,
-            flagged_by=self.other_moderator,
-            reason=ThreadFlag.Reason.HARASSMENT,
+            reporter=self.other_moderator,
+            reason=CommunityReport.Reason.HARASSMENT,
         )
         normal_client = APIClient()
         normal_client.force_authenticate(user=self.author)

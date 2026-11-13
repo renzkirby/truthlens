@@ -8,11 +8,11 @@ from api.models import (
     Claim,
     CommunitySafetyDecision,
     CommunitySafetyReconsideration,
-    FlagResolutionLog,
+    CommunityReportOutcome,
     ModerationCase,
     Notification,
     Thread,
-    ThreadFlag,
+    CommunityReport,
     UserProfile,
 )
 from api.moderation_service import create_moderation_case
@@ -71,16 +71,16 @@ class CommunitySafetyReconsiderationApiTests(APITestCase):
             source=ModerationCase.Source.USER_REPORT,
             thread=thread,
         )
-        report_one = ThreadFlag.objects.create(
+        report_one = CommunityReport.objects.create(
             thread=thread,
-            flagged_by=self.reporter_one,
-            reason=ThreadFlag.Reason.SPAM,
+            reporter=self.reporter_one,
+            reason=CommunityReport.Reason.SPAM,
             notes="Promotional repetition.",
         )
-        report_two = ThreadFlag.objects.create(
+        report_two = CommunityReport.objects.create(
             thread=thread,
-            flagged_by=self.reporter_two,
-            reason=ThreadFlag.Reason.HARASSMENT,
+            reporter=self.reporter_two,
+            reason=CommunityReport.Reason.HARASSMENT,
             notes="Targeted abusive language.",
         )
         return thread, case, report_one, report_two
@@ -348,9 +348,9 @@ class CommunitySafetyReconsiderationApiTests(APITestCase):
 
     def test_upheld_reconsideration_preserves_original_enforcement_and_history(self):
         decision = self._remove()
-        original_log = FlagResolutionLog.objects.get(
+        original_log = CommunityReportOutcome.objects.get(
             safety_decision=decision,
-            flagged_by=self.reporter_two,
+            reporter=self.reporter_two,
         )
         reporter_trust_after_removal = calculate_trust_components(
             self.reporter_two
@@ -387,7 +387,7 @@ class CommunitySafetyReconsiderationApiTests(APITestCase):
         self.assertEqual(decision.action, CommunitySafetyDecision.Action.REMOVE)
         self.assertEqual(
             original_log.report_outcome,
-            FlagResolutionLog.ReportOutcome.CONFIRMED,
+            CommunityReportOutcome.ReportOutcome.CONFIRMED,
         )
         self.assertTrue(original_log.is_valid_report)
         self.assertEqual(
@@ -433,9 +433,9 @@ class CommunitySafetyReconsiderationApiTests(APITestCase):
         self.thread.refresh_from_db()
         self.case.refresh_from_db()
         decision.refresh_from_db()
-        confirmed_log = FlagResolutionLog.objects.get(
+        confirmed_log = CommunityReportOutcome.objects.get(
             safety_decision=decision,
-            flagged_by=self.reporter_two,
+            reporter=self.reporter_two,
         )
 
         self.assertEqual(self.thread.status, Thread.Status.OPEN)
@@ -452,7 +452,7 @@ class CommunitySafetyReconsiderationApiTests(APITestCase):
         self.assertEqual(decision.action, CommunitySafetyDecision.Action.REMOVE)
         self.assertEqual(
             confirmed_log.report_outcome,
-            FlagResolutionLog.ReportOutcome.CONFIRMED,
+            CommunityReportOutcome.ReportOutcome.CONFIRMED,
         )
         self.assertTrue(confirmed_log.is_valid_report)
 
@@ -618,7 +618,7 @@ class CommunitySafetyReconsiderationApiTests(APITestCase):
             reverse("thread-flag-list"),
             {
                 "thread_id": str(self.thread.pk),
-                "reason": ThreadFlag.Reason.OTHER,
+                "reason": CommunityReport.Reason.OTHER,
                 "notes": "Direct API report against removed content.",
             },
             format="json",
@@ -635,7 +635,7 @@ class CommunitySafetyReconsiderationApiTests(APITestCase):
             reverse("thread-flag-list"),
             {
                 "thread_id": str(self.thread.pk),
-                "reason": ThreadFlag.Reason.OTHER,
+                "reason": CommunityReport.Reason.OTHER,
                 "notes": "A new concern after the discussion was restored.",
             },
             format="json",

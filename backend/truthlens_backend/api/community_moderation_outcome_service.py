@@ -2,9 +2,9 @@
 
 from .community_policy import get_community_violation
 from .models import (
+    CommunityReportOutcome,
     CommunitySafetyDecision,
     CommunitySafetyReconsideration,
-    FlagResolutionLog,
 )
 
 
@@ -15,7 +15,7 @@ class CommunityModerationOutcomeNotFound(Exception):
 def get_community_moderation_outcome(*, actor, decision_id):
     decision = (
         CommunitySafetyDecision.objects
-        .select_related("thread_author", "moderation_case", "reconsideration")
+        .select_related("content_owner", "moderation_case", "reconsideration")
         .filter(pk=decision_id)
         .first()
     )
@@ -24,14 +24,14 @@ def get_community_moderation_outcome(*, actor, decision_id):
 
     role = None
     report_log = None
-    if decision.thread_author_id == actor.id:
+    if decision.content_owner_id == actor.id:
         role = "AUTHOR"
     else:
         report_log = (
-            FlagResolutionLog.objects
+            CommunityReportOutcome.objects
             .filter(
                 safety_decision=decision,
-                flagged_by=actor,
+                reporter=actor,
             )
             .order_by("-resolved_at", "-id")
             .first()
@@ -54,6 +54,11 @@ def get_community_moderation_outcome(*, actor, decision_id):
         "id": str(decision.id),
         "role": role,
         "action": decision.action,
+        "target": {
+            "type": decision.target_type,
+            "id": str(decision.target_id_snapshot),
+            "thread_id": str(decision.thread_id_snapshot),
+        },
         "policy": {
             "title": decision.policy_title_snapshot,
             "version": decision.policy_version,
@@ -82,8 +87,10 @@ def get_community_moderation_outcome(*, actor, decision_id):
     if role == "AUTHOR":
         payload["content"] = {
             "thread_id": str(decision.thread_id_snapshot),
+            "target_id": str(decision.target_id_snapshot),
+            "target_type": decision.target_type,
             "excerpt": decision.content_excerpt_snapshot,
-            "author_username": decision.author_username_snapshot,
+            "owner_username": decision.owner_username_snapshot,
         }
         if reconsideration:
             payload["reconsideration"]["request_statement"] = (
@@ -103,7 +110,7 @@ def get_community_moderation_outcome(*, actor, decision_id):
             "reason": report_log.reason,
             "reason_label": report_log.get_reason_display(),
             "notes": report_log.notes or "",
-            "flagged_at": report_log.flagged_at,
+            "reported_at": report_log.reported_at,
             "outcome": report_log.report_outcome,
             "outcome_label": report_log.get_report_outcome_display(),
             "counts_toward_reputation": bool(
