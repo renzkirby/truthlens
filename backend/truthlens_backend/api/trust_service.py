@@ -389,6 +389,10 @@ def calculate_trust_components(user):
     represented_thread_ids = current_removal_decisions.filter(
         target_type=CommunitySafetyDecision.TargetType.THREAD,
     ).values_list("thread_id_snapshot", flat=True)
+    rejected_threads = Thread.objects.filter(
+        author=user,
+        status=Thread.Status.REJECTED,
+    ).count()
     legacy_rejected_threads = (
         Thread.objects.filter(
             author=user,
