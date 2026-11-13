@@ -8,6 +8,7 @@ from .models import (
     CommunitySafetyDecision,
     CommunitySafetyReconsideration,
     EvidenceSubmission,
+    Thread,
     Vote,
 )
 from .platform_identity_service import is_platform_staff_identity
