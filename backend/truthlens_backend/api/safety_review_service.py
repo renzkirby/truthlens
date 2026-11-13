@@ -283,7 +283,7 @@ def perform_safety_case_action(
 
     if not case.thread_id:
         raise SafetyCaseConflict(
-            "This Safety case no longer has reviewable thread content."
+            "This Safety case no longer has reviewable Community content."
         )
 
     if action == "ESCALATE":
