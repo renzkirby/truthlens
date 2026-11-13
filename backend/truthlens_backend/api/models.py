@@ -2548,7 +2548,7 @@ class CommunitySafetyDecision(models.Model):
     pre_removal_moderator_notes = models.TextField(null=True, blank=True)
     restoration_snapshot_complete = models.BooleanField(default=False)
     thread_id_snapshot = models.UUIDField()
-    target_id_snapshot = models.UUIDField(null=True, blank=True)
+    target_id_snapshot = models.UUIDField()
     content_owner = models.ForeignKey(
         "auth.User",
         on_delete=models.SET_NULL,
