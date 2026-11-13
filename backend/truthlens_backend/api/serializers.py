@@ -1627,13 +1627,19 @@ class ThreadSerializer(serializers.ModelSerializer):
 
     def get_recent_flag_reason(self, obj):
         latest_flag = (
-            obj.flags.filter(resolved_at__isnull=True).order_by("-flagged_at").first()
+            obj.community_reports.filter(
+                target_type=CommunityReport.TargetType.THREAD,
+                resolved_at__isnull=True,
+            ).order_by("-reported_at").first()
         )
 
         return latest_flag.reason if latest_flag else None
 
     def get_flag_count(self, obj):
-        return obj.flags.filter(resolved_at__isnull=True).count()
+        return obj.community_reports.filter(
+            target_type=CommunityReport.TargetType.THREAD,
+            resolved_at__isnull=True,
+        ).count()
 
     def get_evidence_submissions(self, obj):
         evidence = [
