@@ -550,6 +550,7 @@ function CommentThread({
                         onReport={onReport}
                         onRetry={onRetry}
                         onDiscard={onDiscard}
+                        readOnly={readOnly}
                      />
                      {!readOnly && replyComposer?.targetId === comment.id && (
                         <InlineReplyComposer
