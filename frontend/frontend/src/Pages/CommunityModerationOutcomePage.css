@@ -125,3 +125,120 @@
    place-content: center;
    text-align: center;
 }
+
+
+.community-reconsideration-card {
+   border-color: var(--brand-primary);
+}
+
+.community-reconsideration-request {
+   margin-top: 18px;
+   padding-top: 16px;
+   border-top: 1px solid var(--border-default);
+}
+
+.community-reconsideration-request h3 {
+   margin: 0 0 7px;
+   font-size: 0.9rem;
+}
+
+.community-reconsideration-request p {
+   margin: 0 0 8px;
+   color: var(--text-body);
+   line-height: 1.6;
+}
+
+.community-reconsideration-request small,
+.community-reconsideration-form-meta {
+   color: var(--text-muted);
+   font-size: 0.72rem;
+}
+
+.community-reconsideration-form {
+   display: grid;
+   gap: 10px;
+   margin-top: 18px;
+}
+
+.community-reconsideration-form label {
+   color: var(--text-main);
+   font-size: 0.82rem;
+   font-weight: 700;
+}
+
+.community-reconsideration-form textarea {
+   width: 100%;
+   box-sizing: border-box;
+   resize: vertical;
+   padding: 12px 13px;
+   border: 1px solid var(--border-default);
+   border-radius: 9px;
+   background: var(--bg-surface);
+   color: var(--text-main);
+   font: inherit;
+   line-height: 1.55;
+}
+
+.community-reconsideration-form textarea:focus {
+   outline: 2px solid var(--brand-primary);
+   outline-offset: 1px;
+}
+
+.community-reconsideration-form-meta {
+   min-height: 20px;
+   display: flex;
+   justify-content: space-between;
+   gap: 12px;
+}
+
+.community-reconsideration-form-meta strong {
+   color: var(--tl-color-status-critical-text);
+   font-weight: 600;
+}
+
+.community-reconsideration-actions {
+   display: flex;
+   justify-content: flex-end;
+   gap: 10px;
+   margin-top: 4px;
+}
+
+.community-outcome-primary-action,
+.community-outcome-secondary-action {
+   min-height: 38px;
+   padding: 0 14px;
+   border-radius: 8px;
+   font: inherit;
+   font-size: 0.8rem;
+   font-weight: 700;
+   cursor: pointer;
+}
+
+.community-outcome-primary-action {
+   border: 1px solid var(--brand-primary);
+   background: var(--brand-primary);
+   color: var(--text-on-brand, #fff);
+}
+
+.community-outcome-secondary-action {
+   border: 1px solid var(--border-default);
+   background: var(--bg-surface);
+   color: var(--text-main);
+}
+
+.community-outcome-primary-action:disabled,
+.community-outcome-secondary-action:disabled {
+   cursor: not-allowed;
+   opacity: 0.65;
+}
+
+@media (max-width: 560px) {
+   .community-reconsideration-actions {
+      flex-direction: column-reverse;
+   }
+
+   .community-outcome-primary-action,
+   .community-outcome-secondary-action {
+      width: 100%;
+   }
+}

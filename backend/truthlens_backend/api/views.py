@@ -133,6 +133,15 @@ from .community_moderation_outcome_service import (
     CommunityModerationOutcomeNotFound,
     get_community_moderation_outcome,
 )
+from .community_safety_reconsideration_service import (
+    CommunitySafetyReconsiderationAuthorizationError,
+    CommunitySafetyReconsiderationConflict,
+    CommunitySafetyReconsiderationNotFound,
+    resolve_reconsideration,
+    schedule_reconsideration_notifications,
+    schedule_reconsideration_trust_updates,
+    submit_reconsideration,
+)
 from .verification_metrics_query_service import (
     VerificationMetricsAuthorizationError,
     VerificationMetricsCompositionError,
@@ -418,10 +427,12 @@ from .serializers import (
     PublicPartnerSummarySerializer,
     OrganizationPublicProfileAdminSerializer,
     OrganizationPublicProfileUpdateSerializer,
+    CommunitySafetyReconsiderationRequestSerializer,
     SafetyCaseActionSerializer,
     SafetyCaseDetailSerializer,
     SafetyCaseQueueFilterSerializer,
     SafetyCaseSummarySerializer,
+    SafetyReconsiderationResolveSerializer,
     EvidenceCaseActionSerializer,
     EvidenceCaseDetailSerializer,
     EvidenceCaseOrganizationQuerySerializer,
@@ -1279,6 +1290,35 @@ def community_moderation_outcome(request, decision_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def community_moderation_reconsideration(request, decision_id):
+    payload = CommunitySafetyReconsiderationRequestSerializer(data=request.data)
+    payload.is_valid(raise_exception=True)
+
+    try:
+        submit_reconsideration(
+            decision_id=decision_id,
+            actor=request.user,
+            **payload.validated_data,
+        )
+        result = get_community_moderation_outcome(
+            actor=request.user,
+            decision_id=decision_id,
+        )
+    except CommunitySafetyReconsiderationNotFound as error:
+        raise NotFound(
+            "This moderation outcome is not available to this account."
+        ) from error
+    except CommunitySafetyReconsiderationConflict as error:
+        return Response(
+            {"detail": str(error)},
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    return Response(result, status=status.HTTP_201_CREATED)
+
+
+@api_view(["POST"])
 @permission_classes([IsAuthenticated, CanReviewSafety])
 def safety_case_claim(request, case_id):
     case = _get_safety_case_or_404(case_id)
@@ -1336,6 +1376,32 @@ def safety_case_action(request, case_id):
         schedule_safety_resolution_notifications(result)
         schedule_safety_resolution_trust_updates(result)
 
+    return _safety_case_detail_response(case_id)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, CanReviewSafety])
+def safety_case_reconsideration_resolve(request, case_id):
+    payload = SafetyReconsiderationResolveSerializer(data=request.data)
+    payload.is_valid(raise_exception=True)
+    case = _get_safety_case_or_404(case_id)
+
+    try:
+        result = resolve_reconsideration(
+            case=case,
+            actor=request.user,
+            **payload.validated_data,
+        )
+    except CommunitySafetyReconsiderationAuthorizationError as error:
+        raise PermissionDenied(str(error)) from error
+    except (
+        CommunitySafetyReconsiderationConflict,
+        ModerationCaseError,
+    ) as error:
+        return _safety_case_conflict_response(error)
+
+    schedule_reconsideration_notifications(result)
+    schedule_reconsideration_trust_updates(result)
     return _safety_case_detail_response(case_id)
 
 
@@ -3814,6 +3880,9 @@ class ThreadFlagViewSet(viewsets.ModelViewSet):
         try:
             thread = Thread.objects.get(id=thread_id)
         except Thread.DoesNotExist:
+            raise NotFound("Thread not found.")
+
+        if thread.status == Thread.Status.REJECTED:
             raise NotFound("Thread not found.")
 
         if thread.author_id == self.request.user.id:

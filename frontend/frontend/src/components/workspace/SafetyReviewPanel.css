@@ -898,3 +898,60 @@
    font-size: 0.72rem;
    line-height: 1.5;
 }
+
+
+.safety-reconsideration-card {
+   display: grid;
+   gap: 12px;
+   padding: 14px;
+   border: 1px solid var(--border-light);
+   border-radius: 9px;
+   background: var(--bg-subtle);
+}
+
+.safety-reconsideration-label {
+   width: fit-content;
+   padding: 4px 8px;
+   border: 1px solid var(--tl-color-status-warning-border);
+   border-radius: 999px;
+   background: var(--tl-color-status-warning-bg);
+   color: var(--tl-color-status-warning-text);
+   font-size: 0.64rem;
+   font-weight: 750;
+}
+
+.safety-reconsideration-card blockquote {
+   margin: 0;
+   padding: 12px 14px;
+   border-left: 3px solid var(--brand-primary);
+   background: var(--bg-surface);
+   color: var(--text-body);
+   font-size: 0.78rem;
+   line-height: 1.55;
+}
+
+.safety-reconsideration-card > small {
+   color: var(--text-muted);
+   font-size: 0.66rem;
+}
+
+.safety-reconsideration-original {
+   margin: 0;
+}
+
+.safety-reconsideration-original-reason {
+   padding-top: 12px;
+   border-top: 1px solid var(--border-default);
+}
+
+.safety-reconsideration-original-reason strong {
+   color: var(--text-main);
+   font-size: 0.72rem;
+}
+
+.safety-reconsideration-original-reason p {
+   margin: 6px 0 0;
+   color: var(--text-body);
+   font-size: 0.75rem;
+   line-height: 1.5;
+}

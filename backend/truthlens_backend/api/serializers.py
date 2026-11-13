@@ -28,6 +28,7 @@ from .models import (
     OrganizationMembership,
     OrganizationInvitation,
     AccountabilityEvent,
+    CommunitySafetyReconsideration,
 )
 from .accountability_query_service import (
     AccountabilityDomain,
@@ -1884,6 +1885,48 @@ class SafetyCaseActionSerializer(serializers.Serializer):
         return attrs
 
 
+class CommunitySafetyReconsiderationRequestSerializer(serializers.Serializer):
+    request_statement = serializers.CharField(
+        trim_whitespace=True,
+        min_length=20,
+        max_length=2000,
+    )
+
+    def validate(self, attrs):
+        unsupported_fields = set(self.initial_data) - {"request_statement"}
+        if unsupported_fields:
+            raise serializers.ValidationError(
+                {
+                    field: "This field is not supported."
+                    for field in sorted(unsupported_fields)
+                }
+            )
+        return attrs
+
+
+class SafetyReconsiderationResolveSerializer(serializers.Serializer):
+    outcome = serializers.ChoiceField(
+        choices=CommunitySafetyReconsideration.Outcome.choices,
+    )
+    resolution_rationale = serializers.CharField(
+        trim_whitespace=True,
+        min_length=20,
+        max_length=2000,
+    )
+
+    def validate(self, attrs):
+        supported_fields = {"outcome", "resolution_rationale"}
+        unsupported_fields = set(self.initial_data) - supported_fields
+        if unsupported_fields:
+            raise serializers.ValidationError(
+                {
+                    field: "This field is not supported."
+                    for field in sorted(unsupported_fields)
+                }
+            )
+        return attrs
+
+
 class SafetyUserSummarySerializer(serializers.ModelSerializer):
     class Meta:
         model = User
@@ -1957,6 +2000,15 @@ class SafetyCaseSummarySerializer(serializers.ModelSerializer):
 
     @staticmethod
     def _reports(obj):
+        decision = getattr(obj, "community_safety_decision", None)
+        reconsideration = (
+            getattr(decision, "reconsideration", None)
+            if decision is not None
+            else None
+        )
+        if reconsideration is not None:
+            return getattr(obj, "case_linked_safety_reports", [])
+
         if obj.status in ACTIVE_CASE_STATUSES:
             if not obj.thread:
                 return []
@@ -1994,6 +2046,7 @@ class SafetyCaseDetailSerializer(SafetyCaseSummarySerializer):
     reports = serializers.SerializerMethodField()
     events = serializers.SerializerMethodField()
     community_policy = serializers.SerializerMethodField()
+    reconsideration = serializers.SerializerMethodField()
 
     def get_reports(self, obj):
         return SafetyReportDetailSerializer(
@@ -2008,11 +2061,41 @@ class SafetyCaseDetailSerializer(SafetyCaseSummarySerializer):
     def get_community_policy(self, obj):
         return community_policy_payload()
 
+    def get_reconsideration(self, obj):
+        decision = getattr(obj, "community_safety_decision", None)
+        reconsideration = (
+            getattr(decision, "reconsideration", None)
+            if decision is not None
+            else None
+        )
+        if reconsideration is None:
+            return None
+
+        return {
+            "id": str(reconsideration.id),
+            "request_statement": reconsideration.request_statement,
+            "submitted_at": reconsideration.submitted_at,
+            "outcome": reconsideration.outcome or None,
+            "resolution_rationale": reconsideration.resolution_rationale,
+            "resolved_at": reconsideration.resolved_at,
+            "original_decision": {
+                "id": str(decision.id),
+                "action": decision.action,
+                "violation_code": decision.violation_code,
+                "violation_title": decision.violation_label_snapshot,
+                "policy_title": decision.policy_title_snapshot,
+                "policy_version": decision.policy_version,
+                "rationale": decision.rationale,
+                "decided_at": decision.decided_at,
+            },
+        }
+
     class Meta(SafetyCaseSummarySerializer.Meta):
         fields = SafetyCaseSummarySerializer.Meta.fields + [
             "reports",
             "events",
             "community_policy",
+            "reconsideration",
         ]
         read_only_fields = fields
 

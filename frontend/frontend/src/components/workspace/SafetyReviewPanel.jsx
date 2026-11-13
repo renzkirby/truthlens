@@ -41,6 +41,18 @@ const ACTION_DETAILS = {
       consequence: "The case will remain active and its reports will remain unresolved for deeper review.",
       notesRequired: true,
    },
+   UPHOLD_RECONSIDERATION: {
+      label: "Uphold removal",
+      confirmation: "Keep the original removal",
+      consequence: "The original removal will remain in place and the reconsideration will be closed.",
+      notesRequired: true,
+   },
+   REVERSE_RECONSIDERATION: {
+      label: "Reverse removal",
+      confirmation: "Restore the discussion",
+      consequence: "The original removal will be reversed, the discussion restored to its prior state, and affected Trust Scores recalculated.",
+      notesRequired: true,
+   },
 };
 
 function formatLabel(value, fallback = "Unknown") {
@@ -148,6 +160,8 @@ function SafetyReviewPanel() {
    const dismissActionRef = useRef(null);
    const removeActionRef = useRef(null);
    const escalateActionRef = useRef(null);
+   const upholdReconsiderationRef = useRef(null);
+   const reverseReconsiderationRef = useRef(null);
    const decisionReturnFocusRef = useRef(null);
    const releaseTriggerRef = useRef(null);
    const releaseCancelRef = useRef(null);
@@ -379,6 +393,10 @@ function SafetyReviewPanel() {
          removeActionRef.current?.focus();
       } else if (returnAction === "ESCALATE") {
          escalateActionRef.current?.focus();
+      } else if (returnAction === "UPHOLD_RECONSIDERATION") {
+         upholdReconsiderationRef.current?.focus();
+      } else if (returnAction === "REVERSE_RECONSIDERATION") {
+         reverseReconsiderationRef.current?.focus();
       }
    }, [decisionAction]);
 
@@ -705,13 +723,19 @@ function SafetyReviewPanel() {
       const action = decisionAction;
       const actionDetail = action ? ACTION_DETAILS[action] : null;
       const notes = decisionNotes.trim();
+      const isReconsiderationAction =
+         action === "UPHOLD_RECONSIDERATION" || action === "REVERSE_RECONSIDERATION";
 
       if (accessRevokedRef.current || !detail?.id || !actionDetail || pendingOperation) {
          return;
       }
 
       if (actionDetail.notesRequired && !notes) {
-         setActionError("Review notes are required for this Safety action.");
+         setActionError(
+            isReconsiderationAction
+               ? "A reconsideration explanation is required."
+               : "Review notes are required for this Safety action.",
+         );
          return;
       }
 
@@ -727,16 +751,26 @@ function SafetyReviewPanel() {
       setNotice("");
 
       try {
-         const requestBody = {
-            action,
-            notes,
-         };
+         const requestBody = isReconsiderationAction
+            ? {
+                 outcome: action === "REVERSE_RECONSIDERATION" ? "REVERSED" : "UPHELD",
+                 resolution_rationale: notes,
+              }
+            : {
+                 action,
+                 notes,
+              };
+
          if (action === "REMOVE") {
             requestBody.violation_code = decisionViolationCode;
             requestBody.confirmed_report_ids = confirmedReportIds;
          }
 
-         const updatedCase = await safetyFetch(resolveApiEndpoint("SAFETY_CASE_ACTION", caseId), {
+         const endpoint = isReconsiderationAction
+            ? resolveApiEndpoint("SAFETY_RECONSIDERATION_RESOLVE", caseId)
+            : resolveApiEndpoint("SAFETY_CASE_ACTION", caseId);
+
+         const updatedCase = await safetyFetch(endpoint, {
             method: "POST",
             body: requestBody,
          });
@@ -766,12 +800,28 @@ function SafetyReviewPanel() {
             });
          } else {
             removeCompletedQueueCase(caseId);
+
+            const title =
+               action === "REVERSE_RECONSIDERATION"
+                  ? "Removal reversed"
+                  : action === "UPHOLD_RECONSIDERATION"
+                    ? "Removal upheld"
+                    : action === "REMOVE"
+                      ? "Content removed"
+                      : "Safety case dismissed";
+
+            const message =
+               action === "REVERSE_RECONSIDERATION"
+                  ? `Case ${formatCaseReference(caseId)} is complete and the discussion was restored to its prior state.`
+                  : action === "UPHOLD_RECONSIDERATION"
+                    ? `Case ${formatCaseReference(caseId)} is complete and the original removal remains in place.`
+                    : action === "REMOVE"
+                      ? `Case ${formatCaseReference(caseId)} is complete and the reported content was removed from active circulation.`
+                      : `Case ${formatCaseReference(caseId)} is complete. No policy violation was found and the thread remains visible.`;
+
             showWorkspaceSuccess(addToast, {
-               title: action === "REMOVE" ? "Content removed" : "Safety case dismissed",
-               message:
-                  action === "REMOVE"
-                     ? `Case ${formatCaseReference(caseId)} is complete and the reported content was removed from active circulation.`
-                     : `Case ${formatCaseReference(caseId)} is complete. No policy violation was found and the thread remains visible.`,
+               title,
+               message,
                duration: WORKSPACE_LONG_TOAST_DURATION,
             });
          }
@@ -785,9 +835,11 @@ function SafetyReviewPanel() {
             reconcileConflict(caseId, error);
          } else {
             reportMutationFailure(caseId, userFacingErrorMessage(error, {
-               fallback: "We couldn't complete this Safety action. Refresh the case and try again.",
-               authMessage: "Your session has expired. Sign in again before completing this Safety action.",
-               permissionMessage: "Your account doesn't have permission to complete this Safety action.",
+               fallback: isReconsiderationAction
+                  ? "We couldn't complete this reconsideration. Refresh the case and try again."
+                  : "We couldn't complete this Safety action. Refresh the case and try again.",
+               authMessage: "Your session has expired. Sign in again before completing this review.",
+               permissionMessage: "Your account doesn't have permission to complete this Safety review.",
                conflictMessage: "This Safety case changed before your action completed. Refresh it and review the latest status.",
                serviceMessage: "Platform Safety actions are temporarily unavailable. Try again shortly.",
             }));
@@ -804,6 +856,12 @@ function SafetyReviewPanel() {
    const isAssignedToCurrentUser =
       Boolean(detail?.assigned_to?.id) && String(detail.assigned_to.id) === String(currentUserId);
    const isAssignedToAnother = Boolean(detail?.assigned_to) && !isAssignedToCurrentUser;
+   const hasPendingReconsideration = Boolean(
+      detail?.reconsideration && !detail.reconsideration.outcome,
+   );
+   const isReconsiderationAction =
+      decisionAction === "UPHOLD_RECONSIDERATION" ||
+      decisionAction === "REVERSE_RECONSIDERATION";
    const isBusy = Boolean(pendingOperation);
    const selectedActionDetail = decisionAction ? ACTION_DETAILS[decisionAction] : null;
    const hasQueueResults = queue.results.length > 0;
@@ -1143,11 +1201,67 @@ function SafetyReviewPanel() {
                         )}
                      </section>
 
+                     {detail.reconsideration ? (
+                        <section className="safety-detail-section">
+                           <div className="safety-subheading-row safety-major-section-heading">
+                              <div>
+                                 <h4>Reconsideration request</h4>
+                                 <p>Review the author's request against the original Safety decision.</p>
+                              </div>
+                           </div>
+
+                           <div className="safety-reconsideration-card">
+                              <span className="safety-reconsideration-label">
+                                 {detail.reconsideration.outcome
+                                    ? formatLabel(detail.reconsideration.outcome)
+                                    : "Awaiting decision"}
+                              </span>
+                              <blockquote>{detail.reconsideration.request_statement}</blockquote>
+                              <small>
+                                 Submitted {formatDateTime(detail.reconsideration.submitted_at)}
+                              </small>
+
+                              <dl className="safety-thread-provenance safety-reconsideration-original">
+                                 <div>
+                                    <dt>Original finding</dt>
+                                    <dd>
+                                       {detail.reconsideration.original_decision?.violation_title || "Not recorded"}
+                                    </dd>
+                                 </div>
+                                 <div>
+                                    <dt>Original policy</dt>
+                                    <dd>
+                                       {detail.reconsideration.original_decision?.policy_title || "Community Guidelines"}
+                                       {detail.reconsideration.original_decision?.policy_version
+                                          ? ` · Version ${detail.reconsideration.original_decision.policy_version}`
+                                          : ""}
+                                    </dd>
+                                 </div>
+                                 <div>
+                                    <dt>Original decision date</dt>
+                                    <dd>{formatDateTime(detail.reconsideration.original_decision?.decided_at)}</dd>
+                                 </div>
+                              </dl>
+
+                              <div className="safety-reconsideration-original-reason">
+                                 <strong>Original explanation</strong>
+                                 <p>{detail.reconsideration.original_decision?.rationale || "No explanation recorded."}</p>
+                              </div>
+                           </div>
+                        </section>
+                     ) : null}
+
                      <section className="safety-action-section" aria-labelledby="safety-actions-heading">
                         <div className="safety-subheading-row safety-major-section-heading">
                            <div>
-                              <h4 id="safety-actions-heading">Safety actions</h4>
-                              <p>Actions apply to this Platform Safety case, not a factual verdict.</p>
+                              <h4 id="safety-actions-heading">
+                                 {hasPendingReconsideration ? "Reconsideration decision" : "Safety actions"}
+                              </h4>
+                              <p>
+                                 {hasPendingReconsideration
+                                    ? "Decide whether the original removal should remain in place or be reversed."
+                                    : "Actions apply to this Platform Safety case, not a factual verdict."}
+                              </p>
                            </div>
                         </div>
 
@@ -1227,41 +1341,66 @@ function SafetyReviewPanel() {
                               </div>
 
                               {!decisionAction ? (
-                                 <div className="safety-decision-options">
-                                    <Button
-                                       ref={dismissActionRef}
-                                       type="button"
-                                       variant="secondary"
-                                       density="comfortable"
-                                       disabled={isBusy || confirmingRelease}
-                                       onClick={() => handleOpenDecision("DISMISS")}
-                                    >
-                                       Dismiss case
-                                    </Button>
-                                    <Button
-                                       ref={removeActionRef}
-                                       type="button"
-                                       variant="destructive"
-                                       density="comfortable"
-                                       disabled={isBusy || confirmingRelease}
-                                       onClick={() => handleOpenDecision("REMOVE")}
-                                    >
-                                       Remove content
-                                    </Button>
-                                    {detail.status !== "ESCALATED" && (
+                                 hasPendingReconsideration ? (
+                                    <div className="safety-decision-options">
                                        <Button
-                                          ref={escalateActionRef}
+                                          ref={upholdReconsiderationRef}
                                           type="button"
                                           variant="secondary"
                                           density="comfortable"
-                                          className="safety-warning-action"
                                           disabled={isBusy || confirmingRelease}
-                                          onClick={() => handleOpenDecision("ESCALATE")}
+                                          onClick={() => handleOpenDecision("UPHOLD_RECONSIDERATION")}
                                        >
-                                          Escalate review
+                                          Uphold removal
                                        </Button>
-                                    )}
-                                 </div>
+                                       <Button
+                                          ref={reverseReconsiderationRef}
+                                          type="button"
+                                          variant="primary"
+                                          density="comfortable"
+                                          disabled={isBusy || confirmingRelease}
+                                          onClick={() => handleOpenDecision("REVERSE_RECONSIDERATION")}
+                                       >
+                                          Reverse removal
+                                       </Button>
+                                    </div>
+                                 ) : (
+                                    <div className="safety-decision-options">
+                                       <Button
+                                          ref={dismissActionRef}
+                                          type="button"
+                                          variant="secondary"
+                                          density="comfortable"
+                                          disabled={isBusy || confirmingRelease}
+                                          onClick={() => handleOpenDecision("DISMISS")}
+                                       >
+                                          Dismiss case
+                                       </Button>
+                                       <Button
+                                          ref={removeActionRef}
+                                          type="button"
+                                          variant="destructive"
+                                          density="comfortable"
+                                          disabled={isBusy || confirmingRelease}
+                                          onClick={() => handleOpenDecision("REMOVE")}
+                                       >
+                                          Remove content
+                                       </Button>
+                                       {detail.status !== "ESCALATED" && (
+                                          <Button
+                                             ref={escalateActionRef}
+                                             type="button"
+                                             variant="secondary"
+                                             density="comfortable"
+                                             className="safety-warning-action"
+                                             disabled={isBusy || confirmingRelease}
+                                             onClick={() => handleOpenDecision("ESCALATE")}
+                                          >
+                                             Escalate review
+                                          </Button>
+                                       )}
+                                    </div>
+                                 )
                               ) : (
                                  <form className="safety-decision-form" onSubmit={handleDecisionSubmit}>
                                     <div className="safety-decision-summary">
@@ -1331,7 +1470,11 @@ function SafetyReviewPanel() {
                                     )}
 
                                     <label htmlFor="safety-moderator-notes">
-                                       {decisionAction === "ESCALATE" ? "Escalation notes" : "Decision explanation"}{" "}
+                                       {isReconsiderationAction
+                                          ? "Reconsideration explanation"
+                                          : decisionAction === "ESCALATE"
+                                            ? "Escalation notes"
+                                            : "Decision explanation"}{" "}
                                        {selectedActionDetail.notesRequired ? "(required)" : "(optional)"}
                                     </label>
                                     {decisionAction !== "ESCALATE" && (
@@ -1370,7 +1513,8 @@ function SafetyReviewPanel() {
                                           variant={
                                              decisionAction === "REMOVE"
                                                 ? "destructive"
-                                                : decisionAction === "DISMISS"
+                                                : decisionAction === "DISMISS" ||
+                                                    decisionAction === "REVERSE_RECONSIDERATION"
                                                   ? "primary"
                                                   : "secondary"
                                           }

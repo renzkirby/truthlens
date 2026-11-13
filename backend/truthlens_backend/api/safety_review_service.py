@@ -7,6 +7,7 @@ from django.db.models import Prefetch
 from .accountability_service import record_accountability_event
 from .models import (
     AccountabilityEvent,
+    CommunitySafetyReconsideration,
     ModerationCase,
     ModerationEvent,
     Thread,
@@ -61,6 +62,8 @@ def get_safety_case_queryset(*, include_events=False):
             "thread",
             "thread__author",
             "thread__claim",
+            "community_safety_decision",
+            "community_safety_decision__reconsideration",
         )
         .prefetch_related(
             Prefetch(
@@ -211,6 +214,17 @@ def release_safety_case(*, case, actor):
         return released_case
 
 
+def _ensure_not_pending_reconsideration(case):
+    if CommunitySafetyReconsideration.objects.filter(
+        safety_decision__moderation_case=case,
+        outcome="",
+    ).exists():
+        raise SafetyCaseConflict(
+            "This Safety case is a reconsideration review. "
+            "Use the reconsideration decision controls."
+        )
+
+
 def perform_safety_case_action(
     *,
     case,
@@ -232,6 +246,7 @@ def perform_safety_case_action(
             locked_case = _get_locked_safety_case(case)
             _ensure_active_case(locked_case)
             _ensure_case_owner(locked_case, actor)
+            _ensure_not_pending_reconsideration(locked_case)
             previous_status = locked_case.status
 
             escalated_case = escalate_safety_case(
@@ -273,6 +288,7 @@ def perform_safety_case_action(
         locked_case = _get_locked_safety_case(case)
         _ensure_active_case(locked_case)
         _ensure_case_owner(locked_case, actor)
+        _ensure_not_pending_reconsideration(locked_case)
         previous_case_status = locked_case.status
         previous_thread_status = locked_thread.status
 

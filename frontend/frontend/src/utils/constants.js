@@ -196,11 +196,15 @@ export const API_ENDPOINTS = {
    COMMUNITY_GUIDELINES: "community/guidelines/",
    COMMUNITY_MODERATION_OUTCOME: (decisionId) =>
       `community/moderation/outcomes/${encodeURIComponent(decisionId)}/`,
+   COMMUNITY_MODERATION_RECONSIDERATION: (decisionId) =>
+      `community/moderation/outcomes/${encodeURIComponent(decisionId)}/reconsideration/`,
    SAFETY_CASES: "moderation/safety/cases/",
    SAFETY_CASE_DETAIL: (caseId) => `moderation/safety/cases/${encodeURIComponent(caseId)}/`,
    SAFETY_CASE_CLAIM: (caseId) => `moderation/safety/cases/${encodeURIComponent(caseId)}/claim/`,
    SAFETY_CASE_RELEASE: (caseId) => `moderation/safety/cases/${encodeURIComponent(caseId)}/release/`,
    SAFETY_CASE_ACTION: (caseId) => `moderation/safety/cases/${encodeURIComponent(caseId)}/action/`,
+   SAFETY_RECONSIDERATION_RESOLVE: (caseId) =>
+      `moderation/safety/cases/${encodeURIComponent(caseId)}/reconsideration/resolve/`,
    EVIDENCE_CASES: "moderation/evidence/cases/",
    EVIDENCE_CASE_DETAIL: (caseId) => `moderation/evidence/cases/${encodeURIComponent(caseId)}/`,
    EVIDENCE_CASE_ACTION: (caseId) => `moderation/evidence/cases/${encodeURIComponent(caseId)}/action/`,

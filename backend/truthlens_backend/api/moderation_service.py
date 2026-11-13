@@ -557,6 +557,26 @@ def resolve_safety_case(
         )
 
         now = timezone.now()
+        pre_removal_thread_status = (
+            locked_thread.status
+            if action == SAFETY_ACTION_REMOVE
+            else None
+        )
+        pre_removal_moderated_by = (
+            locked_thread.moderated_by
+            if action == SAFETY_ACTION_REMOVE
+            else None
+        )
+        pre_removal_moderated_at = (
+            locked_thread.moderated_at
+            if action == SAFETY_ACTION_REMOVE
+            else None
+        )
+        pre_removal_moderator_notes = (
+            locked_thread.moderator_notes
+            if action == SAFETY_ACTION_REMOVE
+            else None
+        )
 
         # Preserve existing compatibility fields while the Community Safety
         # decision record becomes the authoritative policy finding.
@@ -610,6 +630,11 @@ def resolve_safety_case(
             policy_title_snapshot=COMMUNITY_POLICY_TITLE,
             policy_version=COMMUNITY_POLICY_VERSION,
             violation_label_snapshot=violation_label_snapshot,
+            pre_removal_thread_status=pre_removal_thread_status,
+            pre_removal_moderated_by=pre_removal_moderated_by,
+            pre_removal_moderated_at=pre_removal_moderated_at,
+            pre_removal_moderator_notes=pre_removal_moderator_notes,
+            restoration_snapshot_complete=(action == SAFETY_ACTION_REMOVE),
             thread_id_snapshot=locked_thread.pk,
             thread_author=locked_thread.author,
             author_username_snapshot=locked_thread.author.username,
