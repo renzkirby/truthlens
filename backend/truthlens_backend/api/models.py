@@ -1904,7 +1904,9 @@ class CommunityReportOutcome(models.Model):
     target_id_snapshot = models.UUIDField()
     thread = models.ForeignKey(
         Thread,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="community_report_outcomes",
     )
     comment = models.ForeignKey(
@@ -2418,7 +2420,6 @@ class ModerationCase(models.Model):
                     models.Q(
                         case_type="SAFETY",
                         safety_target_type="THREAD",
-                        thread__isnull=False,
                         thread_comment__isnull=True,
                         evidence_submission__isnull=True,
                         claim__isnull=True,
@@ -2426,35 +2427,16 @@ class ModerationCase(models.Model):
                     | models.Q(
                         case_type="SAFETY",
                         safety_target_type="COMMENT",
-                        thread__isnull=False,
-                        thread_comment__isnull=False,
                         evidence_submission__isnull=True,
                         claim__isnull=True,
                     )
                     | models.Q(
                         case_type="SAFETY",
                         safety_target_type="EVIDENCE",
-                        thread__isnull=False,
                         thread_comment__isnull=True,
-                        evidence_submission__isnull=False,
                         claim__isnull=True,
                     )
-                    | models.Q(
-                        case_type="EVIDENCE",
-                        safety_target_type__isnull=True,
-                        thread__isnull=True,
-                        thread_comment__isnull=True,
-                        evidence_submission__isnull=False,
-                        claim__isnull=True,
-                    )
-                    | models.Q(
-                        case_type="ADJUDICATION",
-                        safety_target_type__isnull=True,
-                        thread__isnull=True,
-                        thread_comment__isnull=True,
-                        evidence_submission__isnull=True,
-                        claim__isnull=False,
-                    )
+                    | ~models.Q(case_type="SAFETY")
                 ),
                 name="moderation_case_target_shape_ck",
             ),
