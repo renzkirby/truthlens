@@ -4,10 +4,10 @@ from django.contrib.auth.models import User
 from django.db.models import Count, Q
 
 from .models import (
+    CommunityReportOutcome,
+    CommunitySafetyDecision,
     CommunitySafetyReconsideration,
     EvidenceSubmission,
-    FlagResolutionLog,
-    Thread,
     Vote,
 )
 from .platform_identity_service import is_platform_staff_identity
@@ -28,7 +28,7 @@ COMMUNITY_SIGNAL_SCALE = 8.0
 HISTORY_POINTS_CAP = 5.0
 
 # Moderation penalties
-REJECTED_THREAD_PENALTY = 5.0
+MODERATION_ACTION_PENALTY = 5.0
 MODERATION_PENALTY_CAP = 30.0
 
 
@@ -62,11 +62,11 @@ def _clamp(value, minimum, maximum):
 
 def _confirmed_report_queryset(user):
     return (
-        FlagResolutionLog.objects.filter(
-            flagged_by=user,
+        CommunityReportOutcome.objects.filter(
+            reporter=user,
             is_valid_report=True,
         )
-        .exclude(thread__author=user)
+        .exclude(safety_decision__content_owner=user)
         .exclude(
             safety_decision__reconsideration__outcome=(
                 CommunitySafetyReconsideration.Outcome.REVERSED
@@ -359,17 +359,26 @@ def calculate_trust_components(user):
     # Ordinary rejected evidence already lowers contribution quality.
     # We avoid penalizing it twice.
     #
-    # A rejected authored thread is treated separately because it
-    # represents a stronger moderation outcome.
-
-    rejected_threads = Thread.objects.filter(
-        author=user,
-        status=Thread.Status.REJECTED,
-    ).count()
+    # Current upheld Community Safety removals are one moderation signal
+    # regardless of whether the removed content is a discussion, comment, or
+    # evidence contribution. Reversed decisions remain historical but no
+    # longer contribute a current penalty.
+    moderation_actions = (
+        CommunitySafetyDecision.objects.filter(
+            content_owner=user,
+            action=CommunitySafetyDecision.Action.REMOVE,
+        )
+        .exclude(
+            reconsideration__outcome=(
+                CommunitySafetyReconsideration.Outcome.REVERSED
+            )
+        )
+        .count()
+    )
 
     moderation_penalty = min(
         MODERATION_PENALTY_CAP,
-        rejected_threads * REJECTED_THREAD_PENALTY,
+        moderation_actions * MODERATION_ACTION_PENALTY,
     )
 
     # ── Final score ──
