@@ -203,7 +203,7 @@ function CommunityModerationOutcomePage() {
 
                   {reconsiderationPending ? (
                      <p>
-                        Platform Safety will review the original removal again. The discussion remains removed
+                        Platform Safety will review the original removal again. The {targetLabel} remains removed
                         while the reconsideration is pending.
                      </p>
                   ) : (
