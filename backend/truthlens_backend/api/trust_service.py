@@ -69,6 +69,13 @@ def _confirmed_report_queryset(user):
         )
         .exclude(safety_decision__content_owner=user)
         .exclude(
+            safety_decision__isnull=True,
+            target_type=CommunityReportOutcome._meta.get_field(
+                "target_type"
+            ).default,
+            thread__author=user,
+        )
+        .exclude(
             safety_decision__reconsideration__outcome=(
                 CommunitySafetyReconsideration.Outcome.REVERSED
             )
