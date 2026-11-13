@@ -49,7 +49,7 @@ const ACTION_DETAILS = {
    },
    REVERSE_RECONSIDERATION: {
       label: "Reverse removal",
-      confirmation: "Restore the discussion",
+      confirmation: "Restore the content",
       consequence: "The original removal will be reversed, the content restored, and affected Trust Scores recalculated.",
       notesRequired: true,
    },
@@ -820,7 +820,7 @@ function SafetyReviewPanel() {
 
             const message =
                action === "REVERSE_RECONSIDERATION"
-                  ? `Case ${formatCaseReference(caseId)} is complete and the discussion was restored to its prior state.`
+                  ? `Case ${formatCaseReference(caseId)} is complete and the content was restored.`
                   : action === "UPHOLD_RECONSIDERATION"
                     ? `Case ${formatCaseReference(caseId)} is complete and the original removal remains in place.`
                     : action === "REMOVE"
@@ -1164,22 +1164,20 @@ function SafetyReviewPanel() {
                         </div>
 
                         <div className="safety-thread-context">
-                           <p>{detail.thread?.claim?.context_text || detail.thread?.caption || "Thread context unavailable"}</p>
+                           <p>{detail.target?.excerpt || "Content excerpt unavailable."}</p>
                            <dl className="safety-thread-provenance">
                               <div>
-                                 <dt>Claim type</dt>
-                                 <dd>{formatLabel(detail.thread?.claim?.claim_type, "Claim type unavailable")}</dd>
+                                 <dt>Target</dt>
+                                 <dd>{formatLabel(detail.target?.type, "Community content")}</dd>
                               </div>
                               <div>
-                                 <dt>Author</dt>
-                                 <dd>{detail.thread?.author?.username ? `@${detail.thread.author.username}` : "Unknown"}</dd>
+                                 <dt>Content owner</dt>
+                                 <dd>{getTargetOwnerLabel(detail)}</dd>
                               </div>
-                              {detail.thread?.created_at && (
-                                 <div>
-                                    <dt>Posted</dt>
-                                    <dd>{formatDateTime(detail.thread.created_at)}</dd>
-                                 </div>
-                              )}
+                              <div>
+                                 <dt>Discussion context</dt>
+                                 <dd>{detail.thread?.claim?.context_text || detail.thread?.caption || "Unavailable"}</dd>
+                              </div>
                            </dl>
                         </div>
                      </section>
@@ -1198,7 +1196,7 @@ function SafetyReviewPanel() {
                                  <li key={report.id}>
                                     <div>
                                        <strong>{report.reason_label || formatLabel(report.reason)}</strong>
-                                       <time dateTime={report.flagged_at}>{formatDateTime(report.flagged_at)}</time>
+                                       <time dateTime={report.reported_at}>{formatDateTime(report.reported_at)}</time>
                                     </div>
                                     <p>{report.notes || "No additional report notes were provided."}</p>
                                  </li>
@@ -1214,7 +1212,7 @@ function SafetyReviewPanel() {
                            <div className="safety-subheading-row safety-major-section-heading">
                               <div>
                                  <h4>Reconsideration request</h4>
-                                 <p>Review the author's request against the original Safety decision.</p>
+                                 <p>Review the content owner's request against the original Safety decision.</p>
                               </div>
                            </div>
 
