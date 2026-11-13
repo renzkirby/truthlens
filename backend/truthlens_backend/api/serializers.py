@@ -1651,11 +1651,12 @@ class ThreadSerializer(serializers.ModelSerializer):
         ).count()
 
     def get_evidence_count(self, obj):
-        return sum(
-            1
-            for item in obj.evidence_submissions.all()
-            if item.safety_removed_at is None
-        )
+        annotated_count = getattr(obj, "evidence_count", None)
+        if annotated_count is not None:
+            return annotated_count
+        return obj.evidence_submissions.filter(
+            safety_removed_at__isnull=True,
+        ).count()
 
     def get_comment_count(self, obj):
         return obj.comments.count()
