@@ -92,7 +92,7 @@ def get_reputation_action_counts(user):
         ),
     )
     # Only confirmed Safety reports are reputation-bearing actions.
-    # Dismissed reports remain preserved in FlagResolutionLog for moderation
+    # Dismissed reports remain preserved in CommunityReportOutcome for moderation
     # history, but are neutral: they do not count as successes, failures,
     # reputation depth, or vote-weight maturation.
     confirmed_report_count = _confirmed_report_queryset(user).count()
