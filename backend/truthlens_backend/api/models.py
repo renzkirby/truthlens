@@ -2299,7 +2299,19 @@ class ModerationCase(models.Model):
         auto_now=True,
     )
 
+    def _infer_legacy_thread_safety_target(self):
+        if (
+            self.case_type == self.CaseType.SAFETY
+            and self.safety_target_type is None
+            and self.thread_id is not None
+            and self.thread_comment_id is None
+            and self.evidence_submission_id is None
+            and self.claim_id is None
+        ):
+            self.safety_target_type = self.SafetyTargetType.THREAD
+
     def clean(self):
+        self._infer_legacy_thread_safety_target()
         super().clean()
 
         if self.case_type == self.CaseType.SAFETY:
@@ -2368,6 +2380,10 @@ class ModerationCase(models.Model):
                     )
                 }
             )
+
+    def save(self, *args, **kwargs):
+        self._infer_legacy_thread_safety_target()
+        return super().save(*args, **kwargs)
 
     class Meta:
         ordering = ["-created_at"]
