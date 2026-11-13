@@ -634,6 +634,7 @@ def resolve_safety_case(
             pre_removal_moderated_by=pre_removal_moderated_by,
             pre_removal_moderated_at=pre_removal_moderated_at,
             pre_removal_moderator_notes=pre_removal_moderator_notes,
+            restoration_snapshot_complete=(action == SAFETY_ACTION_REMOVE),
             thread_id_snapshot=locked_thread.pk,
             thread_author=locked_thread.author,
             author_username_snapshot=locked_thread.author.username,
