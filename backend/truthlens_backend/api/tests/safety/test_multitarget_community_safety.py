@@ -320,6 +320,11 @@ class MultiTargetCommunitySafetyTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
+        thread_edit = self._client(self.thread_author).patch(
+            reverse("thread-detail", kwargs={"pk": self.thread.pk}),
+            {"caption": "Updated discussion context while a comment is reviewed."},
+            format="json",
+        )
         comment_delete = self._client(self.comment_owner).delete(
             reverse("comment-detail", kwargs={"pk": self.comment.pk})
         )
@@ -327,6 +332,7 @@ class MultiTargetCommunitySafetyTests(APITestCase):
             reverse("thread-detail", kwargs={"pk": self.thread.pk})
         )
 
+        self.assertEqual(thread_edit.status_code, status.HTTP_200_OK)
         self.assertEqual(comment_delete.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(thread_delete.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertTrue(ThreadComment.objects.filter(pk=self.comment.pk).exists())
