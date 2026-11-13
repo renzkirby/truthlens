@@ -2578,10 +2578,45 @@ class CommunitySafetyDecision(models.Model):
 
     def clean(self):
         super().clean()
-        if self.moderation_case_id and self.moderation_case.case_type != ModerationCase.CaseType.SAFETY:
-            raise ValidationError(
-                {"moderation_case": "Community Safety decisions require a Safety case."}
-            )
+        if self.moderation_case_id:
+            case = self.moderation_case
+            if case.case_type != ModerationCase.CaseType.SAFETY:
+                raise ValidationError(
+                    {"moderation_case": "Community Safety decisions require a Safety case."}
+                )
+
+            if case.safety_target_type != self.target_type:
+                raise ValidationError(
+                    {
+                        "target_type": (
+                            "The Safety decision target type must match its moderation case."
+                        )
+                    }
+                )
+
+            expected_target_id = {
+                ModerationCase.SafetyTargetType.THREAD: case.thread_id,
+                ModerationCase.SafetyTargetType.COMMENT: case.thread_comment_id,
+                ModerationCase.SafetyTargetType.EVIDENCE: case.evidence_submission_id,
+            }.get(case.safety_target_type)
+
+            if expected_target_id is None or self.target_id_snapshot != expected_target_id:
+                raise ValidationError(
+                    {
+                        "target_id_snapshot": (
+                            "The Safety decision target must match its moderation case."
+                        )
+                    }
+                )
+
+            if case.thread_id is None or self.thread_id_snapshot != case.thread_id:
+                raise ValidationError(
+                    {
+                        "thread_id_snapshot": (
+                            "The Safety decision discussion context must match its moderation case."
+                        )
+                    }
+                )
         if self.action == self.Action.REMOVE and not self.violation_code:
             raise ValidationError(
                 {"violation_code": "A removed-content decision requires a violation."}
@@ -2737,12 +2772,6 @@ class CommunitySafetyReconsideration(models.Model):
             )
 
     def save(self, *args, **kwargs):
-        if (
-            not self.target_id_snapshot
-            and self.target_type == self.TargetType.THREAD
-            and self.thread_id_snapshot
-        ):
-            self.target_id_snapshot = self.thread_id_snapshot
         self.full_clean()
         return super().save(*args, **kwargs)
 
