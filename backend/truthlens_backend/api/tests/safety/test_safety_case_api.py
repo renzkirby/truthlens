@@ -11,13 +11,13 @@ from api.models import (
     Claim,
     CommunitySafetyDecision,
     EvidenceSubmission,
-    FlagResolutionLog,
+    CommunityReportOutcome,
     ModerationCase,
     ModerationEvent,
     Organization,
     OrganizationMembership,
     Thread,
-    ThreadFlag,
+    CommunityReport,
     UserProfile,
     Notification,
 )
@@ -63,16 +63,16 @@ class SafetyCaseApiTests(APITestCase):
             priority=ModerationCase.Priority.HIGH,
             thread=self.thread,
         )
-        self.report_one = ThreadFlag.objects.create(
+        self.report_one = CommunityReport.objects.create(
             thread=self.thread,
-            flagged_by=self.reporter_one,
-            reason=ThreadFlag.Reason.SPAM,
+            reporter=self.reporter_one,
+            reason=CommunityReport.Reason.SPAM,
             notes="Repeated promotional links.",
         )
-        self.report_two = ThreadFlag.objects.create(
+        self.report_two = CommunityReport.objects.create(
             thread=self.thread,
-            flagged_by=self.reporter_two,
-            reason=ThreadFlag.Reason.HARASSMENT,
+            reporter=self.reporter_two,
+            reason=CommunityReport.Reason.HARASSMENT,
             notes="Targeted abusive language.",
         )
         self.evidence = EvidenceSubmission.objects.create(
@@ -321,10 +321,10 @@ class SafetyCaseApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_queue_report_summary_is_unresolved_and_bounded(self):
-        resolved_report = ThreadFlag.objects.create(
+        resolved_report = CommunityReport.objects.create(
             thread=self.thread,
-            flagged_by=self.ordinary_user,
-            reason=ThreadFlag.Reason.OTHER,
+            reporter=self.ordinary_user,
+            reason=CommunityReport.Reason.OTHER,
             resolved_at=self.case.created_at,
             resolution_case=self.case,
         )
@@ -338,7 +338,7 @@ class SafetyCaseApiTests(APITestCase):
         self.assertEqual(summary["report_count"], 2)
         self.assertEqual(
             {item["reason"]: item["count"] for item in summary["report_reason_summary"]},
-            {ThreadFlag.Reason.HARASSMENT: 1, ThreadFlag.Reason.SPAM: 1},
+            {CommunityReport.Reason.HARASSMENT: 1, CommunityReport.Reason.SPAM: 1},
         )
 
     def test_detail_uses_explicit_privacy_safe_shape(self):
@@ -353,7 +353,7 @@ class SafetyCaseApiTests(APITestCase):
         })
         self.assertEqual(len(response.data["reports"]), 2)
         for report in response.data["reports"]:
-            self.assertNotIn("flagged_by", report)
+            self.assertNotIn("reporter", report)
             self.assertNotIn("reporter", report)
             self.assertNotIn("email", report)
         serialized = str(response.data)
@@ -391,10 +391,10 @@ class SafetyCaseApiTests(APITestCase):
         )
 
         new_reporter = self._user("safety-later-reporter")
-        later_report = ThreadFlag.objects.create(
+        later_report = CommunityReport.objects.create(
             thread=self.thread,
-            flagged_by=new_reporter,
-            reason=ThreadFlag.Reason.OTHER,
+            reporter=new_reporter,
+            reason=CommunityReport.Reason.OTHER,
             notes="A report from the later review cycle.",
         )
         later_case = create_moderation_case(
@@ -427,7 +427,7 @@ class SafetyCaseApiTests(APITestCase):
             for report in response.data["reports"]:
                 self.assertEqual(
                     set(report),
-                    {"id", "reason", "reason_label", "notes", "flagged_at"},
+                    {"id", "reason", "reason_label", "notes", "reported_at"},
                 )
 
         stale_action = client.post(
@@ -535,15 +535,15 @@ class SafetyCaseApiTests(APITestCase):
         self.assertEqual(self.case.status, ModerationCase.Status.RESOLVED)
         self.assertEqual(self.thread.status, Thread.Status.OPEN)
         self.assertFalse(
-            ThreadFlag.objects.filter(
+            CommunityReport.objects.filter(
                 thread=self.thread, resolved_at__isnull=True
             ).exists()
         )
-        logs = FlagResolutionLog.objects.filter(thread=self.thread)
+        logs = CommunityReportOutcome.objects.filter(thread=self.thread)
         self.assertEqual(logs.count(), 2)
         self.assertEqual(
             set(logs.values_list("report_outcome", flat=True)),
-            {FlagResolutionLog.ReportOutcome.NO_VIOLATION},
+            {CommunityReportOutcome.ReportOutcome.NO_VIOLATION},
         )
         self.assertFalse(logs.filter(is_valid_report=True).exists())
         self.assertTrue(
@@ -605,22 +605,22 @@ class SafetyCaseApiTests(APITestCase):
         self.assertEqual(decision.action, CommunitySafetyDecision.Action.REMOVE)
         self.assertEqual(decision.violation_code, "HARASSMENT_TARGETED_ABUSE")
         self.assertEqual(decision.policy_version, "1.0")
-        report_one_log = FlagResolutionLog.objects.get(
+        report_one_log = CommunityReportOutcome.objects.get(
             thread=self.thread,
-            flagged_by=self.reporter_one,
+            reporter=self.reporter_one,
         )
-        report_two_log = FlagResolutionLog.objects.get(
+        report_two_log = CommunityReportOutcome.objects.get(
             thread=self.thread,
-            flagged_by=self.reporter_two,
+            reporter=self.reporter_two,
         )
         self.assertEqual(
             report_one_log.report_outcome,
-            FlagResolutionLog.ReportOutcome.NOT_CONFIRMED,
+            CommunityReportOutcome.ReportOutcome.NOT_CONFIRMED,
         )
         self.assertFalse(report_one_log.is_valid_report)
         self.assertEqual(
             report_two_log.report_outcome,
-            FlagResolutionLog.ReportOutcome.CONFIRMED,
+            CommunityReportOutcome.ReportOutcome.CONFIRMED,
         )
         self.assertTrue(report_two_log.is_valid_report)
         self.assertEqual(report_one_log.safety_decision, decision)
@@ -652,7 +652,7 @@ class SafetyCaseApiTests(APITestCase):
         self.assertEqual(second.status_code, status.HTTP_200_OK)
         self.assertEqual(self.case.status, ModerationCase.Status.ESCALATED)
         self.assertEqual(
-            ThreadFlag.objects.filter(
+            CommunityReport.objects.filter(
                 thread=self.thread, resolved_at__isnull=True
             ).count(),
             2,
@@ -707,12 +707,12 @@ class SafetyCaseApiTests(APITestCase):
             )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        logs = FlagResolutionLog.objects.filter(thread=self.thread)
+        logs = CommunityReportOutcome.objects.filter(thread=self.thread)
         self.assertEqual(logs.count(), 2)
         self.assertFalse(logs.filter(is_valid_report=True).exists())
         self.assertEqual(
             set(logs.values_list("report_outcome", flat=True)),
-            {FlagResolutionLog.ReportOutcome.NOT_CONFIRMED},
+            {CommunityReportOutcome.ReportOutcome.NOT_CONFIRMED},
         )
 
     def test_moderation_outcome_is_private_and_role_specific(self):
@@ -901,7 +901,7 @@ class SafetyCaseApiTests(APITestCase):
         self.assertEqual(self.case.status, ModerationCase.Status.RESOLVED)
         self.assertEqual(self.thread.status, Thread.Status.OPEN)
         self.assertFalse(
-            ThreadFlag.objects.filter(
+            CommunityReport.objects.filter(
                 thread=self.thread,
                 resolved_at__isnull=True,
             ).exists()
@@ -953,7 +953,7 @@ class SafetyCaseApiTests(APITestCase):
         self.assertEqual(self.case.status, ModerationCase.Status.RESOLVED)
         self.assertEqual(self.thread.status, Thread.Status.REJECTED)
         self.assertEqual(
-            FlagResolutionLog.objects.filter(thread=self.thread).count(),
+            CommunityReportOutcome.objects.filter(thread=self.thread).count(),
             2,
         )
         self.assertEqual(
@@ -990,7 +990,7 @@ class SafetyCaseApiTests(APITestCase):
         self.assertEqual(self.case.status, ModerationCase.Status.OPEN)
         self.assertEqual(self.thread.status, Thread.Status.OPEN)
         self.assertEqual(
-            ThreadFlag.objects.filter(
+            CommunityReport.objects.filter(
                 thread=self.thread,
                 resolved_at__isnull=True,
             ).count(),
