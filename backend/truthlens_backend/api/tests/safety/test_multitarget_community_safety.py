@@ -1,4 +1,5 @@
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
@@ -132,6 +133,32 @@ class MultiTargetCommunitySafetyTests(APITestCase):
             )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         return CommunitySafetyDecision.objects.get(moderation_case=case)
+
+    def test_safety_decision_target_must_match_its_case(self):
+        response = self._report(
+            reporter=self.reporter_one,
+            target_type=CommunityReport.TargetType.COMMENT,
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        case = self._case(ModerationCase.SafetyTargetType.COMMENT)
+
+        with self.assertRaises(ValidationError):
+            CommunitySafetyDecision.objects.create(
+                moderation_case=case,
+                action=CommunitySafetyDecision.Action.DISMISS,
+                target_type=CommunitySafetyDecision.TargetType.EVIDENCE,
+                target_id_snapshot=self.evidence.pk,
+                thread_id_snapshot=self.thread.pk,
+                content_owner=self.comment_owner,
+                owner_username_snapshot=self.comment_owner.username,
+                content_excerpt_snapshot="Mismatched target.",
+                policy_title_snapshot="TruthLens Community Guidelines",
+                policy_version="1.0",
+                violation_code="",
+                violation_label_snapshot="",
+                rationale="No violation found.",
+                decided_by=self.moderator,
+            )
 
     def test_comment_and_evidence_reports_create_independent_safety_cases(self):
         comment_response = self._report(
