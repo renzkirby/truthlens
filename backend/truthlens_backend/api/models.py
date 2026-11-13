@@ -1845,13 +1845,11 @@ class CommunityReport(models.Model):
                     )
                     | models.Q(
                         target_type="COMMENT",
-                        comment__isnull=False,
                         evidence_submission__isnull=True,
                     )
                     | models.Q(
                         target_type="EVIDENCE",
                         comment__isnull=True,
-                        evidence_submission__isnull=False,
                     )
                 ),
                 name="community_report_target_shape_ck",
@@ -1901,6 +1899,7 @@ class CommunityReportOutcome(models.Model):
         default=CommunityReport.TargetType.THREAD,
         db_index=True,
     )
+    target_id_snapshot = models.UUIDField()
     thread = models.ForeignKey(
         Thread,
         on_delete=models.CASCADE,
