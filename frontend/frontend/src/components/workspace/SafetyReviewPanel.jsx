@@ -26,7 +26,7 @@ const ACTION_DETAILS = {
    DISMISS: {
       label: "Dismiss case",
       confirmation: "No policy violation found",
-      consequence: "The case will be resolved, its reports closed, and the thread will remain visible.",
+      consequence: "The case will be resolved, its reports closed, and the content will remain visible.",
       notesRequired: false,
    },
    REMOVE: {
@@ -50,7 +50,7 @@ const ACTION_DETAILS = {
    REVERSE_RECONSIDERATION: {
       label: "Reverse removal",
       confirmation: "Restore the discussion",
-      consequence: "The original removal will be reversed, the discussion restored to its prior state, and affected Trust Scores recalculated.",
+      consequence: "The original removal will be reversed, the content restored, and affected Trust Scores recalculated.",
       notesRequired: true,
    },
 };
@@ -84,11 +84,19 @@ function formatDateTime(value) {
 }
 
 function getCaseTitle(caseItem) {
+   if (caseItem?.target?.type && caseItem.target.type !== "THREAD") {
+      return caseItem.target.excerpt || (formatLabel(caseItem.target.type) + " content");
+   }
    return (
       caseItem?.thread?.claim?.context_text ||
       caseItem?.thread?.caption ||
-      "Thread context unavailable"
+      "Discussion context unavailable"
    );
+}
+
+function getTargetOwnerLabel(caseItem) {
+   const username = caseItem?.target?.owner?.username;
+   return username ? ("@" + username) : "Unknown owner";
 }
 
 function getAssignmentLabel(caseItem, currentUserId) {
@@ -1011,7 +1019,7 @@ function SafetyReviewPanel() {
                                  <strong>{getCaseTitle(caseItem)}</strong>
 
                                  <span className="safety-case-context">
-                                    By {caseItem?.thread?.author?.username ? `@${caseItem.thread.author.username}` : "Unknown author"}
+                                    {formatLabel(caseItem?.safety_target_type, "Content")} by {getTargetOwnerLabel(caseItem)}
                                  </span>
 
                                  <span className="safety-reason-summary">
