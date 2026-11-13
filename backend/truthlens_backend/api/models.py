@@ -1845,11 +1845,13 @@ class CommunityReport(models.Model):
                     )
                     | models.Q(
                         target_type="COMMENT",
+                        comment__isnull=False,
                         evidence_submission__isnull=True,
                     )
                     | models.Q(
                         target_type="EVIDENCE",
                         comment__isnull=True,
+                        evidence_submission__isnull=False,
                     )
                 ),
                 name="community_report_target_shape_ck",
@@ -1994,13 +1996,11 @@ class CommunityReportOutcome(models.Model):
                     )
                     | models.Q(
                         target_type="COMMENT",
-                        comment__isnull=False,
                         evidence_submission__isnull=True,
                     )
                     | models.Q(
                         target_type="EVIDENCE",
                         comment__isnull=True,
-                        evidence_submission__isnull=False,
                     )
                 ),
                 name="community_report_outcome_target_ck",
@@ -2691,6 +2691,12 @@ class CommunitySafetyDecision(models.Model):
             raise ValidationError(
                 "Community Safety decisions are immutable and cannot be modified."
             )
+        if (
+            not self.target_id_snapshot
+            and self.target_type == self.TargetType.THREAD
+            and self.thread_id_snapshot
+        ):
+            self.target_id_snapshot = self.thread_id_snapshot
         self.full_clean()
         return super().save(*args, **kwargs)
 
