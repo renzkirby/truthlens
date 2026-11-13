@@ -274,7 +274,7 @@ function CommunityFeed() {
 
    const activeSearchTerm = (searchParams.get("q") || "").trim();
    const threadDetailUrl = (threadId) => `${threadsEndpoint}${threadId}/`;
-   const threadFlagsEndpoint = buildApiUrl("thread-flags/");
+   const communityReportsEndpoint = buildApiUrl("community-reports/");
    const isThreadOwner = (thread) => thread?.author?.id === user?.id;
    const reportActionMeta = {
       code: "REPORT THREAD",
@@ -521,12 +521,22 @@ function CommunityFeed() {
          return;
       }
 
+      if (reasonInput === "OTHER" && !reportDialog.notes.trim()) {
+         addToast({ type: "error", message: "Add a short explanation when selecting Other." });
+         return;
+      }
+
       try {
          setReportingThreadId(reportDialog.threadId);
-         await authFetch(threadFlagsEndpoint, {
+         await authFetch(communityReportsEndpoint, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ thread_id: reportDialog.threadId, reason: reasonInput, notes: reportDialog.notes.trim() }),
+            body: JSON.stringify({
+               target_type: "THREAD",
+               thread_id: reportDialog.threadId,
+               reason: reasonInput,
+               notes: reportDialog.notes.trim(),
+            }),
          });
          addToast({ type: "success", message: "Report submitted for review." });
          setReportDialog({ open: false, threadId: null, reason: "OTHER", notes: "" });
@@ -1300,7 +1310,7 @@ function CommunityFeed() {
                         </Link>
                      </p>
                      <div className="feed-modal-field">
-                        <label htmlFor="report-notes">Notes (optional)</label>
+                        <label htmlFor="report-notes">{reportDialog.reason === "OTHER" ? "Notes (required)" : "Notes (optional)"}</label>
                         <textarea
                            id="report-notes"
                            className="feed-modal-textarea"
