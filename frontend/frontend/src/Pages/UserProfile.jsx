@@ -838,7 +838,9 @@ function UserProfile() {
                                        : visibleTabItems.map((item) => {
                                             const isComment = item.activity_type === "COMMENT";
                                             const contributionText = isComment
-                                               ? item.comment_text || "Comment submitted."
+                                               ? item.safety_removed
+                                                  ? "Comment removed by Platform Safety"
+                                                  : item.comment_text || "Comment submitted."
                                                : item.evidence_caption || "Evidence submitted.";
                                             return (
                                                <article
