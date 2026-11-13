@@ -4,7 +4,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from api.models import Claim, FlagResolutionLog, Thread, ThreadFlag
+from api.models import Claim, CommunityReportOutcome, Thread, CommunityReport
 from api.trust_score_validation import TrustScenario, simulate_trust_score
 from api.trust_service import (
     build_vote_reputation_snapshot,
@@ -37,16 +37,16 @@ class ReportReputationSemanticsTests(TestCase):
         )
 
     def _resolution_log(self, *, confirmed, index):
-        return FlagResolutionLog.objects.create(
+        return CommunityReportOutcome.objects.create(
             thread=self.thread,
-            flagged_by=self.reporter,
-            reason=ThreadFlag.Reason.OTHER,
+            reporter=self.reporter,
+            reason=CommunityReport.Reason.OTHER,
             notes=f"Report {index}",
-            flagged_at=timezone.now(),
+            reported_at=timezone.now(),
             resolved_action=(
-                FlagResolutionLog.ResolutionAction.REMOVE
+                CommunityReportOutcome.ResolutionAction.REMOVE
                 if confirmed
-                else FlagResolutionLog.ResolutionAction.DISMISS
+                else CommunityReportOutcome.ResolutionAction.DISMISS
             ),
             is_valid_report=confirmed,
         )
@@ -59,7 +59,7 @@ class ReportReputationSemanticsTests(TestCase):
             reverse("thread-flag-list"),
             {
                 "thread_id": str(self.thread.pk),
-                "reason": ThreadFlag.Reason.OTHER,
+                "reason": CommunityReport.Reason.OTHER,
                 "notes": "Self-report should not be accepted.",
             },
             format="json",
@@ -68,25 +68,25 @@ class ReportReputationSemanticsTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(
             response.data["detail"],
-            "You cannot report your own thread.",
+            "You cannot report your own Community content.",
         )
         self.assertFalse(
-            ThreadFlag.objects.filter(
+            CommunityReport.objects.filter(
                 thread=self.thread,
-                flagged_by=self.author,
+                reporter=self.author,
             ).exists()
         )
 
     def test_historical_confirmed_self_report_does_not_build_reputation(self):
         self.thread.status = Thread.Status.REJECTED
         self.thread.save(update_fields=["status"])
-        FlagResolutionLog.objects.create(
+        CommunityReportOutcome.objects.create(
             thread=self.thread,
-            flagged_by=self.author,
-            reason=ThreadFlag.Reason.OTHER,
+            reporter=self.author,
+            reason=CommunityReport.Reason.OTHER,
             notes="Historical self-report.",
-            flagged_at=timezone.now(),
-            resolved_action=FlagResolutionLog.ResolutionAction.REMOVE,
+            reported_at=timezone.now(),
+            resolved_action=CommunityReportOutcome.ResolutionAction.REMOVE,
             is_valid_report=True,
         )
 
