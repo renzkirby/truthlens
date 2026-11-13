@@ -336,8 +336,6 @@ class PublicUserEvidenceSerializer(serializers.ModelSerializer):
             "evidence_verdict",
             "evidence_status",
             "thread",
-            "safety_target_type",
-            "target",
         ]
 
 
@@ -345,6 +343,16 @@ class PublicUserCommentSerializer(serializers.ModelSerializer):
     activity_type = serializers.CharField(default="COMMENT", read_only=True)
     activity_at = serializers.DateTimeField(source="commented_at", read_only=True)
     thread = PublicProfileThreadSummarySerializer(read_only=True)
+    safety_removed = serializers.SerializerMethodField()
+
+    def get_safety_removed(self, obj):
+        return obj.safety_removed_at is not None
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.safety_removed_at is not None:
+            data["comment_text"] = ""
+        return data
 
     class Meta:
         model = ThreadComment
@@ -354,6 +362,7 @@ class PublicUserCommentSerializer(serializers.ModelSerializer):
             "activity_at",
             "comment_text",
             "thread",
+            "safety_removed",
         ]
 
 
