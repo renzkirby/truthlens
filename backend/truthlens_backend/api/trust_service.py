@@ -31,6 +31,9 @@ HISTORY_POINTS_CAP = 5.0
 
 # Moderation penalties
 MODERATION_ACTION_PENALTY = 5.0
+# Temporary compatibility alias for the deterministic calibration helper,
+# which still models the historical thread-removal input by this name.
+REJECTED_THREAD_PENALTY = MODERATION_ACTION_PENALTY
 MODERATION_PENALTY_CAP = 30.0
 
 
