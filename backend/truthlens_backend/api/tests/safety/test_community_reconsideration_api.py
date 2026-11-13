@@ -197,6 +197,34 @@ class CommunitySafetyReconsiderationApiTests(APITestCase):
             1,
         )
 
+    def test_historical_removal_without_complete_snapshot_is_not_reconsiderable(self):
+        decision = self._remove()
+        CommunitySafetyDecision.objects.filter(pk=decision.pk).update(
+            restoration_snapshot_complete=False,
+        )
+        decision.refresh_from_db()
+
+        outcome_response = self._client_for(self.author).get(
+            reverse(
+                "community_moderation_outcome",
+                kwargs={"decision_id": decision.pk},
+            )
+        )
+        request_response = self._request(decision)
+
+        self.assertEqual(outcome_response.status_code, status.HTTP_200_OK)
+        self.assertFalse(outcome_response.data["can_request_reconsideration"])
+        self.assertEqual(request_response.status_code, status.HTTP_409_CONFLICT)
+        self.assertIn(
+            "historical removal",
+            request_response.data["detail"].lower(),
+        )
+        self.assertFalse(
+            CommunitySafetyReconsideration.objects.filter(
+                safety_decision=decision,
+            ).exists()
+        )
+
     def test_request_validation_is_simple_and_bounded(self):
         decision = self._remove()
         client = self._client_for(self.author)
