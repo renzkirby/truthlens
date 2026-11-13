@@ -109,6 +109,15 @@ def create_moderation_case(
     organization=None,
     safety_target_type=None,
 ):
+    if (
+        case_type == ModerationCase.CaseType.SAFETY
+        and safety_target_type is None
+        and thread is not None
+        and thread_comment is None
+        and evidence_submission is None
+    ):
+        safety_target_type = ModerationCase.SafetyTargetType.THREAD
+
     case = ModerationCase(
         case_type=case_type,
         source=source,
