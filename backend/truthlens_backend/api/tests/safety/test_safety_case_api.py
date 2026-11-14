@@ -166,13 +166,22 @@ class SafetyCaseApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["title"], "TruthLens Community Guidelines")
-        self.assertEqual(response.data["version"], "1.0")
+        self.assertEqual(response.data["version"], "1.1")
+        self.assertIsNotNone(response.data["account_enforcement"])
         self.assertEqual(len(response.data["rules"]), 7)
         self.assertIn(
             "HARASSMENT_TARGETED_ABUSE",
             {rule["code"] for rule in response.data["rules"]},
         )
         self.assertIn("verification", response.data["verification_boundary"].lower())
+
+        archived = APIClient().get(
+            reverse("community_guidelines"),
+            {"version": "1.0"},
+        )
+        self.assertEqual(archived.status_code, status.HTTP_200_OK)
+        self.assertEqual(archived.data["version"], "1.0")
+        self.assertIsNone(archived.data["account_enforcement"])
 
     def test_partner_factual_role_cannot_access_safety_endpoints(self):
         client = self._client_for(self.partner_lead)
