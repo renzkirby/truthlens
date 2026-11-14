@@ -4,11 +4,9 @@ import { Link, useSearchParams } from "react-router-dom";
 import { resolveApiEndpoint } from "../utils/api";
 import "./CommunityGuidelinesPage.css";
 
-function CommunityGuidelinesPage() {
-   const [searchParams] = useSearchParams();
+function CommunityGuidelinesContent({ requestedVersion }) {
    const [policy, setPolicy] = useState(null);
    const [error, setError] = useState(false);
-   const requestedVersion = (searchParams.get("version") || "").trim();
 
    useEffect(() => {
       let active = true;
@@ -17,7 +15,6 @@ function CommunityGuidelinesPage() {
          ? `${endpoint}?${new URLSearchParams({ version: requestedVersion }).toString()}`
          : endpoint;
 
-      setPolicy(null);
       fetch(url)
          .then(async (response) => {
             if (!response.ok) throw new Error("Policy unavailable");
@@ -185,6 +182,18 @@ function CommunityGuidelinesPage() {
             </article>
          </div>
       </div>
+   );
+}
+
+function CommunityGuidelinesPage() {
+   const [searchParams] = useSearchParams();
+   const requestedVersion = (searchParams.get("version") || "").trim();
+
+   return (
+      <CommunityGuidelinesContent
+         key={requestedVersion || "current"}
+         requestedVersion={requestedVersion}
+      />
    );
 }
 
