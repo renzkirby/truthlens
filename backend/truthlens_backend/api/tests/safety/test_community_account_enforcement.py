@@ -927,6 +927,14 @@ class CommunityAccountEnforcementTests(APITestCase):
             AccountabilityEvent.AuthorityScope.PLATFORM,
         )
         self.assertEqual(
+            issue_event.new_state["issued_at"],
+            enforcement.issued_at.isoformat(),
+        )
+        self.assertEqual(
+            issue_event.new_state["restriction_ends_at"],
+            enforcement.restriction_ends_at.isoformat(),
+        )
+        self.assertEqual(
             request_event.authority_scope,
             AccountabilityEvent.AuthorityScope.PERSONAL,
         )
