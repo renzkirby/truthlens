@@ -58,6 +58,8 @@ export function SafetyAccountActionForm({
 
    const decision = detail?.safety_decision;
    const enforcement = detail?.account_enforcement;
+   const reconsiderationPending =
+      Boolean(detail?.reconsideration) && !detail?.reconsideration?.outcome;
    const reversedContent = detail?.reconsideration?.outcome === "REVERSED";
    const eligible =
       decision?.action === "REMOVE" &&
@@ -111,6 +113,27 @@ export function SafetyAccountActionForm({
             <div className="safety-account-action-reason">
                <strong>Reason shown to the user</strong>
                <p>{enforcement.user_rationale}</p>
+            </div>
+         </section>
+      );
+   }
+
+   if (detail?.account_enforcement_available === false) {
+      return (
+         <section className="safety-account-action-card is-disabled">
+            <div className="safety-subheading-row">
+               <div>
+                  <h4>Community access action</h4>
+                  <p>Account enforcement is separate from the content-removal decision.</p>
+               </div>
+            </div>
+            <div className="safety-account-action-disabled">
+               <Icons name="info" size={16} />
+               <span>
+                  {reconsiderationPending
+                     ? "Resolve the content reconsideration before deciding any account-level action."
+                     : "This historical removal predates the Community account-enforcement policy and cannot be used to issue a new warning or restriction."}
+               </span>
             </div>
          </section>
       );
