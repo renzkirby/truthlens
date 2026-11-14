@@ -227,6 +227,21 @@ def serialize_enforcement(enforcement, *, actor=None, now=None, include_internal
                             review.independence_override_rationale if review else ""
                         ),
                         "internal_note": review.internal_note if review else "",
+                        "independence_requirement": (
+                            (
+                                "OVERRIDE_RATIONALE"
+                                if _another_safety_reviewer_exists(actor)
+                                else "UNAVAILABLE_NOTE"
+                            )
+                            if (
+                                actor
+                                and actor.is_authenticated
+                                and enforcement.issued_by_id == actor.pk
+                                and review.status
+                                == CommunityAccountEnforcementReview.Status.SUBMITTED
+                            )
+                            else "INDEPENDENT_REVIEW"
+                        ),
                     }
                     if review is not None
                     else None
