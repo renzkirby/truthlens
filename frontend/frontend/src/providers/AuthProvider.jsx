@@ -418,9 +418,19 @@ export function AuthProvider({ children }) {
             Object.assign(normalizedError, responseData);
          }
 
+         if (
+            normalizedError.status === 403 &&
+            normalizedError.code === "COMMUNITY_CONTRIBUTION_RESTRICTED"
+         ) {
+            const activeToken = getAccessToken();
+            if (activeToken) {
+               fetchUser(activeToken, authGenerationRef.current).catch(() => null);
+            }
+         }
+
          throw normalizedError;
       }
-   }, []);
+   }, [fetchUser]);
 
    const refreshUser = useCallback(() => {
       const activeToken = getAccessToken();
