@@ -410,7 +410,7 @@ function ReviewStartForm({ enforcement, onStart, busy }) {
    );
 }
 
-function ReviewResolveForm({ enforcement, onResolve, busy }) {
+function ReviewResolveForm({ onResolve, busy }) {
    const [outcome, setOutcome] = useState("UPHELD");
    const [rationale, setRationale] = useState("");
    const [internalNote, setInternalNote] = useState("");
@@ -736,7 +736,6 @@ export default function CommunityAccountEnforcementPanel({ safetyFetch }) {
                                           <blockquote>{review.request_statement}</blockquote>
                                           {currentReviewer ? (
                                              <ReviewResolveForm
-                                                enforcement={enforcement}
                                                 busy={busy}
                                                 onResolve={(body) =>
                                                    mutate(
