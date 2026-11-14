@@ -60,6 +60,13 @@ class PlatformStaffCommunityIdentityTests(TestCase):
                 "professional_identity": None,
                 "platform_role": "PLATFORM_ADMIN",
                 "platform_role_label": "Platform Admin",
+                "community_access": {
+                    "status": "NOT_APPLICABLE",
+                    "can_contribute": False,
+                    "restriction_ends_at": None,
+                    "active_enforcement_id": None,
+                    "has_unseen_action": False,
+                },
             },
         )
 
@@ -79,6 +86,13 @@ class PlatformStaffCommunityIdentityTests(TestCase):
         )
         self.assertFalse(response.data["community_identity"]["can_participate"])
         self.assertFalse(response.data["community_identity"]["reputation_applicable"])
+        self.assertEqual(
+            response.data["community_identity"]["community_access"]["status"],
+            "NOT_APPLICABLE",
+        )
+        self.assertFalse(
+            response.data["community_identity"]["community_access"]["can_contribute"]
+        )
 
     def test_ordinary_user_keeps_community_reputation_identity(self):
         response = self._client_for(self.community_user).get(reverse("auth_me"))
@@ -96,6 +110,13 @@ class PlatformStaffCommunityIdentityTests(TestCase):
                 "professional_identity": None,
                 "platform_role": None,
                 "platform_role_label": None,
+                "community_access": {
+                    "status": "FULL_ACCESS",
+                    "can_contribute": True,
+                    "restriction_ends_at": None,
+                    "active_enforcement_id": None,
+                    "has_unseen_action": False,
+                },
             },
         )
 
