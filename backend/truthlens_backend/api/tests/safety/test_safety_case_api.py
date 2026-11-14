@@ -21,6 +21,7 @@ from api.models import (
     UserProfile,
     Notification,
 )
+from api.community_policy import COMMUNITY_POLICY_VERSION
 from api.moderation_service import ModerationCaseError, create_moderation_case
 from api.trust_service import calculate_trust_components
 
@@ -620,7 +621,10 @@ class SafetyCaseApiTests(APITestCase):
         decision = CommunitySafetyDecision.objects.get(moderation_case=self.case)
         self.assertEqual(decision.action, CommunitySafetyDecision.Action.REMOVE)
         self.assertEqual(decision.violation_code, "HARASSMENT_TARGETED_ABUSE")
-        self.assertEqual(decision.policy_version, "1.0")
+        self.assertEqual(
+            decision.policy_version,
+            COMMUNITY_POLICY_VERSION,
+        )
         report_one_log = CommunityReportOutcome.objects.get(
             thread=self.thread,
             reporter=self.reporter_one,
