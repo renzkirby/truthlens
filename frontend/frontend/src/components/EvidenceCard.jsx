@@ -70,6 +70,7 @@ export default function EvidenceCard({
    setEditingRich,
    setEditingVerdict,
    readOnly = false,
+   canContribute = true,
 }) {
    const verdict = (evidence.evidence_verdict || "UNVERIFIED").toUpperCase();
    const verdictMeta = EVIDENCE_VERDICT_META[verdict] || EVIDENCE_VERDICT_META.UNVERIFIED;
@@ -112,17 +113,19 @@ export default function EvidenceCard({
                {isTop && <span className="evidence-card-rank"><Icons name="star" size={12} /> Top ranked</span>}
                {isOwner && !isEditing && !readOnly && (
                   <>
-                     <button
-                        type="button"
-                        onClick={() => {
-                           setEditingId(evidence.id);
-                           setEditingText(evidence.evidence_caption || "");
-                           setEditingRich(evidence.evidence_caption_rich || null);
-                           setEditingVerdict(EVIDENCE_ASSESSMENT_OPTIONS.some((option) => option.value === verdict) ? verdict : "");
-                        }}
-                     >
-                        Edit
-                     </button>
+                     {canContribute && (
+                        <button
+                           type="button"
+                           onClick={() => {
+                              setEditingId(evidence.id);
+                              setEditingText(evidence.evidence_caption || "");
+                              setEditingRich(evidence.evidence_caption_rich || null);
+                              setEditingVerdict(EVIDENCE_ASSESSMENT_OPTIONS.some((option) => option.value === verdict) ? verdict : "");
+                           }}
+                        >
+                           Edit
+                        </button>
+                     )}
                      <button type="button" className="is-danger" onClick={() => onDelete(evidence.id)}>Delete</button>
                   </>
                )}
@@ -224,8 +227,20 @@ export default function EvidenceCard({
                         className={`evidence-card-vote evidence-card-vote--up ${evidence.my_vote?.vote_value === true ? "is-selected" : ""}`}
                         aria-pressed={evidence.my_vote?.vote_value === true}
                         onClick={() => onVote?.(evidence, true)}
-                        disabled={isVoting || isOwnEvidence}
-                        title={isOwnEvidence ? "You cannot vote on your own evidence." : "Upvote evidence"}
+                        disabled={
+                           isVoting ||
+                           isOwnEvidence ||
+                           (!canContribute && evidence.my_vote?.vote_value !== true)
+                        }
+                        title={
+                           isOwnEvidence
+                              ? "You cannot vote on your own evidence."
+                              : !canContribute && evidence.my_vote?.vote_value !== true
+                                ? "New or changed votes are unavailable while Community contribution access is restricted."
+                                : evidence.my_vote?.vote_value === true
+                                  ? "Remove your upvote"
+                                  : "Upvote evidence"
+                        }
                      >
                         <Icons name="chevron-up" size={15} /> <span className="sr-only">Upvote</span>{upvotes}
                      </button>
@@ -234,8 +249,20 @@ export default function EvidenceCard({
                         className={`evidence-card-vote evidence-card-vote--down ${evidence.my_vote?.vote_value === false ? "is-selected" : ""}`}
                         aria-pressed={evidence.my_vote?.vote_value === false}
                         onClick={() => onVote?.(evidence, false)}
-                        disabled={isVoting || isOwnEvidence}
-                        title={isOwnEvidence ? "You cannot vote on your own evidence." : "Downvote evidence"}
+                        disabled={
+                           isVoting ||
+                           isOwnEvidence ||
+                           (!canContribute && evidence.my_vote?.vote_value !== false)
+                        }
+                        title={
+                           isOwnEvidence
+                              ? "You cannot vote on your own evidence."
+                              : !canContribute && evidence.my_vote?.vote_value !== false
+                                ? "New or changed votes are unavailable while Community contribution access is restricted."
+                                : evidence.my_vote?.vote_value === false
+                                  ? "Remove your downvote"
+                                  : "Downvote evidence"
+                        }
                      >
                         <Icons name="chevron-down" size={15} /> <span className="sr-only">Downvote</span>{downvotes}
                      </button>
@@ -246,7 +273,11 @@ export default function EvidenceCard({
             <span className="evidence-card-vote-hint">
                {readOnly
                   ? "Voting is unavailable to platform staff identities."
-                  : isOwnEvidence
+                  : !canContribute
+                    ? evidence.my_vote
+                       ? "You can remove your existing vote, but you cannot create or change votes while restricted."
+                       : "Voting is unavailable while Community contribution access is restricted."
+                    : isOwnEvidence
                     ? "Your own evidence is not votable."
                     : isVoting
                       ? "Syncing vote…"
