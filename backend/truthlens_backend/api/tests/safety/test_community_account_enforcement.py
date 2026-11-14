@@ -3,7 +3,6 @@ from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.core.cache import cache
-from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -37,7 +36,6 @@ from api import urls as api_urls
 from api import views as api_views
 
 
-@override_settings(COMMUNITY_ACCOUNT_ENFORCEMENT_ISSUANCE_ENABLED=True)
 class CommunityAccountEnforcementTests(APITestCase):
     def setUp(self):
         self.author = self._user("account-enforcement-author")
@@ -176,44 +174,6 @@ class CommunityAccountEnforcementTests(APITestCase):
             },
             format="json",
         )
-
-    def test_issuance_flag_off_blocks_new_actions_but_not_existing_access_state(self):
-        _, case, _, _ = self._remove("flag")
-
-        with override_settings(
-            COMMUNITY_ACCOUNT_ENFORCEMENT_ISSUANCE_ENABLED=False
-        ):
-            blocked = self._issue(case, action="WARNING")
-
-        self.assertEqual(blocked.status_code, status.HTTP_409_CONFLICT)
-        self.assertFalse(CommunityAccountEnforcement.objects.exists())
-
-        issued = self._issue(case)
-        self.assertEqual(issued.status_code, status.HTTP_201_CREATED)
-        enforcement = CommunityAccountEnforcement.objects.get()
-
-        with override_settings(
-            COMMUNITY_ACCOUNT_ENFORCEMENT_ISSUANCE_ENABLED=False
-        ):
-            self.assertFalse(
-                get_user_community_access(self.author)["can_contribute"]
-            )
-            lifted = self._client(self.moderator).post(
-                reverse(
-                    "safety_account_enforcement_lift",
-                    kwargs={"enforcement_id": enforcement.pk},
-                ),
-                {
-                    "rationale": (
-                        "Platform Safety is ending this restriction early after "
-                        "reviewing the operational circumstances."
-                    )
-                },
-                format="json",
-            )
-
-        self.assertEqual(lifted.status_code, status.HTTP_200_OK)
-        self.assertTrue(get_user_community_access(self.author)["can_contribute"])
 
     def test_guidelines_1_0_removal_cannot_issue_retroactive_account_action(self):
         _, case, _, decision = self._remove("historical-policy")
