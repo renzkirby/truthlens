@@ -383,7 +383,7 @@ function DeepAnalysisTerminalState({ tone = "critical", icon, title, detail, onB
 function DeepAnalysisPage() {
    const { claimId } = useParams();
    const navigate = useNavigate();
-   const { authFetch, user } = useAuth();
+   const { authFetch } = useAuth();
    const [claimData, setClaimData] = useState(null);
    const [statusData, setStatusData] = useState(null);
    const [statusSettled, setStatusSettled] = useState(false);
@@ -393,6 +393,16 @@ function DeepAnalysisPage() {
    const [isOriginalImageOpen, setIsOriginalImageOpen] = useState(false);
    const [originalMediaFailed, setOriginalMediaFailed] = useState(false);
    const originalImageTriggerRef = useRef(null);
+   const {
+      identityEligible: canParticipateInCommunity,
+      canContribute,
+      accessStatus,
+      restrictionEndsAt,
+   } = useCommunityAccess();
+   const restrictionSummary = communityRestrictionSummary(
+      accessStatus,
+      restrictionEndsAt,
+   );
 
    useEffect(() => {
       let active = true;
@@ -576,17 +586,6 @@ function DeepAnalysisPage() {
    const hasOriginalMaterial = Boolean(originalUrl || originalMediaUrl);
    const relatedFactChecks = Array.isArray(statusData?.related_fact_checks) ? statusData.related_fact_checks : [];
    const communityThreadId = statusData?.thread_id || null;
-   const {
-      identityEligible: canParticipateInCommunity,
-      canContribute,
-      accessStatus,
-      restrictionEndsAt,
-   } = useCommunityAccess();
-   const restrictionSummary = communityRestrictionSummary(
-      accessStatus,
-      restrictionEndsAt,
-   );
-
    return (
       <main className="deep-analysis-page" id="main-content">
          <div className="deep-analysis-shell">
