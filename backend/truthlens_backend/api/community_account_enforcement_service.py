@@ -145,6 +145,7 @@ def serialize_enforcement(enforcement, *, actor=None, now=None, include_internal
 
     payload = {
         "id": str(enforcement.pk),
+        "safety_decision_id": str(enforcement.safety_decision_id),
         "action": enforcement.action,
         "state": state,
         "user_rationale": enforcement.user_rationale,
@@ -420,6 +421,10 @@ def issue_account_enforcement(
             "Only a confirmed removed-content decision can support account enforcement."
         )
     reconsideration = getattr(decision, "reconsideration", None)
+    if reconsideration is not None and not reconsideration.outcome:
+        raise CommunityAccountEnforcementConflict(
+            "Resolve the pending content reconsideration before issuing an account-level action."
+        )
     if (
         reconsideration is not None
         and reconsideration.outcome
@@ -897,14 +902,44 @@ def revoke_enforcement_for_basis_reversal(*, safety_decision, actor, rationale):
     if enforcement is None:
         return None
 
-    if enforcement.revoked_at is None:
-        _revoke_locked_enforcement(
+    if enforcement.revocation_reason not in {
+        CommunityAccountEnforcement.RevocationReason.BASIS_REVERSED,
+        CommunityAccountEnforcement.RevocationReason.REVIEW_REVERSED,
+    }:
+        previous_state = serialize_enforcement(
+            enforcement,
+            include_internal=True,
+        )
+        enforcement.revoked_at = timezone.now()
+        enforcement.revoked_by = actor
+        enforcement.revocation_reason = (
+            CommunityAccountEnforcement.RevocationReason.BASIS_REVERSED
+        )
+        enforcement.revocation_rationale = str(rationale or "").strip()
+        enforcement.user_seen_at = None
+        enforcement.save(
+            update_fields=[
+                "revoked_at",
+                "revoked_by",
+                "revocation_reason",
+                "revocation_rationale",
+                "user_seen_at",
+            ]
+        )
+        _record_enforcement_event(
             enforcement=enforcement,
             actor=actor,
-            reason=CommunityAccountEnforcement.RevocationReason.BASIS_REVERSED,
-            rationale=rationale,
             action_type=(
                 AccountabilityEvent.ActionType.COMMUNITY_ENFORCEMENT_BASIS_REVERSED
+            ),
+            reason_code=(
+                CommunityAccountEnforcement.RevocationReason.BASIS_REVERSED
+            ),
+            notes=enforcement.revocation_rationale,
+            previous_state=previous_state,
+            new_state=serialize_enforcement(
+                enforcement,
+                include_internal=True,
             ),
         )
 
