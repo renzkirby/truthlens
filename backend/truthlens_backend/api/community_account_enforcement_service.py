@@ -379,14 +379,12 @@ def _mark_superseded(enforcement, *, actor, rationale, when):
         CommunityAccountEnforcement.RevocationReason.SUPERSEDED
     )
     enforcement.revocation_rationale = rationale
-    enforcement.user_seen_at = None
     enforcement.save(
         update_fields=[
             "revoked_at",
             "revoked_by",
             "revocation_reason",
             "revocation_rationale",
-            "user_seen_at",
         ]
     )
     _record_enforcement_event(
@@ -809,15 +807,56 @@ def resolve_enforcement_review(
         )
 
     if outcome == CommunityAccountEnforcementReview.Outcome.REVERSED:
-        _revoke_locked_enforcement(
-            enforcement=enforcement,
-            actor=actor,
-            reason=CommunityAccountEnforcement.RevocationReason.REVIEW_REVERSED,
-            rationale=rationale,
-            action_type=(
-                AccountabilityEvent.ActionType.COMMUNITY_ENFORCEMENT_REVERSED
-            ),
-        )
+        if enforcement.revoked_at is None:
+            _revoke_locked_enforcement(
+                enforcement=enforcement,
+                actor=actor,
+                reason=(
+                    CommunityAccountEnforcement.RevocationReason.REVIEW_REVERSED
+                ),
+                rationale=rationale,
+                action_type=(
+                    AccountabilityEvent.ActionType.COMMUNITY_ENFORCEMENT_REVERSED
+                ),
+            )
+        elif (
+            enforcement.revocation_reason
+            != CommunityAccountEnforcement.RevocationReason.REVIEW_REVERSED
+        ):
+            previous_state = serialize_enforcement(
+                enforcement,
+                include_internal=True,
+            )
+            enforcement.revoked_by = actor
+            enforcement.revocation_reason = (
+                CommunityAccountEnforcement.RevocationReason.REVIEW_REVERSED
+            )
+            enforcement.revocation_rationale = rationale
+            enforcement.user_seen_at = None
+            enforcement.save(
+                update_fields=[
+                    "revoked_by",
+                    "revocation_reason",
+                    "revocation_rationale",
+                    "user_seen_at",
+                ]
+            )
+            _record_enforcement_event(
+                enforcement=enforcement,
+                actor=actor,
+                action_type=(
+                    AccountabilityEvent.ActionType.COMMUNITY_ENFORCEMENT_REVERSED
+                ),
+                reason_code=(
+                    CommunityAccountEnforcement.RevocationReason.REVIEW_REVERSED
+                ),
+                notes=rationale,
+                previous_state=previous_state,
+                new_state=serialize_enforcement(
+                    enforcement,
+                    include_internal=True,
+                ),
+            )
 
     review.status = CommunityAccountEnforcementReview.Status.RESOLVED
     review.outcome = outcome
