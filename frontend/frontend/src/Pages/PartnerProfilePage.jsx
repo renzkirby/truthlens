@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, ExternalLink, Info } from "lucide-react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useNotification } from "../hooks/useNotification";
+import { useCommunityAccess } from "../hooks/useCommunityAccess";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { resolveApiEndpoint } from "../utils/api";
 import { userFacingErrorMessage } from "../utils/userFacingError";
@@ -338,6 +339,7 @@ function PartnerPublishedFactChecks({ slug, isCommunity, onCountChange }) {
 function PartnerProfileContent({ slug, isCommunity }) {
    const { user, authFetch } = useAuth();
    const { addToast } = useNotification();
+   const { canContribute } = useCommunityAccess();
    const [partner, setPartner] = useState(null);
    const [isLoading, setIsLoading] = useState(true);
    const [error, setError] = useState(null);
@@ -411,6 +413,13 @@ function PartnerProfileContent({ slug, isCommunity }) {
 
    const toggleFollow = async () => {
       if (!partner || isFollowPending) return;
+      if (!canContribute && !partner.is_following) {
+         addToast({
+            type: "info",
+            message: "Following new Partner Organizations is unavailable while your Community contribution access is restricted.",
+         });
+         return;
+      }
 
       setIsFollowPending(true);
       try {
@@ -572,7 +581,12 @@ function PartnerProfileContent({ slug, isCommunity }) {
                            partner.is_following ? "is-following" : ""
                         }`}
                         onClick={toggleFollow}
-                        disabled={isFollowPending}
+                        disabled={isFollowPending || (!canContribute && !partner.is_following)}
+                     title={
+                        !canContribute && !partner.is_following
+                           ? "Following new Partner Organizations is unavailable while restricted."
+                           : undefined
+                     }
                         aria-pressed={Boolean(partner.is_following)}
                      >
                         <Icons
