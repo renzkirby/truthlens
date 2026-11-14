@@ -5,6 +5,9 @@ import logging
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from .community_account_enforcement_service import (
+    revoke_enforcement_for_basis_reversal,
+)
 from .community_safety_target_service import (
     CommunitySafetyTargetError,
     get_decision_target,
@@ -315,6 +318,14 @@ def resolve_reconsideration(*, case, actor, outcome, resolution_rationale):
             )
         except CommunitySafetyTargetError as error:
             raise CommunitySafetyReconsiderationConflict(str(error)) from error
+        revoke_enforcement_for_basis_reversal(
+            safety_decision=decision,
+            actor=actor,
+            rationale=(
+                "The underlying Community Safety removal was reversed after "
+                "content reconsideration."
+            ),
+        )
         resolution_code = "RECONSIDERATION_REVERSED"
     else:
         resolution_code = "RECONSIDERATION_UPHELD"
