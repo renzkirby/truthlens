@@ -2,6 +2,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -22,10 +23,18 @@ from api.models import (
     OrganizationMembership,
     Thread,
     ThreadComment,
+    ThreadCommentLike,
     UserProfile,
 )
+from api.community_access_permissions import CanContributeToCommunity
 from api.moderation_service import create_moderation_case
+from api.throttles import (
+    CommunityReportBurstRateThrottle,
+    CommunityReportHourlyRateThrottle,
+)
 from api.trust_service import calculate_trust_components
+from api import urls as api_urls
+from api import views as api_views
 
 
 @override_settings(COMMUNITY_ACCOUNT_ENFORCEMENT_ISSUANCE_ENABLED=True)
@@ -257,6 +266,10 @@ class CommunityAccountEnforcementTests(APITestCase):
             commenter=self.unrelated,
             comment_text="Reportable comment from another member.",
         )
+        ThreadCommentLike.objects.create(
+            comment=report_target,
+            user=self.author,
+        )
 
         _, case, _, _ = self._remove("permissions")
         issued = self._issue(case)
@@ -288,6 +301,14 @@ class CommunityAccountEnforcementTests(APITestCase):
             },
             format="json",
         )
+        unlike = client.delete(
+            reverse("comment-like", kwargs={"pk": report_target.pk})
+        )
+        relike = client.post(
+            reverse("comment-like", kwargs={"pk": report_target.pk}),
+            {},
+            format="json",
+        )
         delete_comment = client.delete(
             reverse("comment-detail", kwargs={"pk": own_comment.pk})
         )
@@ -305,6 +326,13 @@ class CommunityAccountEnforcementTests(APITestCase):
                 "COMMUNITY_CONTRIBUTION_RESTRICTED",
             )
         self.assertEqual(report.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(unlike.status_code, status.HTTP_200_OK)
+        self.assertFalse(unlike.data["is_liked"])
+        self.assertEqual(relike.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(
+            str(relike.data["code"]),
+            "COMMUNITY_CONTRIBUTION_RESTRICTED",
+        )
         self.assertEqual(delete_comment.status_code, status.HTTP_204_NO_CONTENT)
 
     def test_restricted_user_can_unfollow_but_cannot_start_new_follow(self):
@@ -695,6 +723,131 @@ class CommunityAccountEnforcementTests(APITestCase):
         self.assertTrue(
             identity["professional_identity"]["authority_active"]
         )
+
+    def test_warning_and_expired_temporary_actions_remain_reviewable(self):
+        _, warning_case, _, _ = self._remove("review-warning")
+        self.assertEqual(
+            self._issue(warning_case, action="WARNING").status_code,
+            status.HTTP_201_CREATED,
+        )
+        warning = CommunityAccountEnforcement.objects.get(
+            safety_decision__moderation_case=warning_case
+        )
+        warning_review = self._request_account_review(warning)
+        self.assertEqual(warning_review.status_code, status.HTTP_201_CREATED)
+
+        _, temp_case, _, _ = self._remove("review-expired")
+        self.assertEqual(
+            self._issue(temp_case, duration_code="24_HOURS").status_code,
+            status.HTTP_201_CREATED,
+        )
+        temporary = CommunityAccountEnforcement.objects.get(
+            safety_decision__moderation_case=temp_case
+        )
+        CommunityAccountEnforcement.objects.filter(pk=temporary.pk).update(
+            restriction_ends_at=timezone.now() - timedelta(seconds=1)
+        )
+        temporary.refresh_from_db()
+
+        self.assertTrue(get_user_community_access(self.author)["can_contribute"])
+        expired_review = self._request_account_review(temporary)
+        self.assertEqual(expired_review.status_code, status.HTTP_201_CREATED)
+
+    def test_router_community_mutations_explicitly_apply_contribution_policy(self):
+        exempt_viewsets = {api_views.CommunityReportViewSet}
+        governed = []
+
+        for _prefix, viewset, _basename in api_urls.router.registry:
+            permissions = set(getattr(viewset, "permission_classes", ()))
+            if api_views.CanParticipateInCommunity not in permissions:
+                continue
+            governed.append(viewset)
+            if viewset in exempt_viewsets:
+                self.assertNotIn(CanContributeToCommunity, permissions)
+            else:
+                self.assertIn(
+                    CanContributeToCommunity,
+                    permissions,
+                    msg=(
+                        f"{viewset.__name__} participates in Community mutations "
+                        "but does not declare the contribution-access policy."
+                    ),
+                )
+
+        self.assertIn(api_views.ThreadViewSet, governed)
+        self.assertIn(api_views.ThreadCommentViewSet, governed)
+        self.assertIn(api_views.EvidenceSubmissionViewSet, governed)
+        self.assertIn(api_views.VoteViewSet, governed)
+        self.assertIn(api_views.CommunityReportViewSet, governed)
+
+    def test_report_throttle_limits_post_burst_without_blocking_report_history_reads(self):
+        cache.clear()
+        original_burst = CommunityReportBurstRateThrottle.THROTTLE_RATES
+        original_hourly = CommunityReportHourlyRateThrottle.THROTTLE_RATES
+        CommunityReportBurstRateThrottle.THROTTLE_RATES = {
+            **(original_burst or {}),
+            "community_report_burst": "2/minute",
+        }
+        CommunityReportHourlyRateThrottle.THROTTLE_RATES = {
+            **(original_hourly or {}),
+            "community_report_hour": "100/hour",
+        }
+
+        try:
+            claim = Claim.objects.create(
+                claim_type=Claim.ClaimType.TEXT,
+                context_text="Report throttle target.",
+                verified_via=Claim.VerificationSource.PENDING,
+            )
+            thread = Thread.objects.create(
+                claim=claim,
+                author=self.unrelated,
+                caption="Report throttle discussion.",
+                status=Thread.Status.OPEN,
+            )
+            target = ThreadComment.objects.create(
+                thread=thread,
+                commenter=self.unrelated,
+                comment_text="Report throttle comment.",
+            )
+            payload = {
+                "target_type": CommunityReport.TargetType.COMMENT,
+                "thread_id": str(thread.pk),
+                "comment_id": str(target.pk),
+                "reason": CommunityReport.Reason.HARASSMENT,
+                "notes": "Repeated report request used only for throttle testing.",
+            }
+            client = self._client(self.author)
+
+            first = client.post(
+                reverse("community-report-list"),
+                payload,
+                format="json",
+            )
+            duplicate = client.post(
+                reverse("community-report-list"),
+                payload,
+                format="json",
+            )
+            throttled = client.post(
+                reverse("community-report-list"),
+                payload,
+                format="json",
+            )
+            history = client.get(reverse("community-report-list"))
+
+            self.assertEqual(first.status_code, status.HTTP_201_CREATED)
+            self.assertEqual(duplicate.status_code, status.HTTP_400_BAD_REQUEST)
+            self.assertEqual(
+                throttled.status_code,
+                status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+            self.assertIn("Retry-After", throttled)
+            self.assertEqual(history.status_code, status.HTTP_200_OK)
+        finally:
+            CommunityReportBurstRateThrottle.THROTTLE_RATES = original_burst
+            CommunityReportHourlyRateThrottle.THROTTLE_RATES = original_hourly
+            cache.clear()
 
     def test_safety_audit_records_account_events_without_exposing_user_request_as_platform_authority(self):
         _, case, _, _ = self._remove("audit")
