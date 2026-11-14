@@ -10,6 +10,9 @@ import Icons from "../Icons.jsx";
 import Button from "../ui/Button.jsx";
 import Select from "../ui/Select.jsx";
 import Textarea from "../ui/Textarea.jsx";
+import CommunityAccountEnforcementPanel, {
+   SafetyAccountActionForm,
+} from "./CommunityAccountEnforcementPanel.jsx";
 
 import "./SafetyReviewPanel.css";
 
@@ -952,6 +955,8 @@ function SafetyReviewPanel() {
             </div>
          </div>
 
+         <CommunityAccountEnforcementPanel safetyFetch={safetyFetch} />
+
          {notice && (
             <div className="safety-notice" role="status" aria-live="polite">
                <Icons name="info" size={17} />
@@ -1538,6 +1543,21 @@ function SafetyReviewPanel() {
                            </>
                         )}
                      </section>
+
+                     <SafetyAccountActionForm
+                        detail={detail}
+                        safetyFetch={safetyFetch}
+                        onUpdated={(accountEnforcement) => {
+                           setDetail((current) =>
+                              current
+                                 ? {
+                                      ...current,
+                                      account_enforcement: accountEnforcement,
+                                   }
+                                 : current,
+                           );
+                        }}
+                     />
 
                      <section className="safety-detail-section">
                         <div className="safety-subheading-row safety-major-section-heading">
