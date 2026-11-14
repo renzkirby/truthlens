@@ -199,6 +199,19 @@ export const API_ENDPOINTS = {
       `community/moderation/outcomes/${encodeURIComponent(decisionId)}/`,
    COMMUNITY_MODERATION_RECONSIDERATION: (decisionId) =>
       `community/moderation/outcomes/${encodeURIComponent(decisionId)}/reconsideration/`,
+   COMMUNITY_ACCOUNT_ENFORCEMENT_SEEN: (enforcementId) =>
+      `community/account-enforcements/${encodeURIComponent(enforcementId)}/seen/`,
+   COMMUNITY_ACCOUNT_ENFORCEMENT_REVIEW: (enforcementId) =>
+      `community/account-enforcements/${encodeURIComponent(enforcementId)}/review/`,
+   SAFETY_ACCOUNT_ENFORCEMENTS: "moderation/safety/account-enforcements/",
+   SAFETY_ACCOUNT_ENFORCEMENT: (caseId) =>
+      `moderation/safety/cases/${encodeURIComponent(caseId)}/account-enforcement/`,
+   SAFETY_ACCOUNT_ENFORCEMENT_LIFT: (enforcementId) =>
+      `moderation/safety/account-enforcements/${encodeURIComponent(enforcementId)}/lift/`,
+   SAFETY_ACCOUNT_ENFORCEMENT_REVIEW_START: (reviewId) =>
+      `moderation/safety/account-enforcement-reviews/${encodeURIComponent(reviewId)}/start/`,
+   SAFETY_ACCOUNT_ENFORCEMENT_REVIEW_RESOLVE: (reviewId) =>
+      `moderation/safety/account-enforcement-reviews/${encodeURIComponent(reviewId)}/resolve/`,
    SAFETY_CASES: "moderation/safety/cases/",
    SAFETY_CASE_DETAIL: (caseId) => `moderation/safety/cases/${encodeURIComponent(caseId)}/`,
    SAFETY_CASE_CLAIM: (caseId) => `moderation/safety/cases/${encodeURIComponent(caseId)}/claim/`,
