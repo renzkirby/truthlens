@@ -76,6 +76,7 @@ from .community_safety_target_service import target_excerpt, target_owner
 from .community_policy import (
     COMMUNITY_VIOLATION_CHOICES,
     community_policy_payload,
+    community_policy_supports_account_enforcement,
 )
 from .adjudication_provenance import (
     AdjudicationProvenance,
@@ -2171,6 +2172,7 @@ class SafetyCaseDetailSerializer(SafetyCaseSummarySerializer):
     reconsideration = serializers.SerializerMethodField()
     safety_decision = serializers.SerializerMethodField()
     account_enforcement = serializers.SerializerMethodField()
+    account_enforcement_available = serializers.SerializerMethodField()
     account_enforcement_issuance_enabled = serializers.SerializerMethodField()
 
     def get_reports(self, obj):
@@ -2217,6 +2219,22 @@ class SafetyCaseDetailSerializer(SafetyCaseSummarySerializer):
         return serialize_enforcement(
             enforcement,
             include_internal=True,
+        )
+
+    def get_account_enforcement_available(self, obj):
+        decision = getattr(obj, "community_safety_decision", None)
+        if decision is None or decision.action != "REMOVE":
+            return False
+        if not community_policy_supports_account_enforcement(
+            decision.policy_version
+        ):
+            return False
+        reconsideration = getattr(decision, "reconsideration", None)
+        if reconsideration is None:
+            return True
+        return bool(
+            reconsideration.outcome
+            == CommunitySafetyReconsideration.Outcome.UPHELD
         )
 
     def get_account_enforcement_issuance_enabled(self, obj):
@@ -2267,6 +2285,7 @@ class SafetyCaseDetailSerializer(SafetyCaseSummarySerializer):
             "reconsideration",
             "safety_decision",
             "account_enforcement",
+            "account_enforcement_available",
             "account_enforcement_issuance_enabled",
         ]
         read_only_fields = fields
