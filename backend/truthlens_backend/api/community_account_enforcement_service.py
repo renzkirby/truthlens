@@ -313,14 +313,16 @@ def _record_enforcement_event(
     notes,
     previous_state=None,
     new_state=None,
+    authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+    capability=PartnerCapability.REVIEW_SAFETY,
 ):
     return record_accountability_event(
         action_type=action_type,
         resource_type=AccountabilityEvent.ResourceType.USER_ACCOUNT,
         resource_id=enforcement.user_id or enforcement.username_snapshot,
-        authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+        authority_scope=authority_scope,
         actor=actor,
-        capability=PartnerCapability.REVIEW_SAFETY,
+        capability=capability,
         previous_state=previous_state or {},
         new_state=new_state or {},
         reason_code=reason_code,
@@ -621,6 +623,8 @@ def submit_enforcement_review(*, enforcement_id, actor, request_statement):
             "review_id": str(review.pk),
             "status": review.status,
         },
+        authority_scope=AccountabilityEvent.AuthorityScope.PERSONAL,
+        capability="",
     )
     return review
 
