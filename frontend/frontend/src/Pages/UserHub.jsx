@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import "./UserHub.css";
 import Icons from "../components/Icons.jsx";
@@ -1025,7 +1025,7 @@ const UserHubSkeleton = () => {
 };
 
 export default function UserHub() {
-   const { authFetch } = useAuth();
+   const { authFetch, refreshUser } = useAuth();
    const navigate = useNavigate();
    const [hubData, setHubData] = useState(null);
    const [loading, setLoading] = useState(true);
@@ -1216,13 +1216,56 @@ export default function UserHub() {
       );
    }
 
-   const { reputation, impact, user_info: userInfo } = hubData;
+   const {
+      reputation,
+      impact,
+      user_info: userInfo,
+      community_standing: communityStanding,
+   } = hubData;
    const professionalIdentity = userInfo?.professional_identity || null;
    const professionalOrganization = professionalIdentity?.organization || null;
 
    const username = userInfo?.username || "User";
    const avatarUrl = userInfo?.avatar_url;
    const avatarInitial = username.charAt(0).toUpperCase();
+   const standingAccess = communityStanding?.access || {
+      status: "FULL_ACCESS",
+      can_contribute: true,
+      restriction_ends_at: null,
+   };
+   const standingHistory = Array.isArray(communityStanding?.history)
+      ? communityStanding.history
+      : [];
+   const unseenEnforcement = standingHistory.find((item) => item?.seen === false) || null;
+
+   const standingLabel = {
+      FULL_ACCESS: "Full access",
+      TEMPORARILY_RESTRICTED: "Temporarily restricted",
+      INDEFINITELY_RESTRICTED: "Indefinitely restricted",
+   }[standingAccess.status] || "Full access";
+
+   const standingDescription =
+      standingAccess.status === "TEMPORARILY_RESTRICTED"
+         ? `You can read Community content and report unsafe content, but you cannot create or edit Community contributions until ${new Date(standingAccess.restriction_ends_at).toLocaleString()}.`
+         : standingAccess.status === "INDEFINITELY_RESTRICTED"
+           ? "Your Community contribution access has no automatic end date. Verification, reading, reporting, and separately authorized Partner Workspace access remain available."
+           : "You currently have full Community participation access.";
+
+   const handleAcknowledgeEnforcement = async (enforcement) => {
+      if (!enforcement?.id) return;
+      try {
+         await authFetch(
+            buildApiUrl(`community/account-enforcements/${enforcement.id}/seen/`),
+            { method: "POST" },
+         );
+         await Promise.all([
+            loadDashboard({ isRefresh: true }),
+            refreshUser(),
+         ]);
+      } catch (err) {
+         console.error("Failed to acknowledge Community account action:", err);
+      }
+   };
 
    const handleEscalate = (claimId) => {
       navigate(`/thread/create?claim_id=${encodeURIComponent(claimId)}`);
@@ -1764,6 +1807,114 @@ export default function UserHub() {
                   </aside>
                </section>
                )}
+
+               {unseenEnforcement && (
+                  <section className="hub-standing-alert" role="status" aria-live="polite">
+                     <div className="hub-standing-alert-icon">
+                        <Icons name="shield" size={20} />
+                     </div>
+                     <div className="hub-standing-alert-copy">
+                        <strong>
+                           {unseenEnforcement.action === "WARNING"
+                              ? "You received a Community warning"
+                              : "Your Community access changed"}
+                        </strong>
+                        <p>
+                           {unseenEnforcement.action === "WARNING"
+                              ? "Your access is unchanged. Review the reason and policy in Community Standing."
+                              : "Platform Safety issued a Community contribution restriction. Your reason and review options are available below."}
+                        </p>
+                     </div>
+                     <div className="hub-standing-alert-actions">
+                        <a href="#community-standing">View details</a>
+                        <button
+                           type="button"
+                           onClick={() => handleAcknowledgeEnforcement(unseenEnforcement)}
+                        >
+                           Dismiss
+                        </button>
+                     </div>
+                  </section>
+               )}
+
+               <section id="community-standing" className="hub-standing-section box-panel">
+                  <div className="hub-section-header">
+                     <div>
+                        <span className="hub-section-eyebrow">COMMUNITY STANDING</span>
+                        <h2 className="hub-section-heading">{standingLabel}</h2>
+                        <p className="hub-section-description">{standingDescription}</p>
+                     </div>
+                     <Link className="hub-standing-guidelines-link" to="/community-guidelines">
+                        Community Guidelines
+                        <Icons name="arrow-right" size={14} />
+                     </Link>
+                  </div>
+
+                  {standingHistory.length === 0 ? (
+                     <div className="hub-standing-empty">
+                        <Icons name="shield-check" size={20} />
+                        <div>
+                           <strong>No account-level Safety actions</strong>
+                           <p>Your Community Standing has no warning or account restriction history.</p>
+                        </div>
+                     </div>
+                  ) : (
+                     <div className="hub-standing-history">
+                        <h3>Recent account actions</h3>
+                        {standingHistory.map((item) => {
+                           const label = {
+                              WARNING: "Warning",
+                              TEMPORARY_RESTRICTION: "Temporary Community restriction",
+                              INDEFINITE_RESTRICTION: "Indefinite Community restriction",
+                           }[item.action] || item.action;
+                           const stateLabel =
+                              item.state === "EXPIRED"
+                                 ? "Expired"
+                                 : item.state === "REVOKED"
+                                   ? "No longer active"
+                                   : item.state === "ACTIVE"
+                                     ? "Active"
+                                     : "Recorded";
+                           return (
+                              <article key={item.id} className="hub-standing-history-item">
+                                 <div className="hub-standing-history-heading">
+                                    <div>
+                                       <strong>{label}</strong>
+                                       <span>{stateLabel}</span>
+                                    </div>
+                                    <time dateTime={item.issued_at}>
+                                       {new Date(item.issued_at).toLocaleDateString()}
+                                    </time>
+                                 </div>
+                                 <p>{item.user_rationale}</p>
+                                 <div className="hub-standing-history-meta">
+                                    <span>{item.violation?.title || "Community Guidelines"}</span>
+                                    <span>Policy {item.policy?.version}</span>
+                                    {item.restriction_ends_at && (
+                                       <span>
+                                          Until {new Date(item.restriction_ends_at).toLocaleString()}
+                                       </span>
+                                    )}
+                                 </div>
+                                 {item.review && (
+                                    <p className="hub-standing-review-state">
+                                       Review: {item.review.outcome || item.review.status}
+                                    </p>
+                                 )}
+                                 {item.safety_decision_id && (
+                                    <Link
+                                       className="hub-standing-review-link"
+                                       to={`/community/moderation/outcomes/${item.safety_decision_id}`}
+                                    >
+                                       Review decision
+                                    </Link>
+                                 )}
+                              </article>
+                           );
+                        })}
+                     </div>
+                  )}
+               </section>
 
                {/* Impact Overview */}
                <section className="hub-impact-section">
