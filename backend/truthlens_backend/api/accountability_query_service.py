@@ -738,8 +738,16 @@ def list_platform_accountability_events(
         )
 
     queryset = AccountabilityEvent.objects.filter(
-        authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
-        action_type__in=SAFETY_ACTIONS,
+        Q(
+            authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+            action_type__in=SAFETY_ACTIONS,
+        )
+        | Q(
+            authority_scope=AccountabilityEvent.AuthorityScope.PERSONAL,
+            action_type=(
+                AccountabilityEvent.ActionType.COMMUNITY_ENFORCEMENT_REVIEW_SUBMITTED
+            ),
+        )
     ).select_related("actor", "authority_organization", "subject_organization")
     queryset = _apply_filters(
         queryset,
