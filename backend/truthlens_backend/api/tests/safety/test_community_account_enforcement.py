@@ -215,6 +215,27 @@ class CommunityAccountEnforcementTests(APITestCase):
         self.assertEqual(lifted.status_code, status.HTTP_200_OK)
         self.assertTrue(get_user_community_access(self.author)["can_contribute"])
 
+    def test_guidelines_1_0_removal_cannot_issue_retroactive_account_action(self):
+        _, case, _, decision = self._remove("historical-policy")
+        CommunitySafetyDecision.objects.filter(pk=decision.pk).update(
+            policy_version="1.0"
+        )
+
+        response = self._issue(case, action="WARNING")
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertFalse(CommunityAccountEnforcement.objects.exists())
+        self.assertIn(
+            "predates Community account enforcement",
+            str(response.data.get("detail", "")),
+        )
+
+        detail = self._client(self.moderator).get(
+            reverse("safety_case_detail", kwargs={"case_id": case.pk})
+        )
+        self.assertEqual(detail.status_code, status.HTTP_200_OK)
+        self.assertFalse(detail.data["account_enforcement_available"])
+
     def test_warning_is_historical_only_and_does_not_change_trust(self):
         _, case, _, _ = self._remove("warning")
         trust_after_removal = calculate_trust_components(self.author)[
