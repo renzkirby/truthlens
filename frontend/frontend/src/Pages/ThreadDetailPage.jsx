@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useNotification } from "../hooks/useNotification";
+import {
+   communityRestrictionSummary,
+   useCommunityAccess,
+} from "../hooks/useCommunityAccess";
 import ImageLightbox from "../components/ImageLightbox";
 import Icons from "../components/Icons";
 import EvidenceCard from "../components/EvidenceCard";
@@ -320,6 +324,7 @@ function CommentItem({
    onRetry,
    onDiscard,
    readOnly = false,
+   canContribute = true,
 }) {
    const isOwner = String(comment.commenter?.id || "") === String(currentUserId || "");
    const username = comment.commenter?.username || "Unknown";
@@ -402,7 +407,9 @@ function CommentItem({
 
             {!readOnly && !isEditing && isFailed && (
                <div className="thread-detail-comment-actions" role="group" aria-label={`Recovery actions for ${username}'s comment`}>
-                  <button type="button" className="is-primary-text" onClick={() => onRetry(comment)}>Retry</button>
+                  {canContribute && (
+                     <button type="button" className="is-primary-text" onClick={() => onRetry(comment)}>Retry</button>
+                  )}
                   <button type="button" onClick={() => onDiscard(comment)}>Discard</button>
                </div>
             )}
@@ -414,26 +421,33 @@ function CommentItem({
                         <Icons name="thumbs-up" size={13} />
                         <span aria-hidden="true">{comment.like_count || 0}</span>
                      </span>
+                  ) : canContribute || comment.is_liked ? (
+                     <button
+                        type="button"
+                        className={`thread-detail-comment-like ${comment.is_liked ? "is-selected" : ""}`}
+                        aria-pressed={Boolean(comment.is_liked)}
+                        aria-label={`${comment.is_liked ? "Unlike" : "Like"} ${username}'s comment. ${comment.like_count || 0} likes`}
+                        disabled={isLiking || (!canContribute && !comment.is_liked)}
+                        onClick={() => onLike(comment)}
+                     >
+                        <Icons name="thumbs-up" size={13} />
+                        <span aria-hidden="true">{comment.like_count || 0}</span>
+                     </button>
                   ) : (
-                     <>
-                        <button
-                           type="button"
-                           className={`thread-detail-comment-like ${comment.is_liked ? "is-selected" : ""}`}
-                           aria-pressed={Boolean(comment.is_liked)}
-                           aria-label={`${comment.is_liked ? "Unlike" : "Like"} ${username}'s comment. ${comment.like_count || 0} likes`}
-                           disabled={isLiking}
-                           onClick={() => onLike(comment)}
-                        >
-                           <Icons name="thumbs-up" size={13} />
-                           <span aria-hidden="true">{comment.like_count || 0}</span>
-                        </button>
-                        <button type="button" onClick={() => onReply(comment)}>Reply</button>
-                     </>
+                     <span className="thread-detail-comment-like thread-detail-comment-like--readonly" aria-label={`${comment.like_count || 0} likes`}>
+                        <Icons name="thumbs-up" size={13} />
+                        <span aria-hidden="true">{comment.like_count || 0}</span>
+                     </span>
+                  )}
+                  {!readOnly && canContribute && (
+                     <button type="button" onClick={() => onReply(comment)}>Reply</button>
                   )}
                   <button type="button" onClick={() => onShare(comment)}>Share</button>
                   {!readOnly && isOwner && (
                      <>
-                        <button type="button" className="is-owner-action" onClick={() => onStartEdit(comment)}>Edit</button>
+                        {canContribute && (
+                           <button type="button" className="is-owner-action" onClick={() => onStartEdit(comment)}>Edit</button>
+                        )}
                         <button type="button" className="is-danger is-owner-action" onClick={() => onDelete(comment.id)}>Delete</button>
                      </>
                   )}
@@ -479,6 +493,7 @@ function CommentThread({
    onShowMoreReplies,
    onHideReplies,
    readOnly = false,
+   canContribute = true,
 }) {
    const replies = flattenReplies(root);
    const safeVisibleCount = Math.max(0, Math.min(visibleReplyCount, replies.length));
@@ -509,9 +524,10 @@ function CommentThread({
             onRetry={onRetry}
             onDiscard={onDiscard}
             readOnly={readOnly}
+            canContribute={canContribute}
          />
 
-         {!readOnly && rootHasReplyComposer && (
+         {!readOnly && canContribute && rootHasReplyComposer && (
             <InlineReplyComposer
                target={root}
                currentUser={currentUser}
@@ -551,8 +567,9 @@ function CommentThread({
                         onRetry={onRetry}
                         onDiscard={onDiscard}
                         readOnly={readOnly}
+                        canContribute={canContribute}
                      />
-                     {!readOnly && replyComposer?.targetId === comment.id && (
+                     {!readOnly && canContribute && replyComposer?.targetId === comment.id && (
                         <InlineReplyComposer
                            target={comment}
                            currentUser={currentUser}
@@ -722,7 +739,16 @@ function ThreadDetailSkeleton() {
 export default function ThreadDetailPage() {
    const { authFetch, user } = useAuth();
    const { addToast } = useNotification();
-   const canParticipateInCommunity = user?.community_identity?.can_participate !== false;
+   const {
+      identityEligible: canParticipateInCommunity,
+      canContribute,
+      accessStatus,
+      restrictionEndsAt,
+   } = useCommunityAccess();
+   const restrictionSummary = communityRestrictionSummary(
+      accessStatus,
+      restrictionEndsAt,
+   );
    const { threadId } = useParams();
    const navigate = useNavigate();
    const location = useLocation();
@@ -858,9 +884,9 @@ export default function ThreadDetailPage() {
       const openForm = searchParams.get("openForm") === "evidence";
       if (commentHash) setCurrentTab("comments");
       else setCurrentTab(searchParams.get("tab") === "evidence" || openForm ? "evidence" : "comments");
-      if (openForm && canParticipateInCommunity) setShowEvidenceForm(true);
-      else if (!canParticipateInCommunity) setShowEvidenceForm(false);
-   }, [canParticipateInCommunity, commentHash, searchParams]);
+      if (openForm && canContribute) setShowEvidenceForm(true);
+      else if (!canContribute) setShowEvidenceForm(false);
+   }, [canContribute, commentHash, searchParams]);
 
    useEffect(() => {
       if (loading || !commentHash || deepLinkHandledRef.current || currentTab !== "comments") return undefined;
@@ -1003,6 +1029,7 @@ export default function ThreadDetailPage() {
 
    async function handleCommentSubmit(event) {
       event.preventDefault();
+      if (!canContribute) return;
       const text = newComment.trim();
       if (!text || submittingComment) return;
 
@@ -1019,7 +1046,7 @@ export default function ThreadDetailPage() {
    }
 
    function startReply(comment, rootId) {
-      if (comment._sendState) return;
+      if (!canContribute || comment._sendState) return;
       setReplyComposer({
          targetId: comment.id,
          rootId,
@@ -1034,6 +1061,7 @@ export default function ThreadDetailPage() {
 
    async function handleReplySubmit(event, targetComment) {
       event.preventDefault();
+      if (!canContribute) return;
       const text = replyComposer?.text?.trim();
       if (!text || !targetComment || replyComposer?.targetId !== targetComment.id) return;
 
@@ -1065,6 +1093,7 @@ export default function ThreadDetailPage() {
       if (likingIds.has(comment.id) || comment._sendState) return;
 
       const previousLiked = Boolean(comment.is_liked);
+      if (!canContribute && !previousLiked) return;
       const previousCount = Number(comment.like_count || 0);
       const optimisticLiked = !previousLiked;
       const optimisticCount = Math.max(0, previousCount + (optimisticLiked ? 1 : -1));
@@ -1127,6 +1156,7 @@ export default function ThreadDetailPage() {
    }
 
    async function handleSaveCommentEdit(commentId) {
+      if (!canContribute) return;
       const text = editingCommentText.trim();
       if (!text) return;
       try {
@@ -1181,6 +1211,7 @@ export default function ThreadDetailPage() {
 
    async function handleEvidenceSubmit(event) {
       event.preventDefault();
+      if (!canContribute) return;
       if (!evidenceUrl.trim() || !evidenceExplanation.trim() || !evidenceAssessment || submittingEvidence) return;
       setSubmittingEvidence(true);
       try {
@@ -1212,7 +1243,7 @@ export default function ThreadDetailPage() {
    }
 
    async function handleSaveEvidenceEdit(evidenceId, richCaption, caption, verdict) {
-      if (!caption.trim() || !verdict) return;
+      if (!canContribute || !caption.trim() || !verdict) return;
       try {
          await authFetch(apiUrl(`evidence/${evidenceId}/`), {
             method: "PATCH",
@@ -1243,6 +1274,8 @@ export default function ThreadDetailPage() {
 
       const previousEvidence = { ...evidence };
       const previousVoteValue = evidence.my_vote?.vote_value;
+      const isRemovingExistingVote = Boolean(evidence.my_vote) && previousVoteValue === nextValue;
+      if (!canContribute && !isRemovingExistingVote) return;
       let nextUpvotes = Number(evidence.upvotes || 0);
       let nextDownvotes = Number(evidence.downvotes || 0);
       let nextMyVote = evidence.my_vote;
@@ -1410,6 +1443,16 @@ export default function ThreadDetailPage() {
                   <span>Started {formatDate(thread.created_at, { hour: "numeric", minute: "2-digit" })} by <strong>@{authorUsername}</strong></span>
                </div>
                <div className="thread-detail-metadata">
+                  {canParticipateInCommunity && !canContribute && (
+                     <Link
+                        className="thread-detail-governance-chip"
+                        to="/dashboard#community-standing"
+                        title="Your Community contribution access is restricted. Reading and safety reporting remain available."
+                     >
+                        <Icons name="shield" size={13} aria-hidden="true" />
+                        Community access restricted
+                     </Link>
+                  )}
                   {!canParticipateInCommunity && (
                      <span
                         className="thread-detail-governance-chip"
@@ -1553,7 +1596,7 @@ export default function ThreadDetailPage() {
                   </div>
                </article>
 
-               {canParticipateInCommunity && (
+               {canParticipateInCommunity && canContribute && (
                   <button
                      type="button"
                      className="thread-detail-evidence-cta"
@@ -1579,7 +1622,14 @@ export default function ThreadDetailPage() {
 
                   {currentTab === "comments" && (
                      <div id="thread-detail-comments-panel" role="tabpanel" aria-labelledby="thread-detail-comments-tab" className="thread-detail-panel thread-detail-panel--comments">
-                        {canParticipateInCommunity && (
+                        {canParticipateInCommunity && !canContribute && (
+                           <div className="thread-detail-restriction-note">
+                              <Icons name="shield" size={16} />
+                              <span>{restrictionSummary}</span>
+                              <Link to="/dashboard#community-standing">View Community Standing</Link>
+                           </div>
+                        )}
+                        {canParticipateInCommunity && canContribute && (
                            <form className="thread-detail-composer thread-detail-composer--classic" onSubmit={handleCommentSubmit}>
                               <Avatar user={user} />
                               <div className="thread-detail-composer-body">
@@ -1606,7 +1656,7 @@ export default function ThreadDetailPage() {
                         <div className="thread-detail-comment-list">
                            {!commentTree.length && (
                               <p className="thread-detail-empty">
-                                 {canParticipateInCommunity
+                                 {canParticipateInCommunity && canContribute
                                     ? "No comments yet. Start the discussion."
                                     : "No Community comments have been posted yet."}
                               </p>
@@ -1659,6 +1709,7 @@ export default function ThreadDetailPage() {
                                  onShowMoreReplies={showMoreReplies}
                                  onHideReplies={hideReplies}
                                  readOnly={!canParticipateInCommunity}
+                                 canContribute={canContribute}
                               />
                            ))}
                         </div>
@@ -1672,13 +1723,20 @@ export default function ThreadDetailPage() {
                               <h2>Evidence Board</h2>
                               <p>Community-submitted sources, ranked by weighted trust score.</p>
                            </div>
-                           {canParticipateInCommunity && (
+                           {canParticipateInCommunity && canContribute && (
                               <button type="button" className="thread-detail-text-button" onClick={() => setShowEvidenceForm((open) => !open)}>
                                  {showEvidenceForm ? "Close form" : "Contribute evidence"}
                               </button>
                            )}
                         </div>
-                        {canParticipateInCommunity && showEvidenceForm && (
+                        {canParticipateInCommunity && !canContribute && (
+                           <div className="thread-detail-restriction-note">
+                              <Icons name="shield" size={16} />
+                              <span>{restrictionSummary}</span>
+                              <Link to="/dashboard#community-standing">View Community Standing</Link>
+                           </div>
+                        )}
+                        {canParticipateInCommunity && canContribute && showEvidenceForm && (
                            <form className="thread-detail-evidence-form thread-detail-evidence-form--legacy" ref={evidenceFormRef} onSubmit={handleEvidenceSubmit}>
                               <div className="thread-detail-evidence-form-title">
                                  <Icons name="paperclip" size={14} />
@@ -1786,6 +1844,7 @@ export default function ThreadDetailPage() {
                                  setEditingRich={setEditingEvidenceRich}
                                  setEditingVerdict={setEditingEvidenceVerdict}
                                  readOnly={!canParticipateInCommunity}
+                                 canContribute={canContribute}
                               />
                            ))}
                         </div>
