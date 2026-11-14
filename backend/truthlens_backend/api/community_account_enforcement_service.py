@@ -3,7 +3,6 @@
 import logging
 from datetime import date, datetime, timedelta
 
-from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from django.db.models import Q
@@ -430,15 +429,6 @@ def issue_account_enforcement(
     duration_code="",
 ):
     _require_safety_reviewer(actor)
-
-    if not getattr(
-        settings,
-        "COMMUNITY_ACCOUNT_ENFORCEMENT_ISSUANCE_ENABLED",
-        False,
-    ):
-        raise CommunityAccountEnforcementConflict(
-            "Community account enforcement issuance is currently disabled."
-        )
 
     decision = (
         CommunitySafetyDecision.objects.select_for_update()
