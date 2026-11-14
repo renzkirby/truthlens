@@ -1,6 +1,7 @@
 from collections.abc import Mapping
 
 from rest_framework import serializers
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.core.validators import URLValidator
@@ -2168,6 +2169,8 @@ class SafetyCaseDetailSerializer(SafetyCaseSummarySerializer):
     events = serializers.SerializerMethodField()
     community_policy = serializers.SerializerMethodField()
     reconsideration = serializers.SerializerMethodField()
+    account_enforcement = serializers.SerializerMethodField()
+    account_enforcement_issuance_enabled = serializers.SerializerMethodField()
 
     def get_reports(self, obj):
         return SafetyReportDetailSerializer(
@@ -2181,6 +2184,31 @@ class SafetyCaseDetailSerializer(SafetyCaseSummarySerializer):
 
     def get_community_policy(self, obj):
         return community_policy_payload()
+
+    def get_account_enforcement(self, obj):
+        decision = getattr(obj, "community_safety_decision", None)
+        enforcement = (
+            getattr(decision, "account_enforcement", None)
+            if decision is not None
+            else None
+        )
+        if enforcement is None:
+            return None
+        from .community_account_enforcement_service import serialize_enforcement
+
+        return serialize_enforcement(
+            enforcement,
+            include_internal=True,
+        )
+
+    def get_account_enforcement_issuance_enabled(self, obj):
+        return bool(
+            getattr(
+                settings,
+                "COMMUNITY_ACCOUNT_ENFORCEMENT_ISSUANCE_ENABLED",
+                False,
+            )
+        )
 
     def get_reconsideration(self, obj):
         decision = getattr(obj, "community_safety_decision", None)
@@ -2219,6 +2247,8 @@ class SafetyCaseDetailSerializer(SafetyCaseSummarySerializer):
             "events",
             "community_policy",
             "reconsideration",
+            "account_enforcement",
+            "account_enforcement_issuance_enabled",
         ]
         read_only_fields = fields
 
