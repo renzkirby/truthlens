@@ -1,7 +1,7 @@
 """Community account enforcement, Standing, review, and revocation services."""
 
 import logging
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 
 from django.conf import settings
 from django.contrib.auth.models import User
@@ -321,6 +321,21 @@ def get_community_standing(user, *, history_limit=20):
     }
 
 
+def _json_safe_audit_snapshot(value):
+    """Convert enforcement snapshots to JSON-safe accountability payloads."""
+
+    if isinstance(value, dict):
+        return {
+            key: _json_safe_audit_snapshot(nested_value)
+            for key, nested_value in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_json_safe_audit_snapshot(item) for item in value]
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return value
+
+
 def _record_enforcement_event(
     *,
     enforcement,
@@ -340,8 +355,8 @@ def _record_enforcement_event(
         authority_scope=authority_scope,
         actor=actor,
         capability=capability,
-        previous_state=previous_state or {},
-        new_state=new_state or {},
+        previous_state=_json_safe_audit_snapshot(previous_state or {}),
+        new_state=_json_safe_audit_snapshot(new_state or {}),
         reason_code=reason_code,
         notes=notes,
         context={
