@@ -35,6 +35,7 @@ from .factual_correction_proposal_schema import (
     FactualCorrectionProposalSchemaError,
     validate_factual_correction_proposal,
 )
+from .community_policy import community_policy_supports_account_enforcement
 from .rich_text_schema import (
     PROFILE_PUBLICATION,
     RichTextSchemaError,
@@ -2925,6 +2926,17 @@ class CommunityAccountEnforcement(models.Model):
                 raise ValidationError(
                     {"policy_version": "The enforcement policy version must match its Safety decision."}
                 )
+        if not community_policy_supports_account_enforcement(
+            self.policy_version
+        ):
+            raise ValidationError(
+                {
+                    "policy_version": (
+                        "Account enforcement requires a Community Guidelines "
+                        "version that authorizes account-level actions."
+                    )
+                }
+            )
         if self._state.adding and self.user_id is None:
             raise ValidationError({"user": "A new account enforcement action requires a user."})
         if self.action == self.Action.TEMPORARY_RESTRICTION:
