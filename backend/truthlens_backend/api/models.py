@@ -132,6 +132,10 @@ class Notification(models.Model):
             "COMMUNITY_MODERATION_OUTCOME",
             "Community moderation outcome",
         )
+        COMMUNITY_ACCOUNT_ENFORCEMENT = (
+            "COMMUNITY_ACCOUNT_ENFORCEMENT",
+            "Community account enforcement",
+        )
 
     class TargetType(models.TextChoices):
         CLAIM = "CLAIM", "Claim"
@@ -167,6 +171,7 @@ class Notification(models.Model):
                 "FACTUAL_CORRECTION_PUBLISHED", "ORGANIZATION_MEMBERSHIP_CHANGED",
                 "ORGANIZATION_GOVERNANCE_CHANGED", "THREAD_COMMENTED",
                 "EVIDENCE_REVIEWED", "USER_FOLLOWED", "COMMUNITY_MODERATION_OUTCOME",
+                "COMMUNITY_ACCOUNT_ENFORCEMENT",
             ]), name="notification_type_valid"),
             models.CheckConstraint(condition=Q(target_type__in=[
                 "CLAIM", "THREAD", "OFFICIAL_FACT_CHECK", "WORKSPACE", "ORGANIZATION",
@@ -2780,6 +2785,269 @@ class CommunitySafetyReconsideration(models.Model):
         return f"{state} - Safety decision {self.safety_decision_id}"
 
 
+class CommunityAccountEnforcement(models.Model):
+    """Human-issued Community account action derived from one Safety removal."""
+
+    class Action(models.TextChoices):
+        WARNING = "WARNING", "Warning"
+        TEMPORARY_RESTRICTION = (
+            "TEMPORARY_RESTRICTION",
+            "Temporary Community restriction",
+        )
+        INDEFINITE_RESTRICTION = (
+            "INDEFINITE_RESTRICTION",
+            "Indefinite Community restriction",
+        )
+
+    class RevocationReason(models.TextChoices):
+        REVIEW_REVERSED = "REVIEW_REVERSED", "Review reversed"
+        BASIS_REVERSED = "BASIS_REVERSED", "Underlying content decision reversed"
+        LIFTED_EARLY = "LIFTED_EARLY", "Restriction lifted early"
+        SUPERSEDED = "SUPERSEDED", "Superseded by stronger restriction"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="community_account_enforcements",
+    )
+    username_snapshot = models.CharField(max_length=150)
+    safety_decision = models.OneToOneField(
+        CommunitySafetyDecision,
+        on_delete=models.PROTECT,
+        related_name="account_enforcement",
+    )
+    action = models.CharField(max_length=32, choices=Action.choices)
+    user_rationale = models.TextField()
+    internal_note = models.TextField(blank=True, default="")
+    policy_title_snapshot = models.CharField(max_length=160)
+    policy_version = models.CharField(max_length=20)
+    violation_code_snapshot = models.CharField(max_length=64)
+    violation_label_snapshot = models.CharField(max_length=160)
+    restriction_ends_at = models.DateTimeField(null=True, blank=True)
+    issued_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="community_account_enforcements_issued",
+    )
+    issued_at = models.DateTimeField(default=timezone.now, editable=False)
+    user_seen_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    revoked_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="community_account_enforcements_revoked",
+    )
+    revocation_reason = models.CharField(
+        max_length=32,
+        choices=RevocationReason.choices,
+        blank=True,
+        default="",
+    )
+    revocation_rationale = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["-issued_at", "-id"]
+        indexes = [
+            models.Index(
+                fields=["user", "-issued_at"],
+                name="comm_enforce_user_time_idx",
+            ),
+            models.Index(
+                fields=["user", "restriction_ends_at"],
+                name="comm_enforce_user_end_idx",
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        action="TEMPORARY_RESTRICTION",
+                        restriction_ends_at__isnull=False,
+                    )
+                    | models.Q(
+                        action__in=["WARNING", "INDEFINITE_RESTRICTION"],
+                        restriction_ends_at__isnull=True,
+                    )
+                ),
+                name="comm_enforce_action_expiry_ck",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        revoked_at__isnull=True,
+                        revoked_by__isnull=True,
+                        revocation_reason="",
+                        revocation_rationale="",
+                    )
+                    | (
+                        models.Q(revoked_at__isnull=False)
+                        & ~models.Q(revocation_reason="")
+                        & ~models.Q(revocation_rationale="")
+                    )
+                ),
+                name="comm_enforce_revocation_state_ck",
+            ),
+            models.UniqueConstraint(
+                fields=["user"],
+                condition=models.Q(
+                    action="INDEFINITE_RESTRICTION",
+                    revoked_at__isnull=True,
+                    user__isnull=False,
+                ),
+                name="comm_enforce_one_active_indef",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.safety_decision_id:
+            decision = self.safety_decision
+            if decision.action != CommunitySafetyDecision.Action.REMOVE:
+                raise ValidationError(
+                    {"safety_decision": "Account enforcement requires a removed-content Safety decision."}
+                )
+            if self.user_id is not None and decision.content_owner_id != self.user_id:
+                raise ValidationError(
+                    {"user": "Account enforcement must target the content owner from the Safety decision."}
+                )
+            if self.violation_code_snapshot != decision.violation_code:
+                raise ValidationError(
+                    {"violation_code_snapshot": "The enforcement violation must match its Safety decision."}
+                )
+            if self.policy_version != decision.policy_version:
+                raise ValidationError(
+                    {"policy_version": "The enforcement policy version must match its Safety decision."}
+                )
+        if self._state.adding and self.user_id is None:
+            raise ValidationError({"user": "A new account enforcement action requires a user."})
+        if self.action == self.Action.TEMPORARY_RESTRICTION:
+            if self.restriction_ends_at is None:
+                raise ValidationError(
+                    {"restriction_ends_at": "Temporary restrictions require an end time."}
+                )
+        elif self.restriction_ends_at is not None:
+            raise ValidationError(
+                {"restriction_ends_at": "Only temporary restrictions can have an automatic end time."}
+            )
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.action} - {self.username_snapshot}"
+
+
+class CommunityAccountEnforcementReview(models.Model):
+    """One user-requested review of one Community account action."""
+
+    class Status(models.TextChoices):
+        SUBMITTED = "SUBMITTED", "Submitted"
+        UNDER_REVIEW = "UNDER_REVIEW", "Under review"
+        RESOLVED = "RESOLVED", "Resolved"
+        MOOT = "MOOT", "Moot"
+
+    class Outcome(models.TextChoices):
+        UPHELD = "UPHELD", "Account action upheld"
+        REVERSED = "REVERSED", "Account action reversed"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    enforcement = models.OneToOneField(
+        CommunityAccountEnforcement,
+        on_delete=models.PROTECT,
+        related_name="review",
+    )
+    requested_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="community_account_enforcement_reviews_requested",
+    )
+    request_statement = models.TextField()
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.SUBMITTED,
+    )
+    reviewer = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="community_account_enforcement_reviews",
+    )
+    reviewer_independence_note = models.TextField(blank=True, default="")
+    independence_override_rationale = models.TextField(blank=True, default="")
+    review_started_at = models.DateTimeField(null=True, blank=True)
+    outcome = models.CharField(
+        max_length=20,
+        choices=Outcome.choices,
+        blank=True,
+        default="",
+    )
+    resolution_rationale = models.TextField(blank=True, default="")
+    internal_note = models.TextField(blank=True, default="")
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-submitted_at", "-id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        status="SUBMITTED",
+                        reviewer__isnull=True,
+                        review_started_at__isnull=True,
+                        outcome="",
+                        resolved_at__isnull=True,
+                    )
+                    | models.Q(
+                        status="UNDER_REVIEW",
+                        reviewer__isnull=False,
+                        review_started_at__isnull=False,
+                        outcome="",
+                        resolved_at__isnull=True,
+                    )
+                    | (
+                        models.Q(
+                            status="RESOLVED",
+                            reviewer__isnull=False,
+                            review_started_at__isnull=False,
+                            outcome__in=["UPHELD", "REVERSED"],
+                            resolved_at__isnull=False,
+                        )
+                        & ~models.Q(resolution_rationale="")
+                    )
+                    | (
+                        models.Q(
+                            status="MOOT",
+                            outcome="",
+                            resolved_at__isnull=False,
+                        )
+                        & ~models.Q(resolution_rationale="")
+                    )
+                ),
+                name="comm_enforce_review_state_ck",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.status} - enforcement {self.enforcement_id}"
+
+
 class EvidenceReviewDecision(models.Model):
     class DecisionType(models.TextChoices):
         INDEPENDENT_REVIEW = "INDEPENDENT_REVIEW", "Independent Review"
@@ -3245,6 +3513,42 @@ class AccountabilityEvent(models.Model):
         SAFETY_CONTENT_REMOVED = (
             "SAFETY_CONTENT_REMOVED",
             "Safety Content Removed",
+        )
+        COMMUNITY_WARNING_ISSUED = (
+            "COMMUNITY_WARNING_ISSUED",
+            "Community Warning Issued",
+        )
+        COMMUNITY_RESTRICTION_ISSUED = (
+            "COMMUNITY_RESTRICTION_ISSUED",
+            "Community Restriction Issued",
+        )
+        COMMUNITY_ENFORCEMENT_REVIEW_SUBMITTED = (
+            "COMMUNITY_ENFORCEMENT_REVIEW_SUBMITTED",
+            "Community Enforcement Review Submitted",
+        )
+        COMMUNITY_ENFORCEMENT_REVIEW_STARTED = (
+            "COMMUNITY_ENFORCEMENT_REVIEW_STARTED",
+            "Community Enforcement Review Started",
+        )
+        COMMUNITY_ENFORCEMENT_UPHELD = (
+            "COMMUNITY_ENFORCEMENT_UPHELD",
+            "Community Enforcement Upheld",
+        )
+        COMMUNITY_ENFORCEMENT_REVERSED = (
+            "COMMUNITY_ENFORCEMENT_REVERSED",
+            "Community Enforcement Reversed",
+        )
+        COMMUNITY_ENFORCEMENT_BASIS_REVERSED = (
+            "COMMUNITY_ENFORCEMENT_BASIS_REVERSED",
+            "Community Enforcement Basis Reversed",
+        )
+        COMMUNITY_RESTRICTION_LIFTED = (
+            "COMMUNITY_RESTRICTION_LIFTED",
+            "Community Restriction Lifted",
+        )
+        COMMUNITY_RESTRICTION_SUPERSEDED = (
+            "COMMUNITY_RESTRICTION_SUPERSEDED",
+            "Community Restriction Superseded",
         )
         PLATFORM_SAFETY_MODERATOR_REVOKED = (
             "PLATFORM_SAFETY_MODERATOR_REVOKED",
