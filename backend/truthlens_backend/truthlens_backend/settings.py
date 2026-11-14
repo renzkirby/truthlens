@@ -111,6 +111,14 @@ REST_FRAMEWORK = {
             "DRF_PUBLIC_PARTNER_THROTTLE_RATE",
             "60/minute",
         ),
+        "community_report_burst": os.getenv(
+            "DRF_COMMUNITY_REPORT_BURST_RATE",
+            "5/minute",
+        ),
+        "community_report_hour": os.getenv(
+            "DRF_COMMUNITY_REPORT_HOURLY_RATE",
+            "20/hour",
+        ),
     },
 }
 
@@ -287,6 +295,11 @@ if INVESTIGATION_ROUTING_MODE not in {"off", "enforce"}:
 # Production should provide a shared Redis URL (preferably a dedicated logical
 # database such as /1). Local/test environments retain an in-process cache so
 # contributors do not need Redis just to run the application or test suite.
+COMMUNITY_ACCOUNT_ENFORCEMENT_ISSUANCE_ENABLED = (
+    os.getenv("COMMUNITY_ACCOUNT_ENFORCEMENT_ISSUANCE_ENABLED", "False").lower()
+    == "true"
+)
+
 CACHE_REDIS_URL = (os.getenv("CACHE_REDIS_URL") or "").strip()
 CACHE_KEY_PREFIX = (os.getenv("CACHE_KEY_PREFIX", "truthlens") or "truthlens").strip()
 CACHE_DEFAULT_TIMEOUT_SECONDS = int(
