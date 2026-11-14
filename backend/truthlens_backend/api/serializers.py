@@ -2169,6 +2169,7 @@ class SafetyCaseDetailSerializer(SafetyCaseSummarySerializer):
     events = serializers.SerializerMethodField()
     community_policy = serializers.SerializerMethodField()
     reconsideration = serializers.SerializerMethodField()
+    safety_decision = serializers.SerializerMethodField()
     account_enforcement = serializers.SerializerMethodField()
     account_enforcement_issuance_enabled = serializers.SerializerMethodField()
 
@@ -2184,6 +2185,23 @@ class SafetyCaseDetailSerializer(SafetyCaseSummarySerializer):
 
     def get_community_policy(self, obj):
         return community_policy_payload()
+
+    def get_safety_decision(self, obj):
+        decision = getattr(obj, "community_safety_decision", None)
+        if decision is None:
+            return None
+        return {
+            "id": str(decision.id),
+            "action": decision.action,
+            "target_type": decision.target_type,
+            "target_id": str(decision.target_id_snapshot),
+            "violation_code": decision.violation_code,
+            "violation_title": decision.violation_label_snapshot,
+            "policy_title": decision.policy_title_snapshot,
+            "policy_version": decision.policy_version,
+            "rationale": decision.rationale,
+            "decided_at": decision.decided_at,
+        }
 
     def get_account_enforcement(self, obj):
         decision = getattr(obj, "community_safety_decision", None)
@@ -2247,6 +2265,7 @@ class SafetyCaseDetailSerializer(SafetyCaseSummarySerializer):
             "events",
             "community_policy",
             "reconsideration",
+            "safety_decision",
             "account_enforcement",
             "account_enforcement_issuance_enabled",
         ]
