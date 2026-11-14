@@ -1,6 +1,7 @@
 """Privacy-safe read projection for Community moderation outcomes."""
 
 from .community_policy import get_community_violation
+from .community_account_enforcement_service import serialize_enforcement
 from .models import (
     CommunityReportOutcome,
     CommunitySafetyDecision,
@@ -15,7 +16,15 @@ class CommunityModerationOutcomeNotFound(Exception):
 def get_community_moderation_outcome(*, actor, decision_id):
     decision = (
         CommunitySafetyDecision.objects
-        .select_related("content_owner", "moderation_case", "reconsideration")
+        .select_related(
+            "content_owner",
+            "moderation_case",
+            "reconsideration",
+            "account_enforcement",
+            "account_enforcement__review",
+            "account_enforcement__review__reviewer",
+            "account_enforcement__issued_by",
+        )
         .filter(pk=decision_id)
         .first()
     )
@@ -104,6 +113,12 @@ def get_community_moderation_outcome(*, actor, decision_id):
         payload["can_request_reconsideration"] = can_request_reconsideration(
             decision=decision,
             actor=actor,
+        )
+        enforcement = getattr(decision, "account_enforcement", None)
+        payload["account_enforcement"] = (
+            serialize_enforcement(enforcement, actor=actor)
+            if enforcement is not None
+            else None
         )
     else:
         payload["report"] = {
