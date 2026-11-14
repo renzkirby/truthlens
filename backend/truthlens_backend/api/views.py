@@ -5301,6 +5301,11 @@ def public_partner_detail(
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def toggle_public_partner_follow_view(request, slug):
+    if not can_participate_in_community(request.user):
+        raise PermissionDenied(
+            "Platform staff identities do not participate in Community social activity."
+        )
+
     try:
         result = toggle_public_partner_follow(
             slug=slug,
