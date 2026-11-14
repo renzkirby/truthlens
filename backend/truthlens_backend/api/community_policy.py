@@ -171,6 +171,17 @@ def get_community_violation(code):
     return _COMMUNITY_VIOLATION_BY_CODE.get(code)
 
 
+def community_policy_supports_account_enforcement(version):
+    """Return whether a published Guidelines version authorizes account actions."""
+
+    selected_version = str(version or "").strip()
+    version_record = COMMUNITY_POLICY_VERSIONS.get(selected_version)
+    return bool(
+        version_record
+        and version_record.get("account_enforcement") is not None
+    )
+
+
 def community_policy_payload(version=None):
     selected_version = str(version or COMMUNITY_POLICY_VERSION).strip()
     version_record = COMMUNITY_POLICY_VERSIONS.get(selected_version)
