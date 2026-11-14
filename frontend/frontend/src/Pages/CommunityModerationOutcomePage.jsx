@@ -26,6 +26,10 @@ function CommunityModerationOutcomePage() {
    const [requestStatement, setRequestStatement] = useState("");
    const [requestError, setRequestError] = useState("");
    const [submittingRequest, setSubmittingRequest] = useState(false);
+   const [accountReviewOpen, setAccountReviewOpen] = useState(false);
+   const [accountReviewStatement, setAccountReviewStatement] = useState("");
+   const [accountReviewError, setAccountReviewError] = useState("");
+   const [submittingAccountReview, setSubmittingAccountReview] = useState(false);
 
    useEffect(() => {
       let active = true;
@@ -83,6 +87,53 @@ function CommunityModerationOutcomePage() {
       }
    };
 
+   const handleAccountReviewSubmit = async (event) => {
+      event.preventDefault();
+      const enforcement = outcome?.account_enforcement;
+      const statement = accountReviewStatement.trim();
+
+      if (!enforcement?.id) return;
+      if (statement.length < 20) {
+         setAccountReviewError(
+            "Explain why the account action should be reviewed in at least 20 characters.",
+         );
+         return;
+      }
+
+      setSubmittingAccountReview(true);
+      setAccountReviewError("");
+
+      try {
+         const updatedEnforcement = await authFetch(
+            resolveApiEndpoint(
+               "COMMUNITY_ACCOUNT_ENFORCEMENT_REVIEW",
+               enforcement.id,
+            ),
+            {
+               method: "POST",
+               body: { request_statement: statement },
+            },
+         );
+         setOutcome((current) => ({
+            ...current,
+            account_enforcement: updatedEnforcement,
+         }));
+         setAccountReviewOpen(false);
+         setAccountReviewStatement("");
+      } catch (reviewError) {
+         setAccountReviewError(
+            userFacingErrorMessage(reviewError, {
+               fallback: "We couldn't submit this account-action review. Try again.",
+               conflictMessage: "This account action can no longer accept a review request.",
+               permissionMessage: "This account action cannot be reviewed by this account.",
+               serviceMessage: "Account-action review is temporarily unavailable. Try again shortly.",
+            }),
+         );
+      } finally {
+         setSubmittingAccountReview(false);
+      }
+   };
+
    if (error) {
       return (
          <main className="community-outcome-page">
@@ -125,6 +176,15 @@ function CommunityModerationOutcomePage() {
    const reconsideration = outcome.reconsideration;
    const reversed = reconsideration?.outcome === "REVERSED";
    const reconsiderationPending = reconsideration?.status === "SUBMITTED";
+   const accountEnforcement = outcome.account_enforcement || null;
+   const accountActionLabel = accountEnforcement
+      ? ({
+           WARNING: "Community warning",
+           TEMPORARY_RESTRICTION: "Temporary Community restriction",
+           INDEFINITE_RESTRICTION: "Indefinite Community restriction",
+        }[accountEnforcement.action] || accountEnforcement.action)
+      : null;
+   const accountReview = accountEnforcement?.review || null;
 
    const heading = (() => {
       if (reversed) {
@@ -178,6 +238,163 @@ function CommunityModerationOutcomePage() {
 
                <Link to="/community-guidelines">Read the Community Guidelines</Link>
             </section>
+
+            {isAuthor && accountEnforcement ? (
+               <section className="community-outcome-card community-account-action-card">
+                  <span className="community-outcome-eyebrow">Community access action</span>
+                  <div className="community-outcome-heading">
+                     <div>
+                        <h2>{accountActionLabel}</h2>
+                        <p>
+                           This account-level action is separate from the content-removal decision above.
+                        </p>
+                     </div>
+                     <strong>
+                        {accountEnforcement.state === "ACTIVE"
+                           ? "Active"
+                           : accountEnforcement.state === "EXPIRED"
+                             ? "Expired"
+                             : accountEnforcement.state === "REVOKED"
+                               ? "No longer active"
+                               : "Recorded"}
+                     </strong>
+                  </div>
+
+                  <dl className="community-outcome-details">
+                     <div>
+                        <dt>Community Guidelines finding</dt>
+                        <dd>{accountEnforcement.violation?.title || "Community Guidelines"}</dd>
+                     </div>
+                     <div>
+                        <dt>Policy</dt>
+                        <dd>
+                           {accountEnforcement.policy?.title} · Version {accountEnforcement.policy?.version}
+                        </dd>
+                     </div>
+                     {accountEnforcement.restriction_ends_at ? (
+                        <div>
+                           <dt>Restriction ends</dt>
+                           <dd>{formatDate(accountEnforcement.restriction_ends_at)}</dd>
+                        </div>
+                     ) : null}
+                  </dl>
+
+                  <div className="community-outcome-rationale">
+                     <h3>Why this account action was issued</h3>
+                     <p>{accountEnforcement.user_rationale}</p>
+                  </div>
+
+                  {accountEnforcement.revoked_at ? (
+                     <div className="community-account-action-update">
+                        <h3>Account action updated</h3>
+                        <p>{accountEnforcement.revocation_rationale}</p>
+                        <small>Updated {formatDate(accountEnforcement.revoked_at)}</small>
+                     </div>
+                  ) : null}
+
+                  {accountReview ? (
+                     <div className="community-account-review-summary">
+                        <h3>Account-action review</h3>
+                        <p>
+                           {accountReview.outcome
+                              ? accountReview.outcome === "REVERSED"
+                                 ? "Platform Safety reversed the account action."
+                                 : "Platform Safety upheld the account action."
+                              : "Your account-action review is pending Platform Safety review."}
+                        </p>
+                        {accountReview.resolution_rationale ? (
+                           <div className="community-outcome-rationale">
+                              <h3>Review explanation</h3>
+                              <p>{accountReview.resolution_rationale}</p>
+                           </div>
+                        ) : null}
+                        <div className="community-reconsideration-request">
+                           <h3>Your request</h3>
+                           <p>{accountReview.request_statement}</p>
+                           <small>Submitted {formatDate(accountReview.submitted_at)}</small>
+                        </div>
+                     </div>
+                  ) : null}
+
+                  {accountEnforcement.can_request_review ? (
+                     <>
+                        <p className="community-outcome-helper">
+                           You can request one review of this account action. This is separate
+                           from asking Platform Safety to reconsider the content removal.
+                        </p>
+                        {!accountReviewOpen ? (
+                           <button
+                              type="button"
+                              className="community-outcome-primary-action"
+                              onClick={() => {
+                                 setAccountReviewOpen(true);
+                                 setAccountReviewError("");
+                              }}
+                           >
+                              Request account-action review
+                           </button>
+                        ) : (
+                           <form
+                              className="community-reconsideration-form"
+                              onSubmit={handleAccountReviewSubmit}
+                           >
+                              <label htmlFor="community-account-review-statement">
+                                 Why should this account action be reviewed?
+                              </label>
+                              <textarea
+                                 id="community-account-review-statement"
+                                 value={accountReviewStatement}
+                                 minLength={20}
+                                 maxLength={3000}
+                                 rows={6}
+                                 required
+                                 disabled={submittingAccountReview}
+                                 onChange={(event) => {
+                                    setAccountReviewStatement(event.target.value);
+                                    setAccountReviewError("");
+                                 }}
+                              />
+                              <div className="community-reconsideration-form-meta">
+                                 <span>{accountReviewStatement.length}/3000</span>
+                                 {accountReviewError ? (
+                                    <strong role="alert">{accountReviewError}</strong>
+                                 ) : null}
+                              </div>
+                              <div className="community-reconsideration-actions">
+                                 <button
+                                    type="button"
+                                    className="community-outcome-secondary-action"
+                                    disabled={submittingAccountReview}
+                                    onClick={() => {
+                                       setAccountReviewOpen(false);
+                                       setAccountReviewStatement("");
+                                       setAccountReviewError("");
+                                    }}
+                                 >
+                                    Cancel
+                                 </button>
+                                 <button
+                                    type="submit"
+                                    className="community-outcome-primary-action"
+                                    disabled={submittingAccountReview}
+                                 >
+                                    {submittingAccountReview ? "Submitting…" : "Submit review request"}
+                                 </button>
+                              </div>
+                           </form>
+                        )}
+                     </>
+                  ) : null}
+
+                  <Link
+                     to={`/community-guidelines?version=${encodeURIComponent(
+                        accountEnforcement.policy?.version || outcome.policy?.version || "",
+                     )}`}
+                  >
+                     Read the policy version used for this action
+                  </Link>
+               </section>
+            ) : null}
 
             {reconsideration ? (
                <section className="community-outcome-card community-reconsideration-card">
