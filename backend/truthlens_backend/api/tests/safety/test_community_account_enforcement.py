@@ -377,6 +377,38 @@ class CommunityAccountEnforcementTests(APITestCase):
             "COMMUNITY_CONTRIBUTION_RESTRICTED",
         )
 
+    def test_restricted_user_can_unfollow_partner_but_cannot_follow_again(self):
+        organization = Organization.objects.create(
+            name="Restricted Follow Partner",
+            slug="restricted-follow-partner",
+            verification_status=Organization.VerificationStatus.VERIFIED,
+            partner_status=Organization.PartnerStatus.ACTIVE,
+            public_profile_enabled=True,
+        )
+        client = self._client(self.author)
+        follow_url = reverse(
+            "public_partner_follow",
+            kwargs={"slug": organization.slug},
+        )
+
+        initial_follow = client.post(follow_url, {}, format="json")
+        self.assertEqual(initial_follow.status_code, status.HTTP_200_OK)
+        self.assertTrue(initial_follow.data["is_following"])
+
+        _, case, _, _ = self._remove("partner-follow")
+        self.assertEqual(self._issue(case).status_code, status.HTTP_201_CREATED)
+
+        unfollow = client.post(follow_url, {}, format="json")
+        follow_again = client.post(follow_url, {}, format="json")
+
+        self.assertEqual(unfollow.status_code, status.HTTP_200_OK)
+        self.assertFalse(unfollow.data["is_following"])
+        self.assertEqual(follow_again.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(
+            str(follow_again.data["code"]),
+            "COMMUNITY_CONTRIBUTION_RESTRICTED",
+        )
+
     def test_temporary_restriction_expires_at_server_boundary_without_task(self):
         _, case, _, _ = self._remove("expiry")
         response = self._issue(case)
