@@ -10,6 +10,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from .accountability_service import record_accountability_event
+from .community_policy import community_policy_supports_account_enforcement
 from .models import (
     AccountabilityEvent,
     CommunityAccountEnforcement,
@@ -432,6 +433,11 @@ def issue_account_enforcement(
     if decision.action != CommunitySafetyDecision.Action.REMOVE:
         raise CommunityAccountEnforcementConflict(
             "Only a confirmed removed-content decision can support account enforcement."
+        )
+    if not community_policy_supports_account_enforcement(decision.policy_version):
+        raise CommunityAccountEnforcementConflict(
+            "This historical Safety decision predates Community account enforcement "
+            "and cannot be used to issue a new account action."
         )
     reconsideration = getattr(decision, "reconsideration", None)
     if reconsideration is not None and not reconsideration.outcome:
