@@ -173,6 +173,23 @@ class PartnershipApplicationWorkflowTests(APITestCase):
             Organization.VerificationStatus.PENDING,
         )
 
+    def test_admin_provisioning_is_blocked_before_application_approval(self):
+        self.submit_application()
+        application = self.application()
+        self.client.force_authenticate(self.platform_admin)
+
+        response = self.client.post(
+            reverse(
+                "management_primary_admin_provision",
+                args=[application.organization_id],
+            ),
+            {"email": application.applicant_email},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertFalse(application.organization.invitations.exists())
+
     def test_admin_provisioning_requires_approved_representative_email(self):
         self.submit_application()
         application = self.application()
