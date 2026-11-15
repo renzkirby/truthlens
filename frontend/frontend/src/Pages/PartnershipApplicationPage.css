@@ -19,14 +19,15 @@
 .partner-application-intro {
    align-self: start;
    position: sticky;
-   top: 32px;
+   top: 108px;
 }
 
 .partner-application-back {
-   display: inline-flex;
+   width: fit-content;
+   display: flex;
    align-items: center;
    gap: 7px;
-   margin-bottom: 42px;
+   margin-bottom: 24px;
    color: var(--tl-color-text-muted);
    font-size: var(--tl-text-sm);
    font-weight: 700;
@@ -34,6 +35,7 @@
 }
 
 .partner-application-eyebrow {
+   display: block;
    color: var(--tl-color-brand-primary);
    font-size: var(--tl-text-xs);
    font-weight: 800;
@@ -189,11 +191,18 @@
 }
 
 .partner-application-actions p {
-   max-width: 520px;
+   flex: 1 1 auto;
+   max-width: 560px;
    margin: 0;
    color: var(--tl-color-text-muted);
    font-size: var(--tl-text-xs);
    line-height: 1.5;
+}
+
+.partner-application-actions .tl-button {
+   flex: 0 0 auto;
+   min-width: 238px;
+   white-space: nowrap;
 }
 
 .partner-application-success {
@@ -241,7 +250,7 @@
    }
 
    .partner-application-back {
-      margin-bottom: 28px;
+      margin-bottom: 20px;
    }
 }
 
@@ -265,5 +274,7 @@
 
    .partner-application-actions .tl-button {
       width: 100%;
+      min-width: 0;
+      white-space: normal;
    }
 }
