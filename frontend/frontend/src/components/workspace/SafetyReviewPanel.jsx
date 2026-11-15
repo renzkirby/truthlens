@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../hooks/useNotification";
@@ -127,6 +127,9 @@ function formatCaseReference(caseId) {
 function SafetyReviewPanel() {
    const { authFetch, user, refreshUser } = useAuth();
    const { addToast } = useNotification();
+   const navigate = useNavigate();
+   const [searchParams, setSearchParams] = useSearchParams();
+   const initialCaseIdRef = useRef(searchParams.get("case"));
    const [accessRevoked, setAccessRevoked] = useState(false);
 
    const [filters, setFilters] = useState({
@@ -138,9 +141,9 @@ function SafetyReviewPanel() {
    const [queueError, setQueueError] = useState("");
    const [queueRequestVersion, setQueueRequestVersion] = useState(0);
 
-   const [selectedCaseId, setSelectedCaseId] = useState(null);
+   const [selectedCaseId, setSelectedCaseId] = useState(initialCaseIdRef.current || null);
    const [detail, setDetail] = useState(null);
-   const [detailLoading, setDetailLoading] = useState(false);
+   const [detailLoading, setDetailLoading] = useState(Boolean(initialCaseIdRef.current));
    const [detailError, setDetailError] = useState("");
    const [detailUnavailable, setDetailUnavailable] = useState(false);
    const [detailRequestVersion, setDetailRequestVersion] = useState(0);
@@ -153,13 +156,14 @@ function SafetyReviewPanel() {
    const [decisionNotes, setDecisionNotes] = useState("");
    const [decisionViolationCode, setDecisionViolationCode] = useState("");
    const [confirmedReportIds, setConfirmedReportIds] = useState([]);
+   const [showAccountActionForm, setShowAccountActionForm] = useState(false);
 
    const queueRequestIdRef = useRef(0);
    const detailRequestIdRef = useRef(0);
    const safetyGenerationRef = useRef(0);
    const accessRevokedRef = useRef(false);
    const mountedRef = useRef(true);
-   const selectedCaseIdRef = useRef(null);
+   const selectedCaseIdRef = useRef(initialCaseIdRef.current || null);
    const queueHeadingRef = useRef(null);
    const detailRegionRef = useRef(null);
    const detailHeadingRef = useRef(null);
@@ -215,6 +219,7 @@ function SafetyReviewPanel() {
       setConfirmingRelease(false);
       setDecisionAction(null);
       setDecisionNotes("");
+      setShowAccountActionForm(false);
       setNotice("");
       setActionError("");
       if (error?.status === 403) {
@@ -484,6 +489,8 @@ function SafetyReviewPanel() {
       setConfirmingRelease(false);
       setDecisionAction(null);
       setDecisionNotes("");
+      setShowAccountActionForm(false);
+      setSearchParams({}, { replace: true });
       window.requestAnimationFrame(() => queueHeadingRef.current?.focus());
    };
 
@@ -560,6 +567,8 @@ function SafetyReviewPanel() {
       setConfirmingRelease(false);
       setDecisionAction(null);
       setDecisionNotes("");
+      setShowAccountActionForm(false);
+      setSearchParams({}, { replace: true });
    };
 
    const handleSelectCase = (caseId) => {
@@ -579,6 +588,8 @@ function SafetyReviewPanel() {
       setConfirmingRelease(false);
       setDecisionAction(null);
       setDecisionNotes("");
+      setShowAccountActionForm(false);
+      setSearchParams({ case: String(caseId) }, { replace: true });
    };
 
    const handleOpenReleaseConfirmation = () => {
@@ -802,6 +813,7 @@ function SafetyReviewPanel() {
          setDecisionViolationCode("");
          setConfirmedReportIds([]);
          setConfirmingRelease(false);
+         setShowAccountActionForm(false);
 
          if (action === "ESCALATE") {
             updateQueueCase(updatedCase);
@@ -875,6 +887,13 @@ function SafetyReviewPanel() {
       decisionAction === "REVERSE_RECONSIDERATION";
    const isBusy = Boolean(pendingOperation);
    const selectedActionDetail = decisionAction ? ACTION_DETAILS[decisionAction] : null;
+   const isRemovedDecision = detail?.safety_decision?.action === "REMOVE";
+   const canConsiderAccountAction =
+      !isActiveCase &&
+      isRemovedDecision &&
+      detail?.account_enforcement_available === true &&
+      !detail?.account_enforcement;
+   const openedFromHistory = searchParams.get("source") === "history";
    const hasQueueResults = queue.results.length > 0;
    const isInitialQueueLoading = queueLoading && !hasQueueResults && !queueError;
 
@@ -1544,20 +1563,62 @@ function SafetyReviewPanel() {
                         )}
                      </section>
 
-                     <SafetyAccountActionForm
-                        detail={detail}
-                        safetyFetch={safetyFetch}
-                        onUpdated={(accountEnforcement) => {
-                           setDetail((current) =>
-                              current
-                                 ? {
-                                      ...current,
-                                      account_enforcement: accountEnforcement,
-                                   }
-                                 : current,
-                           );
-                        }}
-                     />
+                     {canConsiderAccountAction && !showAccountActionForm ? (
+                        <section className="safety-account-action-card">
+                           <div className="safety-subheading-row">
+                              <div>
+                                 <h4>Content removal recorded</h4>
+                                 <p>
+                                    This Safety case is complete. A separate Community account
+                                    action is optional and can also be considered later from
+                                    Safety History.
+                                 </p>
+                              </div>
+                           </div>
+                           <div className="safety-decision-options">
+                              <Button
+                                 type="button"
+                                 variant="secondary"
+                                 density="comfortable"
+                                 onClick={() => {
+                                    if (openedFromHistory) {
+                                       navigate("/management/safety/audit");
+                                    } else {
+                                       handleReturnToQueue();
+                                    }
+                                 }}
+                              >
+                                 Finish review
+                              </Button>
+                              <Button
+                                 type="button"
+                                 variant="primary"
+                                 density="comfortable"
+                                 onClick={() => setShowAccountActionForm(true)}
+                              >
+                                 Consider account action
+                              </Button>
+                           </div>
+                        </section>
+                     ) : null}
+
+                     {(!canConsiderAccountAction || showAccountActionForm) ? (
+                        <SafetyAccountActionForm
+                           detail={detail}
+                           safetyFetch={safetyFetch}
+                           onUpdated={(accountEnforcement) => {
+                              setShowAccountActionForm(false);
+                              setDetail((current) =>
+                                 current
+                                    ? {
+                                         ...current,
+                                         account_enforcement: accountEnforcement,
+                                      }
+                                    : current,
+                              );
+                           }}
+                        />
+                     ) : null}
 
                      <section className="safety-detail-section">
                         <div className="safety-subheading-row safety-major-section-heading">
