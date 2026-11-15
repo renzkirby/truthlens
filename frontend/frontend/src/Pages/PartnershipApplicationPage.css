@@ -158,8 +158,8 @@
    color: var(--tl-color-status-critical-text) !important;
 }
 
-.partner-application-guidelines-note {
-   margin: 0 0 22px;
+.partner-application-form .partner-application-attestations > .partner-application-guidelines-note {
+   margin: 0 0 24px;
    color: var(--tl-color-text-muted);
    font-size: var(--tl-text-sm);
    line-height: 1.55;
@@ -183,8 +183,8 @@
    line-height: 1.55;
 }
 
-.partner-application-attestations label + label {
-   margin-top: 18px;
+.partner-application-form .partner-application-attestations > label + label {
+   margin-top: 20px;
 }
 
 .partner-application-attestations input {
