@@ -386,13 +386,15 @@ function CommunityModerationOutcomePage() {
                      </>
                   ) : null}
 
-                  <Link
-                     to={`/community-guidelines?version=${encodeURIComponent(
-                        accountEnforcement.policy?.version || outcome.policy?.version || "",
-                     )}`}
-                  >
-                     Read the policy version used for this action
-                  </Link>
+                  <div className="community-account-action-links">
+                     <Link
+                        to={`/community-guidelines?version=${encodeURIComponent(
+                           accountEnforcement.policy?.version || outcome.policy?.version || "",
+                        )}`}
+                     >
+                        Read the policy version used for this action
+                     </Link>
+                  </div>
                </section>
             ) : null}
 
