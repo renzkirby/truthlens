@@ -158,6 +158,23 @@
    color: var(--tl-color-status-critical-text) !important;
 }
 
+.partner-application-guidelines-note {
+   margin: 0 0 16px;
+   color: var(--tl-color-text-muted);
+   font-size: var(--tl-text-sm);
+   line-height: 1.55;
+}
+
+.partner-application-guidelines-note a {
+   color: var(--tl-color-brand-primary);
+   font-weight: 700;
+   text-decoration: none;
+}
+
+.partner-application-guidelines-note a:hover {
+   text-decoration: underline;
+}
+
 .partner-application-attestations label {
    grid-template-columns: auto minmax(0, 1fr);
    align-items: start;
