@@ -170,6 +170,7 @@ class EvidenceUrlPreviewTests(TestCase):
                     "evidence_caption": "Primary source",
                     "evidence_url": url,
                     "evidence_type": EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
+                    "evidence_verdict": "FACT",
                 },
                 format="json",
             )
@@ -242,6 +243,7 @@ class EvidenceUrlPreviewTests(TestCase):
                         "evidence_caption": "Source while provider is unavailable",
                         "evidence_url": "https://example.com/unavailable",
                         "evidence_type": EvidenceSubmission.EvidenceType.SOURCE_VERIFICATION,
+                    "evidence_verdict": "FACT",
                     },
                     format="json",
                 )

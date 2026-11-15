@@ -103,6 +103,11 @@ DOMAIN_ACTIONS = {
         AccountabilityEvent.ActionType.FACTUAL_CORRECTION_PUBLISHED,
     ),
     AccountabilityDomain.PLATFORM_GOVERNANCE: (
+        AccountabilityEvent.ActionType.PARTNERSHIP_APPLICATION_SUBMITTED,
+        AccountabilityEvent.ActionType.PARTNERSHIP_APPLICATION_REVIEW_STARTED,
+        AccountabilityEvent.ActionType.PARTNERSHIP_APPLICATION_APPROVED,
+        AccountabilityEvent.ActionType.PARTNERSHIP_APPLICATION_REJECTED,
+        AccountabilityEvent.ActionType.PARTNERSHIP_APPLICATION_ONBOARDING_COMPLETED,
         AccountabilityEvent.ActionType.ORGANIZATION_CREATED,
         AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED,
         AccountabilityEvent.ActionType.INSTITUTION_CREATED,
@@ -210,6 +215,7 @@ DOMAIN_RESOURCES = {
     AccountabilityDomain.PLATFORM_GOVERNANCE: {
         AccountabilityEvent.ResourceType.CLAIM,
         AccountabilityEvent.ResourceType.ORGANIZATION,
+        AccountabilityEvent.ResourceType.PARTNERSHIP_APPLICATION,
         AccountabilityEvent.ResourceType.INSTITUTION,
         AccountabilityEvent.ResourceType.ORGANIZATION_INSTITUTION_AFFILIATION,
         AccountabilityEvent.ResourceType.ORGANIZATION_INVITATION,
@@ -226,6 +232,15 @@ MANAGEMENT_GOVERNANCE_ACTIONS = DOMAIN_ACTIONS[
     AccountabilityDomain.PLATFORM_GOVERNANCE
 ]
 MANAGEMENT_GOVERNANCE_ACTION_CAPABILITIES = {
+    AccountabilityEvent.ActionType.PARTNERSHIP_APPLICATION_REVIEW_STARTED: (
+        MANAGE_PARTNER_ORGANIZATION
+    ),
+    AccountabilityEvent.ActionType.PARTNERSHIP_APPLICATION_APPROVED: (
+        MANAGE_PARTNER_ORGANIZATION
+    ),
+    AccountabilityEvent.ActionType.PARTNERSHIP_APPLICATION_REJECTED: (
+        MANAGE_PARTNER_ORGANIZATION
+    ),
     AccountabilityEvent.ActionType.ORGANIZATION_CREATED: (
         MANAGE_PARTNER_ORGANIZATION
     ),
@@ -551,6 +566,12 @@ def _management_governance_queryset():
             AccountabilityEvent.ActionType.ORGANIZATION_INVITATION_CANCELLED,
         }:
             resource_type = AccountabilityEvent.ResourceType.ORGANIZATION_INVITATION
+        elif action_type in {
+            AccountabilityEvent.ActionType.PARTNERSHIP_APPLICATION_REVIEW_STARTED,
+            AccountabilityEvent.ActionType.PARTNERSHIP_APPLICATION_APPROVED,
+            AccountabilityEvent.ActionType.PARTNERSHIP_APPLICATION_REJECTED,
+        }:
+            resource_type = AccountabilityEvent.ResourceType.PARTNERSHIP_APPLICATION
         elif action_type == AccountabilityEvent.ActionType.PLATFORM_SAFETY_MODERATOR_REVOKED:
             resource_type = AccountabilityEvent.ResourceType.USER_ACCOUNT
         elif action_type in {
@@ -577,9 +598,17 @@ def _management_governance_queryset():
         resource_type=AccountabilityEvent.ResourceType.ORGANIZATION,
         reason_code="PARTNERSHIP_RECONSIDERATION_SUBMITTED",
     )
+    system_application_events = Q(
+        authority_scope=AccountabilityEvent.AuthorityScope.SYSTEM,
+        action_type__in={
+            AccountabilityEvent.ActionType.PARTNERSHIP_APPLICATION_SUBMITTED,
+            AccountabilityEvent.ActionType.PARTNERSHIP_APPLICATION_ONBOARDING_COMPLETED,
+        },
+        resource_type=AccountabilityEvent.ResourceType.PARTNERSHIP_APPLICATION,
+    )
 
     return AccountabilityEvent.objects.filter(
-        platform_governance | reconsideration_submissions
+        platform_governance | reconsideration_submissions | system_application_events
     ).select_related("actor", "authority_organization", "subject_organization")
 
 

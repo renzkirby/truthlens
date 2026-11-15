@@ -11,6 +11,14 @@ export function useManagementRequest(url) {
 
    const retry = useCallback(() => setRequestVersion((version) => version + 1), []);
 
+   const replaceData = useCallback((data) => {
+      setResult({
+         key: requestKey,
+         data,
+         error: "",
+      });
+   }, [requestKey]);
+
    useEffect(() => {
       let active = true;
 
@@ -43,5 +51,6 @@ export function useManagementRequest(url) {
       loading: result.key !== requestKey,
       error: result.key === requestKey ? result.error : "",
       retry,
+      replaceData,
    };
 }

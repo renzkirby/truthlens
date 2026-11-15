@@ -103,6 +103,16 @@ export const API_ENDPOINTS = {
    MANAGEMENT_PIPELINE_RUNS: "management/pipeline/runs/",
    MANAGEMENT_PIPELINE_RUN_DETAIL: (runId) =>
       `management/pipeline/runs/${encodeURIComponent(runId)}/`,
+   PARTNERSHIP_APPLICATION: "partnership-applications/",
+   MANAGEMENT_PARTNERSHIP_APPLICATIONS: "management/partnership-applications/",
+   MANAGEMENT_PARTNERSHIP_APPLICATION_DETAIL: (applicationId) =>
+      `management/partnership-applications/${encodeURIComponent(applicationId)}/`,
+   MANAGEMENT_PARTNERSHIP_APPLICATION_REVIEW: (applicationId) =>
+      `management/partnership-applications/${encodeURIComponent(applicationId)}/review/`,
+   MANAGEMENT_PARTNERSHIP_APPLICATION_APPROVE: (applicationId) =>
+      `management/partnership-applications/${encodeURIComponent(applicationId)}/approve/`,
+   MANAGEMENT_PARTNERSHIP_APPLICATION_REJECT: (applicationId) =>
+      `management/partnership-applications/${encodeURIComponent(applicationId)}/reject/`,
    MANAGEMENT_ORGANIZATIONS: "management/organizations/",
    MANAGEMENT_ORGANIZATION_DETAIL: (organizationId) =>
       `management/organizations/${encodeURIComponent(organizationId)}/`,

@@ -20,11 +20,35 @@
          <h1 style="margin: 0 0 16px; font-size: 22px">Join {{ organization_name }}</h1>
 
          <p>
+            {% if partnership_onboarding %}
+            TruthLens has invited you to join
+            <strong>{{ organization_name }}</strong>
+            as <strong>{{ role_label }}</strong>.
+            {% else %}
             {{ inviter_name }} invited you to join
             <strong>{{ organization_name }}</strong>
             as <strong>{{ role_label }}</strong>
             on TruthLens.
+            {% endif %}
          </p>
+
+         {% if partnership_onboarding %}
+         <div
+            style="
+               margin: 20px 0;
+               padding: 14px 16px;
+               border-radius: 8px;
+               background: #eef2ff;
+               color: #3730a3;
+               font-size: 14px;
+               line-height: 1.6;
+            "
+         >
+            TruthLens has approved this organization's partnership application.
+            Accepting this Organization Admin invitation with the verified invited
+            email completes institutional verification and activates the Partner Organization.
+         </div>
+         {% endif %}
 
          <p style="margin: 24px 0">
             <a

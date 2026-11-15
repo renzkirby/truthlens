@@ -21,6 +21,7 @@ from .models import (
     Organization,
     OrganizationInvitation,
     OrganizationMembership,
+    PartnershipApplication,
 )
 from .accountability_service import record_accountability_event
 from .organization_service import (
@@ -31,6 +32,11 @@ from .organization_service import (
 )
 from .organization_partnership_policy import (
     get_organization_admin_onboarding_policy,
+)
+from .partnership_application_service import (
+    PartnershipApplicationConflict,
+    approved_application_for_admin_onboarding,
+    finalize_approved_partnership_onboarding,
 )
 from django.core.exceptions import (
     ValidationError,
@@ -359,6 +365,14 @@ def accept_organization_invitation(
                         "This Organization Admin invitation contains an invalid role."
                     )
 
+                try:
+                    approved_application_for_admin_onboarding(
+                        organization=invitation.organization,
+                        email=invitation.email,
+                    )
+                except PartnershipApplicationConflict as error:
+                    raise OrganizationInvitationConflict(str(error)) from error
+
                 current_admin = (
                     OrganizationMembership.objects.select_for_update(of=("self",))
                     .filter(
@@ -500,6 +514,15 @@ def accept_organization_invitation(
                 },
             )
 
+            if is_admin_onboarding:
+                try:
+                    finalize_approved_partnership_onboarding(
+                        organization=invitation.organization,
+                        accepted_by=actor,
+                    )
+                except PartnershipApplicationConflict as error:
+                    raise OrganizationInvitationConflict(str(error)) from error
+
             accepted_invitation = invitation
 
     # Raise only AFTER leaving the transaction so
@@ -534,6 +557,18 @@ def send_organization_invitation_email(
 
     role_label = get_invitation_role_label(invitation)
 
+    partnership_onboarding = False
+    if invitation.purpose in ADMIN_ONBOARDING_PURPOSES:
+        try:
+            application = invitation.organization.partnership_application
+        except PartnershipApplication.DoesNotExist:
+            application = None
+        partnership_onboarding = bool(
+            application
+            and application.status == PartnershipApplication.Status.APPROVED
+            and application.onboarding_completed_at is None
+        )
+
     inviter_name = (
         invitation.invited_by.username
         if invitation.invited_by
@@ -541,13 +576,33 @@ def send_organization_invitation_email(
     )
 
     subject = (
-        f"You're invited to join " f"{invitation.organization.name} " f"on TruthLens"
+        f"Complete {invitation.organization.name} TruthLens Partner onboarding"
+        if partnership_onboarding
+        else f"You're invited to join {invitation.organization.name} on TruthLens"
+    )
+
+    invitation_intro = (
+        f"TruthLens has invited you to join {invitation.organization.name} "
+        f"as {role_label}.\n\n"
+        if partnership_onboarding
+        else (
+            f"{inviter_name} invited you to join {invitation.organization.name} "
+            f"as {role_label} on TruthLens.\n\n"
+        )
+    )
+
+    onboarding_text = (
+        "TruthLens has approved this organization's partnership application. "
+        "Accepting this Organization Admin invitation with the verified invited "
+        "email completes institutional verification and activates the Partner "
+        "Organization.\n\n"
+        if partnership_onboarding
+        else ""
     )
 
     text_body = (
-        f"{inviter_name} invited you to "
-        f"join {invitation.organization.name} "
-        f"as {role_label} on TruthLens.\n\n"
+        f"{invitation_intro}"
+        f"{onboarding_text}"
         f"Accept the invitation:\n"
         f"{invitation_url}\n\n"
         f"This invitation expires on "
@@ -564,6 +619,7 @@ def send_organization_invitation_email(
             "inviter_name": inviter_name,
             "invitation_url": invitation_url,
             "expires_at": (invitation.expires_at),
+            "partnership_onboarding": partnership_onboarding,
         },
     )
 
