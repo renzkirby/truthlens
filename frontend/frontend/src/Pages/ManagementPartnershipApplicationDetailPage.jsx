@@ -23,6 +23,7 @@ import "./ManagementPartnershipApplications.css";
 function ReviewActions({ application, onRefresh }) {
    const { addToast } = useNotification();
    const { mutate, pending, error, reset } = useManagementMutation();
+   const [activeAction, setActiveAction] = useState(null);
    const [approvedAdminEmail, setApprovedAdminEmail] = useState(
       application.approved_admin_email || application.applicant_email,
    );
@@ -30,11 +31,13 @@ function ReviewActions({ application, onRefresh }) {
    const [rejectionNotes, setRejectionNotes] = useState("");
 
    const startReview = async () => {
+      setActiveAction("review");
       const result = await mutate(
          resolveApiEndpoint("MANAGEMENT_PARTNERSHIP_APPLICATION_REVIEW", application.id),
          { method: "POST", body: {} },
          "Application review started.",
       );
+      setActiveAction(null);
       if (result.ok) {
          addToast({
             type: "success",
@@ -48,6 +51,7 @@ function ReviewActions({ application, onRefresh }) {
 
    const approve = async (event) => {
       event.preventDefault();
+      setActiveAction("approve");
       const result = await mutate(
          resolveApiEndpoint("MANAGEMENT_PARTNERSHIP_APPLICATION_APPROVE", application.id),
          {
@@ -59,6 +63,7 @@ function ReviewActions({ application, onRefresh }) {
          },
          "Application approved for Organization Admin onboarding.",
       );
+      setActiveAction(null);
       if (result.ok) {
          addToast({
             type: "success",
@@ -72,6 +77,7 @@ function ReviewActions({ application, onRefresh }) {
 
    const reject = async (event) => {
       event.preventDefault();
+      setActiveAction("reject");
       const result = await mutate(
          resolveApiEndpoint("MANAGEMENT_PARTNERSHIP_APPLICATION_REJECT", application.id),
          {
@@ -80,6 +86,7 @@ function ReviewActions({ application, onRefresh }) {
          },
          "Partnership application rejected.",
       );
+      setActiveAction(null);
       if (result.ok) {
          addToast({
             type: "success",
@@ -98,7 +105,12 @@ function ReviewActions({ application, onRefresh }) {
             <p className="management-section__description">
                Start review before making an approval or rejection decision. This records who began the platform review.
             </p>
-            <Button onClick={startReview} loading={pending} loadingLabel="Starting review…">
+            <Button
+               onClick={startReview}
+               loading={pending && activeAction === "review"}
+               loadingLabel="Starting review…"
+               disabled={pending}
+            >
                Start review
             </Button>
             {error ? <ManagementFeedback tone="error">{error.message}</ManagementFeedback> : null}
@@ -152,7 +164,12 @@ function ReviewActions({ application, onRefresh }) {
                         placeholder="Optional internal review notes"
                      />
                   </label>
-                  <Button type="submit" loading={pending} loadingLabel="Approving…">
+                  <Button
+                     type="submit"
+                     loading={pending && activeAction === "approve"}
+                     loadingLabel="Approving…"
+                     disabled={pending}
+                  >
                      Approve for onboarding
                   </Button>
                </form>
@@ -181,9 +198,9 @@ function ReviewActions({ application, onRefresh }) {
                   <Button
                      type="submit"
                      variant="destructive"
-                     loading={pending}
+                     loading={pending && activeAction === "reject"}
                      loadingLabel="Rejecting…"
-                     disabled={!rejectionNotes.trim()}
+                     disabled={pending || !rejectionNotes.trim()}
                   >
                      Reject application
                   </Button>
