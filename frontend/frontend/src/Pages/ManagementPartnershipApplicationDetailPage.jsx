@@ -33,7 +33,7 @@ function ReviewActions({ application, onRefresh }) {
          { method: "POST", body: {} },
          "Application review started.",
       );
-      if (result.ok) onRefresh();
+      if (result.ok) onRefresh(result.data);
    };
 
    const approve = async (event) => {
@@ -49,7 +49,7 @@ function ReviewActions({ application, onRefresh }) {
          },
          "Application approved for Organization Admin onboarding.",
       );
-      if (result.ok) onRefresh();
+      if (result.ok) onRefresh(result.data);
    };
 
    const reject = async (event) => {
@@ -62,7 +62,7 @@ function ReviewActions({ application, onRefresh }) {
          },
          "Partnership application rejected.",
       );
-      if (result.ok) onRefresh();
+      if (result.ok) onRefresh(result.data);
    };
 
    if (application.status === "SUBMITTED") {
@@ -210,7 +210,7 @@ function ReviewActions({ application, onRefresh }) {
 
 export default function ManagementPartnershipApplicationDetailPage() {
    const { applicationId } = useParams();
-   const { data, loading, error, retry } = useManagementRequest(
+   const { data, loading, error, retry, replaceData } = useManagementRequest(
       resolveApiEndpoint("MANAGEMENT_PARTNERSHIP_APPLICATION_DETAIL", applicationId),
    );
 
@@ -300,7 +300,11 @@ export default function ManagementPartnershipApplicationDetailPage() {
                      </div>
                   </section>
 
-                  <ReviewActions key={data.id + ":" + data.status} application={data} onRefresh={retry} />
+                  <ReviewActions
+                     key={data.id + ":" + data.status}
+                     application={data}
+                     onRefresh={replaceData}
+                  />
                </div>
             ) : null}
          </ManagementRequestState>
