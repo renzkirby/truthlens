@@ -22,6 +22,14 @@
    grid-template-columns: minmax(220px, 250px) minmax(0, 760px);
 }
 
+.partner-guidelines-page--public .partner-guidelines-sidebar {
+   top: 100px;
+}
+
+.partner-guidelines-page--public .partner-guidelines-sidebar--toc .partner-guidelines-sidebar__sticky {
+   max-height: calc(100vh - 124px);
+}
+
 .partner-guidelines-back {
    display: inline-flex;
    margin-bottom: var(--tl-space-5);
@@ -33,6 +41,23 @@
 
 .partner-guidelines-back:hover {
    color: var(--tl-color-brand-primary);
+}
+
+.partner-guidelines-sidebar-back {
+   width: 100%;
+   display: inline-flex;
+   align-items: center;
+   margin-bottom: var(--tl-space-4);
+   padding-bottom: var(--tl-space-4);
+   border-bottom: 1px solid var(--tl-color-border-light);
+   color: var(--tl-color-brand-primary);
+   font-size: var(--tl-text-ui);
+   font-weight: 700;
+   text-decoration: none;
+}
+
+.partner-guidelines-sidebar-back:hover {
+   color: var(--tl-color-brand-primary-hover);
 }
 
 .partner-guidelines-floating-back {
@@ -510,6 +535,10 @@
 
    .partner-guidelines-sidebar {
       position: static;
+   }
+
+   .partner-guidelines-page--public .partner-guidelines-sidebar--toc .partner-guidelines-sidebar__sticky {
+      max-height: none;
    }
 
    .partner-guidelines-sidebar--toc .partner-guidelines-sidebar__sticky {
