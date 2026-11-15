@@ -1300,7 +1300,11 @@ function SafetyReviewPanel() {
                               <Icons name="check-circle" size={18} />
                               <div>
                                  <strong>Review completed</strong>
-                                 <span>This case is no longer active and has no further Safety controls.</span>
+                                 <span>
+                                    {isRemovedDecision
+                                       ? "This case is no longer active. Community account action, when eligible, remains a separate optional decision."
+                                       : "This case is no longer active and has no further Safety controls."}
+                                 </span>
                               </div>
                            </div>
                         ) : !detail.assigned_to ? (
