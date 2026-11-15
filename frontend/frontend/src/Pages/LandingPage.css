@@ -1909,9 +1909,16 @@
    line-height: 1.65;
 }
 
+:where(.landing-page) .trust-partner-actions {
+   display: flex;
+   flex-wrap: wrap;
+   gap: 10px 18px;
+   margin-top: 22px;
+}
+
 :where(.landing-page) .trust-partners-link {
    width: fit-content;
-   margin-top: 22px;
+   margin-top: 0;
    display: inline-flex;
    align-items: center;
    gap: 8px;
