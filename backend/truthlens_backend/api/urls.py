@@ -5,6 +5,7 @@ from .auth_tokens import SessionTokenRefreshView
 from .notification_stream import notification_stream
 from . import management_views
 from . import organization_governance_notice_views
+from . import partnership_application_views
 
 urlpatterns = [
     path(
@@ -41,6 +42,36 @@ urlpatterns = [
         "governance/notices/<uuid:notice_id>/reconsideration/",
         organization_governance_notice_views.GovernanceNoticeReconsiderationView.as_view(),
         name="governance_notice_reconsideration",
+    ),
+    path(
+        "partnership-applications/",
+        partnership_application_views.PublicPartnershipApplicationCreateView.as_view(),
+        name="public_partnership_application_create",
+    ),
+    path(
+        "management/partnership-applications/",
+        partnership_application_views.ManagementPartnershipApplicationListView.as_view(),
+        name="management_partnership_applications",
+    ),
+    path(
+        "management/partnership-applications/<uuid:application_id>/",
+        partnership_application_views.ManagementPartnershipApplicationDetailView.as_view(),
+        name="management_partnership_application_detail",
+    ),
+    path(
+        "management/partnership-applications/<uuid:application_id>/review/",
+        partnership_application_views.ManagementPartnershipApplicationReviewView.as_view(),
+        name="management_partnership_application_review",
+    ),
+    path(
+        "management/partnership-applications/<uuid:application_id>/approve/",
+        partnership_application_views.ManagementPartnershipApplicationApproveView.as_view(),
+        name="management_partnership_application_approve",
+    ),
+    path(
+        "management/partnership-applications/<uuid:application_id>/reject/",
+        partnership_application_views.ManagementPartnershipApplicationRejectView.as_view(),
+        name="management_partnership_application_reject",
     ),
     path(
         "management/overview/",
