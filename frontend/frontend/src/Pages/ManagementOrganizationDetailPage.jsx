@@ -1585,6 +1585,7 @@ function OrganizationAdminState({
    organizationId,
    primaryAdmin,
    adminOnboarding,
+   partnershipApplication,
    onRefresh,
    onFeedback,
    returnFocusAfterRefreshRef,
@@ -1596,9 +1597,13 @@ function OrganizationAdminState({
    const cancelInvitationButtonRef = useRef(null);
    const provisionButtonRef = useRef(null);
    const { mutate, pending, error, reset } = useManagementMutation();
-   const adminOnboardingAllowed = adminOnboarding?.allowed !== false;
-   const adminOnboardingMessage = adminOnboarding?.message
-      || "Organization Admin onboarding is unavailable in the current lifecycle state.";
+   const applicationManaged = Boolean(partnershipApplication);
+   const applicationApproved = !applicationManaged || partnershipApplication.status === "APPROVED";
+   const adminOnboardingAllowed = adminOnboarding?.allowed !== false && applicationApproved;
+   const adminOnboardingMessage = applicationManaged && !applicationApproved
+      ? "Approve the partnership application before provisioning the first Organization Admin."
+      : adminOnboarding?.message
+         || "Organization Admin onboarding is unavailable in the current lifecycle state.";
 
    useEffect(() => {
       if (
@@ -1765,6 +1770,14 @@ function OrganizationAdminState({
             <ManagementFeedback tone="error">
                {adminOnboardingMessage}
             </ManagementFeedback>
+            {applicationManaged ? (
+               <Link
+                  className="management-inline-link"
+                  to={"/management/partnership-applications/" + partnershipApplication.id}
+               >
+                  Review partnership application
+               </Link>
+            ) : null}
          </>
       );
    }
@@ -1782,6 +1795,7 @@ function OrganizationAdminState({
                   ref={provisionButtonRef}
                   onClick={() => {
                      reset();
+                     setEmail(partnershipApplication?.approved_admin_email || "");
                      setProvisioningOpen(true);
                   }}
                >
@@ -1793,7 +1807,9 @@ function OrganizationAdminState({
                <div className="management-provision-form__intro">
                   <strong>Invite the organization’s first Admin</strong>
                   <p>
-                     The recipient uses their own TruthLens account, and the invited email must match their verified account when accepting. TruthLens does not create or know their password. This role does not imply legal or business ownership.
+                     {applicationManaged
+                        ? "This invitation is restricted to the representative email approved during partnership review. Acceptance by that verified account completes institutional verification and activates the partnership."
+                        : "The recipient uses their own TruthLens account, and the invited email must match their verified account when accepting. TruthLens does not create or know their password. This role does not imply legal or business ownership."}
                   </p>
                </div>
                <label className="management-form-field">
@@ -1809,6 +1825,7 @@ function OrganizationAdminState({
                      aria-describedby={error?.fields.email ? "primary-admin-email-error" : undefined}
                      autoComplete="email"
                      required
+                     readOnly={applicationManaged}
                      disabled={pending}
                   />
                   <FieldError id="primary-admin-email-error">{error?.fields.email}</FieldError>
@@ -1886,6 +1903,7 @@ function ManagementOrganizationDetailPage() {
                         organizationId={data.id}
                         primaryAdmin={data.organization_admin ?? data.primary_admin}
                         adminOnboarding={data.lifecycle?.admin_onboarding}
+                        partnershipApplication={data.partnership_application}
                         onRefresh={retry}
                         onFeedback={showFeedback}
                         returnFocusAfterRefreshRef={returnFocusAfterPrimaryAdminRefreshRef}
