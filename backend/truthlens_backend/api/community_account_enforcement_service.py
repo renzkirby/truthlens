@@ -430,10 +430,10 @@ def issue_account_enforcement(
 ):
     _require_safety_reviewer(actor)
 
-    decision = (
-        CommunitySafetyDecision.objects.select_for_update()
-        .select_related("content_owner")
-        .get(pk=safety_decision.pk)
+    # Lock only the Safety decision row. Joining nullable content_owner here
+    # makes PostgreSQL reject FOR UPDATE on the nullable side of an outer join.
+    decision = CommunitySafetyDecision.objects.select_for_update().get(
+        pk=safety_decision.pk
     )
     if decision.action != CommunitySafetyDecision.Action.REMOVE:
         raise CommunityAccountEnforcementConflict(
@@ -610,7 +610,6 @@ def mark_enforcement_seen(*, enforcement_id, actor):
 def submit_enforcement_review(*, enforcement_id, actor, request_statement):
     enforcement = (
         CommunityAccountEnforcement.objects.select_for_update()
-        .select_related("review")
         .filter(pk=enforcement_id, user=actor)
         .first()
     )
@@ -669,7 +668,7 @@ def start_enforcement_review(
     _require_safety_reviewer(actor)
     review = (
         CommunityAccountEnforcementReview.objects.select_for_update()
-        .select_related("enforcement", "enforcement__issued_by")
+        .select_related("enforcement")
         .get(pk=review_id)
     )
     if review.status != CommunityAccountEnforcementReview.Status.SUBMITTED:
@@ -781,10 +780,8 @@ def resolve_enforcement_review(
     internal_note="",
 ):
     _require_safety_reviewer(actor)
-    review = (
-        CommunityAccountEnforcementReview.objects.select_for_update()
-        .select_related("enforcement", "reviewer")
-        .get(pk=review_id)
+    review = CommunityAccountEnforcementReview.objects.select_for_update().get(
+        pk=review_id
     )
     if review.status != CommunityAccountEnforcementReview.Status.UNDER_REVIEW:
         raise CommunityAccountEnforcementConflict(
@@ -960,7 +957,6 @@ def revoke_enforcement_for_basis_reversal(*, safety_decision, actor, rationale):
 
     enforcement = (
         CommunityAccountEnforcement.objects.select_for_update()
-        .select_related("review")
         .filter(safety_decision=safety_decision)
         .first()
     )
