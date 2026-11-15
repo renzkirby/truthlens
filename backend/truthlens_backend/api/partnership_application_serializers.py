@@ -14,8 +14,6 @@ class PartnershipApplicationCreateSerializer(serializers.Serializer):
     )
     website = serializers.URLField(
         max_length=2000,
-        required=False,
-        allow_blank=True,
     )
     official_contact_email = serializers.EmailField()
     applicant_full_name = serializers.CharField(
