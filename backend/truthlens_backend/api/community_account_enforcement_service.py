@@ -1123,10 +1123,11 @@ def schedule_enforcement_notification(enforcement, *, event, review=None):
                 title = "Your Community account-action review was resolved"
                 outcome = review.outcome if review is not None else ""
                 message = (
-                    "Platform Safety reversed the account action. Open Community Standing "
-                    "to review the outcome."
+                    "Your review is complete. Platform Safety reversed the account action. "
+                    "Open Community Standing to review the outcome."
                     if outcome == CommunityAccountEnforcementReview.Outcome.REVERSED
-                    else "Platform Safety upheld the account action. Open Community Standing to review the outcome."
+                    else "Your review is complete. Platform Safety upheld the account action. "
+                    "Open Community Standing to review the outcome."
                 )
                 dedupe = f"community-enforcement:{current.pk}:review-resolved"
             elif event == "BASIS_REVERSED":
