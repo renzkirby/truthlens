@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import {
+   communityRestrictionSummary,
+   useCommunityAccess,
+} from "../hooks/useCommunityAccess";
 import ImageLightbox from "../components/ImageLightbox";
 import Icons from "../components/Icons";
 import { API_BASE_URL, VERDICT_META } from "../utils/constants";
@@ -379,7 +383,7 @@ function DeepAnalysisTerminalState({ tone = "critical", icon, title, detail, onB
 function DeepAnalysisPage() {
    const { claimId } = useParams();
    const navigate = useNavigate();
-   const { authFetch, user } = useAuth();
+   const { authFetch } = useAuth();
    const [claimData, setClaimData] = useState(null);
    const [statusData, setStatusData] = useState(null);
    const [statusSettled, setStatusSettled] = useState(false);
@@ -389,6 +393,16 @@ function DeepAnalysisPage() {
    const [isOriginalImageOpen, setIsOriginalImageOpen] = useState(false);
    const [originalMediaFailed, setOriginalMediaFailed] = useState(false);
    const originalImageTriggerRef = useRef(null);
+   const {
+      identityEligible: canParticipateInCommunity,
+      canContribute,
+      accessStatus,
+      restrictionEndsAt,
+   } = useCommunityAccess();
+   const restrictionSummary = communityRestrictionSummary(
+      accessStatus,
+      restrictionEndsAt,
+   );
 
    useEffect(() => {
       let active = true;
@@ -572,8 +586,6 @@ function DeepAnalysisPage() {
    const hasOriginalMaterial = Boolean(originalUrl || originalMediaUrl);
    const relatedFactChecks = Array.isArray(statusData?.related_fact_checks) ? statusData.related_fact_checks : [];
    const communityThreadId = statusData?.thread_id || null;
-   const canParticipateInCommunity = user?.community_identity?.can_participate !== false;
-
    return (
       <main className="deep-analysis-page" id="main-content">
          <div className="deep-analysis-shell">
@@ -894,7 +906,7 @@ function DeepAnalysisPage() {
                                  View Community Discussion
                                  <Icons name="arrow-right" size={16} aria-hidden="true" />
                               </Link>
-                           ) : (
+                           ) : canContribute ? (
                               <Link
                                  className="deep-analysis-primary-action"
                                  to={`/thread/create?claim_id=${encodeURIComponent(claimId)}`}
@@ -903,6 +915,13 @@ function DeepAnalysisPage() {
                                  Escalate to Community
                                  <Icons name="arrow-right" size={16} aria-hidden="true" />
                               </Link>
+                           ) : (
+                              <div className="deep-analysis-community-restricted">
+                                 <p>{restrictionSummary}</p>
+                                 <Link to="/dashboard#community-standing">
+                                    View Community Standing
+                                 </Link>
+                              </div>
                            )}
                         </div>
                      </div>

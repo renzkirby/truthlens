@@ -6,12 +6,23 @@ from .notification_stream import notification_stream
 from . import management_views
 from . import organization_governance_notice_views
 from . import partnership_application_views
+from . import community_account_enforcement_views
 
 urlpatterns = [
     path(
         "community/guidelines/",
         views.community_guidelines,
         name="community_guidelines",
+    ),
+    path(
+        "community/account-enforcements/<uuid:enforcement_id>/seen/",
+        community_account_enforcement_views.community_account_enforcement_seen,
+        name="community_account_enforcement_seen",
+    ),
+    path(
+        "community/account-enforcements/<uuid:enforcement_id>/review/",
+        community_account_enforcement_views.community_account_enforcement_review,
+        name="community_account_enforcement_review",
     ),
     path(
         "community/moderation/outcomes/<uuid:decision_id>/",
@@ -379,6 +390,26 @@ urlpatterns = [
         name="platform_safety_accountability",
     ),
     path(
+        "moderation/safety/account-enforcements/",
+        community_account_enforcement_views.safety_account_enforcement_collection,
+        name="safety_account_enforcement_collection",
+    ),
+    path(
+        "moderation/safety/account-enforcements/<uuid:enforcement_id>/lift/",
+        community_account_enforcement_views.safety_account_enforcement_lift,
+        name="safety_account_enforcement_lift",
+    ),
+    path(
+        "moderation/safety/account-enforcement-reviews/<uuid:review_id>/start/",
+        community_account_enforcement_views.safety_account_enforcement_review_start,
+        name="safety_account_enforcement_review_start",
+    ),
+    path(
+        "moderation/safety/account-enforcement-reviews/<uuid:review_id>/resolve/",
+        community_account_enforcement_views.safety_account_enforcement_review_resolve,
+        name="safety_account_enforcement_review_resolve",
+    ),
+    path(
         "moderation/safety/cases/",
         views.safety_case_queue,
         name="safety_case_queue",
@@ -402,6 +433,11 @@ urlpatterns = [
         "moderation/safety/cases/<uuid:case_id>/action/",
         views.safety_case_action,
         name="safety_case_action",
+    ),
+    path(
+        "moderation/safety/cases/<uuid:case_id>/account-enforcement/",
+        community_account_enforcement_views.safety_case_account_enforcement,
+        name="safety_case_account_enforcement",
     ),
     path(
         "moderation/safety/cases/<uuid:case_id>/reconsideration/resolve/",

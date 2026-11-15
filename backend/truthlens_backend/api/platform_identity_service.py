@@ -68,6 +68,23 @@ def get_community_identity_context(user):
         platform_role = None
         platform_role_label = None
 
+    if eligible:
+        # Local import avoids coupling identity classification to enforcement
+        # model loading while still exposing one canonical access projection.
+        from .community_account_enforcement_service import (
+            get_user_community_access,
+        )
+
+        community_access = get_user_community_access(user)
+    else:
+        community_access = {
+            "status": "NOT_APPLICABLE",
+            "can_contribute": False,
+            "restriction_ends_at": None,
+            "active_enforcement_id": None,
+            "has_unseen_action": False,
+        }
+
     return {
         "can_participate": eligible,
         "public_profile_available": eligible,
@@ -76,6 +93,7 @@ def get_community_identity_context(user):
         "professional_identity": professional_identity,
         "platform_role": platform_role,
         "platform_role_label": platform_role_label,
+        "community_access": community_access,
     }
 
 

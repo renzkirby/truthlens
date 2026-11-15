@@ -65,6 +65,15 @@ DOMAIN_ACTIONS = {
         AccountabilityEvent.ActionType.SAFETY_CASE_ESCALATED,
         AccountabilityEvent.ActionType.SAFETY_DISMISSED,
         AccountabilityEvent.ActionType.SAFETY_CONTENT_REMOVED,
+        AccountabilityEvent.ActionType.COMMUNITY_WARNING_ISSUED,
+        AccountabilityEvent.ActionType.COMMUNITY_RESTRICTION_ISSUED,
+        AccountabilityEvent.ActionType.COMMUNITY_ENFORCEMENT_REVIEW_SUBMITTED,
+        AccountabilityEvent.ActionType.COMMUNITY_ENFORCEMENT_REVIEW_STARTED,
+        AccountabilityEvent.ActionType.COMMUNITY_ENFORCEMENT_UPHELD,
+        AccountabilityEvent.ActionType.COMMUNITY_ENFORCEMENT_REVERSED,
+        AccountabilityEvent.ActionType.COMMUNITY_ENFORCEMENT_BASIS_REVERSED,
+        AccountabilityEvent.ActionType.COMMUNITY_RESTRICTION_LIFTED,
+        AccountabilityEvent.ActionType.COMMUNITY_RESTRICTION_SUPERSEDED,
     ),
     AccountabilityDomain.EVIDENCE: (
         AccountabilityEvent.ActionType.EVIDENCE_REOPENED,
@@ -185,6 +194,7 @@ DOMAIN_RESOURCES = {
     },
     AccountabilityDomain.SAFETY: {
         AccountabilityEvent.ResourceType.MODERATION_CASE,
+        AccountabilityEvent.ResourceType.USER_ACCOUNT,
     },
     AccountabilityDomain.EVIDENCE: {
         AccountabilityEvent.ResourceType.EVIDENCE_SUBMISSION,
@@ -757,8 +767,16 @@ def list_platform_accountability_events(
         )
 
     queryset = AccountabilityEvent.objects.filter(
-        authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
-        action_type__in=SAFETY_ACTIONS,
+        Q(
+            authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+            action_type__in=SAFETY_ACTIONS,
+        )
+        | Q(
+            authority_scope=AccountabilityEvent.AuthorityScope.PERSONAL,
+            action_type=(
+                AccountabilityEvent.ActionType.COMMUNITY_ENFORCEMENT_REVIEW_SUBMITTED
+            ),
+        )
     ).select_related("actor", "authority_organization", "subject_organization")
     queryset = _apply_filters(
         queryset,

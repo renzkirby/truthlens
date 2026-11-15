@@ -134,6 +134,11 @@ from .notification_service import (
 )
 from .notification_realtime import publish_notification_inbox_changed
 from .community_policy import community_policy_payload
+from .community_access_permissions import (
+    CanContributeToCommunity,
+    community_contribution_restriction_payload,
+)
+from .community_account_enforcement_service import get_community_standing
 from .community_moderation_outcome_service import (
     CommunityModerationOutcomeNotFound,
     get_community_moderation_outcome,
@@ -190,6 +195,7 @@ from .organization_public_presence_service import (
     get_publication_organization_by_slug,
 )
 from .organization_follow_service import (
+    PublicPartnerFollowRestricted,
     PublicPartnerFollowUnavailable,
     toggle_public_partner_follow,
 )
@@ -362,6 +368,9 @@ from .throttles import (
     EmailVerificationRateThrottle,
     PublicPartnerRateThrottle,
     PublicReachRateThrottle,
+    TruthLensUserRateThrottle,
+    CommunityReportBurstRateThrottle,
+    CommunityReportHourlyRateThrottle,
 )
 from .serializers import (
     RegisterSerializer,
@@ -1272,8 +1281,12 @@ def safety_case_detail(request, case_id):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def community_guidelines(request):
+    version = request.query_params.get("version")
+    payload = community_policy_payload(version=version)
+    if payload is None:
+        raise NotFound("This Community Guidelines version is not available.")
     return Response(
-        community_policy_payload(),
+        payload,
         status=status.HTTP_200_OK,
     )
 
@@ -3437,6 +3450,7 @@ class ThreadViewSet(viewsets.ModelViewSet):
     permission_classes = [
         IsAuthenticated,
         CanParticipateInCommunity,
+        CanContributeToCommunity,
         IsThreadOwnerOrReadOnly,
     ]
     pagination_class = StandardCursorPagination
@@ -3792,6 +3806,7 @@ class EvidenceSubmissionViewSet(viewsets.ModelViewSet):
     permission_classes = [
         IsAuthenticated,
         CanParticipateInCommunity,
+        CanContributeToCommunity,
         IsEvidenceContributorOrReadOnly,
     ]
 
@@ -3885,6 +3900,7 @@ class ThreadCommentViewSet(viewsets.ModelViewSet):
     permission_classes = [
         IsAuthenticated,
         CanParticipateInCommunity,
+        CanContributeToCommunity,
         IsCommenterOrReadOnly,
     ]
 
@@ -3945,7 +3961,11 @@ class ThreadCommentViewSet(viewsets.ModelViewSet):
     @action(
         detail=True,
         methods=["post", "delete"],
-        permission_classes=[IsAuthenticated, CanParticipateInCommunity],
+        permission_classes=[
+            IsAuthenticated,
+            CanParticipateInCommunity,
+            CanContributeToCommunity,
+        ],
     )
     def like(self, request, pk=None):
         comment = self.get_object()
@@ -3985,6 +4005,11 @@ class ThreadCommentViewSet(viewsets.ModelViewSet):
 class CommunityReportViewSet(viewsets.ModelViewSet):
     serializer_class = CommunityReportSerializer
     permission_classes = [IsAuthenticated, CanParticipateInCommunity]
+    throttle_classes = [
+        TruthLensUserRateThrottle,
+        CommunityReportBurstRateThrottle,
+        CommunityReportHourlyRateThrottle,
+    ]
     http_method_names = ["get", "post", "head", "options"]
 
     def get_queryset(self):
@@ -4100,6 +4125,7 @@ class VoteViewSet(viewsets.ModelViewSet):
     permission_classes = [
         IsAuthenticated,
         CanParticipateInCommunity,
+        CanContributeToCommunity,
         IsVoterOrReadOnly,
     ]
 
@@ -4523,15 +4549,24 @@ def toggle_follow_user(request, username):
 
     with transaction.atomic():
         profile = UserProfile.objects.select_for_update().get(user=target_user)
-        relationship = through_model.objects.filter(
-            userprofile_id=profile.pk,
-            user_id=request.user.pk,
-        ).first()
+        relationship = (
+            through_model.objects.select_for_update()
+            .filter(
+                userprofile_id=profile.pk,
+                user_id=request.user.pk,
+            )
+            .first()
+        )
 
         if relationship is not None:
             relationship.delete()
             is_following = False
         else:
+            restriction = community_contribution_restriction_payload(
+                request.user
+            )
+            if restriction is not None:
+                raise PermissionDenied(restriction)
             relationship = through_model.objects.create(
                 userprofile_id=profile.pk,
                 user_id=request.user.pk,
@@ -4663,6 +4698,7 @@ class UserHubView(APIView):
                     ),
                     "professional_identity": get_partner_professional_identity(user),
                 },
+                "community_standing": get_community_standing(user),
                 "reputation": {
                     "trust_score": components["trust_score"],
                     "status": progression["status"],
@@ -5265,6 +5301,11 @@ def public_partner_detail(
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def toggle_public_partner_follow_view(request, slug):
+    if not can_participate_in_community(request.user):
+        raise PermissionDenied(
+            "Platform staff identities do not participate in Community social activity."
+        )
+
     try:
         result = toggle_public_partner_follow(
             slug=slug,
@@ -5272,6 +5313,19 @@ def toggle_public_partner_follow_view(request, slug):
         )
     except PublicPartnerFollowUnavailable as error:
         raise NotFound() from error
+    except PublicPartnerFollowRestricted as error:
+        restriction = community_contribution_restriction_payload(
+            request.user
+        )
+        raise PermissionDenied(
+            restriction
+            or {
+                "code": "COMMUNITY_CONTRIBUTION_RESTRICTED",
+                "detail": str(error),
+                "restriction_ends_at": None,
+                "standing_url": "/dashboard#community-standing",
+            }
+        ) from error
 
     return Response(
         result,

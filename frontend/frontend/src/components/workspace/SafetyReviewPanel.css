@@ -515,6 +515,11 @@
    color: var(--tl-color-status-success-text);
 }
 
+.safety-complete-state > div {
+   display: grid;
+   gap: 2px;
+}
+
 .safety-assignment-locked {
    border-color: var(--tl-color-status-info-border);
    background: var(--tl-color-status-info-bg);
@@ -954,4 +959,248 @@
    color: var(--text-body);
    font-size: 0.75rem;
    line-height: 1.5;
+}
+
+
+/* Community account enforcement */
+.safety-access-panel,
+.safety-account-action-card {
+   margin: 14px 0;
+   border: 1px solid var(--workspace-border, #dbe3ec);
+   border-radius: 14px;
+   background: var(--workspace-surface, #ffffff);
+}
+
+.safety-access-panel-header,
+.safety-account-action-card {
+   padding: 16px 18px;
+}
+
+.safety-access-panel-header {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: 16px;
+}
+
+.safety-access-panel-header > div {
+   display: grid;
+   gap: 3px;
+}
+
+.safety-access-panel-header strong,
+.safety-account-action-card h4 {
+   color: var(--text-primary, #162033);
+}
+
+.safety-access-panel-header p,
+.safety-account-action-card .safety-subheading-row p {
+   margin: 0;
+   color: var(--text-muted, #667085);
+   font-size: 0.82rem;
+}
+
+.safety-access-panel-body {
+   padding: 0 18px 18px;
+   border-top: 1px solid var(--workspace-border, #dbe3ec);
+}
+
+.safety-access-controls {
+   display: flex;
+   align-items: end;
+   gap: 10px;
+   padding: 14px 0;
+}
+
+.safety-access-controls label {
+   min-width: 220px;
+   display: grid;
+   gap: 5px;
+}
+
+.safety-access-controls label > span,
+.safety-account-action-form label > span,
+.safety-access-inline-form label > span {
+   color: var(--text-secondary, #344054);
+   font-size: 0.76rem;
+   font-weight: 700;
+}
+
+.safety-access-list {
+   display: grid;
+   gap: 9px;
+}
+
+.safety-access-item {
+   overflow: hidden;
+   border: 1px solid var(--workspace-border, #dbe3ec);
+   border-radius: 11px;
+}
+
+.safety-access-item-summary {
+   width: 100%;
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: 16px;
+   padding: 12px 14px;
+   border: 0;
+   background: transparent;
+   color: inherit;
+   text-align: left;
+   cursor: pointer;
+}
+
+.safety-access-item-summary > span {
+   display: flex;
+   align-items: center;
+   gap: 8px;
+}
+
+.safety-access-item-summary small {
+   color: var(--text-muted, #667085);
+}
+
+.safety-access-item-detail {
+   display: grid;
+   gap: 13px;
+   padding: 14px;
+   border-top: 1px solid var(--workspace-border, #dbe3ec);
+   background: var(--workspace-subtle, #f8fafc);
+}
+
+.safety-account-action-status {
+   padding: 4px 9px;
+   border-radius: 999px;
+   background: var(--workspace-subtle, #f1f5f9);
+   color: var(--text-secondary, #475467);
+   font-size: 0.68rem;
+   font-weight: 800;
+   text-transform: uppercase;
+}
+
+.safety-account-action-card.is-disabled {
+   background: var(--workspace-subtle, #f8fafc);
+}
+
+.safety-account-action-disabled {
+   display: flex;
+   gap: 8px;
+   margin-top: 12px;
+   padding: 11px 12px;
+   border-radius: 9px;
+   background: var(--tl-color-status-warning-bg, #fff8e6);
+   color: var(--tl-color-status-warning-text, #7a4b00);
+   font-size: 0.8rem;
+   line-height: 1.5;
+}
+
+.safety-account-action-form,
+.safety-access-inline-form {
+   display: grid;
+   gap: 12px;
+   margin-top: 14px;
+}
+
+.safety-account-action-form label,
+.safety-access-inline-form label {
+   display: grid;
+   gap: 6px;
+}
+
+.safety-account-action-form label small,
+.safety-access-inline-form label small {
+   color: var(--text-muted, #667085);
+   font-size: 0.74rem;
+   line-height: 1.45;
+}
+
+.safety-account-confirmation {
+   grid-template-columns: auto minmax(0, 1fr);
+   align-items: flex-start;
+   gap: 9px !important;
+   padding: 12px;
+   border: 1px solid var(--tl-color-status-warning-border, #f3d58a);
+   border-radius: 9px;
+   background: var(--tl-color-status-warning-bg, #fff8e6);
+}
+
+.safety-account-confirmation input {
+   margin-top: 2px;
+}
+
+.safety-account-action-reason,
+.safety-account-internal-note,
+.safety-access-review-block {
+   padding: 12px 14px;
+   border: 1px solid var(--workspace-border, #dbe3ec);
+   border-radius: 9px;
+   background: #ffffff;
+}
+
+.safety-account-action-reason p,
+.safety-account-internal-note p,
+.safety-access-review-block p,
+.safety-access-review-block blockquote {
+   margin: 5px 0 0;
+   color: var(--text-secondary, #475467);
+   font-size: 0.8rem;
+   line-height: 1.55;
+}
+
+.safety-account-internal-note {
+   border-style: dashed;
+}
+
+.safety-access-review-block h5 {
+   margin: 0 0 7px;
+   color: var(--text-primary, #162033);
+   font-size: 0.84rem;
+}
+
+.safety-access-review-block blockquote {
+   padding-left: 10px;
+   border-left: 2px solid var(--brand-primary, #4f46e5);
+}
+
+.safety-access-lift {
+   border-top: 1px solid var(--workspace-border, #dbe3ec);
+   padding-top: 10px;
+}
+
+.safety-access-lift summary {
+   width: fit-content;
+   color: var(--text-secondary, #475467);
+   font-size: 0.78rem;
+   font-weight: 700;
+   cursor: pointer;
+}
+
+.safety-account-form-error {
+   margin: 0;
+   color: var(--tl-color-status-danger-text, #b42318);
+   font-size: 0.78rem;
+   font-weight: 700;
+}
+
+@media (max-width: 760px) {
+   .safety-access-panel-header,
+   .safety-access-controls {
+      align-items: stretch;
+      flex-direction: column;
+   }
+
+   .safety-access-controls label {
+      min-width: 0;
+   }
+
+   .safety-access-item-summary {
+      align-items: flex-start;
+   }
+
+   .safety-access-item-summary > span {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 2px;
+   }
 }

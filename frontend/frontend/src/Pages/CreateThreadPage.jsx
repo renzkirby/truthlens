@@ -12,6 +12,10 @@ import ImageLightbox from "../components/ImageLightbox.jsx";
 import Icons from "../components/Icons.jsx";
 import RichTextEditor from "../components/richtext/RichTextEditor.jsx";
 import { useAuth } from "../hooks/useAuth";
+import {
+   communityRestrictionSummary,
+   useCommunityAccess,
+} from "../hooks/useCommunityAccess";
 import { ESCALATION_OPTIONS } from "../utils/constants";
 import { resolveApiEndpoint } from "../utils/api";
 import { getAiVerdict } from "../utils/verdict";
@@ -150,6 +154,15 @@ function CreateThreadPage() {
    const [searchParams] = useSearchParams();
    const claimId = searchParams.get("claim_id");
    const { authFetch } = useAuth();
+   const {
+      canContribute,
+      accessStatus,
+      restrictionEndsAt,
+   } = useCommunityAccess();
+   const restrictionSummary = communityRestrictionSummary(
+      accessStatus,
+      restrictionEndsAt,
+   );
    const navigate = useNavigate();
    const [formValues, setFormValues] = useState({
       caption: "",
@@ -178,6 +191,11 @@ function CreateThreadPage() {
 
    const handleSubmit = async (event) => {
       event.preventDefault();
+
+      if (!canContribute) {
+         setError(restrictionSummary || "Your Community contribution access is restricted.");
+         return;
+      }
 
       if (!formValues.escalation_reason) {
          setError("Choose the main reason for community review before starting the discussion.");
@@ -290,7 +308,8 @@ function CreateThreadPage() {
    const boundedConfidence = hasConfidence ? Math.max(0, Math.min(100, confidence)) : 0;
    const otherConcernRequired = formValues.escalation_reason === "OTHER";
    const canSubmit = Boolean(
-      formValues.escalation_reason
+      canContribute
+      && formValues.escalation_reason
       && (!otherConcernRequired || formValues.other_concern.trim()),
    );
 
@@ -350,7 +369,21 @@ function CreateThreadPage() {
                </section>
             )}
 
-            {!loading && claim && !existingThread && (
+            {!loading && claim && !existingThread && !canContribute && (
+               <section className="create-thread-notice" role="status">
+                  <span className="create-thread-notice-icon" aria-hidden="true">
+                     <Icons name="shield" size={18} />
+                  </span>
+                  <div>
+                     <strong>Community contribution access is restricted</strong>
+                     <p>{restrictionSummary}</p>
+                     <p>You can still read Community discussions, report unsafe content, and use TruthLens verification.</p>
+                     <Link to="/dashboard#community-standing">View Community Standing</Link>
+                  </div>
+               </section>
+            )}
+
+            {!loading && claim && !existingThread && canContribute && (
                <form className="create-thread-content-grid" onSubmit={handleSubmit} noValidate>
                   <div className="create-thread-primary-column">
                      <section className="create-thread-panel create-thread-claim" aria-labelledby="create-thread-claim-title">

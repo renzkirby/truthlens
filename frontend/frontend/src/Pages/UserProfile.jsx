@@ -6,6 +6,7 @@ import Icons from "../components/Icons.jsx";
 import PartnerAffiliations from "../components/partners/PartnerAffiliations.jsx";
 import { useAuth } from "../hooks/useAuth";
 import { useNotification } from "../hooks/useNotification";
+import { useCommunityAccess } from "../hooks/useCommunityAccess";
 import { resolveApiEndpoint } from "../utils/api";
 import { userFacingErrorMessage } from "../utils/userFacingError";
 import "./UserProfile.css";
@@ -194,6 +195,7 @@ function UserProfile() {
    const navigate = useNavigate();
    const { user: authUser, authFetch, refreshUser } = useAuth();
    const { addToast } = useNotification();
+   const { canContribute } = useCommunityAccess();
 
    const [publicUser, setPublicUser] = useState(null);
    const [profileStatus, setProfileStatus] = useState("idle");
@@ -264,6 +266,13 @@ function UserProfile() {
 
    const handleFollowToggle = async () => {
       if (!displayUsername || isFollowPending) return;
+      if (!canContribute && !isFollowing) {
+         addToast({
+            type: "info",
+            message: "Following new Community members is unavailable while your Community contribution access is restricted.",
+         });
+         return;
+      }
       setIsFollowPending(true);
       try {
          const response = await authFetch(resolveApiEndpoint("USER_FOLLOW", displayUsername), {
@@ -689,8 +698,13 @@ function UserProfile() {
                            type="button"
                            className={`user-profile__primary-button user-profile__profile-action ${isFollowing ? "is-following" : ""}`}
                            onClick={handleFollowToggle}
-                           disabled={isFollowPending}
+                           disabled={isFollowPending || (!canContribute && !isFollowing)}
                            aria-pressed={isFollowing}
+                           title={
+                              !canContribute && !isFollowing
+                                 ? "Following new Community members is unavailable while restricted."
+                                 : undefined
+                           }
                         >
                            <Icons name={isFollowing ? "user-check" : "user-plus"} size={16} aria-hidden="true" />
                            {isFollowPending ? "Updating…" : isFollowing ? "Following" : "Follow"}

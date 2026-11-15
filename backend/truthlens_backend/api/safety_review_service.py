@@ -73,6 +73,10 @@ def get_safety_case_queryset(*, include_events=False):
             "evidence_submission__contributor",
             "community_safety_decision",
             "community_safety_decision__reconsideration",
+            "community_safety_decision__account_enforcement",
+            "community_safety_decision__account_enforcement__issued_by",
+            "community_safety_decision__account_enforcement__review",
+            "community_safety_decision__account_enforcement__review__reviewer",
         )
         .prefetch_related(
             Prefetch(

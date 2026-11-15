@@ -5,6 +5,10 @@ import Icons from "../components/Icons.jsx";
 import PartnerAffiliations from "../components/partners/PartnerAffiliations.jsx";
 import { useAuth } from "../hooks/useAuth";
 import { useNotification } from "../hooks/useNotification";
+import {
+   communityRestrictionSummary,
+   useCommunityAccess,
+} from "../hooks/useCommunityAccess";
 import { buildApiUrl, resolveApiEndpoint } from "../utils/api";
 import timeAgo from "../utils/timeAgo";
 import { getEffectiveVerdict } from "../utils/verdict";
@@ -223,7 +227,16 @@ function CommunityFeed() {
    const [searchParams] = useSearchParams();
    const { authFetch, user } = useAuth();
    const { addToast } = useNotification();
-   const canParticipateInCommunity = user?.community_identity?.can_participate !== false;
+   const {
+      identityEligible: canParticipateInCommunity,
+      canContribute,
+      accessStatus,
+      restrictionEndsAt,
+   } = useCommunityAccess();
+   const restrictionSummary = communityRestrictionSummary(
+      accessStatus,
+      restrictionEndsAt,
+   );
    const threadsEndpoint = resolveApiEndpoint("THREADS");
 
    const [threads, setThreads] = useState([]);
@@ -432,6 +445,14 @@ function CommunityFeed() {
 
    const startEditThread = (event, thread) => {
       event.stopPropagation();
+      if (!canContribute) {
+         setOpenMenuThreadId(null);
+         addToast({
+            type: "info",
+            message: restrictionSummary || "Community contribution access is restricted.",
+         });
+         return;
+      }
       setEditingThreadId(thread.id);
       setEditingCaption(thread.caption || "");
       setOpenMenuThreadId(null);
@@ -444,6 +465,14 @@ function CommunityFeed() {
 
    const saveEditThread = async (event, threadId) => {
       event.stopPropagation();
+      if (!canContribute) {
+         cancelEditThread();
+         addToast({
+            type: "info",
+            message: restrictionSummary || "Community contribution access is restricted.",
+         });
+         return;
+      }
       if (!editingCaption.trim()) {
          addToast({ type: "warning", message: "Community context cannot be empty." });
          return;
@@ -1166,9 +1195,11 @@ function CommunityFeed() {
                                           </button>
                                        ) : isThreadOwner(thread) ? (
                                           <>
-                                             <button type="button" role="menuitem" className="feed-popup-item" onClick={(event) => startEditThread(event, thread)}>
-                                                <Icons name="pencil" size={16} aria-hidden="true" /> Edit
-                                             </button>
+                                             {canContribute && (
+                                                <button type="button" role="menuitem" className="feed-popup-item" onClick={(event) => startEditThread(event, thread)}>
+                                                   <Icons name="pencil" size={16} aria-hidden="true" /> Edit
+                                                </button>
+                                             )}
                                              <button type="button" role="menuitem" className="feed-popup-item" onClick={(event) => shareThread(event, thread)} disabled={sharingThreadId === thread.id}>
                                                 <Icons name="share-2" size={16} aria-hidden="true" /> {sharingThreadId === thread.id ? "Sharing..." : "Share"}
                                              </button>
@@ -1237,7 +1268,17 @@ function CommunityFeed() {
                                  <span>Comment</span>
                                  <span className="feed-count" aria-label={`${thread.comment_count} comments`}>{thread.comment_count}</span>
                               </button>
-                              <button type="button" className="feed-card-action feed-card-action--primary" onClick={() => handleThreadClick(thread.id, "evidence", { openEvidenceForm: true })}>
+                              <button
+                                 type="button"
+                                 className="feed-card-action feed-card-action--primary"
+                                 onClick={() => handleThreadClick(thread.id, "evidence", { openEvidenceForm: true })}
+                                 disabled={canParticipateInCommunity && !canContribute}
+                                 title={
+                                    canParticipateInCommunity && !canContribute
+                                       ? restrictionSummary
+                                       : undefined
+                                 }
+                              >
                                  <Icons name="circle-plus" size={18} aria-hidden="true" /> <span>Add Evidence</span>
                               </button>
                               <button type="button" className="feed-card-action" onClick={() => handleThreadClick(thread.id, "evidence")}>

@@ -123,3 +123,86 @@
       position: static;
    }
 }
+
+
+.community-guidelines-enforcement {
+   display: grid;
+   gap: 14px;
+}
+
+.community-guidelines-enforcement > h3 {
+   margin: 14px 0 0;
+   color: var(--text-main);
+   font-size: 1rem;
+}
+
+.community-guidelines-action-list,
+.community-guidelines-version-list {
+   display: grid;
+   gap: 10px;
+   margin-top: 4px;
+}
+
+.community-guidelines-action {
+   padding: 16px;
+   border: 1px solid var(--border-default);
+   border-radius: 12px;
+   background: var(--bg-surface);
+}
+
+.community-guidelines-action h3 {
+   margin: 0 0 6px;
+   color: var(--text-main);
+   font-size: 0.96rem;
+}
+
+.community-guidelines-version-note {
+   margin-bottom: 14px !important;
+}
+
+.community-guidelines-version {
+   position: relative;
+   display: grid;
+   gap: 6px;
+   padding: 14px 16px;
+   border: 1px solid var(--border-default);
+   border-radius: 12px;
+   color: inherit;
+   text-decoration: none;
+   background: var(--bg-surface);
+}
+
+.community-guidelines-version:hover,
+.community-guidelines-version.is-viewing {
+   border-color: var(--brand-primary);
+}
+
+.community-guidelines-version > span {
+   display: flex;
+   align-items: baseline;
+   gap: 8px;
+}
+
+.community-guidelines-version strong {
+   color: var(--text-main);
+}
+
+.community-guidelines-version small {
+   color: var(--text-muted);
+}
+
+.community-guidelines-version p {
+   padding-right: 72px;
+   font-size: 0.88rem;
+}
+
+.community-guidelines-version em {
+   position: absolute;
+   top: 14px;
+   right: 14px;
+   color: var(--brand-primary);
+   font-size: 0.72rem;
+   font-style: normal;
+   font-weight: 800;
+   text-transform: uppercase;
+}

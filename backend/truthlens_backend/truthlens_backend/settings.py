@@ -111,6 +111,14 @@ REST_FRAMEWORK = {
             "DRF_PUBLIC_PARTNER_THROTTLE_RATE",
             "60/minute",
         ),
+        "community_report_burst": os.getenv(
+            "DRF_COMMUNITY_REPORT_BURST_RATE",
+            "5/minute",
+        ),
+        "community_report_hour": os.getenv(
+            "DRF_COMMUNITY_REPORT_HOURLY_RATE",
+            "20/hour",
+        ),
     },
 }
 

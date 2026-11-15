@@ -88,6 +88,34 @@ class PublicPartnerRateThrottle(TruthLensSimpleRateThrottle):
         }
 
 
+class CommunityReportBurstRateThrottle(TruthLensSimpleRateThrottle):
+    scope = "community_report_burst"
+
+    def get_cache_key(self, request, view):
+        if request.method != "POST":
+            return None
+        if not request.user or not request.user.is_authenticated:
+            return None
+        return self.cache_format % {
+            "scope": self.scope,
+            "ident": f"user:{request.user.pk}",
+        }
+
+
+class CommunityReportHourlyRateThrottle(TruthLensSimpleRateThrottle):
+    scope = "community_report_hour"
+
+    def get_cache_key(self, request, view):
+        if request.method != "POST":
+            return None
+        if not request.user or not request.user.is_authenticated:
+            return None
+        return self.cache_format % {
+            "scope": self.scope,
+            "ident": f"user:{request.user.pk}",
+        }
+
+
 class PublicReachRateThrottle(TruthLensSimpleRateThrottle):
     scope = "public_reach"
 

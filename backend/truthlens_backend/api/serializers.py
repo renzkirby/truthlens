@@ -1,6 +1,7 @@
 from collections.abc import Mapping
 
 from rest_framework import serializers
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.core.validators import URLValidator
@@ -75,6 +76,7 @@ from .community_safety_target_service import target_excerpt, target_owner
 from .community_policy import (
     COMMUNITY_VIOLATION_CHOICES,
     community_policy_payload,
+    community_policy_supports_account_enforcement,
 )
 from .adjudication_provenance import (
     AdjudicationProvenance,
@@ -2168,6 +2170,9 @@ class SafetyCaseDetailSerializer(SafetyCaseSummarySerializer):
     events = serializers.SerializerMethodField()
     community_policy = serializers.SerializerMethodField()
     reconsideration = serializers.SerializerMethodField()
+    safety_decision = serializers.SerializerMethodField()
+    account_enforcement = serializers.SerializerMethodField()
+    account_enforcement_available = serializers.SerializerMethodField()
 
     def get_reports(self, obj):
         return SafetyReportDetailSerializer(
@@ -2181,6 +2186,55 @@ class SafetyCaseDetailSerializer(SafetyCaseSummarySerializer):
 
     def get_community_policy(self, obj):
         return community_policy_payload()
+
+    def get_safety_decision(self, obj):
+        decision = getattr(obj, "community_safety_decision", None)
+        if decision is None:
+            return None
+        return {
+            "id": str(decision.id),
+            "action": decision.action,
+            "target_type": decision.target_type,
+            "target_id": str(decision.target_id_snapshot),
+            "violation_code": decision.violation_code,
+            "violation_title": decision.violation_label_snapshot,
+            "policy_title": decision.policy_title_snapshot,
+            "policy_version": decision.policy_version,
+            "rationale": decision.rationale,
+            "decided_at": decision.decided_at,
+        }
+
+    def get_account_enforcement(self, obj):
+        decision = getattr(obj, "community_safety_decision", None)
+        enforcement = (
+            getattr(decision, "account_enforcement", None)
+            if decision is not None
+            else None
+        )
+        if enforcement is None:
+            return None
+        from .community_account_enforcement_service import serialize_enforcement
+
+        return serialize_enforcement(
+            enforcement,
+            include_internal=True,
+        )
+
+    def get_account_enforcement_available(self, obj):
+        decision = getattr(obj, "community_safety_decision", None)
+        if decision is None or decision.action != "REMOVE":
+            return False
+        if not community_policy_supports_account_enforcement(
+            decision.policy_version
+        ):
+            return False
+        reconsideration = getattr(decision, "reconsideration", None)
+        if reconsideration is None:
+            return True
+        return bool(
+            reconsideration.outcome
+            == CommunitySafetyReconsideration.Outcome.UPHELD
+        )
 
     def get_reconsideration(self, obj):
         decision = getattr(obj, "community_safety_decision", None)
@@ -2219,6 +2273,9 @@ class SafetyCaseDetailSerializer(SafetyCaseSummarySerializer):
             "events",
             "community_policy",
             "reconsideration",
+            "safety_decision",
+            "account_enforcement",
+            "account_enforcement_available",
         ]
         read_only_fields = fields
 

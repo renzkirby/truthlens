@@ -4863,3 +4863,32 @@ html[data-theme="dark"] .thread-detail-page.thread-detail-page--classic .thread-
 .thread-detail-comment-removed svg {
    flex: 0 0 auto;
 }
+
+
+.thread-detail-restriction-note {
+   display: flex;
+   align-items: flex-start;
+   gap: 9px;
+   margin: 12px 0;
+   padding: 12px 14px;
+   border: 1px solid var(--tl-color-status-warning-border);
+   border-radius: 10px;
+   background: var(--tl-color-status-warning-bg);
+   color: var(--tl-color-status-warning-text);
+   font-size: 0.84rem;
+   line-height: 1.45;
+}
+
+.thread-detail-restriction-note > span {
+   flex: 1;
+}
+
+.thread-detail-restriction-note a {
+   flex-shrink: 0;
+   color: inherit;
+   font-weight: 800;
+}
+
+a.thread-detail-governance-chip {
+   text-decoration: none;
+}

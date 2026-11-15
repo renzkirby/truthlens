@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../hooks/useAuth";
 import { resolveApiEndpoint } from "../../utils/api";
@@ -341,6 +342,7 @@ function StateChanges({ event }) {
 }
 
 function AccountabilityEvent({ event }) {
+   const navigate = useNavigate();
    const [expanded, setExpanded] = useState(false);
    const actorLabel = event.actor?.username ? `@${event.actor.username}` : "System";
    const timestamp = event.created_at ? new Date(event.created_at) : null;
@@ -353,6 +355,10 @@ function AccountabilityEvent({ event }) {
    const authorityLabel = authorityLabelForEvent(event);
    const resourceLabel = professionalResourceLabel(event);
    const eventSummary = professionalEventSummary(event, actorLabel);
+   const canOpenSafetyCase =
+      event.domain === "SAFETY" &&
+      event.resource?.type === "MODERATION_CASE" &&
+      Boolean(resourceId);
 
    return (
       <li>
@@ -393,6 +399,20 @@ function AccountabilityEvent({ event }) {
             </dl>
 
             <div className="accountability-event-actions">
+               {canOpenSafetyCase ? (
+                  <Button
+                     type="button"
+                     variant="secondary"
+                     onClick={() =>
+                        navigate(
+                           `/management/safety?case=${encodeURIComponent(resourceId)}&source=history`,
+                        )
+                     }
+                     leadingIcon={<Icons name="external-link" size={15} aria-hidden="true" />}
+                  >
+                     Open case
+                  </Button>
+               ) : null}
                <Button
                   type="button"
                   variant="ghost"

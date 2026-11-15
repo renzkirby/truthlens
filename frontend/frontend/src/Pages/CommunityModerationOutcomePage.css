@@ -242,3 +242,48 @@
       width: 100%;
    }
 }
+
+
+.community-account-action-card {
+   border-color: var(--tl-color-status-warning-border);
+}
+
+.community-account-action-card .community-outcome-heading p {
+   margin: 5px 0 0;
+   color: var(--text-muted);
+   font-size: 0.86rem;
+   line-height: 1.5;
+}
+
+.community-account-action-update,
+.community-account-review-summary {
+   margin-top: 16px;
+   padding: 14px 16px;
+   border: 1px solid var(--border-default);
+   border-radius: 12px;
+   background: var(--bg-subtle, #f8fafc);
+}
+
+.community-account-action-update h3,
+.community-account-review-summary h3 {
+   margin: 0 0 7px;
+   color: var(--text-main);
+   font-size: 0.94rem;
+}
+
+.community-account-action-update p,
+.community-account-review-summary > p {
+   margin: 0;
+   color: var(--text-body);
+   line-height: 1.6;
+}
+
+.community-account-action-update small {
+   display: block;
+   margin-top: 8px;
+   color: var(--text-muted);
+}
+
+.community-account-action-links {
+   margin-top: 12px;
+}
