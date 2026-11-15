@@ -84,7 +84,7 @@ function ReviewActions({ application, onRefresh }) {
          addToast({
             type: "success",
             title: "Application rejected",
-            message: "The rejection decision was recorded and the applicant will be notified by email.",
+            message: "The rejection decision has been recorded.",
             duration: 4500,
          });
          onRefresh(result.data);
