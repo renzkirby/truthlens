@@ -18,6 +18,7 @@ const NAVIGATION_ITEMS = [
    { to: "/management/safety", label: "Safety Review", icon: "shield-check", section: "Platform Safety", access: "safety", end: true },
    { to: "/management/safety/audit", label: "Safety History", icon: "activity", access: "safety" },
    { to: "/management/platform-staff", label: "Platform Staff", icon: "shield-user", section: "Governance", access: "admin" },
+   { to: "/management/partnership-applications", label: "Partner Applications", icon: "file-text", access: "admin" },
    { to: "/management/organizations", label: "Partner Organizations", icon: "landmark", access: "admin" },
    { to: "/management/memberships", label: "Membership Records", icon: "users", access: "admin" },
    { to: "/management/invitations", label: "Invitation Records", icon: "mail", access: "admin" },
