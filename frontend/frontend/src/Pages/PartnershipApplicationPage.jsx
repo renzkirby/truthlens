@@ -186,13 +186,14 @@ export default function PartnershipApplicationPage() {
                      </label>
 
                      <label>
-                        <span>Official website</span>
+                        <span>Official website *</span>
                         <Input
                            type="url"
                            value={form.website}
                            onChange={(event) => update("website", event.target.value)}
                            placeholder="https://example.org"
                            invalid={Boolean(fieldMessage(error, "website"))}
+                           required
                         />
                         {fieldMessage(error, "website") ? <small className="partner-application-error">{fieldMessage(error, "website")}</small> : null}
                      </label>
