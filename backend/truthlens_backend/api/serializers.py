@@ -2173,7 +2173,6 @@ class SafetyCaseDetailSerializer(SafetyCaseSummarySerializer):
     safety_decision = serializers.SerializerMethodField()
     account_enforcement = serializers.SerializerMethodField()
     account_enforcement_available = serializers.SerializerMethodField()
-    account_enforcement_issuance_enabled = serializers.SerializerMethodField()
 
     def get_reports(self, obj):
         return SafetyReportDetailSerializer(
@@ -2237,15 +2236,6 @@ class SafetyCaseDetailSerializer(SafetyCaseSummarySerializer):
             == CommunitySafetyReconsideration.Outcome.UPHELD
         )
 
-    def get_account_enforcement_issuance_enabled(self, obj):
-        return bool(
-            getattr(
-                settings,
-                "COMMUNITY_ACCOUNT_ENFORCEMENT_ISSUANCE_ENABLED",
-                False,
-            )
-        )
-
     def get_reconsideration(self, obj):
         decision = getattr(obj, "community_safety_decision", None)
         reconsideration = (
@@ -2286,7 +2276,6 @@ class SafetyCaseDetailSerializer(SafetyCaseSummarySerializer):
             "safety_decision",
             "account_enforcement",
             "account_enforcement_available",
-            "account_enforcement_issuance_enabled",
         ]
         read_only_fields = fields
 
