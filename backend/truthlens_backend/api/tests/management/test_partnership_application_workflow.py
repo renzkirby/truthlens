@@ -3,6 +3,7 @@ from django.core import mail
 from django.core.cache import cache
 from django.urls import reverse
 from rest_framework import status
+from unittest.mock import patch
 from rest_framework.test import APITestCase
 
 from api.models import (
@@ -108,6 +109,97 @@ class PartnershipApplicationWorkflowTests(APITestCase):
             organization.governance_contact_email,
             APPLICATION_PAYLOAD["official_contact_email"],
         )
+
+    @patch("api.partnership_application_serializers.check_url_threat_reputation")
+    def test_known_threat_official_url_blocks_application(self, check_reputation):
+        check_reputation.return_value = {
+            "status": "UNSAFE",
+            "provider": "GOOGLE_SAFE_BROWSING",
+            "threat_types": ["SOCIAL_ENGINEERING"],
+        }
+
+        response = self.submit_application(
+            supporting_links=[],
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("website", response.data)
+        self.assertIn(
+            "identified as potentially unsafe",
+            str(response.data["website"][0]),
+        )
+        self.assertEqual(Organization.objects.count(), 0)
+        self.assertEqual(PartnershipApplication.objects.count(), 0)
+
+    @patch("api.partnership_application_serializers.check_url_threat_reputation")
+    def test_known_threat_supporting_link_blocks_application(self, check_reputation):
+        def reputation(url):
+            if url.endswith("/editorial-policy"):
+                return {
+                    "status": "UNSAFE",
+                    "provider": "GOOGLE_SAFE_BROWSING",
+                    "threat_types": ["MALWARE"],
+                }
+            return {
+                "status": "SAFE",
+                "provider": "GOOGLE_SAFE_BROWSING",
+                "threat_types": [],
+            }
+
+        check_reputation.side_effect = reputation
+
+        response = self.submit_application(
+            supporting_links=[
+                "https://example-verification.org/about",
+                "https://example-verification.org/editorial-policy",
+            ],
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("supporting_links", response.data)
+        self.assertIn(
+            "Supporting link 2 was identified as potentially unsafe",
+            str(response.data["supporting_links"][0]),
+        )
+        self.assertEqual(Organization.objects.count(), 0)
+        self.assertEqual(PartnershipApplication.objects.count(), 0)
+
+    @patch("api.partnership_application_serializers.check_url_threat_reputation")
+    def test_unavailable_url_reputation_does_not_block_application(
+        self,
+        check_reputation,
+    ):
+        check_reputation.return_value = {
+            "status": "UNKNOWN",
+            "provider": "GOOGLE_SAFE_BROWSING",
+            "reason": "provider_unreachable",
+        }
+
+        response = self.submit_application()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Organization.objects.count(), 1)
+        self.assertEqual(PartnershipApplication.objects.count(), 1)
+
+    @patch("api.partnership_application_serializers.check_url_threat_reputation")
+    def test_private_official_url_is_rejected_before_reputation_lookup(
+        self,
+        check_reputation,
+    ):
+        response = self.submit_application(
+            website="http://127.0.0.1/admin",
+            supporting_links=[],
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("website", response.data)
+        self.assertIn(
+            "Private network URLs are not allowed.",
+            str(response.data["website"][0]),
+        )
+        check_reputation.assert_not_called()
+        self.assertEqual(Organization.objects.count(), 0)
+        self.assertEqual(PartnershipApplication.objects.count(), 0)
 
     def test_duplicate_organization_name_is_rejected(self):
         first = self.submit_application()
