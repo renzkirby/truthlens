@@ -236,6 +236,72 @@ class PartnershipApplicationWorkflowTests(APITestCase):
         invitation.refresh_from_db()
         self.assertEqual(invitation.status, invitation.Status.ACCEPTED)
 
+    def test_legacy_organization_without_application_keeps_manual_lifecycle(self):
+        organization = Organization.objects.create(
+            name="Legacy Internal Partner",
+            slug="legacy-internal-partner",
+            organization_type=Organization.OrganizationType.FACT_CHECKING,
+            verification_status=Organization.VerificationStatus.PENDING,
+            partner_status=Organization.PartnerStatus.NONE,
+        )
+        self.client.force_authenticate(self.platform_admin)
+
+        verify_response = self.client.post(
+            reverse("management_organization_verify", args=[organization.pk]),
+            {},
+            format="json",
+        )
+        self.assertEqual(verify_response.status_code, status.HTTP_200_OK)
+
+        activate_response = self.client.post(
+            reverse(
+                "management_organization_activate_partnership",
+                args=[organization.pk],
+            ),
+            {},
+            format="json",
+        )
+        self.assertEqual(activate_response.status_code, status.HTTP_200_OK)
+
+        organization.refresh_from_db()
+        self.assertEqual(
+            organization.verification_status,
+            Organization.VerificationStatus.VERIFIED,
+        )
+        self.assertEqual(
+            organization.partner_status,
+            Organization.PartnerStatus.ACTIVE,
+        )
+
+    def test_management_governance_history_includes_application_review_events(self):
+        self.submit_application()
+        application = self.application()
+        self.start_review(application)
+        self.approve(application)
+
+        response = self.client.get(
+            reverse("management_governance_audit"),
+            {"organization": application.organization.name},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        actions = {
+            row["action_type"]
+            for row in response.data["results"]
+        }
+        self.assertIn(
+            "PARTNERSHIP_APPLICATION_SUBMITTED",
+            actions,
+        )
+        self.assertIn(
+            "PARTNERSHIP_APPLICATION_REVIEW_STARTED",
+            actions,
+        )
+        self.assertIn(
+            "PARTNERSHIP_APPLICATION_APPROVED",
+            actions,
+        )
+
     def test_rejection_marks_application_and_organization_rejected(self):
         self.submit_application()
         application = self.application()
