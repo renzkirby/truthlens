@@ -563,6 +563,18 @@ class CommunityAccountEnforcementTests(APITestCase):
             calculate_trust_components(self.author)["trust_score"],
             trust_after_content_removal,
         )
+        review_notification = Notification.objects.filter(
+            recipient=self.author,
+            notification_type=(
+                Notification.NotificationType.COMMUNITY_ACCOUNT_ENFORCEMENT
+            ),
+            dedupe_key=f"community-enforcement:{enforcement.pk}:review-resolved",
+        ).get()
+        self.assertIn("Your review is complete.", review_notification.message)
+        self.assertIn(
+            "Platform Safety reversed the account action.",
+            review_notification.message,
+        )
 
     def test_phase_c_reversal_atomically_revokes_basis_and_moots_account_review(self):
         thread, case, _, decision = self._remove("basis-reversal")
