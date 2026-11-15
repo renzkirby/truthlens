@@ -139,26 +139,6 @@ export function SafetyAccountActionForm({
       );
    }
 
-   if (!detail?.account_enforcement_issuance_enabled) {
-      return (
-         <section className="safety-account-action-card is-disabled">
-            <div className="safety-subheading-row">
-               <div>
-                  <h4>Community access action</h4>
-                  <p>Account enforcement is separate from the content-removal decision.</p>
-               </div>
-            </div>
-            <div className="safety-account-action-disabled">
-               <Icons name="lock" size={16} />
-               <span>
-                  New account actions are disabled by the deployment safeguard.
-                  Standing, reviews, reversals, and existing restrictions remain operational.
-               </span>
-            </div>
-         </section>
-      );
-   }
-
    const submit = async (event) => {
       event.preventDefault();
       if (!action) {
