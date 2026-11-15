@@ -1,4 +1,5 @@
 from django.contrib.auth.models import User
+from django.core import mail
 from django.core.cache import cache
 from django.urls import reverse
 from rest_framework import status
@@ -10,7 +11,10 @@ from api.models import (
     PartnershipApplication,
 )
 from api.organization_invitation_service import accept_organization_invitation
-from api.organization_provisioning_service import _create_organization_admin_invitation
+from api.organization_provisioning_service import (
+    _create_organization_admin_invitation,
+    create_and_send_organization_admin_invitation,
+)
 
 
 APPLICATION_PAYLOAD = {
@@ -208,6 +212,33 @@ class PartnershipApplicationWorkflowTests(APITestCase):
             format="json",
         )
         self.assertEqual(wrong.status_code, status.HTTP_409_CONFLICT)
+
+    def test_approved_admin_onboarding_email_uses_truthlens_as_inviter(self):
+        self.submit_application()
+        application = self.application()
+        self.start_review(application)
+        self.approve(application)
+
+        create_and_send_organization_admin_invitation(
+            organization=application.organization,
+            email="maria@example-verification.org",
+            actor=self.platform_admin,
+        )
+
+        self.assertEqual(len(mail.outbox), 1)
+        message = mail.outbox[0]
+        self.assertIn(
+            "TruthLens has invited you to join Example Verification Network",
+            message.body,
+        )
+        self.assertNotIn(self.platform_admin.username, message.body)
+
+        html_body = message.alternatives[0][0]
+        self.assertIn(
+            "TruthLens has invited you to join",
+            html_body,
+        )
+        self.assertNotIn(self.platform_admin.username, html_body)
 
     def test_approved_admin_acceptance_finalizes_verification_and_partnership(self):
         self.submit_application()
