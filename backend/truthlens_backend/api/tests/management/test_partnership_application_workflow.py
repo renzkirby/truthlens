@@ -1,4 +1,5 @@
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -38,6 +39,8 @@ APPLICATION_PAYLOAD = {
 
 class PartnershipApplicationWorkflowTests(APITestCase):
     def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
         self.platform_admin = User.objects.create_superuser(
             username="platform-admin",
             email="admin@truthlens.test",
