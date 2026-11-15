@@ -146,6 +146,11 @@
    margin-bottom: 16px;
 }
 
+.partner-application-grid > label {
+   align-self: start;
+   align-content: start;
+}
+
 .partner-application-grid__full {
    grid-column: 1 / -1;
 }
