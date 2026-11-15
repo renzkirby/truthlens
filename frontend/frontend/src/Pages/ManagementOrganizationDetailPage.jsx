@@ -36,6 +36,11 @@ function OrganizationGovernanceSection({
    const activeFactualCorrections = lifecycle.active_factual_corrections || [];
    const partnershipApplication = organization.partnership_application;
    const applicationManaged = Boolean(partnershipApplication);
+   const applicationOnboardingComplete = Boolean(
+      partnershipApplication?.onboarding_completed_at
+      && organization.verification_status === "VERIFIED"
+      && organization.partner_status === "ACTIVE",
+   );
    const [confirmationAction, setConfirmationAction] = useState(null);
    const [correctionConfirmation, setCorrectionConfirmation] = useState(null);
    const [endConfirmationOpen, setEndConfirmationOpen] = useState(false);
@@ -490,7 +495,7 @@ function OrganizationGovernanceSection({
             </ManagementFeedback>
          ) : null}
 
-         {applicationManaged ? (
+         {applicationManaged && !applicationOnboardingComplete ? (
             <div className="management-governance-action">
                <div>
                   <strong>Application-managed onboarding</strong>
