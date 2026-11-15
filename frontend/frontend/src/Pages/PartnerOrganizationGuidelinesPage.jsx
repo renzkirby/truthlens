@@ -153,9 +153,10 @@ function PartnerOrganizationGuidelinesPage() {
    const upwardDistanceRef = useRef(0);
 
    const location = useLocation();
+   const publicView = location.pathname === "/partner-guidelines";
    const isPlatformAdmin = canAccessManagementConsole(user);
    const professionalIdentity = user?.community_identity?.professional_identity || null;
-   const canView = isPlatformAdmin || Boolean(professionalIdentity);
+   const canView = publicView || isPlatformAdmin || Boolean(professionalIdentity);
    const managementView = location.pathname.startsWith("/management/");
 
    useEffect(() => {
@@ -216,23 +217,33 @@ function PartnerOrganizationGuidelinesPage() {
       return <Navigate to="/community" replace />;
    }
 
-   if (requestedDocument === "framework" || requestedDocument === "enforcement") {
+   if (publicView && requestedDocument !== "guidelines") {
+      return <Navigate to="/partner-guidelines" replace />;
+   }
+
+   if (!publicView && (requestedDocument === "framework" || requestedDocument === "enforcement")) {
       return <Navigate to={`${location.pathname}?document=governance`} replace />;
    }
 
-   const backTo = managementView
-      ? "/management"
-      : canAccessWorkspace(user)
-         ? "/workspace"
-         : "/community";
-   const backLabel = managementView
-      ? "Management Console"
-      : canAccessWorkspace(user)
-         ? "Verification Workspace"
-         : "Community";
+   const backTo = publicView
+      ? "/partners/apply"
+      : managementView
+         ? "/management"
+         : canAccessWorkspace(user)
+            ? "/workspace"
+            : "/community";
+   const backLabel = publicView
+      ? "Partnership application"
+      : managementView
+         ? "Management Console"
+         : canAccessWorkspace(user)
+            ? "Verification Workspace"
+            : "Community";
 
    return (
-      <main className={`partner-guidelines-page ${managementView ? "partner-guidelines-page--management" : ""}`}>
+      <main
+         className={`partner-guidelines-page ${managementView ? "partner-guidelines-page--management" : ""} ${publicView ? "partner-guidelines-page--public" : ""}`}
+      >
          <div className="partner-guidelines-page__content">
             <Link className="partner-guidelines-back" to={backTo}>
                ← {backLabel}
@@ -290,34 +301,36 @@ function PartnerOrganizationGuidelinesPage() {
                   <PolicyMetadata document={currentDocument} />
                </div>
 
-               <aside className="partner-guidelines-sidebar partner-guidelines-sidebar--documents" aria-label="Partner governance documents">
-                  <div className="partner-guidelines-sidebar__sticky">
-                     <span className="partner-guidelines-sidebar__eyebrow">Governance documents</span>
-                     <div className="partner-governance-documents">
-                        {partnerGovernanceDocuments.map((item) => {
-                           const documentHref = item.key === "guidelines"
-                              ? location.pathname
-                              : `${location.pathname}?document=${item.key}`;
-                           const isCurrent = currentDocument.key === item.key;
-                           return (
-                              <Link
-                                 key={item.key}
-                                 to={documentHref}
-                                 className={`partner-governance-document-card ${isCurrent ? "is-current" : ""}`}
-                              >
-                                 <div className="partner-governance-document-card__title-row">
-                                    <strong>{item.title}</strong>
-                                 </div>
-                                 <p>{item.description}</p>
-                              </Link>
-                           );
-                        })}
+               {!publicView ? (
+                  <aside className="partner-guidelines-sidebar partner-guidelines-sidebar--documents" aria-label="Partner governance documents">
+                     <div className="partner-guidelines-sidebar__sticky">
+                        <span className="partner-guidelines-sidebar__eyebrow">Governance documents</span>
+                        <div className="partner-governance-documents">
+                           {partnerGovernanceDocuments.map((item) => {
+                              const documentHref = item.key === "guidelines"
+                                 ? location.pathname
+                                 : `${location.pathname}?document=${item.key}`;
+                              const isCurrent = currentDocument.key === item.key;
+                              return (
+                                 <Link
+                                    key={item.key}
+                                    to={documentHref}
+                                    className={`partner-governance-document-card ${isCurrent ? "is-current" : ""}`}
+                                 >
+                                    <div className="partner-governance-document-card__title-row">
+                                       <strong>{item.title}</strong>
+                                    </div>
+                                    <p>{item.description}</p>
+                                 </Link>
+                              );
+                           })}
+                        </div>
+                        <p className="partner-guidelines-sidebar__note">
+                           The Guidelines define Partner standards. The Governance & Enforcement Policy defines how material concerns are handled.
+                        </p>
                      </div>
-                     <p className="partner-guidelines-sidebar__note">
-                        The Guidelines define Partner standards. The Governance & Enforcement Policy defines how material concerns are handled.
-                     </p>
-                  </div>
-               </aside>
+                  </aside>
+               ) : null}
             </div>
          </div>
       </main>
