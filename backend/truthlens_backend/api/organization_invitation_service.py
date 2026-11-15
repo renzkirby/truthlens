@@ -32,6 +32,11 @@ from .organization_service import (
 from .organization_partnership_policy import (
     get_organization_admin_onboarding_policy,
 )
+from .partnership_application_service import (
+    PartnershipApplicationConflict,
+    approved_application_for_admin_onboarding,
+    finalize_approved_partnership_onboarding,
+)
 from django.core.exceptions import (
     ValidationError,
 )
@@ -359,6 +364,14 @@ def accept_organization_invitation(
                         "This Organization Admin invitation contains an invalid role."
                     )
 
+                try:
+                    approved_application_for_admin_onboarding(
+                        organization=invitation.organization,
+                        email=invitation.email,
+                    )
+                except PartnershipApplicationConflict as error:
+                    raise OrganizationInvitationConflict(str(error)) from error
+
                 current_admin = (
                     OrganizationMembership.objects.select_for_update(of=("self",))
                     .filter(
@@ -499,6 +512,15 @@ def accept_organization_invitation(
                     "membership_status": membership.status,
                 },
             )
+
+            if is_admin_onboarding:
+                try:
+                    finalize_approved_partnership_onboarding(
+                        organization=invitation.organization,
+                        accepted_by=actor,
+                    )
+                except PartnershipApplicationConflict as error:
+                    raise OrganizationInvitationConflict(str(error)) from error
 
             accepted_invitation = invitation
 
