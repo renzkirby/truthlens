@@ -418,6 +418,7 @@
 .accountability-event-actions {
    display: flex;
    justify-content: flex-end;
+   gap: var(--tl-space-2);
    margin-top: var(--tl-space-3);
 }
 
