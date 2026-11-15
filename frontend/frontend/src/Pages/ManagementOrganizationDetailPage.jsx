@@ -34,6 +34,8 @@ function OrganizationGovernanceSection({
    const impact = lifecycle.impact || {};
    const blockers = lifecycle.end_partnership_blockers || [];
    const activeFactualCorrections = lifecycle.active_factual_corrections || [];
+   const partnershipApplication = organization.partnership_application;
+   const applicationManaged = Boolean(partnershipApplication);
    const [confirmationAction, setConfirmationAction] = useState(null);
    const [correctionConfirmation, setCorrectionConfirmation] = useState(null);
    const [endConfirmationOpen, setEndConfirmationOpen] = useState(false);
@@ -147,7 +149,11 @@ function OrganizationGovernanceSection({
          success: "Partnership reinstated.",
          variant: "primary",
       },
-   ].filter((action) => action.allowed);
+   ].filter(
+      (action) =>
+         action.allowed
+         && (!applicationManaged || !["verify", "reject", "activate"].includes(action.key)),
+   );
 
    const selectedAction = governanceActions.find(
       (action) => action.key === confirmationAction,
@@ -482,6 +488,24 @@ function OrganizationGovernanceSection({
                This organization has prior Partner verification work but is still recorded as “Not a Partner.”
                Complete the governed retirement flow before any later reinstatement.
             </ManagementFeedback>
+         ) : null}
+
+         {applicationManaged ? (
+            <div className="management-governance-action">
+               <div>
+                  <strong>Application-managed onboarding</strong>
+                  <p>
+                     This organization came from a public partnership application. Verification and initial activation
+                     are finalized only after application approval and acceptance of the approved Organization Admin invitation.
+                  </p>
+               </div>
+               <Link
+                  className="management-inline-link"
+                  to={"/management/partnership-applications/" + partnershipApplication.id}
+               >
+                  View partnership application
+               </Link>
+            </div>
          ) : null}
 
          {governanceActions.length ? (
