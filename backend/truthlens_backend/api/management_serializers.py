@@ -26,6 +26,7 @@ from .models import (
     OrganizationInstitutionAffiliation,
     OrganizationInvitation,
     OrganizationMembership,
+    PartnershipApplication,
     PlatformStaffInvitation,
     Claim,
     VerificationRun,
@@ -1008,6 +1009,7 @@ class ManagementOrganizationAdminInvitationSerializer(serializers.ModelSerialize
 
 class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerializer):
     lifecycle = serializers.SerializerMethodField()
+    partnership_application = serializers.SerializerMethodField()
     governance_notice_delivery = serializers.SerializerMethodField()
     governance_reconsiderations = serializers.SerializerMethodField()
     institution_affiliation = serializers.SerializerMethodField()
@@ -1026,6 +1028,26 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
 
     def get_lifecycle(self, obj):
         return get_partner_organization_lifecycle_projection(obj)
+
+    def get_partnership_application(self, obj):
+        try:
+            application = obj.partnership_application
+        except PartnershipApplication.DoesNotExist:
+            return None
+
+        return {
+            "id": str(application.pk),
+            "status": application.status,
+            "status_label": application.get_status_display(),
+            "applicant_full_name": application.applicant_full_name,
+            "applicant_position": application.applicant_position,
+            "applicant_email": application.applicant_email,
+            "official_contact_email": application.official_contact_email,
+            "approved_admin_email": application.approved_admin_email,
+            "review_started_at": application.review_started_at,
+            "decided_at": application.decided_at,
+            "onboarding_completed_at": application.onboarding_completed_at,
+        }
 
     def get_governance_notice_delivery(self, obj):
         queryset = OrganizationGovernanceNoticeRecipient.objects.filter(
@@ -1213,6 +1235,7 @@ class ManagementOrganizationDetailSerializer(ManagementOrganizationListSerialize
             "organization_admin",
             "primary_admin",
             "lifecycle",
+            "partnership_application",
             "governance_notice_delivery",
             "governance_reconsiderations",
             "created_at",
