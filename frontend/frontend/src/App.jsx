@@ -82,6 +82,7 @@ function App() {
                   <Route path="/landing-page" element={<Navigate to="/landing" replace />} />
                   <Route path="/partners" element={<PartnersPage />} />
                   <Route path="/partners/apply" element={<PartnershipApplicationPage />} />
+                  <Route path="/partner-guidelines" element={<PartnerOrganizationGuidelinesPage />} />
                   <Route path="/community-guidelines" element={<CommunityGuidelinesPage />} />
                   <Route path="/partners/:slug" element={<PartnerProfilePage />} />
                   <Route path="/partners/:slug/fact-checks/:publicationId" element={<PublicFactCheckPage />} />
