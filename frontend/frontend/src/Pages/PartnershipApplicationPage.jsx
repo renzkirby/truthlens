@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Building2, CheckCircle2, ExternalLink, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowRight, Building2, CheckCircle2, ShieldCheck } from "lucide-react";
 
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
@@ -238,6 +238,7 @@ export default function PartnershipApplicationPage() {
                            invalid={Boolean(fieldMessage(error, "applicant_full_name"))}
                            required
                         />
+                        {fieldMessage(error, "applicant_full_name") ? <small className="partner-application-error">{fieldMessage(error, "applicant_full_name")}</small> : null}
                      </label>
                      <label>
                         <span>Position or role *</span>
@@ -248,6 +249,7 @@ export default function PartnershipApplicationPage() {
                            invalid={Boolean(fieldMessage(error, "applicant_position"))}
                            required
                         />
+                        {fieldMessage(error, "applicant_position") ? <small className="partner-application-error">{fieldMessage(error, "applicant_position")}</small> : null}
                      </label>
                      <label className="partner-application-grid__full">
                         <span>Representative email *</span>
@@ -259,7 +261,11 @@ export default function PartnershipApplicationPage() {
                            invalid={Boolean(fieldMessage(error, "applicant_email"))}
                            required
                         />
-                        <small>If approved, TruthLens may use this address for Organization Admin onboarding.</small>
+                        {fieldMessage(error, "applicant_email") ? (
+                           <small className="partner-application-error">{fieldMessage(error, "applicant_email")}</small>
+                        ) : (
+                           <small>If approved, TruthLens may use this address for Organization Admin onboarding.</small>
+                        )}
                      </label>
                   </div>
                </section>
@@ -328,7 +334,7 @@ export default function PartnershipApplicationPage() {
                      loading={pending}
                      loadingLabel="Submitting application…"
                      disabled={supportingLinkCount > 5}
-                     trailingIcon={<ExternalLink size={16} />}
+                     trailingIcon={<ArrowRight size={16} />}
                   >
                      Submit partnership application
                   </Button>
