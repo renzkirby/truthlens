@@ -515,6 +515,11 @@
    color: var(--tl-color-status-success-text);
 }
 
+.safety-complete-state > div {
+   display: grid;
+   gap: 2px;
+}
+
 .safety-assignment-locked {
    border-color: var(--tl-color-status-info-border);
    background: var(--tl-color-status-info-bg);
