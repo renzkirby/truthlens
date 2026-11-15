@@ -99,13 +99,19 @@ def _validate_public_submission(
             field="organization_name",
         )
 
+    if not website:
+        raise PartnershipApplicationValidationError(
+            "Official organization website is required.",
+            field="website",
+        )
+
     if Organization.objects.filter(name__iexact=organization_name).exists():
         raise PartnershipApplicationConflict(
             "An organization with this name already exists on TruthLens.",
             field="organization_name",
         )
 
-    if website and Organization.objects.filter(website__iexact=website).exists():
+    if Organization.objects.filter(website__iexact=website).exists():
         raise PartnershipApplicationConflict(
             "An organization with this website already exists on TruthLens.",
             field="website",
