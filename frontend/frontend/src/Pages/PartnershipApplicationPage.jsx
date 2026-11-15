@@ -186,7 +186,7 @@ export default function PartnershipApplicationPage() {
                      </label>
 
                      <label>
-                        <span>Official website *</span>
+                        <span>Official website or public social media page *</span>
                         <Input
                            type="url"
                            value={form.website}
@@ -195,7 +195,14 @@ export default function PartnershipApplicationPage() {
                            invalid={Boolean(fieldMessage(error, "website"))}
                            required
                         />
-                        {fieldMessage(error, "website") ? <small className="partner-application-error">{fieldMessage(error, "website")}</small> : null}
+                        {fieldMessage(error, "website") ? (
+                           <small className="partner-application-error">{fieldMessage(error, "website")}</small>
+                        ) : (
+                           <small>
+                              Provide the organization’s official website. If it does not maintain one, an official
+                              public social media page is acceptable.
+                           </small>
+                        )}
                      </label>
 
                      <label>
@@ -297,12 +304,23 @@ export default function PartnershipApplicationPage() {
                         placeholder={"https://example.org/about\nhttps://example.org/editorial-policy"}
                         invalid={Boolean(fieldMessage(error, "supporting_links")) || supportingLinkCount > 5}
                      />
-                     <small>Optional. One URL per line, up to 5 links.</small>
+                     <small>
+                        Optional links that can help TruthLens review your organization, such as an About page,
+                        editorial policy, registration or accreditation record, institutional directory, or other
+                        public documentation. One URL per line, up to 5 links.
+                     </small>
                   </label>
                </section>
 
                <section className="partner-application-attestations">
                   <h3>Confirmations</h3>
+                  <p className="partner-application-guidelines-note">
+                     Review the{" "}
+                     <Link to="/partner-guidelines" target="_blank" rel="noreferrer">
+                        Partner Organization Guidelines
+                     </Link>{" "}
+                     before submitting this application.
+                  </p>
                   <label>
                      <input
                         type="checkbox"
@@ -317,7 +335,10 @@ export default function PartnershipApplicationPage() {
                         checked={form.agrees_to_partner_responsibilities}
                         onChange={(event) => update("agrees_to_partner_responsibilities", event.target.checked)}
                      />
-                     <span>I acknowledge that approval and continued participation are subject to TruthLens Partner responsibilities and governance requirements.</span>
+                     <span>
+                        I have reviewed the Partner Organization Guidelines and acknowledge that approval and continued
+                        participation are subject to TruthLens Partner responsibilities and governance requirements.
+                     </span>
                   </label>
                   {fieldMessage(error, "authorized_to_represent") ? <small className="partner-application-error">{fieldMessage(error, "authorized_to_represent")}</small> : null}
                   {fieldMessage(error, "agrees_to_partner_responsibilities") ? <small className="partner-application-error">{fieldMessage(error, "agrees_to_partner_responsibilities")}</small> : null}
