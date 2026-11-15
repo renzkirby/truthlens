@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Building2, CheckCircle2, ShieldCheck } from "lucide-react";
 
@@ -33,12 +33,45 @@ function fieldMessage(error, key) {
    return typeof value === "string" ? value : "";
 }
 
+const PARTNERSHIP_FIELD_ORDER = [
+   "organization_name",
+   "organization_type",
+   "website",
+   "official_contact_email",
+   "organization_description",
+   "applicant_full_name",
+   "applicant_position",
+   "applicant_email",
+   "partnership_reason",
+   "supporting_links",
+   "authorized_to_represent",
+   "agrees_to_partner_responsibilities",
+];
+
+function firstFieldError(errors) {
+   return PARTNERSHIP_FIELD_ORDER.find((field) => fieldMessage(errors, field));
+}
+
+function isValidEmail(value) {
+   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+
+function isValidPublicUrl(value) {
+   try {
+      const parsed = new URL(String(value || "").trim());
+      return parsed.protocol === "http:" || parsed.protocol === "https:";
+   } catch {
+      return false;
+   }
+}
+
 export default function PartnershipApplicationPage() {
    useDocumentTitle("Become a TruthLens Partner");
    const [form, setForm] = useState(INITIAL_FORM);
    const [pending, setPending] = useState(false);
    const [error, setError] = useState(null);
    const [submitted, setSubmitted] = useState(false);
+   const formRef = useRef(null);
 
    const supportingLinkCount = useMemo(
       () => form.supporting_links.split("\n").map((value) => value.trim()).filter(Boolean).length,
@@ -50,9 +83,103 @@ export default function PartnershipApplicationPage() {
       setError(null);
    };
 
+   const scrollToField = (field) => {
+      if (!field) return;
+
+      window.requestAnimationFrame(() => {
+         const container = formRef.current?.querySelector(
+            `[data-partnership-field="${field}"]`,
+         );
+         if (!container) return;
+
+         container.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+         });
+
+         const control = container.querySelector("input, select, textarea");
+         window.setTimeout(() => {
+            control?.focus({ preventScroll: true });
+         }, 300);
+      });
+   };
+
+   const validateBeforeSubmit = () => {
+      const nextError = {};
+      const requiredTextFields = [
+         ["organization_name", "Organization name is required."],
+         ["organization_type", "Select an organization type."],
+         ["website", "An official website or public social media page is required."],
+         ["official_contact_email", "Official contact email is required."],
+         ["applicant_full_name", "Applicant full name is required."],
+         ["applicant_position", "Applicant position or role is required."],
+         ["applicant_email", "Representative email is required."],
+      ];
+
+      requiredTextFields.forEach(([field, message]) => {
+         if (!String(form[field] || "").trim()) {
+            nextError[field] = [message];
+         }
+      });
+
+      if (form.website.trim() && !isValidPublicUrl(form.website)) {
+         nextError.website = ["Enter a valid http:// or https:// web address."];
+      }
+
+      if (
+         form.official_contact_email.trim()
+         && !isValidEmail(form.official_contact_email)
+      ) {
+         nextError.official_contact_email = ["Enter a valid official contact email address."];
+      }
+
+      if (form.applicant_email.trim() && !isValidEmail(form.applicant_email)) {
+         nextError.applicant_email = ["Enter a valid representative email address."];
+      }
+
+      if (form.organization_description.trim().length < 30) {
+         nextError.organization_description = [
+            "Provide at least 30 characters describing the organization.",
+         ];
+      }
+
+      if (form.partnership_reason.trim().length < 30) {
+         nextError.partnership_reason = [
+            "Provide at least 30 characters explaining the partnership request.",
+         ];
+      }
+
+      if (supportingLinkCount > 5) {
+         nextError.supporting_links = ["Provide no more than 5 supporting links."];
+      }
+
+      if (!form.authorized_to_represent) {
+         nextError.authorized_to_represent = [
+            "Confirm that you are authorized to represent this organization.",
+         ];
+      }
+
+      if (!form.agrees_to_partner_responsibilities) {
+         nextError.agrees_to_partner_responsibilities = [
+            "Confirm that you reviewed and acknowledge the Partner Organization Guidelines.",
+         ];
+      }
+
+      return nextError;
+   };
+
    const submit = async (event) => {
       event.preventDefault();
       if (pending) return;
+
+      const localErrors = validateBeforeSubmit();
+      const firstLocalError = firstFieldError(localErrors);
+
+      if (firstLocalError) {
+         setError(localErrors);
+         scrollToField(firstLocalError);
+         return;
+      }
 
       setPending(true);
       setError(null);
@@ -73,6 +200,7 @@ export default function PartnershipApplicationPage() {
          const payload = await response.json().catch(() => ({}));
          if (!response.ok) {
             setError(payload);
+            scrollToField(firstFieldError(payload));
             return;
          }
          setSubmitted(true);
@@ -148,7 +276,7 @@ export default function PartnershipApplicationPage() {
                </div>
             </aside>
 
-            <form className="partner-application-form" onSubmit={submit} noValidate>
+            <form ref={formRef} className="partner-application-form" onSubmit={submit} noValidate>
                <header>
                   <span className="partner-application-eyebrow">Partnership application</span>
                   <h2>Tell us about your organization</h2>
@@ -158,7 +286,7 @@ export default function PartnershipApplicationPage() {
                <section>
                   <h3>Organization identity</h3>
                   <div className="partner-application-grid">
-                     <label>
+                     <label data-partnership-field="organization_name">
                         <span>Organization name *</span>
                         <Input
                            value={form.organization_name}
@@ -169,7 +297,7 @@ export default function PartnershipApplicationPage() {
                         {fieldMessage(error, "organization_name") ? <small className="partner-application-error">{fieldMessage(error, "organization_name")}</small> : null}
                      </label>
 
-                     <label>
+                     <label data-partnership-field="organization_type">
                         <span>Organization type *</span>
                         <Select
                            value={form.organization_type}
@@ -185,7 +313,7 @@ export default function PartnershipApplicationPage() {
                         {fieldMessage(error, "organization_type") ? <small className="partner-application-error">{fieldMessage(error, "organization_type")}</small> : null}
                      </label>
 
-                     <label>
+                     <label data-partnership-field="website">
                         <span>Official website or public social media page *</span>
                         <Input
                            type="url"
@@ -205,7 +333,7 @@ export default function PartnershipApplicationPage() {
                         )}
                      </label>
 
-                     <label>
+                     <label data-partnership-field="official_contact_email">
                         <span>Official contact email *</span>
                         <Input
                            type="email"
@@ -219,7 +347,7 @@ export default function PartnershipApplicationPage() {
                      </label>
                   </div>
 
-                  <label>
+                  <label data-partnership-field="organization_description">
                      <span>Organization description *</span>
                      <Textarea
                         rows={4}
@@ -238,7 +366,7 @@ export default function PartnershipApplicationPage() {
                <section>
                   <h3>Authorized representative</h3>
                   <div className="partner-application-grid">
-                     <label>
+                     <label data-partnership-field="applicant_full_name">
                         <span>Full name *</span>
                         <Input
                            value={form.applicant_full_name}
@@ -248,7 +376,7 @@ export default function PartnershipApplicationPage() {
                         />
                         {fieldMessage(error, "applicant_full_name") ? <small className="partner-application-error">{fieldMessage(error, "applicant_full_name")}</small> : null}
                      </label>
-                     <label>
+                     <label data-partnership-field="applicant_position">
                         <span>Position or role *</span>
                         <Input
                            value={form.applicant_position}
@@ -259,7 +387,7 @@ export default function PartnershipApplicationPage() {
                         />
                         {fieldMessage(error, "applicant_position") ? <small className="partner-application-error">{fieldMessage(error, "applicant_position")}</small> : null}
                      </label>
-                     <label className="partner-application-grid__full">
+                     <label className="partner-application-grid__full" data-partnership-field="applicant_email">
                         <span>Representative email *</span>
                         <Input
                            type="email"
@@ -280,7 +408,7 @@ export default function PartnershipApplicationPage() {
 
                <section>
                   <h3>Partnership request</h3>
-                  <label>
+                  <label data-partnership-field="partnership_reason">
                      <span>Why does your organization want to partner with TruthLens? *</span>
                      <Textarea
                         rows={5}
@@ -295,7 +423,7 @@ export default function PartnershipApplicationPage() {
                      </small>
                   </label>
 
-                  <label>
+                  <label data-partnership-field="supporting_links">
                      <span>Supporting links</span>
                      <Textarea
                         rows={3}
@@ -321,7 +449,7 @@ export default function PartnershipApplicationPage() {
                      </Link>{" "}
                      before submitting this application.
                   </p>
-                  <label>
+                  <label data-partnership-field="authorized_to_represent">
                      <input
                         type="checkbox"
                         checked={form.authorized_to_represent}
@@ -329,7 +457,7 @@ export default function PartnershipApplicationPage() {
                      />
                      <span>I confirm that I am authorized to submit this partnership application on behalf of the organization.</span>
                   </label>
-                  <label>
+                  <label data-partnership-field="agrees_to_partner_responsibilities">
                      <input
                         type="checkbox"
                         checked={form.agrees_to_partner_responsibilities}
@@ -355,7 +483,6 @@ export default function PartnershipApplicationPage() {
                      type="submit"
                      loading={pending}
                      loadingLabel="Submitting application…"
-                     disabled={supportingLinkCount > 5}
                      trailingIcon={<ArrowRight size={16} />}
                   >
                      Submit partnership application
