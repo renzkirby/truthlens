@@ -159,7 +159,7 @@
 }
 
 .partner-application-guidelines-note {
-   margin: 0 0 16px;
+   margin: 0 0 22px;
    color: var(--tl-color-text-muted);
    font-size: var(--tl-text-sm);
    line-height: 1.55;
@@ -181,6 +181,10 @@
    gap: 10px;
    font-weight: 500;
    line-height: 1.55;
+}
+
+.partner-application-attestations label + label {
+   margin-top: 18px;
 }
 
 .partner-application-attestations input {
