@@ -20,10 +20,16 @@
          <h1 style="margin: 0 0 16px; font-size: 22px">Join {{ organization_name }}</h1>
 
          <p>
+            {% if partnership_onboarding %}
+            TruthLens has invited you to join
+            <strong>{{ organization_name }}</strong>
+            as <strong>{{ role_label }}</strong>.
+            {% else %}
             {{ inviter_name }} invited you to join
             <strong>{{ organization_name }}</strong>
             as <strong>{{ role_label }}</strong>
             on TruthLens.
+            {% endif %}
          </p>
 
          {% if partnership_onboarding %}
