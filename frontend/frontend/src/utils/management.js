@@ -23,7 +23,7 @@ export function formatManagementDate(value, { dateOnly = false } = {}) {
 }
 
 export function managementStatusTone(status) {
-   if (["ACTIVE", "VERIFIED", "ACCEPTED", "COMPLETED", "RESOLVED"].includes(status)) return "success";
+   if (["ACTIVE", "VERIFIED", "ACCEPTED", "APPROVED", "COMPLETED", "RESOLVED"].includes(status)) return "success";
    if (["PENDING", "RUNNING", "UNVERIFIED", "SUBMITTED", "UNDER_REVIEW"].includes(status)) return "warning";
    if (["SUSPENDED", "REJECTED", "CANCELLED", "EXPIRED", "FAILED"].includes(status)) return "critical";
    return "neutral";
