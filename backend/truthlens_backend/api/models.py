@@ -467,6 +467,69 @@ class Organization(models.Model):
         return self.name
 
 
+class PartnershipApplication(models.Model):
+    class Status(models.TextChoices):
+        SUBMITTED = "SUBMITTED", "Submitted"
+        UNDER_REVIEW = "UNDER_REVIEW", "Under Review"
+        APPROVED = "APPROVED", "Approved for Onboarding"
+        REJECTED = "REJECTED", "Rejected"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.OneToOneField(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="partnership_application",
+    )
+    applicant_full_name = models.CharField(max_length=255)
+    applicant_position = models.CharField(max_length=255)
+    applicant_email = models.EmailField(max_length=254)
+    official_contact_email = models.EmailField(max_length=254)
+    organization_description = models.TextField(max_length=4000)
+    partnership_reason = models.TextField(max_length=4000)
+    supporting_links = models.JSONField(default=list, blank=True)
+    authorized_to_represent = models.BooleanField(default=False)
+    agrees_to_partner_responsibilities = models.BooleanField(default=False)
+    status = models.CharField(
+        max_length=24,
+        choices=Status.choices,
+        default=Status.SUBMITTED,
+        db_index=True,
+    )
+    reviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_partnership_applications",
+    )
+    review_started_at = models.DateTimeField(null=True, blank=True)
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="decided_partnership_applications",
+    )
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_notes = models.TextField(max_length=4000, blank=True, default="")
+    approved_admin_email = models.EmailField(max_length=254, blank=True, default="")
+    onboarding_completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(
+                fields=["status", "-created_at"],
+                name="partner_app_status_created_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.organization.name} - {self.get_status_display()}"
+
+
 class OrganizationInstitutionAffiliation(models.Model):
     """Platform-reviewed affiliation between a student publication and institution."""
 
@@ -3134,6 +3197,26 @@ class AccountabilityEvent(models.Model):
         SYSTEM = "SYSTEM", "System"
 
     class ActionType(models.TextChoices):
+        PARTNERSHIP_APPLICATION_SUBMITTED = (
+            "PARTNERSHIP_APPLICATION_SUBMITTED",
+            "Partnership Application Submitted",
+        )
+        PARTNERSHIP_APPLICATION_REVIEW_STARTED = (
+            "PARTNERSHIP_APPLICATION_REVIEW_STARTED",
+            "Partnership Application Review Started",
+        )
+        PARTNERSHIP_APPLICATION_APPROVED = (
+            "PARTNERSHIP_APPLICATION_APPROVED",
+            "Partnership Application Approved",
+        )
+        PARTNERSHIP_APPLICATION_REJECTED = (
+            "PARTNERSHIP_APPLICATION_REJECTED",
+            "Partnership Application Rejected",
+        )
+        PARTNERSHIP_APPLICATION_ONBOARDING_COMPLETED = (
+            "PARTNERSHIP_APPLICATION_ONBOARDING_COMPLETED",
+            "Partnership Application Onboarding Completed",
+        )
         ORGANIZATION_CREATED = (
             "ORGANIZATION_CREATED",
             "Organization Created",
@@ -3329,6 +3412,10 @@ class AccountabilityEvent(models.Model):
             "Organization Invitation",
         )
         ORGANIZATION = "ORGANIZATION", "Organization"
+        PARTNERSHIP_APPLICATION = (
+            "PARTNERSHIP_APPLICATION",
+            "Partnership Application",
+        )
         INSTITUTION = "INSTITUTION", "Institution"
         ORGANIZATION_INSTITUTION_AFFILIATION = (
             "ORGANIZATION_INSTITUTION_AFFILIATION",
