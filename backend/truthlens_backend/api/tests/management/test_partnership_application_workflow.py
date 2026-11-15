@@ -358,14 +358,15 @@ class PartnershipApplicationWorkflowTests(APITestCase):
         application = self.application()
         self.start_review(application)
 
-        response = self.client.post(
-            reverse(
-                "management_partnership_application_reject",
-                args=[application.pk],
-            ),
-            {"decision_notes": "The submitted institutional identity could not be established."},
-            format="json",
-        )
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                reverse(
+                    "management_partnership_application_reject",
+                    args=[application.pk],
+                ),
+                {"decision_notes": "The submitted institutional identity could not be established."},
+                format="json",
+            )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         application.refresh_from_db()
@@ -378,4 +379,32 @@ class PartnershipApplicationWorkflowTests(APITestCase):
         self.assertEqual(
             application.organization.partner_status,
             Organization.PartnerStatus.NONE,
+        )
+
+        self.assertEqual(len(mail.outbox), 1)
+        message = mail.outbox[0]
+        self.assertEqual(
+            message.to,
+            [APPLICATION_PAYLOAD["applicant_email"]],
+        )
+        self.assertIn(
+            "TruthLens partnership application update",
+            message.subject,
+        )
+        self.assertIn(
+            "The submitted institutional identity could not be established.",
+            message.body,
+        )
+        self.assertNotIn(
+            APPLICATION_PAYLOAD["official_contact_email"],
+            message.to,
+        )
+        html_body = message.alternatives[0][0]
+        self.assertIn(
+            "Decision rationale",
+            html_body,
+        )
+        self.assertIn(
+            "The submitted institutional identity could not be established.",
+            html_body,
         )
