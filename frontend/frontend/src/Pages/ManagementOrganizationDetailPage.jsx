@@ -34,6 +34,13 @@ function OrganizationGovernanceSection({
    const impact = lifecycle.impact || {};
    const blockers = lifecycle.end_partnership_blockers || [];
    const activeFactualCorrections = lifecycle.active_factual_corrections || [];
+   const partnershipApplication = organization.partnership_application;
+   const applicationManaged = Boolean(partnershipApplication);
+   const applicationOnboardingComplete = Boolean(
+      partnershipApplication?.onboarding_completed_at
+      && organization.verification_status === "VERIFIED"
+      && organization.partner_status === "ACTIVE",
+   );
    const [confirmationAction, setConfirmationAction] = useState(null);
    const [correctionConfirmation, setCorrectionConfirmation] = useState(null);
    const [endConfirmationOpen, setEndConfirmationOpen] = useState(false);
@@ -147,7 +154,11 @@ function OrganizationGovernanceSection({
          success: "Partnership reinstated.",
          variant: "primary",
       },
-   ].filter((action) => action.allowed);
+   ].filter(
+      (action) =>
+         action.allowed
+         && (!applicationManaged || !["verify", "reject", "activate"].includes(action.key)),
+   );
 
    const selectedAction = governanceActions.find(
       (action) => action.key === confirmationAction,
@@ -482,6 +493,24 @@ function OrganizationGovernanceSection({
                This organization has prior Partner verification work but is still recorded as “Not a Partner.”
                Complete the governed retirement flow before any later reinstatement.
             </ManagementFeedback>
+         ) : null}
+
+         {applicationManaged && !applicationOnboardingComplete ? (
+            <div className="management-governance-action">
+               <div>
+                  <strong>Application-managed onboarding</strong>
+                  <p>
+                     This organization came from a public partnership application. Verification and initial activation
+                     are finalized only after application approval and acceptance of the approved Organization Admin invitation.
+                  </p>
+               </div>
+               <Link
+                  className="management-inline-link"
+                  to={"/management/partnership-applications/" + partnershipApplication.id}
+               >
+                  View partnership application
+               </Link>
+            </div>
          ) : null}
 
          {governanceActions.length ? (
@@ -1561,6 +1590,7 @@ function OrganizationAdminState({
    organizationId,
    primaryAdmin,
    adminOnboarding,
+   partnershipApplication,
    onRefresh,
    onFeedback,
    returnFocusAfterRefreshRef,
@@ -1572,9 +1602,13 @@ function OrganizationAdminState({
    const cancelInvitationButtonRef = useRef(null);
    const provisionButtonRef = useRef(null);
    const { mutate, pending, error, reset } = useManagementMutation();
-   const adminOnboardingAllowed = adminOnboarding?.allowed !== false;
-   const adminOnboardingMessage = adminOnboarding?.message
-      || "Organization Admin onboarding is unavailable in the current lifecycle state.";
+   const applicationManaged = Boolean(partnershipApplication);
+   const applicationApproved = !applicationManaged || partnershipApplication.status === "APPROVED";
+   const adminOnboardingAllowed = adminOnboarding?.allowed !== false && applicationApproved;
+   const adminOnboardingMessage = applicationManaged && !applicationApproved
+      ? "Approve the partnership application before provisioning the first Organization Admin."
+      : adminOnboarding?.message
+         || "Organization Admin onboarding is unavailable in the current lifecycle state.";
 
    useEffect(() => {
       if (
@@ -1741,6 +1775,14 @@ function OrganizationAdminState({
             <ManagementFeedback tone="error">
                {adminOnboardingMessage}
             </ManagementFeedback>
+            {applicationManaged ? (
+               <Link
+                  className="management-inline-link"
+                  to={"/management/partnership-applications/" + partnershipApplication.id}
+               >
+                  Review partnership application
+               </Link>
+            ) : null}
          </>
       );
    }
@@ -1758,6 +1800,7 @@ function OrganizationAdminState({
                   ref={provisionButtonRef}
                   onClick={() => {
                      reset();
+                     setEmail(partnershipApplication?.approved_admin_email || "");
                      setProvisioningOpen(true);
                   }}
                >
@@ -1769,7 +1812,9 @@ function OrganizationAdminState({
                <div className="management-provision-form__intro">
                   <strong>Invite the organization’s first Admin</strong>
                   <p>
-                     The recipient uses their own TruthLens account, and the invited email must match their verified account when accepting. TruthLens does not create or know their password. This role does not imply legal or business ownership.
+                     {applicationManaged
+                        ? "This invitation is restricted to the representative email approved during partnership review. Acceptance by that verified account completes institutional verification and activates the partnership."
+                        : "The recipient uses their own TruthLens account, and the invited email must match their verified account when accepting. TruthLens does not create or know their password. This role does not imply legal or business ownership."}
                   </p>
                </div>
                <label className="management-form-field">
@@ -1785,6 +1830,7 @@ function OrganizationAdminState({
                      aria-describedby={error?.fields.email ? "primary-admin-email-error" : undefined}
                      autoComplete="email"
                      required
+                     readOnly={applicationManaged}
                      disabled={pending}
                   />
                   <FieldError id="primary-admin-email-error">{error?.fields.email}</FieldError>
@@ -1862,6 +1908,7 @@ function ManagementOrganizationDetailPage() {
                         organizationId={data.id}
                         primaryAdmin={data.organization_admin ?? data.primary_admin}
                         adminOnboarding={data.lifecycle?.admin_onboarding}
+                        partnershipApplication={data.partnership_application}
                         onRefresh={retry}
                         onFeedback={showFeedback}
                         returnFocusAfterRefreshRef={returnFocusAfterPrimaryAdminRefreshRef}

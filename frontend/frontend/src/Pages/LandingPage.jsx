@@ -443,10 +443,16 @@ const TruthLens = () => {
                      </p>
                   </div>
 
-                  <Link to="/partners" className="trust-partners-link">
-                     Explore public partner organizations
-                     <ArrowRight size={17} strokeWidth={2} aria-hidden="true" />
-                  </Link>
+                  <div className="trust-partner-actions">
+                     <Link to="/partners" className="trust-partners-link">
+                        Explore public partner organizations
+                        <ArrowRight size={17} strokeWidth={2} aria-hidden="true" />
+                     </Link>
+                     <Link to="/partners/apply" className="trust-partners-link trust-partners-link--secondary">
+                        Want to become a partner?
+                        <ArrowRight size={17} strokeWidth={2} aria-hidden="true" />
+                     </Link>
+                  </div>
                </div>
 
                {/* Transparency Principles */}

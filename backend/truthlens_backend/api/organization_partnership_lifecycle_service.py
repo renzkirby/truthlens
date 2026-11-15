@@ -25,6 +25,10 @@ from .organization_partnership_policy import (
     get_organization_admin_onboarding_policy,
     organization_has_prior_partner_work,
 )
+from .partnership_application_service import (
+    PartnershipApplicationConflict,
+    ensure_application_managed_trust_transition_allowed,
+)
 
 
 MANAGE_PARTNER_ORGANIZATION = "MANAGE_PARTNER_ORGANIZATION"
@@ -749,6 +753,10 @@ def verify_partner_organization(*, organization_id, actor):
     organization = Organization.objects.select_for_update(of=("self",)).get(
         pk=organization_id
     )
+    try:
+        ensure_application_managed_trust_transition_allowed(organization)
+    except PartnershipApplicationConflict as error:
+        raise OrganizationPartnershipLifecycleConflict(str(error)) from error
     if organization.verification_status == Organization.VerificationStatus.VERIFIED:
         raise OrganizationPartnershipLifecycleConflict(
             "This organization is already verified."
@@ -780,6 +788,10 @@ def reject_partner_organization_verification(*, organization_id, actor):
     organization = Organization.objects.select_for_update(of=("self",)).get(
         pk=organization_id
     )
+    try:
+        ensure_application_managed_trust_transition_allowed(organization)
+    except PartnershipApplicationConflict as error:
+        raise OrganizationPartnershipLifecycleConflict(str(error)) from error
     if organization.partner_status != Organization.PartnerStatus.NONE:
         raise OrganizationPartnershipLifecycleConflict(
             "End or resolve the current partnership lifecycle before rejecting "
@@ -816,6 +828,10 @@ def activate_partner_organization_partnership(*, organization_id, actor):
     organization = Organization.objects.select_for_update(of=("self",)).get(
         pk=organization_id
     )
+    try:
+        ensure_application_managed_trust_transition_allowed(organization)
+    except PartnershipApplicationConflict as error:
+        raise OrganizationPartnershipLifecycleConflict(str(error)) from error
     if organization.partner_status != Organization.PartnerStatus.NONE:
         raise OrganizationPartnershipLifecycleConflict(
             "Only an organization that is not currently a Partner can be activated."

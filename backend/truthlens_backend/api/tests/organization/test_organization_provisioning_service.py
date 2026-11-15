@@ -184,7 +184,7 @@ class OrganizationProvisioningServiceTests(TestCase):
 
         with self.assertRaisesRegex(
             OrganizationProvisioningConflict,
-            "Reinstate the partnership",
+            "fresh eligibility and activation",
         ):
             self.provision()
 
@@ -200,7 +200,7 @@ class OrganizationProvisioningServiceTests(TestCase):
 
         with self.assertRaisesRegex(
             OrganizationProvisioningConflict,
-            "Reinstate the partnership",
+            "fresh eligibility and activation",
         ):
             resend_organization_admin_invitation(
                 invitation=invitation,
@@ -234,7 +234,7 @@ class OrganizationProvisioningServiceTests(TestCase):
 
         with self.assertRaisesRegex(
             OrganizationInvitationConflict,
-            "Reinstate the partnership",
+            "fresh eligibility and activation",
         ):
             accept_organization_invitation(
                 raw_token=raw_token,

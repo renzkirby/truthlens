@@ -53,6 +53,9 @@ import ManagementPipelineRunDetailPage from "./Pages/ManagementPipelineRunDetail
 import ManagementSafetyReviewPage from "./Pages/ManagementSafetyReviewPage.jsx";
 import ManagementSafetyAuditPage from "./Pages/ManagementSafetyAuditPage.jsx";
 import ManagementPlatformStaffPage from "./Pages/ManagementPlatformStaffPage.jsx";
+import PartnershipApplicationPage from "./Pages/PartnershipApplicationPage.jsx";
+import ManagementPartnershipApplicationsPage from "./Pages/ManagementPartnershipApplicationsPage.jsx";
+import ManagementPartnershipApplicationDetailPage from "./Pages/ManagementPartnershipApplicationDetailPage.jsx";
 
 
 function CommunityFactCheckPage() {
@@ -78,6 +81,8 @@ function App() {
                   <Route path="/landing" element={<LandingPage />} />
                   <Route path="/landing-page" element={<Navigate to="/landing" replace />} />
                   <Route path="/partners" element={<PartnersPage />} />
+                  <Route path="/partners/apply" element={<PartnershipApplicationPage />} />
+                  <Route path="/partner-guidelines" element={<PartnerOrganizationGuidelinesPage />} />
                   <Route path="/community-guidelines" element={<CommunityGuidelinesPage />} />
                   <Route path="/partners/:slug" element={<PartnerProfilePage />} />
                   <Route path="/partners/:slug/fact-checks/:publicationId" element={<PublicFactCheckPage />} />
@@ -99,6 +104,11 @@ function App() {
                      <Route element={<ManagementConsoleShell />}>
                         <Route path="/management" element={<ManagementOverviewPage />} />
                         <Route path="/management/platform-staff" element={<ManagementPlatformStaffPage />} />
+                        <Route path="/management/partnership-applications" element={<ManagementPartnershipApplicationsPage />} />
+                        <Route
+                           path="/management/partnership-applications/:applicationId"
+                           element={<ManagementPartnershipApplicationDetailPage />}
+                        />
                         <Route path="/management/organizations" element={<ManagementOrganizationsPage />} />
                         <Route path="/management/organizations/new" element={<ManagementOrganizationCreatePage />} />
                         <Route

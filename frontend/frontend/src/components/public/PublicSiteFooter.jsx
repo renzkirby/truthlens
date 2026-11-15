@@ -36,6 +36,8 @@ function PublicSiteFooter() {
 
                      <Link to="/partners">Public partners</Link>
 
+                     <Link to="/partners/apply">Become a partner</Link>
+
                      <a href={sectionHref("about")}>About</a>
                   </div>
 

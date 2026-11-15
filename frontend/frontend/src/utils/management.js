@@ -23,7 +23,7 @@ export function formatManagementDate(value, { dateOnly = false } = {}) {
 }
 
 export function managementStatusTone(status) {
-   if (["ACTIVE", "VERIFIED", "ACCEPTED", "COMPLETED", "RESOLVED"].includes(status)) return "success";
+   if (["ACTIVE", "VERIFIED", "ACCEPTED", "APPROVED", "COMPLETED", "RESOLVED"].includes(status)) return "success";
    if (["PENDING", "RUNNING", "UNVERIFIED", "SUBMITTED", "UNDER_REVIEW"].includes(status)) return "warning";
    if (["SUSPENDED", "REJECTED", "CANCELLED", "EXPIRED", "FAILED"].includes(status)) return "critical";
    return "neutral";
@@ -108,6 +108,11 @@ export const MANAGEMENT_PARTNER_STATUSES = [
 ];
 
 export const MANAGEMENT_GOVERNANCE_ACTIONS = [
+   ["PARTNERSHIP_APPLICATION_SUBMITTED", "Partnership Application Submitted"],
+   ["PARTNERSHIP_APPLICATION_REVIEW_STARTED", "Partnership Application Review Started"],
+   ["PARTNERSHIP_APPLICATION_APPROVED", "Partnership Application Approved"],
+   ["PARTNERSHIP_APPLICATION_REJECTED", "Partnership Application Rejected"],
+   ["PARTNERSHIP_APPLICATION_ONBOARDING_COMPLETED", "Partnership Onboarding Completed"],
    ["ORGANIZATION_CREATED", "Organization Created"],
    ["ORGANIZATION_PLATFORM_TRUST_UPDATED", "Partner Organization Status Updated"],
    ["ORGANIZATION_VERIFICATION_SCOPE_APPROVED", "Organization Verification Scope Approved (legacy)"],

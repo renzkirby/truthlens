@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+   <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>TruthLens partnership application update</title>
+   </head>
+   <body style="margin: 0; padding: 32px 16px; background: #f5f7fa; font-family: Arial, sans-serif; color: #1f2937">
+      <div
+         style="
+            max-width: 560px;
+            margin: 0 auto;
+            padding: 28px;
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+         "
+      >
+         <h1 style="margin: 0 0 16px; font-size: 22px">Partnership application update</h1>
+
+         <p style="line-height: 1.6">
+            Hello {{ applicant_name }},
+         </p>
+
+         <p style="line-height: 1.6">
+            Thank you for applying for <strong>{{ organization_name }}</strong>
+            to become a TruthLens Partner Organization.
+         </p>
+
+         <p style="line-height: 1.6">
+            After review, TruthLens is unable to approve this partnership application at this time.
+         </p>
+
+         <div
+            style="
+               margin: 20px 0;
+               padding: 14px 16px;
+               border-left: 3px solid #dc2626;
+               border-radius: 8px;
+               background: #fef2f2;
+               color: #7f1d1d;
+               font-size: 14px;
+               line-height: 1.6;
+            "
+         >
+            <strong>Decision rationale</strong>
+            <div style="margin-top: 8px; white-space: pre-line">{{ decision_notes }}</div>
+         </div>
+
+         <p style="color: #6b7280; font-size: 13px; line-height: 1.6">
+            This decision applies to the submitted partnership application and does not affect any personal TruthLens account you may have.
+         </p>
+      </div>
+   </body>
+</html>
