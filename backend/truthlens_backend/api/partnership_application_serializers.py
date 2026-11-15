@@ -1,6 +1,35 @@
 from rest_framework import serializers
 
 from .models import Organization, PartnershipApplication
+from .services import check_url_threat_reputation, validate_public_url
+from .url_safety import normalize_url_safety_result, url_safety_is_known_threat
+
+
+def _validate_partnership_public_url(value, *, field_label):
+    normalized_url, validation_error = validate_public_url(
+        value,
+        strip_tracking=False,
+    )
+    if validation_error:
+        raise serializers.ValidationError(validation_error)
+
+    safety_result = check_url_threat_reputation(normalized_url)
+    normalized_safety = normalize_url_safety_result(safety_result)
+
+    if url_safety_is_known_threat(safety_result):
+        threat_types = normalized_safety.get("threat_types") or []
+        threat_suffix = (
+            f" ({', '.join(threat_types)})"
+            if threat_types
+            else ""
+        )
+        raise serializers.ValidationError(
+            f"{field_label} was identified as potentially unsafe"
+            f"{threat_suffix} and cannot be submitted. "
+            "Remove or replace this link."
+        )
+
+    return normalized_url
 
 
 class PartnershipApplicationCreateSerializer(serializers.Serializer):
@@ -45,6 +74,32 @@ class PartnershipApplicationCreateSerializer(serializers.Serializer):
     )
     authorized_to_represent = serializers.BooleanField()
     agrees_to_partner_responsibilities = serializers.BooleanField()
+
+    def validate_website(self, value):
+        return _validate_partnership_public_url(
+            value,
+            field_label="The official website or social media link",
+        )
+
+    def validate_supporting_links(self, values):
+        validated_links = []
+        for index, value in enumerate(values, start=1):
+            try:
+                validated_links.append(
+                    _validate_partnership_public_url(
+                        value,
+                        field_label=f"Supporting link {index}",
+                    )
+                )
+            except serializers.ValidationError as error:
+                detail = error.detail
+                if isinstance(detail, list) and detail:
+                    message = str(detail[0])
+                else:
+                    message = str(detail)
+                raise serializers.ValidationError(message) from error
+
+        return validated_links
 
     def validate_organization_description(self, value):
         if len(value.strip()) < 30:
