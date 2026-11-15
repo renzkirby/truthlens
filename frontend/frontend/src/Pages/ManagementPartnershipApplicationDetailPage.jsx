@@ -14,13 +14,15 @@ import Input from "../components/ui/Input";
 import Textarea from "../components/ui/Textarea";
 import { useManagementMutation } from "../hooks/useManagementMutation";
 import { useManagementRequest } from "../hooks/useManagementRequest";
+import { useNotification } from "../hooks/useNotification";
 import { resolveApiEndpoint } from "../utils/api";
 import { formatManagementDate } from "../utils/management";
 
 import "./ManagementPartnershipApplications.css";
 
 function ReviewActions({ application, onRefresh }) {
-   const { mutate, pending, error, success, reset } = useManagementMutation();
+   const { addToast } = useNotification();
+   const { mutate, pending, error, reset } = useManagementMutation();
    const [approvedAdminEmail, setApprovedAdminEmail] = useState(
       application.approved_admin_email || application.applicant_email,
    );
@@ -33,7 +35,15 @@ function ReviewActions({ application, onRefresh }) {
          { method: "POST", body: {} },
          "Application review started.",
       );
-      if (result.ok) onRefresh(result.data);
+      if (result.ok) {
+         addToast({
+            type: "success",
+            title: "Review started",
+            message: application.organization.name + " is now under platform review.",
+            duration: 3500,
+         });
+         onRefresh(result.data);
+      }
    };
 
    const approve = async (event) => {
@@ -49,7 +59,15 @@ function ReviewActions({ application, onRefresh }) {
          },
          "Application approved for Organization Admin onboarding.",
       );
-      if (result.ok) onRefresh(result.data);
+      if (result.ok) {
+         addToast({
+            type: "success",
+            title: "Application approved",
+            message: "Organization Admin onboarding is now available for the approved representative.",
+            duration: 4000,
+         });
+         onRefresh(result.data);
+      }
    };
 
    const reject = async (event) => {
@@ -62,7 +80,15 @@ function ReviewActions({ application, onRefresh }) {
          },
          "Partnership application rejected.",
       );
-      if (result.ok) onRefresh(result.data);
+      if (result.ok) {
+         addToast({
+            type: "success",
+            title: "Application rejected",
+            message: "The rejection decision was recorded and the applicant will be notified by email.",
+            duration: 4500,
+         });
+         onRefresh(result.data);
+      }
    };
 
    if (application.status === "SUBMITTED") {
@@ -137,7 +163,7 @@ function ReviewActions({ application, onRefresh }) {
                      Rejection closes this onboarding request and marks the provisional organization as Rejected.
                   </p>
                   <label className="management-form-field">
-                     <span>Rejection rationale</span>
+                     <span>Rejection rationale (sent to applicant)</span>
                      <Textarea
                         rows={5}
                         value={rejectionNotes}
@@ -164,7 +190,6 @@ function ReviewActions({ application, onRefresh }) {
                </form>
             </div>
             {error ? <ManagementFeedback tone="error">{error.message}</ManagementFeedback> : null}
-            {success ? <ManagementFeedback>{success}</ManagementFeedback> : null}
          </section>
       );
    }
