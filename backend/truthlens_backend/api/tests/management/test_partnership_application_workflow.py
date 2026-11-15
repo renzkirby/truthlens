@@ -194,7 +194,7 @@ class PartnershipApplicationWorkflowTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("website", response.data)
         self.assertIn(
-            "Private network URLs are not allowed.",
+            "Local URLs are not allowed.",
             str(response.data["website"][0]),
         )
         check_reputation.assert_not_called()
