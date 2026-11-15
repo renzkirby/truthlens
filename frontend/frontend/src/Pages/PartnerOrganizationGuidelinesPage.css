@@ -14,6 +14,14 @@
    width: min(100%, 1480px);
 }
 
+.partner-guidelines-page--public .partner-guidelines-page__content {
+   width: min(100%, 1120px);
+}
+
+.partner-guidelines-page--public .partner-guidelines-layout {
+   grid-template-columns: minmax(220px, 250px) minmax(0, 760px);
+}
+
 .partner-guidelines-back {
    display: inline-flex;
    margin-bottom: var(--tl-space-5);
