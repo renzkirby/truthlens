@@ -3,6 +3,9 @@ from django.utils import timezone
 from django.utils.text import slugify
 
 from .accountability_service import record_accountability_event
+from .partnership_application_delivery_service import (
+    dispatch_partnership_application_rejection_email,
+)
 from .models import AccountabilityEvent, Organization, PartnershipApplication
 
 
@@ -401,6 +404,13 @@ def reject_partnership_application(
         previous_state=previous_state,
         new_state=_application_state(application),
         notes=decision_notes,
+    )
+
+    application_id = str(application.pk)
+    transaction.on_commit(
+        lambda application_id=application_id: (
+            dispatch_partnership_application_rejection_email(application_id)
+        )
     )
     return application
 
