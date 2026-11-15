@@ -194,23 +194,50 @@ function PartnerOrganizationGuidelinesPage() {
          .filter(Boolean);
       if (!sectionNodes.length) return undefined;
 
-      const observer = new IntersectionObserver(
-         (entries) => {
-            const visibleEntries = entries
-               .filter((entry) => entry.isIntersecting)
-               .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-            if (visibleEntries.length) {
-               setActiveSection(visibleEntries[0].target.id);
-            }
-         },
-         {
-            rootMargin: "-96px 0px -68% 0px",
-            threshold: [0, 0.1, 0.4],
-         },
-      );
+      let frameId = null;
 
-      sectionNodes.forEach((node) => observer.observe(node));
-      return () => observer.disconnect();
+      const updateActiveSection = () => {
+         frameId = null;
+         const readingLine = 120;
+         let nextActive = sectionNodes[0].id;
+
+         for (const node of sectionNodes) {
+            if (node.getBoundingClientRect().top <= readingLine) {
+               nextActive = node.id;
+            } else {
+               break;
+            }
+         }
+
+         const nearPageBottom =
+            window.innerHeight + window.scrollY
+            >= document.documentElement.scrollHeight - 8;
+
+         if (nearPageBottom) {
+            nextActive = sectionNodes[sectionNodes.length - 1].id;
+         }
+
+         setActiveSection((current) => (
+            current === nextActive ? current : nextActive
+         ));
+      };
+
+      const scheduleActiveSectionUpdate = () => {
+         if (frameId !== null) return;
+         frameId = window.requestAnimationFrame(updateActiveSection);
+      };
+
+      updateActiveSection();
+      window.addEventListener("scroll", scheduleActiveSectionUpdate, { passive: true });
+      window.addEventListener("resize", scheduleActiveSectionUpdate);
+
+      return () => {
+         window.removeEventListener("scroll", scheduleActiveSectionUpdate);
+         window.removeEventListener("resize", scheduleActiveSectionUpdate);
+         if (frameId !== null) {
+            window.cancelAnimationFrame(frameId);
+         }
+      };
    }, [currentSections]);
 
    if (!canView) {
@@ -278,6 +305,7 @@ function PartnerOrganizationGuidelinesPage() {
                               key={section.id}
                               className={resolvedActiveSection === section.anchor ? "is-active" : ""}
                               aria-current={resolvedActiveSection === section.anchor ? "location" : undefined}
+                              onClick={() => setActiveSection(section.anchor)}
                            >
                               {section.title}
                            </a>
