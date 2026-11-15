@@ -245,22 +245,31 @@ function PartnerOrganizationGuidelinesPage() {
          className={`partner-guidelines-page ${managementView ? "partner-guidelines-page--management" : ""} ${publicView ? "partner-guidelines-page--public" : ""}`}
       >
          <div className="partner-guidelines-page__content">
-            <Link className="partner-guidelines-back" to={backTo}>
-               ← {backLabel}
-            </Link>
+            {!publicView ? (
+               <>
+                  <Link className="partner-guidelines-back" to={backTo}>
+                     ← {backLabel}
+                  </Link>
 
-            <Link
-               className={`partner-guidelines-floating-back ${showFloatingBack ? "is-visible" : ""}`}
-               to={backTo}
-               aria-hidden={!showFloatingBack}
-               tabIndex={showFloatingBack ? 0 : -1}
-            >
-               ← {backLabel}
-            </Link>
+                  <Link
+                     className={`partner-guidelines-floating-back ${showFloatingBack ? "is-visible" : ""}`}
+                     to={backTo}
+                     aria-hidden={!showFloatingBack}
+                     tabIndex={showFloatingBack ? 0 : -1}
+                  >
+                     ← {backLabel}
+                  </Link>
+               </>
+            ) : null}
 
             <div className="partner-guidelines-layout">
                <aside className="partner-guidelines-sidebar partner-guidelines-sidebar--toc" aria-label="On this page">
                   <div className="partner-guidelines-sidebar__sticky">
+                     {publicView ? (
+                        <Link className="partner-guidelines-sidebar-back" to={backTo}>
+                           ← {backLabel}
+                        </Link>
+                     ) : null}
                      <span className="partner-guidelines-sidebar__eyebrow">On this page</span>
                      <nav className="partner-guidelines-toc">
                         {currentSections.map((section) => (
