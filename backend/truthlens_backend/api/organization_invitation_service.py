@@ -557,12 +557,6 @@ def send_organization_invitation_email(
 
     role_label = get_invitation_role_label(invitation)
 
-    inviter_name = (
-        invitation.invited_by.username
-        if invitation.invited_by
-        else "An organization administrator"
-    )
-
     partnership_onboarding = False
     if invitation.purpose in ADMIN_ONBOARDING_PURPOSES:
         try:
@@ -575,10 +569,26 @@ def send_organization_invitation_email(
             and application.onboarding_completed_at is None
         )
 
+    inviter_name = (
+        invitation.invited_by.username
+        if invitation.invited_by
+        else "An organization administrator"
+    )
+
     subject = (
         f"Complete {invitation.organization.name} TruthLens Partner onboarding"
         if partnership_onboarding
         else f"You're invited to join {invitation.organization.name} on TruthLens"
+    )
+
+    invitation_intro = (
+        f"TruthLens has invited you to join {invitation.organization.name} "
+        f"as {role_label}.\n\n"
+        if partnership_onboarding
+        else (
+            f"{inviter_name} invited you to join {invitation.organization.name} "
+            f"as {role_label} on TruthLens.\n\n"
+        )
     )
 
     onboarding_text = (
@@ -591,9 +601,7 @@ def send_organization_invitation_email(
     )
 
     text_body = (
-        f"{inviter_name} invited you to "
-        f"join {invitation.organization.name} "
-        f"as {role_label} on TruthLens.\n\n"
+        f"{invitation_intro}"
         f"{onboarding_text}"
         f"Accept the invitation:\n"
         f"{invitation_url}\n\n"
