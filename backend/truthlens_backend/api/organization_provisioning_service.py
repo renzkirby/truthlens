@@ -22,6 +22,10 @@ from .organization_invitation_service import (
 from .organization_partnership_policy import (
     get_organization_admin_onboarding_policy,
 )
+from .partnership_application_service import (
+    PartnershipApplicationConflict,
+    approved_application_for_admin_onboarding,
+)
 
 
 PROVISION_PARTNER_ORGANIZATION = "PROVISION_PARTNER_ORGANIZATION"
@@ -139,6 +143,14 @@ def _create_organization_admin_invitation(
     locked_organization = _lock_organization(organization)
     _ensure_organization_admin_onboarding_allowed(locked_organization)
     normalized_email = _normalize_email(email)
+
+    try:
+        approved_application_for_admin_onboarding(
+            organization=locked_organization,
+            email=normalized_email,
+        )
+    except PartnershipApplicationConflict as error:
+        raise OrganizationProvisioningConflict(str(error)) from error
 
     expire_stale_invitations(
         organization=locked_organization,
@@ -266,6 +278,14 @@ def resend_organization_admin_invitation(
             organization=locked_organization,
         )
     )
+
+    try:
+        approved_application_for_admin_onboarding(
+            organization=locked_organization,
+            email=locked_invitation.email,
+        )
+    except PartnershipApplicationConflict as error:
+        raise OrganizationProvisioningConflict(str(error)) from error
 
     if (
         locked_invitation.purpose
