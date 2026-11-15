@@ -366,8 +366,23 @@ def reject_partnership_application(
     )
 
     organization = application.organization
+    previous_organization_state = _organization_state(organization)
     organization.verification_status = Organization.VerificationStatus.REJECTED
     organization.save(update_fields=["verification_status", "updated_at"])
+
+    record_accountability_event(
+        action_type=AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED,
+        resource_type=AccountabilityEvent.ResourceType.ORGANIZATION,
+        resource_id=organization.pk,
+        authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
+        actor=actor,
+        subject_organization=organization,
+        capability=MANAGE_PARTNER_ORGANIZATION,
+        previous_state=previous_organization_state,
+        new_state=_organization_state(organization),
+        reason_code="PARTNERSHIP_APPLICATION_REJECTED",
+        notes=decision_notes,
+    )
 
     record_accountability_event(
         action_type=AccountabilityEvent.ActionType.PARTNERSHIP_APPLICATION_REJECTED,
