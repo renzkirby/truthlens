@@ -101,7 +101,7 @@ def _validate_public_submission(
 
     if not website:
         raise PartnershipApplicationValidationError(
-            "Official organization website is required.",
+            "An official website or public social media page is required.",
             field="website",
         )
 
@@ -113,7 +113,7 @@ def _validate_public_submission(
 
     if Organization.objects.filter(website__iexact=website).exists():
         raise PartnershipApplicationConflict(
-            "An organization with this website already exists on TruthLens.",
+            "An organization with this official web or social address already exists on TruthLens.",
             field="website",
         )
 
