@@ -21,6 +21,7 @@ from .models import (
     Organization,
     OrganizationInvitation,
     OrganizationMembership,
+    PartnershipApplication,
 )
 from .accountability_service import record_accountability_event
 from .organization_service import (
@@ -562,14 +563,38 @@ def send_organization_invitation_email(
         else "An organization administrator"
     )
 
+    partnership_onboarding = False
+    if invitation.purpose in ADMIN_ONBOARDING_PURPOSES:
+        try:
+            application = invitation.organization.partnership_application
+        except PartnershipApplication.DoesNotExist:
+            application = None
+        partnership_onboarding = bool(
+            application
+            and application.status == PartnershipApplication.Status.APPROVED
+            and application.onboarding_completed_at is None
+        )
+
     subject = (
-        f"You're invited to join " f"{invitation.organization.name} " f"on TruthLens"
+        f"Complete {invitation.organization.name} TruthLens Partner onboarding"
+        if partnership_onboarding
+        else f"You're invited to join {invitation.organization.name} on TruthLens"
+    )
+
+    onboarding_text = (
+        "TruthLens has approved this organization's partnership application. "
+        "Accepting this Organization Admin invitation with the verified invited "
+        "email completes institutional verification and activates the Partner "
+        "Organization.\n\n"
+        if partnership_onboarding
+        else ""
     )
 
     text_body = (
         f"{inviter_name} invited you to "
         f"join {invitation.organization.name} "
         f"as {role_label} on TruthLens.\n\n"
+        f"{onboarding_text}"
         f"Accept the invitation:\n"
         f"{invitation_url}\n\n"
         f"This invitation expires on "
@@ -586,6 +611,7 @@ def send_organization_invitation_email(
             "inviter_name": inviter_name,
             "invitation_url": invitation_url,
             "expires_at": (invitation.expires_at),
+            "partnership_onboarding": partnership_onboarding,
         },
     )
 
