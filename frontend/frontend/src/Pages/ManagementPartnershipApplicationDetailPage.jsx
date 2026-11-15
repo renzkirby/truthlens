@@ -253,7 +253,7 @@ export default function ManagementPartnershipApplicationDetailPage() {
                         { label: "Organization name", value: data.organization.name },
                         { label: "Type", value: data.organization.organization_type_label },
                         {
-                           label: "Website",
+                           label: "Website / social media",
                            node: data.organization.website ? (
                               <a href={data.organization.website} target="_blank" rel="noreferrer">
                                  {data.organization.website} <ExternalLink size={13} />
