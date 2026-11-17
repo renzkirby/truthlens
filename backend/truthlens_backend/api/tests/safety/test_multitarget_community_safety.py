@@ -299,21 +299,16 @@ class MultiTargetCommunitySafetyTests(APITestCase):
         self.assertEqual(report.notes, "Repetitive promotional posting.")
 
     def test_historical_inappropriate_reason_remains_readable(self):
-        outcome = CommunityReportOutcome.objects.create(
+        report = CommunityReport.objects.create(
             target_type=CommunityReport.TargetType.COMMENT,
-            target_id_snapshot=self.comment.pk,
             thread=self.thread,
             comment=self.comment,
             reporter=self.reporter_one,
             reason=CommunityReport.Reason.INAPPROPRIATE,
             notes="Historical report snapshot.",
-            reported_at=self.thread.created_at,
-            resolved_action=CommunityReportOutcome.ResolutionAction.DISMISS,
-            is_valid_report=False,
-            report_outcome=CommunityReportOutcome.ReportOutcome.NO_VIOLATION,
         )
 
-        self.assertEqual(outcome.get_reason_display(), "Inappropriate Content")
+        self.assertEqual(report.get_reason_display(), "Inappropriate Content")
 
     def test_owner_cannot_report_own_comment_or_evidence(self):
         comment_response = self._report(
