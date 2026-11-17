@@ -69,6 +69,15 @@ function formatLabel(value, fallback = "Unknown") {
       .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
+const SENSITIVE_REPORT_REASONS = new Set([
+   "VIOLENCE_DANGEROUS",
+   "SEXUAL_EXPLOITATIVE",
+]);
+
+function isSensitiveReportReason(reason) {
+   return SENSITIVE_REPORT_REASONS.has(String(reason || "").toUpperCase());
+}
+
 function formatDateTime(value) {
    if (!value) {
       return "Unknown";
@@ -1219,7 +1228,12 @@ function SafetyReviewPanel() {
                               {detail.reports.map((report) => (
                                  <li key={report.id}>
                                     <div>
-                                       <strong>{report.reason_label || formatLabel(report.reason)}</strong>
+                                       <span className="safety-report-reason-heading">
+                                          <strong>{report.reason_label || formatLabel(report.reason)}</strong>
+                                          {isSensitiveReportReason(report.reason) && (
+                                             <span className="safety-sensitive-report-badge">Sensitive safety report</span>
+                                          )}
+                                       </span>
                                        <time dateTime={report.reported_at}>{formatDateTime(report.reported_at)}</time>
                                     </div>
                                     <p>{report.notes || "No additional report notes were provided."}</p>
@@ -1491,6 +1505,11 @@ function SafetyReviewPanel() {
                                                          />
                                                          <span>
                                                             <strong>{report.reason_label || formatLabel(report.reason)}</strong>
+                                                            {isSensitiveReportReason(report.reason) && (
+                                                               <small className="safety-sensitive-report-inline">
+                                                                  Sensitive safety report
+                                                               </small>
+                                                            )}
                                                             <small>
                                                                {report.notes || "No additional report notes were provided."}
                                                             </small>
