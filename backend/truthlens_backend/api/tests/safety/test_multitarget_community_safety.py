@@ -220,6 +220,44 @@ class MultiTargetCommunitySafetyTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertFalse(CommunityReport.objects.exists())
 
+    def test_active_report_reason_taxonomy_is_accepted(self):
+        active_reasons = [
+            CommunityReport.Reason.SPAM,
+            CommunityReport.Reason.HARASSMENT,
+            CommunityReport.Reason.HATE,
+            CommunityReport.Reason.VIOLENCE_DANGEROUS,
+            CommunityReport.Reason.PRIVACY,
+            CommunityReport.Reason.SEXUAL_EXPLOITATIVE,
+            CommunityReport.Reason.IMPERSONATION_FRAUD,
+            CommunityReport.Reason.OTHER,
+        ]
+
+        for index, reason in enumerate(active_reasons):
+            with self.subTest(reason=reason):
+                reporter = self._user(f"report-taxonomy-{index}")
+                response = self._report(
+                    reporter=reporter,
+                    target_type=CommunityReport.TargetType.COMMENT,
+                    reason=reason,
+                    notes=(
+                        "A clear explanation for the catch-all report."
+                        if reason == CommunityReport.Reason.OTHER
+                        else ""
+                    ),
+                )
+                self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_legacy_inappropriate_reason_is_rejected_for_new_reports(self):
+        response = self._report(
+            reporter=self.reporter_one,
+            target_type=CommunityReport.TargetType.COMMENT,
+            reason=CommunityReport.Reason.INAPPROPRIATE,
+            notes="Historical reason should not be accepted for new intake.",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("reason", response.data)
+
     def test_other_report_reason_requires_explanation(self):
         response = self._report(
             reporter=self.reporter_one,
@@ -230,6 +268,47 @@ class MultiTargetCommunitySafetyTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("notes", response.data)
+
+        too_short = self._report(
+            reporter=self.reporter_one,
+            target_type=CommunityReport.TargetType.COMMENT,
+            reason=CommunityReport.Reason.OTHER,
+            notes="Too short",
+        )
+        self.assertEqual(too_short.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("notes", too_short.data)
+
+    def test_report_notes_are_bounded_and_trimmed(self):
+        too_long = self._report(
+            reporter=self.reporter_one,
+            target_type=CommunityReport.TargetType.COMMENT,
+            reason=CommunityReport.Reason.SPAM,
+            notes="x" * 1001,
+        )
+        self.assertEqual(too_long.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("notes", too_long.data)
+
+        accepted = self._report(
+            reporter=self.reporter_one,
+            target_type=CommunityReport.TargetType.COMMENT,
+            reason=CommunityReport.Reason.SPAM,
+            notes="   Repetitive promotional posting.   ",
+        )
+        self.assertEqual(accepted.status_code, status.HTTP_201_CREATED)
+        report = CommunityReport.objects.get(pk=accepted.data["id"])
+        self.assertEqual(report.notes, "Repetitive promotional posting.")
+
+    def test_historical_inappropriate_reason_remains_readable(self):
+        report = CommunityReport.objects.create(
+            target_type=CommunityReport.TargetType.COMMENT,
+            thread=self.thread,
+            comment=self.comment,
+            reporter=self.reporter_one,
+            reason=CommunityReport.Reason.INAPPROPRIATE,
+            notes="Historical report snapshot.",
+        )
+
+        self.assertEqual(report.get_reason_display(), "Inappropriate Content")
 
     def test_owner_cannot_report_own_comment_or_evidence(self):
         comment_response = self._report(

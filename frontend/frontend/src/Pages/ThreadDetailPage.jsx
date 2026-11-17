@@ -9,6 +9,7 @@ import {
 import ImageLightbox from "../components/ImageLightbox";
 import Icons from "../components/Icons";
 import EvidenceCard from "../components/EvidenceCard";
+import CommunityReportDialog from "../components/community/CommunityReportDialog.jsx";
 import PartnerAffiliations from "../components/partners/PartnerAffiliations.jsx";
 import RichTextEditor from "../components/richtext/RichTextEditor.jsx";
 import RichTextRenderer from "../components/richtext/RichTextRenderer.jsx";
@@ -788,8 +789,6 @@ export default function ThreadDetailPage() {
    const [dialogBusy, setDialogBusy] = useState(false);
    const [reportDialogOpen, setReportDialogOpen] = useState(false);
    const [reportTarget, setReportTarget] = useState(null);
-   const [reportReason, setReportReason] = useState("OTHER");
-   const [reportNotes, setReportNotes] = useState("");
    const [reporting, setReporting] = useState(false);
    const pageRef = useRef(null);
    const replyInputRef = useRef(null);
@@ -1325,23 +1324,17 @@ export default function ThreadDetailPage() {
    function openReportDialog(target) {
       if (!target?.type || !target?.id || !canParticipateInCommunity) return;
       setReportTarget(target);
-      setReportReason("OTHER");
-      setReportNotes("");
       setReportDialogOpen(true);
    }
 
-   async function submitReport() {
-      if (reporting || !reportTarget) return;
-      if (reportReason === "OTHER" && !reportNotes.trim()) {
-         addToast({ type: "error", message: "Add a short explanation when selecting Other." });
-         return;
-      }
+   async function submitReport({ reason, notes }) {
+      if (reporting || !reportTarget || !reason) return;
 
       const body = {
          target_type: reportTarget.type,
          thread_id: thread.id,
-         reason: reportReason,
-         notes: reportNotes.trim(),
+         reason,
+         notes,
       };
       if (reportTarget.type === "COMMENT") body.comment_id = reportTarget.id;
       if (reportTarget.type === "EVIDENCE") body.evidence_submission_id = reportTarget.id;
@@ -1354,8 +1347,6 @@ export default function ThreadDetailPage() {
          });
          setReportDialogOpen(false);
          setReportTarget(null);
-         setReportReason("OTHER");
-         setReportNotes("");
          addToast({
             type: "success",
             message: "Report submitted for Platform Safety review.",
@@ -1917,78 +1908,20 @@ export default function ThreadDetailPage() {
             <div className="thread-detail-dialog-actions"><button type="button" className="thread-detail-text-button" data-dialog-initial onClick={() => setConfirmDialog({ open: false, type: null, targetId: null })} disabled={dialogBusy}>Cancel</button><button type="button" className="thread-detail-danger-button" onClick={performDelete} disabled={dialogBusy}>{dialogBusy ? "Deleting…" : "Delete"}</button></div>
          </AccessibleDialog>
 
-         <AccessibleDialog
-            open={Boolean(reportDialogOpen && reportTarget)}
-            busy={reporting}
-            labelledBy="thread-detail-report-title"
-            describedBy="thread-detail-report-description"
-            onClose={() => {
-               if (reporting) return;
-               setReportDialogOpen(false);
-               setReportTarget(null);
-            }}
-            fallbackFocusRef={pageRef}
-         >
-            <p className="thread-detail-dialog-kicker">Platform safety</p>
-            <h2 id="thread-detail-report-title">Report this {reportTarget?.label || "content"}</h2>
-            <p id="thread-detail-report-description">
-               Send this {reportTarget?.label || "content"} to Platform Safety for review.
-            </p>
-            <div className="thread-detail-field">
-               <label htmlFor="thread-report-reason">Reason</label>
-               <select
-                  id="thread-report-reason"
-                  data-dialog-initial
-                  value={reportReason}
-                  onChange={(event) => setReportReason(event.target.value)}
-                  disabled={reporting}
-               >
-                  <option value="INAPPROPRIATE">Inappropriate</option>
-                  <option value="SPAM">Spam</option>
-                  <option value="HARASSMENT">Harassment</option>
-                  <option value="OTHER">Other</option>
-               </select>
-            </div>
-            <p className="thread-detail-report-helper">
-               Your selected reason helps Platform Safety review the content. It does not determine the final policy finding.{" "}
-               <Link to="/community-guidelines" target="_blank" rel="noopener noreferrer">
-                  Read Community Guidelines
-               </Link>
-            </p>
-            <div className="thread-detail-field">
-               <label htmlFor="thread-report-notes">
-                  Notes {reportReason === "OTHER" ? "(required)" : "(optional)"}
-               </label>
-               <textarea
-                  id="thread-report-notes"
-                  rows={4}
-                  value={reportNotes}
-                  onChange={(event) => setReportNotes(event.target.value)}
-                  disabled={reporting}
-               />
-            </div>
-            <div className="thread-detail-dialog-actions">
-               <button
-                  type="button"
-                  className="thread-detail-text-button"
-                  onClick={() => {
-                     setReportDialogOpen(false);
-                     setReportTarget(null);
-                  }}
-                  disabled={reporting}
-               >
-                  Cancel
-               </button>
-               <button
-                  type="button"
-                  className="thread-detail-primary-button"
-                  onClick={submitReport}
-                  disabled={reporting}
-               >
-                  {reporting ? "Submitting…" : "Submit report"}
-               </button>
-            </div>
-         </AccessibleDialog>
+         {reportDialogOpen && reportTarget && (
+            <CommunityReportDialog
+               open
+               busy={reporting}
+               targetLabel={reportTarget.label || "content"}
+               onClose={() => {
+                  if (reporting) return;
+                  setReportDialogOpen(false);
+                  setReportTarget(null);
+               }}
+               onSubmit={submitReport}
+               fallbackFocusRef={pageRef}
+            />
+         )}
       </main>
    );
 }

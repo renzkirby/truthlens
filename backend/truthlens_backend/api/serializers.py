@@ -1800,13 +1800,37 @@ class CommunityReportSerializer(serializers.ModelSerializer):
                 }
             )
 
-        if (
-            attrs.get("reason") == CommunityReport.Reason.OTHER
-            and not str(attrs.get("notes") or "").strip()
-        ):
+        reason = attrs.get("reason")
+        active_reasons = {
+            CommunityReport.Reason.SPAM,
+            CommunityReport.Reason.HARASSMENT,
+            CommunityReport.Reason.HATE,
+            CommunityReport.Reason.VIOLENCE_DANGEROUS,
+            CommunityReport.Reason.PRIVACY,
+            CommunityReport.Reason.SEXUAL_EXPLOITATIVE,
+            CommunityReport.Reason.IMPERSONATION_FRAUD,
+            CommunityReport.Reason.OTHER,
+        }
+        if reason not in active_reasons:
             raise serializers.ValidationError(
-                {"notes": "Explain the concern when selecting Other."}
+                {"reason": "Choose a current Community report reason."}
             )
+
+        notes = str(attrs.get("notes") or "").strip()
+        if len(notes) > 1000:
+            raise serializers.ValidationError(
+                {"notes": "Report details must be 1000 characters or fewer."}
+            )
+        if reason == CommunityReport.Reason.OTHER and len(notes) < 10:
+            raise serializers.ValidationError(
+                {
+                    "notes": (
+                        "Please explain your concern in at least 10 characters "
+                        "when selecting Others."
+                    )
+                }
+            )
+        attrs["notes"] = notes or None
 
         return attrs
 

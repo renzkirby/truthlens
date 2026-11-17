@@ -764,6 +764,8 @@ class SafetyCaseApiTests(APITestCase):
         self.assertEqual(author_response.data["role"], "AUTHOR")
         self.assertIn("content", author_response.data)
         self.assertNotIn("report", author_response.data)
+        self.assertNotIn(self.report_one.notes, str(author_response.data))
+        self.assertNotIn(self.report_two.notes, str(author_response.data))
 
         self.assertEqual(confirmed_reporter_response.status_code, status.HTTP_200_OK)
         self.assertEqual(confirmed_reporter_response.data["role"], "REPORTER")
