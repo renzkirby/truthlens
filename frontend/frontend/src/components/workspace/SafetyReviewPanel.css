@@ -459,6 +459,37 @@
    gap: 12px;
 }
 
+.safety-report-reason-heading {
+   min-width: 0;
+   display: flex;
+   align-items: center;
+   flex-wrap: wrap;
+   gap: 6px;
+}
+
+.safety-sensitive-report-badge,
+.safety-sensitive-report-inline {
+   display: inline-flex;
+   align-items: center;
+   width: fit-content;
+   border: 1px solid var(--tl-color-status-critical-border);
+   border-radius: 999px;
+   color: var(--tl-color-status-critical-text);
+   background: var(--tl-color-status-critical-bg);
+   font-size: 0.61rem;
+   font-weight: 700;
+   line-height: 1.2;
+}
+
+.safety-sensitive-report-badge {
+   padding: 3px 7px;
+}
+
+.safety-sensitive-report-inline {
+   margin-top: 2px;
+   padding: 2px 6px;
+}
+
 .safety-report-list strong,
 .safety-event-heading strong {
    color: var(--text-main);
