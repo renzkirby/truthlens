@@ -41,18 +41,19 @@ export default function CommunityReportDialog({
    useEffect(() => {
       if (!open) return undefined;
 
+      const preferredReturnFocus = returnFocusRef?.current || null;
+      const fallbackFocus = fallbackFocusRef?.current || null;
       previousFocusRef.current =
-         returnFocusRef?.current ||
+         preferredReturnFocus ||
          (document.activeElement instanceof HTMLElement ? document.activeElement : null);
 
       const focusFrame = window.requestAnimationFrame(() => firstReasonRef.current?.focus());
       return () => {
          window.cancelAnimationFrame(focusFrame);
          window.setTimeout(() => {
-            const preferred = returnFocusRef?.current;
-            if (preferred?.isConnected) preferred.focus();
+            if (preferredReturnFocus?.isConnected) preferredReturnFocus.focus();
             else if (previousFocusRef.current?.isConnected) previousFocusRef.current.focus();
-            else fallbackFocusRef?.current?.focus();
+            else fallbackFocus?.focus();
          }, 0);
       };
    }, [fallbackFocusRef, open, returnFocusRef]);
