@@ -1908,18 +1908,20 @@ export default function ThreadDetailPage() {
             <div className="thread-detail-dialog-actions"><button type="button" className="thread-detail-text-button" data-dialog-initial onClick={() => setConfirmDialog({ open: false, type: null, targetId: null })} disabled={dialogBusy}>Cancel</button><button type="button" className="thread-detail-danger-button" onClick={performDelete} disabled={dialogBusy}>{dialogBusy ? "Deleting…" : "Delete"}</button></div>
          </AccessibleDialog>
 
-         <CommunityReportDialog
-            open={Boolean(reportDialogOpen && reportTarget)}
-            busy={reporting}
-            targetLabel={reportTarget?.label || "content"}
-            onClose={() => {
-               if (reporting) return;
-               setReportDialogOpen(false);
-               setReportTarget(null);
-            }}
-            onSubmit={submitReport}
-            fallbackFocusRef={pageRef}
-         />
+         {reportDialogOpen && reportTarget && (
+            <CommunityReportDialog
+               open
+               busy={reporting}
+               targetLabel={reportTarget.label || "content"}
+               onClose={() => {
+                  if (reporting) return;
+                  setReportDialogOpen(false);
+                  setReportTarget(null);
+               }}
+               onSubmit={submitReport}
+               fallbackFocusRef={pageRef}
+            />
+         )}
       </main>
    );
 }
