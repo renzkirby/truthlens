@@ -1301,15 +1301,17 @@ function CommunityFeed() {
                </div>
             )}
 
-            <CommunityReportDialog
-               open={reportDialog.open}
-               busy={Boolean(reportingThreadId)}
-               targetLabel="discussion"
-               onClose={closeReportDialog}
-               onSubmit={submitReportThread}
-               fallbackFocusRef={mainRef}
-               returnFocusRef={dialogReturnFocusRef}
-            />
+            {reportDialog.open && (
+               <CommunityReportDialog
+                  open
+                  busy={Boolean(reportingThreadId)}
+                  targetLabel="discussion"
+                  onClose={closeReportDialog}
+                  onSubmit={submitReportThread}
+                  fallbackFocusRef={mainRef}
+                  returnFocusRef={dialogReturnFocusRef}
+               />
+            )}
          </main>
       </div>
    );
