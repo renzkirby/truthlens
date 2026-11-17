@@ -93,6 +93,11 @@ export default function CommunityReportDialog({
       setError("");
 
       const focusFrame = window.requestAnimationFrame(() => firstReasonRef.current?.focus());
+      return () => window.cancelAnimationFrame(focusFrame);
+   }, [open, returnFocusRef]);
+
+   useEffect(() => {
+      if (!open) return undefined;
 
       const handleKeyDown = (event) => {
          if (event.key === "Escape") {
@@ -122,11 +127,8 @@ export default function CommunityReportDialog({
       };
 
       document.addEventListener("keydown", handleKeyDown);
-      return () => {
-         window.cancelAnimationFrame(focusFrame);
-         document.removeEventListener("keydown", handleKeyDown);
-      };
-   }, [busy, onClose, open, returnFocusRef]);
+      return () => document.removeEventListener("keydown", handleKeyDown);
+   }, [busy, onClose, open]);
 
    useEffect(() => {
       if (wasOpenRef.current && !open) {
