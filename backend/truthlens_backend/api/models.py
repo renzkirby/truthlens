@@ -1817,10 +1817,26 @@ class CommunityReport(models.Model):
         EVIDENCE = "EVIDENCE", "Evidence"
 
     class Reason(models.TextChoices):
+        # INAPPROPRIATE is retained only so historical report snapshots remain
+        # readable. New report intake rejects it in CommunityReportSerializer.
         INAPPROPRIATE = "INAPPROPRIATE", "Inappropriate Content"
-        SPAM = "SPAM", "Spam"
-        HARASSMENT = "HARASSMENT", "Harassment"
-        OTHER = "OTHER", "Other"
+        SPAM = "SPAM", "Spam or unwanted promotion"
+        HARASSMENT = "HARASSMENT", "Harassment or bullying"
+        HATE = "HATE", "Hate or discrimination"
+        VIOLENCE_DANGEROUS = (
+            "VIOLENCE_DANGEROUS",
+            "Violence, threats, or dangerous content",
+        )
+        PRIVACY = "PRIVACY", "Sharing private information"
+        SEXUAL_EXPLOITATIVE = (
+            "SEXUAL_EXPLOITATIVE",
+            "Sexual or exploitative content",
+        )
+        IMPERSONATION_FRAUD = (
+            "IMPERSONATION_FRAUD",
+            "Impersonation, scam, or fraud",
+        )
+        OTHER = "OTHER", "Others"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     target_type = models.CharField(
@@ -1853,7 +1869,7 @@ class CommunityReport(models.Model):
         on_delete=models.CASCADE,
         related_name="community_reports",
     )
-    reason = models.CharField(max_length=20, choices=Reason.choices)
+    reason = models.CharField(max_length=32, choices=Reason.choices)
     notes = models.TextField(blank=True, null=True)
     reported_at = models.DateTimeField(auto_now_add=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
@@ -1997,7 +2013,7 @@ class CommunityReportOutcome(models.Model):
         on_delete=models.CASCADE,
         related_name="resolved_community_reports",
     )
-    reason = models.CharField(max_length=20, choices=CommunityReport.Reason.choices)
+    reason = models.CharField(max_length=32, choices=CommunityReport.Reason.choices)
     notes = models.TextField(blank=True, null=True)
     reported_at = models.DateTimeField()
     resolved_action = models.CharField(max_length=20, choices=ResolutionAction.choices)
