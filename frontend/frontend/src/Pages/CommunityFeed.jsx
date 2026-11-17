@@ -2,6 +2,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import Icons from "../components/Icons.jsx";
+import CommunityReportDialog from "../components/community/CommunityReportDialog.jsx";
 import PartnerAffiliations from "../components/partners/PartnerAffiliations.jsx";
 import { useAuth } from "../hooks/useAuth";
 import { useNotification } from "../hooks/useNotification";
@@ -262,7 +263,7 @@ function CommunityFeed() {
    const [reportingThreadId, setReportingThreadId] = useState(null);
    const [sharingThreadId, setSharingThreadId] = useState(null);
    const [failedMediaIds, setFailedMediaIds] = useState(() => new Set());
-   const [reportDialog, setReportDialog] = useState({ open: false, threadId: null, reason: "OTHER", notes: "" });
+   const [reportDialog, setReportDialog] = useState({ open: false, threadId: null });
    const [deleteDialog, setDeleteDialog] = useState({ open: false, threadId: null, caption: "" });
 
    const observerTarget = useRef(null);
@@ -282,20 +283,12 @@ function CommunityFeed() {
    const dialogRef = useRef(null);
    const dialogReturnFocusRef = useRef(null);
    const deleteCancelRef = useRef(null);
-   const reportReasonRef = useRef(null);
    const mainRef = useRef(null);
 
    const activeSearchTerm = (searchParams.get("q") || "").trim();
    const threadDetailUrl = (threadId) => `${threadsEndpoint}${threadId}/`;
    const communityReportsEndpoint = buildApiUrl("community-reports/");
    const isThreadOwner = (thread) => thread?.author?.id === user?.id;
-   const reportActionMeta = {
-      code: "REPORT THREAD",
-      title: "Report this discussion",
-      description: "Submit a report so moderators can investigate this discussion for policy concerns.",
-      cta: "Submit report",
-   };
-
    const restoreDialogFocus = useCallback((preferHeading = false) => {
       window.setTimeout(() => {
          const returnTarget = dialogReturnFocusRef.current;
@@ -312,7 +305,7 @@ function CommunityFeed() {
 
    const closeReportDialog = useCallback(() => {
       if (reportingThreadId) return;
-      setReportDialog({ open: false, threadId: null, reason: "OTHER", notes: "" });
+      setReportDialog({ open: false, threadId: null });
       restoreDialogFocus();
    }, [reportingThreadId, restoreDialogFocus]);
 
@@ -398,28 +391,25 @@ function CommunityFeed() {
 
    useEffect(() => {
       if (deleteDialog.open) window.requestAnimationFrame(() => deleteCancelRef.current?.focus());
-      else if (reportDialog.open) window.requestAnimationFrame(() => reportReasonRef.current?.focus());
-   }, [deleteDialog.open, reportDialog.open]);
+   }, [deleteDialog.open]);
 
    useEffect(() => {
-      if (!deleteDialog.open && !reportDialog.open) return;
+      if (!deleteDialog.open) return;
 
       const handleDialogKeyDown = (event) => {
-         const deleteBusy = deleteDialog.open && Boolean(deletingThreadId);
-         const reportBusy = reportDialog.open && Boolean(reportingThreadId);
+         const deleteBusy = Boolean(deletingThreadId);
 
          if (event.key === "Escape") {
-            if (deleteBusy || reportBusy) return;
+            if (deleteBusy) return;
             event.preventDefault();
-            if (deleteDialog.open) closeDeleteDialog();
-            if (reportDialog.open) closeReportDialog();
+            closeDeleteDialog();
             return;
          }
          if (event.key !== "Tab") return;
 
          const focusable = Array.from(
             dialogRef.current?.querySelectorAll(
-               'button:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+               'button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
             ) || [],
          );
          if (!focusable.length) {
@@ -441,7 +431,7 @@ function CommunityFeed() {
 
       document.addEventListener("keydown", handleDialogKeyDown);
       return () => document.removeEventListener("keydown", handleDialogKeyDown);
-   }, [closeDeleteDialog, closeReportDialog, deleteDialog.open, deletingThreadId, reportDialog.open, reportingThreadId]);
+   }, [closeDeleteDialog, deleteDialog.open, deletingThreadId]);
 
    const startEditThread = (event, thread) => {
       event.stopPropagation();
@@ -537,23 +527,12 @@ function CommunityFeed() {
       event.stopPropagation();
       if (!thread?.id || isThreadOwner(thread)) return;
       dialogReturnFocusRef.current = threadMenuRefs.current.get(thread.id);
-      setReportDialog({ open: true, threadId: thread.id, reason: "OTHER", notes: "" });
+      setReportDialog({ open: true, threadId: thread.id });
       setOpenMenuThreadId(null);
    };
 
-   const submitReportThread = async () => {
-      const reasonInput = reportDialog.reason?.trim().toUpperCase();
-      if (!reportDialog.threadId || !reasonInput) return;
-      const allowedReasons = new Set(["INAPPROPRIATE", "SPAM", "HARASSMENT", "OTHER"]);
-      if (!allowedReasons.has(reasonInput)) {
-         addToast({ type: "error", message: "Choose a valid reason before submitting the report." });
-         return;
-      }
-
-      if (reasonInput === "OTHER" && !reportDialog.notes.trim()) {
-         addToast({ type: "error", message: "Add a short explanation when selecting Other." });
-         return;
-      }
+   const submitReportThread = async ({ reason, notes }) => {
+      if (!reportDialog.threadId || !reason) return;
 
       try {
          setReportingThreadId(reportDialog.threadId);
@@ -563,12 +542,12 @@ function CommunityFeed() {
             body: JSON.stringify({
                target_type: "THREAD",
                thread_id: reportDialog.threadId,
-               reason: reasonInput,
-               notes: reportDialog.notes.trim(),
+               reason,
+               notes,
             }),
          });
          addToast({ type: "success", message: "Report submitted for review." });
-         setReportDialog({ open: false, threadId: null, reason: "OTHER", notes: "" });
+         setReportDialog({ open: false, threadId: null });
          restoreDialogFocus();
       } catch (error) {
          addToast({ type: "error", message: userFacingErrorMessage(error, {
@@ -1322,54 +1301,15 @@ function CommunityFeed() {
                </div>
             )}
 
-            {reportDialog.open && (
-               <div className="feed-modal-overlay" onMouseDown={(event) => event.target === event.currentTarget && closeReportDialog()}>
-                  <div ref={dialogRef} className="feed-modal" role="dialog" aria-modal="true" aria-labelledby="report-dialog-title" aria-describedby="report-dialog-description" tabIndex="-1">
-                     <span className="feed-modal-label-text">{reportActionMeta.code}</span>
-                     <h2 id="report-dialog-title" className="feed-modal-title">{reportActionMeta.title}</h2>
-                     <p id="report-dialog-description" className="feed-modal-text">{reportActionMeta.description}</p>
-                     <div className="feed-modal-field">
-                        <label htmlFor="report-reason">Reason</label>
-                        <select
-                           ref={reportReasonRef}
-                           id="report-reason"
-                           className="feed-modal-select"
-                           value={reportDialog.reason}
-                           onChange={(event) => setReportDialog((currentDialog) => ({ ...currentDialog, reason: event.target.value }))}
-                           disabled={Boolean(reportingThreadId)}
-                        >
-                           <option value="INAPPROPRIATE">Inappropriate</option>
-                           <option value="SPAM">Spam</option>
-                           <option value="HARASSMENT">Harassment</option>
-                           <option value="OTHER">Other</option>
-                        </select>
-                     </div>
-                     <p className="feed-modal-helper">
-                        Choose the concern that best describes your report. Platform Safety makes the final policy finding after review.{" "}
-                        <Link to="/community-guidelines" target="_blank" rel="noopener noreferrer">
-                           Read Community Guidelines
-                        </Link>
-                     </p>
-                     <div className="feed-modal-field">
-                        <label htmlFor="report-notes">{reportDialog.reason === "OTHER" ? "Notes (required)" : "Notes (optional)"}</label>
-                        <textarea
-                           id="report-notes"
-                           className="feed-modal-textarea"
-                           rows={4}
-                           value={reportDialog.notes}
-                           onChange={(event) => setReportDialog((currentDialog) => ({ ...currentDialog, notes: event.target.value }))}
-                           disabled={Boolean(reportingThreadId)}
-                        />
-                     </div>
-                     <div className="feed-modal-actions">
-                        <button type="button" className="feed-modal-btn" onClick={closeReportDialog} disabled={Boolean(reportingThreadId)}>Cancel</button>
-                        <button type="button" className="feed-modal-btn feed-modal-btn--warning" onClick={submitReportThread} disabled={Boolean(reportingThreadId)}>
-                           {reportingThreadId ? "Submitting..." : reportActionMeta.cta}
-                        </button>
-                     </div>
-                  </div>
-               </div>
-            )}
+            <CommunityReportDialog
+               open={reportDialog.open}
+               busy={Boolean(reportingThreadId)}
+               targetLabel="discussion"
+               onClose={closeReportDialog}
+               onSubmit={submitReportThread}
+               fallbackFocusRef={mainRef}
+               returnFocusRef={dialogReturnFocusRef}
+            />
          </main>
       </div>
    );
