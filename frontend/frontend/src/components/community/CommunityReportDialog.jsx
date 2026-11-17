@@ -1,9 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
-import "./CommunityReportDialog.css";
-
 import { COMMUNITY_REPORT_REASONS } from "./communityReportReasons.js";
+import "./CommunityReportDialog.css";
 
 
 function focusableElements(root) {
@@ -29,7 +28,6 @@ export default function CommunityReportDialog({
    const dialogRef = useRef(null);
    const firstReasonRef = useRef(null);
    const previousFocusRef = useRef(null);
-   const wasOpenRef = useRef(false);
    const titleId = useId();
    const descriptionId = useId();
    const reasonLegendId = useId();
@@ -48,8 +46,16 @@ export default function CommunityReportDialog({
          (document.activeElement instanceof HTMLElement ? document.activeElement : null);
 
       const focusFrame = window.requestAnimationFrame(() => firstReasonRef.current?.focus());
-      return () => window.cancelAnimationFrame(focusFrame);
-   }, [open, returnFocusRef]);
+      return () => {
+         window.cancelAnimationFrame(focusFrame);
+         window.setTimeout(() => {
+            const preferred = returnFocusRef?.current;
+            if (preferred?.isConnected) preferred.focus();
+            else if (previousFocusRef.current?.isConnected) previousFocusRef.current.focus();
+            else fallbackFocusRef?.current?.focus();
+         }, 0);
+      };
+   }, [fallbackFocusRef, open, returnFocusRef]);
 
    useEffect(() => {
       if (!open) return undefined;
@@ -84,18 +90,6 @@ export default function CommunityReportDialog({
       document.addEventListener("keydown", handleKeyDown);
       return () => document.removeEventListener("keydown", handleKeyDown);
    }, [busy, onClose, open]);
-
-   useEffect(() => {
-      if (wasOpenRef.current && !open) {
-         window.setTimeout(() => {
-            const preferred = returnFocusRef?.current;
-            if (preferred?.isConnected) preferred.focus();
-            else if (previousFocusRef.current?.isConnected) previousFocusRef.current.focus();
-            else fallbackFocusRef?.current?.focus();
-         }, 0);
-      }
-      wasOpenRef.current = open;
-   }, [fallbackFocusRef, open, returnFocusRef]);
 
    if (!open) return null;
 
