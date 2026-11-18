@@ -672,13 +672,23 @@ def call_llm_with_fallback(
         if primary_response is not None:
             return primary_response
 
+    resolved_fallback_user_prompt = None
+    if hierarchy_active and groq_bounded_fallback_enabled():
+        if callable(fallback_user_prompt):
+            try:
+                resolved_fallback_user_prompt = fallback_user_prompt()
+            except Exception:
+                logger.warning("BOUNDED_FALLBACK_BUILDER_UNAVAILABLE")
+        elif isinstance(fallback_user_prompt, str):
+            resolved_fallback_user_prompt = fallback_user_prompt
+
     bounded_fallback_available = (
         hierarchy_active
         and groq_bounded_fallback_enabled()
         and _bounded_fallback_is_smaller(
             system_instructions,
             user_prompt,
-            fallback_user_prompt,
+            resolved_fallback_user_prompt,
         )
     )
     cloudflare_user_prompt = user_prompt
@@ -686,10 +696,10 @@ def call_llm_with_fallback(
     if (
         bounded_fallback_available
         and len(system_instructions) + len(cloudflare_user_prompt) > CLOUDFLARE_MAX_INPUT_CHARS
-        and len(system_instructions) + len(fallback_user_prompt)
+        and len(system_instructions) + len(resolved_fallback_user_prompt)
         <= CLOUDFLARE_MAX_INPUT_CHARS
     ):
-        cloudflare_user_prompt = fallback_user_prompt
+        cloudflare_user_prompt = resolved_fallback_user_prompt
         cloudflare_request_variant = "BOUNDED"
 
     cloudflare_degraded = _cloudflare_pilot_degraded.get() is True
@@ -839,7 +849,7 @@ def call_llm_with_fallback(
             full_prompt_estimate is not None
             and full_prompt_estimate > FINAL_PROMPT_TARGET
         ):
-            groq_user_prompt = fallback_user_prompt
+            groq_user_prompt = resolved_fallback_user_prompt
             groq_request_variant = "BOUNDED"
 
     def _try_groq_once(prompt, *, variant, retry_number=0):
@@ -918,7 +928,7 @@ def call_llm_with_fallback(
             "the deterministic bounded fallback dossier."
         )
         content, groq_err = _try_groq_once(
-            fallback_user_prompt,
+            resolved_fallback_user_prompt,
             variant="BOUNDED",
             retry_number=1,
         )
@@ -2352,9 +2362,11 @@ def _audit_misleading_materiality(
         return system_instructions, audit_user_data
 
     _, user_data = audit_prompt(evidence_context)
-    fallback_user_prompt = _build_bounded_provider_fallback_user_prompt(
-        evidence_groups,
-        audit_prompt,
+    fallback_user_prompt_builder = lambda: (
+        _build_bounded_provider_fallback_user_prompt(
+            evidence_groups,
+            audit_prompt,
+        )
     )
 
     try:
@@ -2363,7 +2375,7 @@ def _audit_misleading_materiality(
             user_data,
             operation="persisted_evidence_evaluation",
             gemini_timeout_ms=PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
-            fallback_user_prompt=fallback_user_prompt,
+            fallback_user_prompt=fallback_user_prompt_builder,
         )
         audited = _parse_llm_json(response_text)
         required_fields = {
@@ -2448,9 +2460,11 @@ def evaluate_claim_with_persisted_evidence(
         )
 
     system_instructions, user_data = persisted_prompt(evidence_context)
-    fallback_user_prompt = _build_bounded_provider_fallback_user_prompt(
-        evidence_groups,
-        persisted_prompt,
+    fallback_user_prompt_builder = lambda: (
+        _build_bounded_provider_fallback_user_prompt(
+            evidence_groups,
+            persisted_prompt,
+        )
     )
 
     try:
@@ -2459,7 +2473,7 @@ def evaluate_claim_with_persisted_evidence(
             user_data,
             operation="persisted_evidence_evaluation",
             gemini_timeout_ms=PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
-            fallback_user_prompt=fallback_user_prompt,
+            fallback_user_prompt=fallback_user_prompt_builder,
         )
         parsed_result = _parse_llm_json(response_text)
         required_fields = {
