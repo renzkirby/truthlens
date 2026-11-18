@@ -450,6 +450,7 @@ def _request_metadata(
     variant,
     model_id=None,
     retry_number=0,
+    estimate_tokens=False,
 ):
     """Return bounded, privacy-safe numeric/provider request metadata."""
     metadata = {}
@@ -463,13 +464,14 @@ def _request_metadata(
         "request_variant": variant,
         "retry_number": retry_number,
     })
-    try:
-        metadata["prompt_tokens_est"] = estimate_prompt_tokens(
-            system_instructions,
-            user_prompt,
-        )
-    except Exception:
-        pass
+    if estimate_tokens:
+        try:
+            metadata["prompt_tokens_est"] = estimate_prompt_tokens(
+                system_instructions,
+                user_prompt,
+            )
+        except Exception:
+            pass
     return metadata
 
 
@@ -642,6 +644,7 @@ def call_llm_with_fallback(
                             variant="RECOVERY" if force else "FULL",
                             model_id=gemini_model,
                             retry_number=retry_number,
+                            estimate_tokens=True,
                         ),
                     )
                     logger.warning(
@@ -791,6 +794,7 @@ def call_llm_with_fallback(
                         cloudflare_user_prompt,
                         variant=cloudflare_request_variant,
                         model_id=CLOUDFLARE_MODEL,
+                        estimate_tokens=True,
                     ),
                 },
             )
@@ -820,6 +824,7 @@ def call_llm_with_fallback(
                         cloudflare_user_prompt,
                         variant=cloudflare_request_variant,
                         model_id=CLOUDFLARE_MODEL,
+                        estimate_tokens=True,
                     ),
                 },
             )
@@ -893,6 +898,7 @@ def call_llm_with_fallback(
                     variant=variant,
                     model_id=groq_model,
                     retry_number=retry_number,
+                    estimate_tokens=True,
                 ),
             )
             return None, groq_error
