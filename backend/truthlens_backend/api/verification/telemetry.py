@@ -53,11 +53,20 @@ SAFE_LLM_OPERATION_LABELS = frozenset(
     }
 )
 SAFE_LLM_PROVIDERS = frozenset({"gemini", "groq", "cloudflare"})
-SAFE_GEMINI_MODEL_IDS = frozenset({
-    "gemini-2.5-flash",
-    "gemini-3.5-flash-lite",
-    "gemini-3.8-flash",
-})
+SAFE_PROVIDER_MODEL_IDS = {
+    "gemini": frozenset({
+        "gemini-2.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.8-flash",
+    }),
+    "groq": frozenset({
+        "openai/gpt-oss-120b",
+    }),
+    "cloudflare": frozenset({
+        "@cf/google/gemma-4-26b-a4b-it",
+    }),
+}
+SAFE_REQUEST_VARIANTS = frozenset({"FULL", "BOUNDED", "RECOVERY"})
 
 SAFE_GFC_COVERAGE_REASON_CODES = frozenset({
     "EXACT_OR_EQUIVALENT_COVERAGE",
@@ -136,10 +145,17 @@ def record_llm_provider_call(
     operation_label = operation if operation in SAFE_LLM_OPERATION_LABELS else "unspecified"
     provider_label = provider if provider in SAFE_LLM_PROVIDERS else ""
     safe_metadata = {}
-    if provider_label == "gemini" and isinstance(metadata, dict):
+    if isinstance(metadata, dict):
         model_id = metadata.get("model_id")
-        if model_id in SAFE_GEMINI_MODEL_IDS:
+        if model_id in SAFE_PROVIDER_MODEL_IDS.get(provider_label, frozenset()):
             safe_metadata["model_id"] = model_id
+        for key in ("prompt_chars", "prompt_tokens_est", "retry_number"):
+            count = safe_int(metadata.get(key))
+            if count is not None:
+                safe_metadata[key] = count
+        request_variant = metadata.get("request_variant")
+        if request_variant in SAFE_REQUEST_VARIANTS:
+            safe_metadata["request_variant"] = request_variant
     if provider_label == "cloudflare" and isinstance(metadata, dict):
         for key in (
             "prompt_tokens", "completion_tokens", "total_tokens",
