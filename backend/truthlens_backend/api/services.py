@@ -2160,6 +2160,32 @@ def build_persisted_evidence_prompt(
     return system_instructions, user_data
 
 
+def _build_bounded_provider_fallback_user_prompt(evidence_groups, prompt_builder):
+    """Build an execution-only fallback prompt without mutating persisted evidence."""
+    if not groq_bounded_fallback_enabled() or not evidence_groups:
+        return None
+
+    try:
+        fallback_context, metrics = bounded_reasoning_dossier(
+            evidence_groups,
+            prompt_builder,
+        )
+        _, fallback_user_prompt = prompt_builder(fallback_context)
+    except (LLMRequestBudgetExceededError, TypeError, ValueError):
+        logger.warning("PERSISTED_EVIDENCE_BOUNDED_FALLBACK_UNAVAILABLE")
+        return None
+
+    logger.info(
+        "PERSISTED_EVIDENCE_BOUNDED_FALLBACK selected=%s candidates=%s "
+        "prompt_tokens_est=%s prompt_budget=%s",
+        metrics.get("reasoning_selected"),
+        metrics.get("reasoning_candidates"),
+        metrics.get("final_prompt_tokens_est"),
+        metrics.get("final_prompt_budget"),
+    )
+    return fallback_user_prompt
+
+
 def _normalize_contextual_basis_metadata(result):
     """Validate confidence-only contextual metadata without changing the verdict."""
     normalized = result.copy()
@@ -2306,11 +2332,20 @@ def _audit_misleading_materiality(
 
     proposed_basis_kind = proposed_result.get("contextual_basis_kind", "NONE")
     proposed_basis_ids = proposed_result.get("contextual_basis_evidence_ids", [])
-    user_data = (
-        f"<claim>{original_claim}</claim>\n\n"
-        f"<proposed_basis_kind>{proposed_basis_kind}</proposed_basis_kind>\n"
-        f"<proposed_basis_evidence_ids>{json.dumps(proposed_basis_ids)}</proposed_basis_evidence_ids>\n\n"
-        f"<persisted_evidence>{evidence_context}</persisted_evidence>"
+
+    def audit_prompt(context):
+        audit_user_data = (
+            f"<claim>{original_claim}</claim>\n\n"
+            f"<proposed_basis_kind>{proposed_basis_kind}</proposed_basis_kind>\n"
+            f"<proposed_basis_evidence_ids>{json.dumps(proposed_basis_ids)}</proposed_basis_evidence_ids>\n\n"
+            f"<persisted_evidence>{context}</persisted_evidence>"
+        )
+        return system_instructions, audit_user_data
+
+    _, user_data = audit_prompt(evidence_context)
+    fallback_user_prompt = _build_bounded_provider_fallback_user_prompt(
+        evidence_groups,
+        audit_prompt,
     )
 
     try:
@@ -2319,6 +2354,7 @@ def _audit_misleading_materiality(
             user_data,
             operation="persisted_evidence_evaluation",
             gemini_timeout_ms=PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
+            fallback_user_prompt=fallback_user_prompt,
         )
         audited = _parse_llm_json(response_text)
         required_fields = {
@@ -2393,12 +2429,19 @@ def evaluate_claim_with_persisted_evidence(
     if not isinstance(evidence_context, str) or not evidence_context.strip():
         return unavailable_result
 
-    system_instructions, user_data = build_persisted_evidence_prompt(
-        original_claim,
-        evidence_context,
-        article_stance,
-        official_fact_check_resolution,
-        official_satire_evidence_ids,
+    def persisted_prompt(context):
+        return build_persisted_evidence_prompt(
+            original_claim,
+            context,
+            article_stance,
+            official_fact_check_resolution,
+            official_satire_evidence_ids,
+        )
+
+    system_instructions, user_data = persisted_prompt(evidence_context)
+    fallback_user_prompt = _build_bounded_provider_fallback_user_prompt(
+        evidence_groups,
+        persisted_prompt,
     )
 
     try:
@@ -2407,6 +2450,7 @@ def evaluate_claim_with_persisted_evidence(
             user_data,
             operation="persisted_evidence_evaluation",
             gemini_timeout_ms=PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
+            fallback_user_prompt=fallback_user_prompt,
         )
         parsed_result = _parse_llm_json(response_text)
         required_fields = {
