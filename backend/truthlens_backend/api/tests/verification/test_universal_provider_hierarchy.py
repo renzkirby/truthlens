@@ -14,12 +14,40 @@ from api.services import (
 )
 from api.verification.cloudflare_evaluation import CloudflareEvaluationError
 from api.verification.provider_hierarchy import (
+    gemini_transient_circuit_breaker_enabled,
+    groq_bounded_fallback_enabled,
     hierarchy_enabled,
+    reliability_hardening_enabled,
     requires_strict_stage_contract,
 )
 
 
 class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
+    def test_reliability_master_switch_controls_narrow_subfeatures(self):
+        with patch.dict(
+            "os.environ",
+            {
+                "ENABLE_PROVIDER_RELIABILITY_HARDENING": "0",
+                "ENABLE_GROQ_BOUNDED_FALLBACK": "1",
+                "ENABLE_GEMINI_TRANSIENT_CIRCUIT_BREAKER": "1",
+            },
+        ):
+            self.assertFalse(reliability_hardening_enabled())
+            self.assertFalse(groq_bounded_fallback_enabled())
+            self.assertFalse(gemini_transient_circuit_breaker_enabled())
+
+        with patch.dict(
+            "os.environ",
+            {
+                "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                "ENABLE_GROQ_BOUNDED_FALLBACK": "1",
+                "ENABLE_GEMINI_TRANSIENT_CIRCUIT_BREAKER": "0",
+            },
+        ):
+            self.assertTrue(reliability_hardening_enabled())
+            self.assertTrue(groq_bounded_fallback_enabled())
+            self.assertFalse(gemini_transient_circuit_breaker_enabled())
+
     @override_settings(APP_ENV="production", DEBUG=False)
     def test_universal_hierarchy_can_be_opted_in_outside_development(self):
         with patch.dict("os.environ", {"ENABLE_UNIVERSAL_LLM_HIERARCHY": "1"}):
@@ -400,7 +428,13 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
             )])
         )
         with (
-            patch.dict("os.environ", {"ENABLE_UNIVERSAL_LLM_HIERARCHY": "1"}),
+            patch.dict(
+                "os.environ",
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+                    "ENABLE_PROVIDER_RELIABILITY_HARDENING": "0",
+                },
+            ),
             patch("api.services.gemini_client", gemini),
             patch("api.services.groq_client", groq),
             patch("api.services.call_validated_cloudflare_pilot", cloudflare),
@@ -434,7 +468,13 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
         oversized_evidence = "E" * 30000
 
         with (
-            patch.dict("os.environ", {"ENABLE_UNIVERSAL_LLM_HIERARCHY": "1"}),
+            patch.dict(
+                "os.environ",
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+                    "ENABLE_PROVIDER_RELIABILITY_HARDENING": "0",
+                },
+            ),
             patch("api.services.gemini_client", gemini),
             patch("api.services.groq_client", groq),
             patch("api.services.call_validated_cloudflare_pilot", cloudflare),
