@@ -719,11 +719,12 @@ def call_llm_with_fallback(
         and not cloudflare_degraded
         and cloudflare_bypass_reason is None
         and not use_assessment_chunks
-        and len(system_instructions) + len(user_prompt) > CLOUDFLARE_MAX_INPUT_CHARS
+        and len(system_instructions) + len(cloudflare_user_prompt)
+        > CLOUDFLARE_MAX_INPUT_CHARS
     ):
         cloudflare_bypass_reason = "PROMPT_TOO_LONG"
-        # Local request ineligibility is not a provider outage. Preserve the
-        # complete prompt for downstream Groq instead of degrading Cloudflare.
+        # Local request ineligibility is not a provider outage. The downstream
+        # provider may still use a caller-supplied bounded execution prompt.
         _log_llm_provider_call(
             operation, "cloudflare", provider_call_id,
             time.perf_counter(), "skipped",
