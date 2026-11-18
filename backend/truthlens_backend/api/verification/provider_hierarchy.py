@@ -12,6 +12,9 @@ from .classification_contract import CLASSIFICATION_OPERATION
 
 HIERARCHY_FLAG = "ENABLE_AI_RQ2_PROVIDER_HIERARCHY"
 UNIVERSAL_HIERARCHY_FLAG = "ENABLE_UNIVERSAL_LLM_HIERARCHY"
+RELIABILITY_HARDENING_FLAG = "ENABLE_PROVIDER_RELIABILITY_HARDENING"
+GROQ_BOUNDED_FALLBACK_FLAG = "ENABLE_GROQ_BOUNDED_FALLBACK"
+GEMINI_TRANSIENT_CIRCUIT_BREAKER_FLAG = "ENABLE_GEMINI_TRANSIENT_CIRCUIT_BREAKER"
 STAGE_CONTRACT_OPERATIONS = frozenset({
     ASSESSMENT_OPERATION,
     PILOT_OPERATION,
@@ -53,6 +56,30 @@ def hierarchy_enabled():
         and getattr(settings, "DEBUG", False) is True
         and os.getenv(HIERARCHY_FLAG, "") == "1"
     )
+
+
+def reliability_hardening_enabled():
+    """Defense-period reliability patch master switch; off unless explicitly enabled."""
+    return os.getenv(RELIABILITY_HARDENING_FLAG, "") == "1"
+
+
+def _reliability_subfeature_enabled(name):
+    if not reliability_hardening_enabled():
+        return False
+    configured = os.getenv(name)
+    if configured == "0":
+        return False
+    return True
+
+
+def groq_bounded_fallback_enabled():
+    """Use a deterministic bounded persisted-evidence prompt only on fallback."""
+    return _reliability_subfeature_enabled(GROQ_BOUNDED_FALLBACK_FLAG)
+
+
+def gemini_transient_circuit_breaker_enabled():
+    """Suppress repeat 5xx Gemini calls within one scoped verification job."""
+    return _reliability_subfeature_enabled(GEMINI_TRANSIENT_CIRCUIT_BREAKER_FLAG)
 
 
 def requires_strict_stage_contract(operation, *, pilot_active, hierarchy_active):
