@@ -40,6 +40,14 @@ from .verification.provider_hierarchy import (
     hierarchy_enabled,
     requires_strict_stage_contract,
     gemini_job_blocking_error,
+    gemini_transient_circuit_breaker_enabled,
+    groq_bounded_fallback_enabled,
+)
+from .verification.evidence_budget import (
+    FINAL_PROMPT_TARGET,
+    LLMRequestBudgetExceededError,
+    bounded_reasoning_dossier,
+    estimate_prompt_tokens,
 )
 from .verification.cloudflare_evaluation import (
     CloudflareEvaluationError,
@@ -423,6 +431,56 @@ def _is_groq_request_too_large(error):
     return _provider_status_code(error) == 413
 
 
+def _cloudflare_failure_degrades_job(error):
+    """Only provider-scoped failures should trip the per-job Cloudflare breaker."""
+    code = sanitized_cloudflare_error_code(error)
+    return code not in {
+        "PROMPT_TOO_LONG",
+        "ASSESSMENT_BATCH_TOO_LARGE",
+        "HTTP_413",
+    }
+
+
+def _request_metadata(
+    system_instructions,
+    user_prompt,
+    *,
+    variant,
+    model_id=None,
+    retry_number=0,
+):
+    """Return bounded, privacy-safe numeric/provider request metadata."""
+    metadata = {
+        "prompt_chars": len(system_instructions) + len(user_prompt),
+        "request_variant": variant,
+        "retry_number": retry_number,
+    }
+    if isinstance(model_id, str) and model_id:
+        metadata["model_id"] = model_id
+    try:
+        metadata["prompt_tokens_est"] = estimate_prompt_tokens(
+            system_instructions,
+            user_prompt,
+        )
+    except Exception:
+        pass
+    return metadata
+
+
+def _bounded_fallback_is_smaller(system_instructions, full_prompt, fallback_prompt):
+    if not isinstance(fallback_prompt, str) or not fallback_prompt.strip():
+        return False
+    try:
+        full_estimate = estimate_prompt_tokens(system_instructions, full_prompt)
+        fallback_estimate = estimate_prompt_tokens(
+            system_instructions,
+            fallback_prompt,
+        )
+    except Exception:
+        return len(fallback_prompt) < len(full_prompt)
+    return fallback_estimate < full_estimate
+
+
 def _provider_error_label(error):
     """Return useful error metadata without including provider secrets."""
     if isinstance(error, CloudflareEvaluationError):
@@ -489,8 +547,14 @@ def call_llm_with_fallback(
     *,
     operation=None,
     gemini_timeout_ms=None,
+    fallback_user_prompt=None,
 ):
-    """Opt-in Gemini -> Cloudflare -> Groq; legacy order otherwise preserved."""
+    """Opt-in Gemini -> Cloudflare -> Groq; legacy order otherwise preserved.
+
+    Gemini always receives the original full prompt. A caller may provide a
+    deterministic bounded fallback prompt for providers with tighter request
+    budgets; it is never used on the normal successful Gemini path.
+    """
     provider_call_id = uuid.uuid4()
     pilot_active = cloudflare_pilot_enabled(operation)
     hierarchy_active = hierarchy_enabled()
@@ -502,9 +566,9 @@ def call_llm_with_fallback(
     gemini_model = _gemini_model_for_operation(operation)
     last_gemini_error = None
 
-    def _try_gemini():
+    def _try_gemini(*, force=False, retry_number=0):
         nonlocal last_gemini_error
-        if not _gemini_model_is_degraded(gemini_model):
+        if force or not _gemini_model_is_degraded(gemini_model):
             gemini_config = {
                 "system_instruction": system_instructions,
                 "response_mime_type": "application/json",
@@ -549,7 +613,13 @@ def call_llm_with_fallback(
                     # Do not repeatedly call a provider that cannot serve this job.
                     if (
                         hierarchy_active
-                        and gemini_job_blocking_error(gemini_err)
+                        and (
+                            gemini_job_blocking_error(gemini_err)
+                            or (
+                                gemini_transient_circuit_breaker_enabled()
+                                and _is_transient_gemini_server_error(gemini_err)
+                            )
+                        )
                         and _gemini_degraded_models.get() is not None
                     ):
                         _mark_gemini_model_degraded(gemini_model)
@@ -560,7 +630,13 @@ def call_llm_with_fallback(
                         gemini_started_at,
                         "failed",
                         gemini_err,
-                        metadata={"model_id": gemini_model},
+                        metadata=_request_metadata(
+                            system_instructions,
+                            user_prompt,
+                            variant="RECOVERY" if force else "FULL",
+                            model_id=gemini_model,
+                            retry_number=retry_number,
+                        ),
                     )
                     logger.warning(
                         "Gemini API failed (%s); continuing fallback routing.",
@@ -574,7 +650,13 @@ def call_llm_with_fallback(
                         provider_call_id,
                         gemini_started_at,
                         "success",
-                        metadata={"model_id": gemini_model},
+                        metadata=_request_metadata(
+                            system_instructions,
+                            user_prompt,
+                            variant="RECOVERY" if force else "FULL",
+                            model_id=gemini_model,
+                            retry_number=retry_number,
+                        ),
                     )
                     return content
 
