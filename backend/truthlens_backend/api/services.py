@@ -42,6 +42,7 @@ from .verification.provider_hierarchy import (
     gemini_job_blocking_error,
     gemini_transient_circuit_breaker_enabled,
     groq_bounded_fallback_enabled,
+    reliability_hardening_enabled,
 )
 from .verification.evidence_budget import (
     FINAL_PROMPT_TARGET,
@@ -450,13 +451,17 @@ def _request_metadata(
     retry_number=0,
 ):
     """Return bounded, privacy-safe numeric/provider request metadata."""
-    metadata = {
+    metadata = {}
+    if isinstance(model_id, str) and model_id:
+        metadata["model_id"] = model_id
+    if not reliability_hardening_enabled():
+        return metadata
+
+    metadata.update({
         "prompt_chars": len(system_instructions) + len(user_prompt),
         "request_variant": variant,
         "retry_number": retry_number,
-    }
-    if isinstance(model_id, str) and model_id:
-        metadata["model_id"] = model_id
+    })
     try:
         metadata["prompt_tokens_est"] = estimate_prompt_tokens(
             system_instructions,
@@ -787,7 +792,10 @@ def call_llm_with_fallback(
             # Cloudflare requests during the same scoped verification job.
             if (
                 _cloudflare_pilot_degraded.get() is not None
-                and _cloudflare_failure_degrades_job(cloudflare_err)
+                and (
+                    not reliability_hardening_enabled()
+                    or _cloudflare_failure_degrades_job(cloudflare_err)
+                )
             ):
                 _cloudflare_pilot_degraded.set(True)
         else:
