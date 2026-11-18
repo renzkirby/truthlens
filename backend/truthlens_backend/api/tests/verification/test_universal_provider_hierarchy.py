@@ -7,9 +7,15 @@ from unittest.mock import Mock, patch
 from django.test import SimpleTestCase, override_settings
 
 from api.verification.cloudflare_pilot import (cloudflare_pilot_enabled, validate_pilot_response)
-from api.services import LLMProviderUnavailableError, call_llm_with_fallback
+from api.services import (
+    LLMProviderUnavailableError,
+    call_llm_with_fallback,
+    llm_provider_scope,
+)
+from api.verification.cloudflare_evaluation import CloudflareEvaluationError
 from api.verification.provider_hierarchy import (
-    hierarchy_enabled, requires_strict_stage_contract,
+    hierarchy_enabled,
+    requires_strict_stage_contract,
 )
 
 
@@ -448,3 +454,338 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
             .call_args.kwargs["messages"]
         )
         self.assertEqual(sent_messages[1]["content"], oversized_evidence)
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_reliability_hardening_keeps_successful_gemini_path_unchanged(self):
+        payload = json.dumps({
+            "cleaned_claim": "An announcement occurred.",
+            "search_query": "official announcement details",
+            "search_queries": ["official announcement details"],
+            "article_stance": "NEUTRAL",
+        })
+        full_prompt = "FULL ORIGINAL PROMPT"
+        fallback_prompt = "BOUNDED FALLBACK PROMPT"
+        gemini = Mock()
+        gemini.models.generate_content.return_value = SimpleNamespace(text=payload)
+        cloudflare = Mock()
+        groq = Mock()
+
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+                    "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                },
+            ),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.call_validated_cloudflare_pilot", cloudflare),
+        ):
+            result = call_llm_with_fallback(
+                "Instructions",
+                full_prompt,
+                operation="claim_gate",
+                fallback_user_prompt=fallback_prompt,
+            )
+
+        self.assertEqual(result, payload)
+        self.assertEqual(
+            gemini.models.generate_content.call_args.kwargs["contents"],
+            full_prompt,
+        )
+        cloudflare.assert_not_called()
+        groq.with_options.return_value.chat.completions.create.assert_not_called()
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_transient_gemini_503_is_suppressed_for_later_calls_in_same_scope(self):
+        payload = json.dumps({
+            "cleaned_claim": "An announcement occurred.",
+            "search_query": "official announcement details",
+            "search_queries": ["official announcement details"],
+            "article_stance": "NEUTRAL",
+        })
+
+        class ProviderError(RuntimeError):
+            pass
+
+        gemini_503 = ProviderError("service unavailable")
+        gemini_503.code = 503
+
+        gemini = Mock()
+        gemini.models.generate_content.side_effect = gemini_503
+        cloudflare = Mock(return_value=payload)
+        groq = Mock()
+
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+                    "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                },
+            ),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.call_validated_cloudflare_pilot", cloudflare),
+        ):
+            with llm_provider_scope():
+                self.assertEqual(
+                    call_llm_with_fallback(
+                        "Instructions",
+                        "Prompt one",
+                        operation="claim_gate",
+                    ),
+                    payload,
+                )
+                self.assertEqual(
+                    call_llm_with_fallback(
+                        "Instructions",
+                        "Prompt two",
+                        operation="claim_gate",
+                    ),
+                    payload,
+                )
+
+        gemini.models.generate_content.assert_called_once()
+        self.assertEqual(cloudflare.call_count, 2)
+        groq.with_options.return_value.chat.completions.create.assert_not_called()
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_all_fallback_failures_get_one_forced_gemini_recovery_after_503(self):
+        payload = json.dumps({
+            "cleaned_claim": "An announcement occurred.",
+            "search_query": "official announcement details",
+            "search_queries": ["official announcement details"],
+            "article_stance": "NEUTRAL",
+        })
+
+        class ProviderError(RuntimeError):
+            pass
+
+        gemini_503 = ProviderError("service unavailable")
+        gemini_503.code = 503
+        gemini = Mock()
+        gemini.models.generate_content.side_effect = [
+            gemini_503,
+            SimpleNamespace(text=payload),
+        ]
+        cloudflare = Mock(side_effect=RuntimeError("cloudflare unavailable"))
+        groq = Mock()
+        groq.with_options.return_value.chat.completions.create.side_effect = (
+            RuntimeError("groq unavailable")
+        )
+
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+                    "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                },
+            ),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.call_validated_cloudflare_pilot", cloudflare),
+            patch("api.services.time.sleep") as sleep,
+        ):
+            with llm_provider_scope():
+                result = call_llm_with_fallback(
+                    "Instructions",
+                    "FULL ORIGINAL PROMPT",
+                    operation="claim_gate",
+                )
+
+        self.assertEqual(result, payload)
+        self.assertEqual(gemini.models.generate_content.call_count, 2)
+        self.assertEqual(
+            gemini.models.generate_content.call_args_list[1].kwargs["contents"],
+            "FULL ORIGINAL PROMPT",
+        )
+        cloudflare.assert_called_once()
+        groq.with_options.return_value.chat.completions.create.assert_called_once()
+        sleep.assert_called_once_with(1.0)
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_oversize_persisted_fallback_uses_bounded_prompt_for_cloudflare_and_groq(self):
+        payload = json.dumps({
+            "reasoning": "Grounded in the bounded persisted dossier.",
+            "verdict": "FACT",
+            "summary": "The claim is supported.",
+            "confidence_score": 82,
+            "score_context": "Direct supporting evidence.",
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        })
+
+        class ProviderError(RuntimeError):
+            pass
+
+        gemini_503 = ProviderError("service unavailable")
+        gemini_503.code = 503
+        gemini = Mock()
+        gemini.models.generate_content.side_effect = gemini_503
+        cloudflare = Mock(side_effect=RuntimeError("cloudflare unavailable"))
+        groq = Mock()
+        groq.with_options.return_value.chat.completions.create.return_value = (
+            SimpleNamespace(choices=[SimpleNamespace(
+                message=SimpleNamespace(content=payload)
+            )])
+        )
+        full_prompt = "FULL EVIDENCE " * 5000
+        bounded_prompt = "BOUNDED EVIDENCE " * 200
+
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+                    "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                },
+            ),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.call_validated_cloudflare_pilot", cloudflare),
+        ):
+            with llm_provider_scope():
+                result = call_llm_with_fallback(
+                    "Instructions",
+                    full_prompt,
+                    operation="persisted_evidence_evaluation",
+                    fallback_user_prompt=bounded_prompt,
+                )
+
+        self.assertEqual(result, payload)
+        self.assertEqual(
+            gemini.models.generate_content.call_args.kwargs["contents"],
+            full_prompt,
+        )
+        self.assertEqual(cloudflare.call_args.args[1], bounded_prompt)
+        sent_messages = (
+            groq.with_options.return_value.chat.completions.create
+            .call_args.kwargs["messages"]
+        )
+        self.assertEqual(sent_messages[1]["content"], bounded_prompt)
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_groq_413_retries_once_with_bounded_prompt_when_preflight_used_full(self):
+        payload = json.dumps({
+            "reasoning": "Grounded in evidence.",
+            "verdict": "FACT",
+            "summary": "The claim is supported.",
+            "confidence_score": 82,
+            "score_context": "Direct supporting evidence.",
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        })
+
+        class ProviderError(RuntimeError):
+            pass
+
+        gemini_503 = ProviderError("service unavailable")
+        gemini_503.code = 503
+        groq_413 = ProviderError("request too large")
+        groq_413.status_code = 413
+
+        gemini = Mock()
+        gemini.models.generate_content.side_effect = gemini_503
+        cloudflare = Mock(side_effect=RuntimeError("cloudflare unavailable"))
+        groq = Mock()
+        groq.with_options.return_value.chat.completions.create.side_effect = [
+            groq_413,
+            SimpleNamespace(choices=[SimpleNamespace(
+                message=SimpleNamespace(content=payload)
+            )]),
+        ]
+
+        def estimate(_system, prompt):
+            return 3000 if prompt == "FULL PROMPT" else 1000
+
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+                    "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                },
+            ),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.call_validated_cloudflare_pilot", cloudflare),
+            patch("api.services.estimate_prompt_tokens", side_effect=estimate),
+        ):
+            with llm_provider_scope():
+                result = call_llm_with_fallback(
+                    "Instructions",
+                    "FULL PROMPT",
+                    operation="persisted_evidence_evaluation",
+                    fallback_user_prompt="BOUNDED PROMPT",
+                )
+
+        self.assertEqual(result, payload)
+        calls = groq.with_options.return_value.chat.completions.create.call_args_list
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0].kwargs["messages"][1]["content"], "FULL PROMPT")
+        self.assertEqual(calls[1].kwargs["messages"][1]["content"], "BOUNDED PROMPT")
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_cloudflare_413_does_not_poison_later_stage_in_same_scope(self):
+        payload = json.dumps({
+            "cleaned_claim": "An announcement occurred.",
+            "search_query": "official announcement details",
+            "search_queries": ["official announcement details"],
+            "article_stance": "NEUTRAL",
+        })
+
+        class ProviderError(RuntimeError):
+            pass
+
+        gemini_503 = ProviderError("service unavailable")
+        gemini_503.code = 503
+        gemini = Mock()
+        gemini.models.generate_content.side_effect = gemini_503
+        cloudflare = Mock(side_effect=[
+            CloudflareEvaluationError("HTTP_413"),
+            payload,
+        ])
+        groq = Mock()
+        groq.with_options.return_value.chat.completions.create.return_value = (
+            SimpleNamespace(choices=[SimpleNamespace(
+                message=SimpleNamespace(content=payload)
+            )])
+        )
+
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+                    "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                },
+            ),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.call_validated_cloudflare_pilot", cloudflare),
+        ):
+            with llm_provider_scope():
+                self.assertEqual(
+                    call_llm_with_fallback(
+                        "Instructions",
+                        "Prompt one",
+                        operation="claim_gate",
+                    ),
+                    payload,
+                )
+                self.assertEqual(
+                    call_llm_with_fallback(
+                        "Instructions",
+                        "Prompt two",
+                        operation="claim_gate",
+                    ),
+                    payload,
+                )
+
+        gemini.models.generate_content.assert_called_once()
+        self.assertEqual(cloudflare.call_count, 2)
+        groq.with_options.return_value.chat.completions.create.assert_called_once()
+
