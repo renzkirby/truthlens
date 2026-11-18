@@ -667,6 +667,25 @@ def call_llm_with_fallback(
         if primary_response is not None:
             return primary_response
 
+    bounded_fallback_available = (
+        groq_bounded_fallback_enabled()
+        and _bounded_fallback_is_smaller(
+            system_instructions,
+            user_prompt,
+            fallback_user_prompt,
+        )
+    )
+    cloudflare_user_prompt = user_prompt
+    cloudflare_request_variant = "FULL"
+    if (
+        bounded_fallback_available
+        and len(system_instructions) + len(cloudflare_user_prompt) > CLOUDFLARE_MAX_INPUT_CHARS
+        and len(system_instructions) + len(fallback_user_prompt)
+        <= CLOUDFLARE_MAX_INPUT_CHARS
+    ):
+        cloudflare_user_prompt = fallback_user_prompt
+        cloudflare_request_variant = "BOUNDED"
+
     cloudflare_degraded = _cloudflare_pilot_degraded.get() is True
     assessment_bypass_reason = None
     use_assessment_chunks = False
@@ -726,17 +745,17 @@ def call_llm_with_fallback(
                 )
             elif operation in {ASSESSMENT_OPERATION, CLASSIFICATION_OPERATION}:
                 cloudflare_text = call_validated_cloudflare_pilot(
-                    system_instructions, user_prompt,
+                    system_instructions, cloudflare_user_prompt,
                     operation=operation, audit_metadata=cloudflare_metrics,
                 )
             elif operation == PILOT_OPERATION:
                 cloudflare_text = call_validated_cloudflare_pilot(
-                    system_instructions, user_prompt,
+                    system_instructions, cloudflare_user_prompt,
                     audit_metadata=cloudflare_metrics,
                 )
             else:
                 cloudflare_text = call_validated_cloudflare_pilot(
-                    system_instructions, user_prompt,
+                    system_instructions, cloudflare_user_prompt,
                     operation=operation,
                     audit_metadata=cloudflare_metrics,
                 )
@@ -747,7 +766,15 @@ def call_llm_with_fallback(
                 # Even a failed JSON/empty response may expose safe usage and
                 # finish-status counters. Telemetry sanitizes all fields and
                 # never persists hidden reasoning, prompts, or raw evidence.
-                metadata=cloudflare_metrics,
+                metadata={
+                    **cloudflare_metrics,
+                    **_request_metadata(
+                        system_instructions,
+                        cloudflare_user_prompt,
+                        variant=cloudflare_request_variant,
+                        model_id="@cf/google/gemma-4-26b-a4b-it",
+                    ),
+                },
             )
             logger.warning(
                 "Cloudflare verification pilot failed (%s); continuing "
@@ -756,13 +783,24 @@ def call_llm_with_fallback(
             )
             # A provider failure should not trigger repeated quota-consuming
             # Cloudflare requests during the same scoped verification job.
-            if _cloudflare_pilot_degraded.get() is not None:
+            if (
+                _cloudflare_pilot_degraded.get() is not None
+                and _cloudflare_failure_degrades_job(cloudflare_err)
+            ):
                 _cloudflare_pilot_degraded.set(True)
         else:
             _log_llm_provider_call(
                 operation, "cloudflare", provider_call_id,
                 cloudflare_started_at, "success",
-                metadata=cloudflare_metrics,
+                metadata={
+                    **cloudflare_metrics,
+                    **_request_metadata(
+                        system_instructions,
+                        cloudflare_user_prompt,
+                        variant=cloudflare_request_variant,
+                        model_id="@cf/google/gemma-4-26b-a4b-it",
+                    ),
+                },
             )
             return cloudflare_text
 
@@ -771,63 +809,140 @@ def call_llm_with_fallback(
         if legacy_gemini_response is not None:
             return legacy_gemini_response
 
-    groq_started_at = time.perf_counter()
-    try:
-        # Disable the Groq SDK's automatic HTTP retries in the opt-in lane.
-        # A 429 on one Groq model must not trigger a blind model carousel.
-        selected_groq_client = (
-            groq_client.with_options(max_retries=0)
-            if hierarchy_active else groq_client
-        )
-        chat_completion = selected_groq_client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": system_instructions},
-                {"role": "user", "content": user_prompt},
-            ],
-            model=_model_from_env("GROQ_MODEL", DEFAULT_GROQ_MODEL),
-            response_format={"type": "json_object"},
-            temperature=0.1,
-        )
-        content = chat_completion.choices[0].message.content
-        if hierarchy_active and (
-            not isinstance(content, str) or not content.strip()
-        ):
-            raise ValueError("EMPTY_PROVIDER_RESPONSE")
+    groq_model = _model_from_env("GROQ_MODEL", DEFAULT_GROQ_MODEL)
+    selected_groq_client = (
+        groq_client.with_options(max_retries=0)
+        if hierarchy_active else groq_client
+    )
+
+    groq_user_prompt = user_prompt
+    groq_request_variant = "FULL"
+    if bounded_fallback_available:
+        try:
+            full_prompt_estimate = estimate_prompt_tokens(
+                system_instructions,
+                user_prompt,
+            )
+        except Exception:
+            full_prompt_estimate = None
         if (
-            stage_contract_active
-            and not validate_pilot_response(operation, content, user_prompt)
+            full_prompt_estimate is not None
+            and full_prompt_estimate > FINAL_PROMPT_TARGET
         ):
-            raise ValueError("INVALID_PILOT_FALLBACK_JSON")
-    except Exception as groq_err:
+            groq_user_prompt = fallback_user_prompt
+            groq_request_variant = "BOUNDED"
+
+    def _try_groq_once(prompt, *, variant, retry_number=0):
+        groq_started_at = time.perf_counter()
+        try:
+            chat_completion = selected_groq_client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": system_instructions},
+                    {"role": "user", "content": prompt},
+                ],
+                model=groq_model,
+                response_format={"type": "json_object"},
+                temperature=0.1,
+            )
+            groq_content = chat_completion.choices[0].message.content
+            if hierarchy_active and (
+                not isinstance(groq_content, str) or not groq_content.strip()
+            ):
+                raise ValueError("EMPTY_PROVIDER_RESPONSE")
+            if (
+                stage_contract_active
+                and not validate_pilot_response(
+                    operation,
+                    groq_content,
+                    prompt,
+                )
+            ):
+                raise ValueError("INVALID_PILOT_FALLBACK_JSON")
+        except Exception as groq_error:
+            _log_llm_provider_call(
+                operation,
+                "groq",
+                provider_call_id,
+                groq_started_at,
+                "failed",
+                groq_error,
+                metadata=_request_metadata(
+                    system_instructions,
+                    prompt,
+                    variant=variant,
+                    model_id=groq_model,
+                    retry_number=retry_number,
+                ),
+            )
+            return None, groq_error
+
         _log_llm_provider_call(
             operation,
             "groq",
             provider_call_id,
             groq_started_at,
-            "failed",
-            groq_err,
+            "success",
+            metadata=_request_metadata(
+                system_instructions,
+                prompt,
+                variant=variant,
+                model_id=groq_model,
+                retry_number=retry_number,
+            ),
         )
+        return groq_content, None
+
+    content, groq_err = _try_groq_once(
+        groq_user_prompt,
+        variant=groq_request_variant,
+    )
+
+    if (
+        groq_err is not None
+        and _is_groq_request_too_large(groq_err)
+        and bounded_fallback_available
+        and groq_request_variant == "FULL"
+    ):
+        logger.warning(
+            "Groq rejected the full request as too large; retrying once with "
+            "the deterministic bounded fallback dossier."
+        )
+        content, groq_err = _try_groq_once(
+            fallback_user_prompt,
+            variant="BOUNDED",
+            retry_number=1,
+        )
+
+    if groq_err is not None:
         logger.error(
             "Groq fallback failed (%s).",
             _provider_error_label(groq_err),
         )
 
-        # A valid request can exceed a fallback provider's per-request/free-tier
-        # token budget while still fitting Gemini. If Gemini's first attempt
-        # failed only because of a transient server error and Groq explicitly
-        # rejects the unchanged request as too large, give Gemini one final
-        # chance instead of truncating or dropping evidence/context.
-        if (
-            _is_groq_request_too_large(groq_err)
-            and _is_transient_gemini_server_error(last_gemini_error)
+        transient_gemini_failure = _is_transient_gemini_server_error(
+            last_gemini_error
+        )
+        guarded_recovery = (
+            hierarchy_active
+            and gemini_transient_circuit_breaker_enabled()
+            and transient_gemini_failure
+        )
+        legacy_413_recovery = (
+            not guarded_recovery
+            and _is_groq_request_too_large(groq_err)
+            and transient_gemini_failure
             and not _gemini_model_is_degraded(gemini_model)
-        ):
+        )
+        if guarded_recovery or legacy_413_recovery:
             logger.warning(
-                "Groq rejected the request as too large; retrying Gemini once "
-                "after transient server failure."
+                "Fallback providers could not complete the request; retrying "
+                "Gemini once after the transient server failure."
             )
             time.sleep(1.0)
-            recovery_response = _try_gemini()
+            recovery_response = _try_gemini(
+                force=guarded_recovery,
+                retry_number=1,
+            )
             if recovery_response is not None:
                 return recovery_response
 
@@ -835,13 +950,6 @@ def call_llm_with_fallback(
             "No configured LLM provider successfully completed this request."
         ) from groq_err
 
-    _log_llm_provider_call(
-        operation,
-        "groq",
-        provider_call_id,
-        groq_started_at,
-        "success",
-    )
     # A successful takeover suppresses repeated calls only to the Gemini model
     # that failed. Routine and reasoning tiers have independent free quotas.
     _mark_gemini_model_degraded(gemini_model)
