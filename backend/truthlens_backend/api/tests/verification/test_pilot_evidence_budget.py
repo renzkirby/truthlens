@@ -12,6 +12,7 @@ from django.test import SimpleTestCase, override_settings
 from api.services import (
     LLMProviderUnavailableError,
     build_persisted_evidence_prompt,
+    evaluate_claim_with_persisted_evidence,
 )
 from api.tasks import _render_bounded_persisted_evidence_context
 from api.verification.cloudflare_pilot import PILOT_MAX_INPUT_CHARS
@@ -317,6 +318,71 @@ class PilotEvidenceBudgetTests(SimpleTestCase):
             )
 
         self.assertEqual(got, expected)
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_persisted_evaluator_exposes_lazy_real_bounded_fallback_prompt(self):
+        groups = _groups(content_length=1800)
+        full_context = render_reasoning_evidence_dossier(
+            groups,
+            include_evidence_link_ids=True,
+        )
+        system_prompt, full_user_prompt = build_persisted_evidence_prompt(
+            "The claim is precisely described here.",
+            full_context,
+            "NEUTRAL",
+        )
+        response = json.dumps({
+            "reasoning": "Evidence directly supports the claim.",
+            "verdict": "FACT",
+            "summary": "The supplied evidence supports the claim.",
+            "confidence_score": 90,
+            "score_context": "Direct persisted evidence supports the submitted claim.",
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        })
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+                    "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                },
+            ),
+            patch(
+                "api.services.call_llm_with_fallback",
+                return_value=response,
+            ) as provider,
+        ):
+            result = evaluate_claim_with_persisted_evidence(
+                "The claim is precisely described here.",
+                full_context,
+                "NEUTRAL",
+                evidence_groups=groups,
+            )
+
+            fallback_builder = provider.call_args.kwargs["fallback_user_prompt"]
+            self.assertTrue(callable(fallback_builder))
+            bounded_user_prompt = fallback_builder()
+
+        self.assertEqual(result["verdict"], "FACT")
+        self.assertIsInstance(bounded_user_prompt, str)
+        self.assertLess(
+            len(bounded_user_prompt),
+            len(full_user_prompt),
+        )
+        self.assertIn("<persisted_evidence>", bounded_user_prompt)
+        self.assertEqual(
+            full_context,
+            render_reasoning_evidence_dossier(
+                groups,
+                include_evidence_link_ids=True,
+            ),
+        )
+        self.assertEqual(
+            provider.call_args.args,
+            (system_prompt, full_user_prompt),
+        )
 
     def test_pilot_flag_off_keeps_existing_renderer(self):
         groups = _groups(content_length=2900)
