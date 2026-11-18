@@ -668,7 +668,8 @@ def call_llm_with_fallback(
             return primary_response
 
     bounded_fallback_available = (
-        groq_bounded_fallback_enabled()
+        hierarchy_active
+        and groq_bounded_fallback_enabled()
         and _bounded_fallback_is_smaller(
             system_instructions,
             user_prompt,
