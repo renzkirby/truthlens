@@ -505,6 +505,7 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
         })
         full_prompt = "FULL ORIGINAL PROMPT"
         fallback_prompt = "BOUNDED FALLBACK PROMPT"
+        fallback_builder = Mock(return_value=fallback_prompt)
         gemini = Mock()
         gemini.models.generate_content.return_value = SimpleNamespace(text=payload)
         cloudflare = Mock()
@@ -526,10 +527,11 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
                 "Instructions",
                 full_prompt,
                 operation="claim_gate",
-                fallback_user_prompt=fallback_prompt,
+                fallback_user_prompt=fallback_builder,
             )
 
         self.assertEqual(result, payload)
+        fallback_builder.assert_not_called()
         self.assertEqual(
             gemini.models.generate_content.call_args.kwargs["contents"],
             full_prompt,
