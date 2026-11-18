@@ -52,6 +52,7 @@ from .verification.evidence_budget import (
 )
 from .verification.cloudflare_evaluation import (
     CloudflareEvaluationError,
+    DEFAULT_MODEL as CLOUDFLARE_MODEL,
     MAX_INPUT_CHARS as CLOUDFLARE_MAX_INPUT_CHARS,
     sanitized_cloudflare_error_code,
 )
@@ -789,7 +790,7 @@ def call_llm_with_fallback(
                         system_instructions,
                         cloudflare_user_prompt,
                         variant=cloudflare_request_variant,
-                        model_id="@cf/google/gemma-4-26b-a4b-it",
+                        model_id=CLOUDFLARE_MODEL,
                     ),
                 },
             )
@@ -818,7 +819,7 @@ def call_llm_with_fallback(
                         system_instructions,
                         cloudflare_user_prompt,
                         variant=cloudflare_request_variant,
-                        model_id="@cf/google/gemma-4-26b-a4b-it",
+                        model_id=CLOUDFLARE_MODEL,
                     ),
                 },
             )
@@ -2362,12 +2363,11 @@ def _audit_misleading_materiality(
         return system_instructions, audit_user_data
 
     _, user_data = audit_prompt(evidence_context)
-    fallback_user_prompt_builder = lambda: (
-        _build_bounded_provider_fallback_user_prompt(
+    def fallback_user_prompt_builder():
+        return _build_bounded_provider_fallback_user_prompt(
             evidence_groups,
             audit_prompt,
         )
-    )
 
     try:
         response_text = call_llm_with_fallback(
@@ -2460,12 +2460,11 @@ def evaluate_claim_with_persisted_evidence(
         )
 
     system_instructions, user_data = persisted_prompt(evidence_context)
-    fallback_user_prompt_builder = lambda: (
-        _build_bounded_provider_fallback_user_prompt(
+    def fallback_user_prompt_builder():
+        return _build_bounded_provider_fallback_user_prompt(
             evidence_groups,
             persisted_prompt,
         )
-    )
 
     try:
         response_text = call_llm_with_fallback(
