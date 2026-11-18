@@ -222,6 +222,43 @@ class PipelineTelemetryCollectorTests(TestCase):
         )
         self.assertNotIn("PRIVATE", repr(event.metadata))
 
+    def test_provider_request_metadata_is_numeric_allowlisted_and_private_safe(self):
+        @verification_telemetry_scope()
+        def execute(claim_id):
+            bind_verification_run(self.run)
+            record_llm_provider_call(
+                "persisted_evidence_evaluation",
+                "groq",
+                self.run.id,
+                17,
+                "success",
+                metadata={
+                    "model_id": "openai/gpt-oss-120b",
+                    "prompt_chars": 12345,
+                    "prompt_tokens_est": 3210,
+                    "request_variant": "BOUNDED",
+                    "retry_number": 1,
+                    "prompt": "PRIVATE PROMPT CONTENT",
+                    "evidence": "PRIVATE EVIDENCE CONTENT",
+                    "api_key": "PRIVATE KEY",
+                },
+            )
+
+        execute(self.claim.id)
+        event = self.run.telemetry_events.get()
+        self.assertEqual(
+            event.metadata,
+            {
+                "model_id": "openai/gpt-oss-120b",
+                "prompt_chars": 12345,
+                "prompt_tokens_est": 3210,
+                "request_variant": "BOUNDED",
+                "retry_number": 1,
+            },
+        )
+        serialized = repr(event.metadata)
+        self.assertNotIn("PRIVATE", serialized)
+
     def test_flush_failure_never_propagates_or_logs_exception_secret(self):
         @verification_telemetry_scope()
         def execute(claim_id):
