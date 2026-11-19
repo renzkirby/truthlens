@@ -1293,6 +1293,19 @@ def community_guidelines(request):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
+def community_standing(request):
+    if not can_participate_in_community(request.user):
+        raise PermissionDenied(
+            "Community Standing is available to Community participants."
+        )
+    return Response(
+        get_community_standing(request.user),
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def community_moderation_outcome(request, decision_id):
     try:
         payload = get_community_moderation_outcome(
