@@ -237,7 +237,7 @@ function CommunityModerationOutcomePage() {
                {removed && outcome.policy?.violation_title ? (
                   <dl className="community-outcome-details">
                      <div>
-                        <dt>Community Guidelines finding</dt>
+                        <dt>Community rule</dt>
                         <dd>{outcome.policy.violation_title}</dd>
                      </div>
                      <div>
@@ -262,7 +262,7 @@ function CommunityModerationOutcomePage() {
                      <div>
                         <h2>{accountActionLabel}</h2>
                         <p>
-                           This account-level action is separate from the content-removal decision above.
+                           This Community account action is separate from the content-removal decision above.
                         </p>
                      </div>
                      <strong>{accountEnforcement.state_label || "Recorded"}</strong>
@@ -270,7 +270,7 @@ function CommunityModerationOutcomePage() {
 
                   <dl className="community-outcome-details">
                      <div>
-                        <dt>Community Guidelines finding</dt>
+                        <dt>Community rule</dt>
                         <dd>{accountEnforcement.violation?.title || "Community Guidelines"}</dd>
                      </div>
                      <div>
@@ -331,7 +331,7 @@ function CommunityModerationOutcomePage() {
                   {accountEnforcement.can_request_review ? (
                      <>
                         <p className="community-outcome-helper">
-                           You can request one review of this account action. This is separate
+                           You can ask for one review of this account action. This is separate
                            from asking Platform Safety to reconsider the content removal.
                         </p>
                         {!accountReviewOpen ? (
