@@ -206,3 +206,125 @@
    font-weight: 800;
    text-transform: uppercase;
 }
+
+.community-guidelines-content section:focus {
+   outline: 2px solid var(--brand-primary);
+   outline-offset: 4px;
+}
+
+.community-guidelines-choice-grid,
+.community-guidelines-permission-grid,
+.community-guidelines-review-grid {
+   display: grid;
+   grid-template-columns: repeat(2, minmax(0, 1fr));
+   gap: 12px;
+   margin-top: 16px;
+}
+
+.community-guidelines-choice-grid > div,
+.community-guidelines-permission-grid > div,
+.community-guidelines-review-grid > div {
+   padding: 16px;
+   border: 1px solid var(--border-default);
+   border-radius: 12px;
+   background: var(--bg-surface);
+}
+
+.community-guidelines-choice-grid strong,
+.community-guidelines-choice-grid span {
+   display: block;
+}
+
+.community-guidelines-choice-grid span {
+   margin-top: 6px;
+   color: var(--text-body);
+   line-height: 1.55;
+}
+
+.community-guidelines-process {
+   display: grid;
+   gap: 10px;
+   margin: 16px 0 0;
+   padding: 0;
+   list-style: none;
+   counter-reset: safety-step;
+}
+
+.community-guidelines-process li {
+   counter-increment: safety-step;
+   display: grid;
+   grid-template-columns: 28px minmax(0, 1fr);
+   column-gap: 10px;
+   padding: 14px 16px;
+   border: 1px solid var(--border-default);
+   border-radius: 12px;
+   background: var(--bg-surface);
+}
+
+.community-guidelines-process li::before {
+   content: counter(safety-step);
+   grid-row: 1 / span 2;
+   display: grid;
+   place-items: center;
+   width: 28px;
+   height: 28px;
+   border-radius: 999px;
+   background: var(--tl-color-status-info-bg);
+   color: var(--brand-primary);
+   font-weight: 800;
+}
+
+.community-guidelines-process span {
+   margin-top: 3px;
+   color: var(--text-body);
+   line-height: 1.55;
+}
+
+.community-guidelines-rule-extra,
+.community-guidelines-boundary,
+.community-guidelines-safety-note {
+   margin-top: 16px;
+}
+
+.community-guidelines-rule-extra h3,
+.community-guidelines-boundary strong,
+.community-guidelines-permission-grid h3,
+.community-guidelines-review-grid h3,
+.community-guidelines-safety-note strong {
+   color: var(--text-main);
+   font-size: 0.94rem;
+}
+
+.community-guidelines-rule-extra ul,
+.community-guidelines-permission-grid ul {
+   margin: 8px 0 0;
+   padding-left: 20px;
+   color: var(--text-body);
+   line-height: 1.6;
+}
+
+.community-guidelines-boundary,
+.community-guidelines-safety-note {
+   padding: 14px 16px;
+   border-radius: 10px;
+   background: var(--bg-subtle);
+}
+
+.community-guidelines-boundary p,
+.community-guidelines-safety-note p,
+.community-guidelines-review-grid p {
+   margin-top: 6px;
+}
+
+.community-guidelines-permission-grid h3,
+.community-guidelines-review-grid h3 {
+   margin: 0;
+}
+
+@media (max-width: 760px) {
+   .community-guidelines-choice-grid,
+   .community-guidelines-permission-grid,
+   .community-guidelines-review-grid {
+      grid-template-columns: 1fr;
+   }
+}
