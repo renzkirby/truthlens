@@ -69,6 +69,10 @@ _RULES_V1_0_AND_V1_1 = (
 _RULES_V1_2 = (
     {
         **_RULES_V1_0_AND_V1_1[0],
+        "description": (
+            "Repeated spam, scams, fake promotions, phishing, or other deceptive "
+            "behavior meant to disrupt or manipulate participation on TruthLens."
+        ),
         "examples": [
             "Repeated irrelevant promotion or disruptive repeated messages.",
             "Phishing links or offers designed to obtain money or account details.",
@@ -79,6 +83,10 @@ _RULES_V1_2 = (
     },
     {
         **_RULES_V1_0_AND_V1_1[1],
+        "description": (
+            "Bullying, repeated personal attacks, targeted abuse, or coordinated "
+            "harassment against a person or group."
+        ),
         "examples": [
             "Repeated targeted insults or intimidation.",
             "Encouraging others to repeatedly target one person.",
@@ -89,8 +97,12 @@ _RULES_V1_2 = (
     },
     {
         **_RULES_V1_0_AND_V1_1[2],
+        "description": (
+            "Degrading or abusive attacks against people because of personal "
+            "characteristics such as race, religion, nationality, sex, or disability."
+        ),
         "examples": [
-            "Dehumanizing attacks aimed at people because of a protected or intrinsic characteristic.",
+            "Dehumanizing attacks aimed at people because of a protected or personal characteristic.",
             "Abusive calls to exclude or mistreat people because of such a characteristic.",
         ],
         "boundary": (
@@ -99,6 +111,10 @@ _RULES_V1_2 = (
     },
     {
         **_RULES_V1_0_AND_V1_1[3],
+        "description": (
+            "Credible threats, calls for serious violence, or encouragement of "
+            "dangerous acts that could cause serious physical harm."
+        ),
         "examples": [
             "A credible threat of serious physical harm.",
             "Encouraging people to carry out serious violence or dangerous acts.",
@@ -109,6 +125,10 @@ _RULES_V1_2 = (
     },
     {
         **_RULES_V1_0_AND_V1_1[4],
+        "description": (
+            "Sharing non-public addresses, contact details, passwords, private "
+            "records, or other sensitive information in a way that creates a privacy or safety risk."
+        ),
         "examples": [
             "Posting a non-public home address, password, or private personal record.",
             "Sharing sensitive personal details in a way that creates a safety risk.",
@@ -116,6 +136,10 @@ _RULES_V1_2 = (
     },
     {
         **_RULES_V1_0_AND_V1_1[5],
+        "description": (
+            "Non-consensual intimate material, sexual exploitation, or other "
+            "seriously abusive sexual content."
+        ),
         "examples": [
             "Sharing non-consensual intimate material.",
             "Content that sexually exploits or seriously abuses another person.",
@@ -123,6 +147,10 @@ _RULES_V1_2 = (
     },
     {
         **_RULES_V1_0_AND_V1_1[6],
+        "description": (
+            "Pretending to be another person or organization, scams, or other "
+            "deceptive behavior meant to mislead or harm people."
+        ),
         "examples": [
             "Pretending to be another person or organization to deceive people.",
             "Using a false identity or deceptive offer to obtain money or personal information.",
@@ -133,16 +161,27 @@ _RULES_V1_2 = (
     },
 )
 
-_BASE_REPORTING_NOTE = (
+_REPORTING_NOTE_V1_0_AND_V1_1 = (
     "A report reason is an intake signal for Platform Safety. It does not "
     "itself determine whether a Community Guidelines violation occurred."
 )
 
-_BASE_VERIFICATION_BOUNDARY = (
+_VERIFICATION_BOUNDARY_V1_0_AND_V1_1 = (
     "Disagreement about whether a factual claim is fact, fake, misleading, "
     "satire, or unverified is not by itself a Community Safety violation. "
     "Those questions belong to TruthLens verification and professional "
     "adjudication workflows."
+)
+
+_REPORTING_NOTE_V1_2 = (
+    "The report reason tells Platform Safety what the reporter is concerned about. "
+    "It is not proof that a Community rule was broken."
+)
+
+_VERIFICATION_BOUNDARY_V1_2 = (
+    "If you think a factual claim is wrong, use Verify or submit evidence. "
+    "A disagreement about whether a claim is Fact, Fake, Misleading, Satire, "
+    "or Unverified is not by itself a Community Safety violation."
 )
 
 _ACCOUNT_ENFORCEMENT_V1_1 = {
@@ -214,6 +253,31 @@ _ACCOUNT_ENFORCEMENT_V1_1 = {
         "not yet supported."
     ),
 }
+_ACCOUNT_ENFORCEMENT_V1_2 = deepcopy(_ACCOUNT_ENFORCEMENT_V1_1)
+_ACCOUNT_ENFORCEMENT_V1_2.update(
+    {
+        "overview": (
+            "After Platform Safety confirms a Community rule was broken and removes "
+            "the content, a human reviewer may separately issue a warning or limit "
+            "Community participation. This is a separate decision and is not automatic."
+        ),
+        "decision_factors": (
+            "Platform Safety may consider how serious the confirmed violation was, "
+            "its context, and relevant past Safety decisions that were upheld. "
+            "TruthLens does not use a fixed strike count."
+        ),
+        "automation_boundary": (
+            "Report counts, Trust Score, Community votes, AI verdicts, and AI "
+            "recommendations do not automatically issue account restrictions."
+        ),
+        "review_right": (
+            "The affected user can ask for one review of an eligible account action. "
+            "An active restriction stays in place while the review is pending. "
+            "Warnings and expired temporary restrictions can also be reviewed."
+        ),
+    }
+)
+
 
 _PUBLIC_EXPLANATION_V1_2 = {
     "process_steps": [
@@ -255,6 +319,8 @@ COMMUNITY_POLICY_VERSIONS = {
         "published_on": "2026-11-14",
         "summary": "Introduced the current Community Safety rules and reporting boundary.",
         "rules": _RULES_V1_0_AND_V1_1,
+        "reporting_note": _REPORTING_NOTE_V1_0_AND_V1_1,
+        "verification_boundary": _VERIFICATION_BOUNDARY_V1_0_AND_V1_1,
         "account_enforcement": None,
         "public_explanation": None,
     },
@@ -265,6 +331,8 @@ COMMUNITY_POLICY_VERSIONS = {
             "restrictions, Standing, and review rights."
         ),
         "rules": _RULES_V1_0_AND_V1_1,
+        "reporting_note": _REPORTING_NOTE_V1_0_AND_V1_1,
+        "verification_boundary": _VERIFICATION_BOUNDARY_V1_0_AND_V1_1,
         "account_enforcement": _ACCOUNT_ENFORCEMENT_V1_1,
         "public_explanation": None,
     },
@@ -275,7 +343,9 @@ COMMUNITY_POLICY_VERSIONS = {
             "and review options work, with simple examples and safety guidance."
         ),
         "rules": _RULES_V1_2,
-        "account_enforcement": _ACCOUNT_ENFORCEMENT_V1_1,
+        "reporting_note": _REPORTING_NOTE_V1_2,
+        "verification_boundary": _VERIFICATION_BOUNDARY_V1_2,
+        "account_enforcement": _ACCOUNT_ENFORCEMENT_V1_2,
         "public_explanation": _PUBLIC_EXPLANATION_V1_2,
     },
 }
@@ -317,8 +387,8 @@ def community_policy_payload(version=None):
         "version": selected_version,
         "published_on": version_record["published_on"],
         "summary": version_record["summary"],
-        "reporting_note": _BASE_REPORTING_NOTE,
-        "verification_boundary": _BASE_VERIFICATION_BOUNDARY,
+        "reporting_note": version_record["reporting_note"],
+        "verification_boundary": version_record["verification_boundary"],
         "rules": [deepcopy(item) for item in version_record["rules"]],
         "account_enforcement": deepcopy(version_record["account_enforcement"]),
         "public_explanation": deepcopy(version_record["public_explanation"]),
