@@ -9,12 +9,25 @@ import "./CommunityModerationOutcomePage.css";
 const formatter = new Intl.DateTimeFormat(undefined, {
    dateStyle: "medium",
    timeStyle: "short",
+   timeZoneName: "short",
 });
 
 function formatDate(value) {
    if (!value) return "Not recorded";
    const date = new Date(value);
    return Number.isNaN(date.getTime()) ? "Not recorded" : formatter.format(date);
+}
+
+function ruleAnchor(code) {
+   if (!code) return "";
+   return `#rule-${String(code).toLowerCase().replaceAll("_", "-")}`;
+}
+
+function policyHref(policy) {
+   const version = String(policy?.version || "").trim();
+   const anchor = ruleAnchor(policy?.violation_code);
+   const query = version ? `?version=${encodeURIComponent(version)}` : "";
+   return `/community-guidelines${query}${anchor}`;
 }
 
 function CommunityModerationOutcomePage() {
@@ -236,7 +249,7 @@ function CommunityModerationOutcomePage() {
                   <p>{outcome.rationale}</p>
                </div>
 
-               <Link to="/community-guidelines">Read the Community Guidelines</Link>
+               <Link to={policyHref(outcome.policy)}>Read the rule used for this decision</Link>
             </section>
 
             {isAuthor && accountEnforcement ? (
@@ -249,15 +262,7 @@ function CommunityModerationOutcomePage() {
                            This account-level action is separate from the content-removal decision above.
                         </p>
                      </div>
-                     <strong>
-                        {accountEnforcement.state === "ACTIVE"
-                           ? "Active"
-                           : accountEnforcement.state === "EXPIRED"
-                             ? "Expired"
-                             : accountEnforcement.state === "REVOKED"
-                               ? "No longer active"
-                               : "Recorded"}
-                     </strong>
+                     <strong>{accountEnforcement.state_label || "Recorded"}</strong>
                   </div>
 
                   <dl className="community-outcome-details">
@@ -275,6 +280,12 @@ function CommunityModerationOutcomePage() {
                         <div>
                            <dt>Restriction ends</dt>
                            <dd>{formatDate(accountEnforcement.restriction_ends_at)}</dd>
+                        </div>
+                     ) : null}
+                     {accountEnforcement.state_reason_label ? (
+                        <div>
+                           <dt>Why this action ended</dt>
+                           <dd>{accountEnforcement.state_reason_label}</dd>
                         </div>
                      ) : null}
                   </dl>
@@ -296,11 +307,9 @@ function CommunityModerationOutcomePage() {
                      <div className="community-account-review-summary">
                         <h3>Account-action review</h3>
                         <p>
-                           {accountReview.outcome
-                              ? accountReview.outcome === "REVERSED"
-                                 ? "Platform Safety reversed the account action."
-                                 : "Platform Safety upheld the account action."
-                              : "Your account-action review is pending Platform Safety review."}
+                           {accountReview.outcome_label ||
+                              accountReview.status_label ||
+                              "Your account-action review is pending Platform Safety review."}
                         </p>
                         {accountReview.resolution_rationale ? (
                            <div className="community-outcome-rationale">
@@ -331,7 +340,7 @@ function CommunityModerationOutcomePage() {
                                  setAccountReviewError("");
                               }}
                            >
-                              Request account-action review
+                              Request review of this account action
                            </button>
                         ) : (
                            <form
@@ -387,12 +396,15 @@ function CommunityModerationOutcomePage() {
                   ) : null}
 
                   <div className="community-account-action-links">
+                     <Link to="/community-standing">View Community Standing</Link>
                      <Link
-                        to={`/community-guidelines?version=${encodeURIComponent(
-                           accountEnforcement.policy?.version || outcome.policy?.version || "",
-                        )}`}
+                        to={policyHref({
+                           version: accountEnforcement.policy?.version || outcome.policy?.version,
+                           violation_code:
+                              accountEnforcement.violation?.code || outcome.policy?.violation_code,
+                        })}
                      >
-                        Read the policy version used for this action
+                        Read the rule used for this action
                      </Link>
                   </div>
                </section>
@@ -467,7 +479,7 @@ function CommunityModerationOutcomePage() {
                            setRequestError("");
                         }}
                      >
-                        Request reconsideration
+                        Request reconsideration of this content decision
                      </button>
                   ) : (
                      <form className="community-reconsideration-form" onSubmit={handleRequestSubmit}>
