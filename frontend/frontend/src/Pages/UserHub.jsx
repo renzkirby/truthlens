@@ -1246,7 +1246,7 @@ export default function UserHub() {
 
    const standingDescription =
       standingAccess.status === "TEMPORARILY_RESTRICTED"
-         ? `You can read Community content and report unsafe content, but you cannot create or edit Community contributions until ${new Date(standingAccess.restriction_ends_at).toLocaleString()}.`
+         ? `You can read Community content and report unsafe content, but you cannot create or edit Community contributions until ${new Date(standingAccess.restriction_ends_at).toLocaleString(undefined, { timeZoneName: "short" })}.`
          : standingAccess.status === "INDEFINITELY_RESTRICTED"
            ? "Your Community contribution access has no automatic end date. Verification, reading, reporting, and separately authorized Partner Workspace access remain available."
            : "You currently have full Community participation access.";
