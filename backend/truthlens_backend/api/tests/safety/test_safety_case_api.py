@@ -167,14 +167,25 @@ class SafetyCaseApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["title"], "TruthLens Community Guidelines")
-        self.assertEqual(response.data["version"], "1.1")
+        self.assertEqual(response.data["version"], "1.2")
         self.assertIsNotNone(response.data["account_enforcement"])
+        self.assertIsNotNone(response.data["public_explanation"])
         self.assertEqual(len(response.data["rules"]), 7)
         self.assertIn(
             "HARASSMENT_TARGETED_ABUSE",
             {rule["code"] for rule in response.data["rules"]},
         )
         self.assertIn("verification", response.data["verification_boundary"].lower())
+
+        version_one_one = APIClient().get(
+            reverse("community_guidelines"),
+            {"version": "1.1"},
+        )
+        self.assertEqual(version_one_one.status_code, status.HTTP_200_OK)
+        self.assertEqual(version_one_one.data["version"], "1.1")
+        self.assertIsNotNone(version_one_one.data["account_enforcement"])
+        self.assertIsNone(version_one_one.data["public_explanation"])
+        self.assertNotIn("examples", version_one_one.data["rules"][0])
 
         archived = APIClient().get(
             reverse("community_guidelines"),
@@ -183,6 +194,19 @@ class SafetyCaseApiTests(APITestCase):
         self.assertEqual(archived.status_code, status.HTTP_200_OK)
         self.assertEqual(archived.data["version"], "1.0")
         self.assertIsNone(archived.data["account_enforcement"])
+        self.assertIsNone(archived.data["public_explanation"])
+
+        self.assertEqual(
+            version_one_one.data["rules"][0]["description"],
+            archived.data["rules"][0]["description"],
+        )
+        self.assertIn("examples", response.data["rules"][0])
+
+        missing = APIClient().get(
+            reverse("community_guidelines"),
+            {"version": "9.9"},
+        )
+        self.assertEqual(missing.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_partner_factual_role_cannot_access_safety_endpoints(self):
         client = self._client_for(self.partner_lead)
