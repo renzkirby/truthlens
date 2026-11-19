@@ -2209,7 +2209,11 @@ class SafetyCaseDetailSerializer(SafetyCaseSummarySerializer):
         return SafetyModerationEventSerializer(events, many=True).data
 
     def get_community_policy(self, obj):
-        return community_policy_payload()
+        payload = community_policy_payload()
+        if payload is None:
+            return None
+        payload.pop("public_explanation", None)
+        return payload
 
     def get_safety_decision(self, obj):
         decision = getattr(obj, "community_safety_decision", None)
