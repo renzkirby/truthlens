@@ -29,7 +29,7 @@ def community_contribution_restriction_payload(user):
         "code": "COMMUNITY_CONTRIBUTION_RESTRICTED",
         "detail": detail,
         "restriction_ends_at": access["restriction_ends_at"],
-        "standing_url": "/dashboard#community-standing",
+        "standing_url": "/community-standing",
     }
 
 
