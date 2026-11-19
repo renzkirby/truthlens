@@ -120,7 +120,7 @@ function CommunityStandingPage() {
             <header className="community-standing-header">
                <span>TruthLens Community</span>
                <h1>Community Standing</h1>
-               <p>Your current Community access and account-level Safety actions.</p>
+               <p>Your current Community access, warnings, and restrictions.</p>
             </header>
 
             <section className="community-standing-access" aria-labelledby="community-standing-access-title">
@@ -177,7 +177,7 @@ function CommunityStandingPage() {
             <section className="community-standing-history" aria-labelledby="community-standing-history-title">
                <div className="community-standing-section-heading community-standing-history-heading">
                   <div>
-                     <span>Account actions</span>
+                     <span>Warnings and restrictions</span>
                      <h2 id="community-standing-history-title">History</h2>
                      <p>Warnings and Community restrictions recorded for your account.</p>
                   </div>
@@ -188,7 +188,7 @@ function CommunityStandingPage() {
                   <div className="community-standing-empty">
                      <Icons name="shield-check" size={20} aria-hidden="true" />
                      <div>
-                        <strong>No account-level Safety actions</strong>
+                        <strong>No Community warnings or restrictions</strong>
                         <p>You have no warning or Community restriction history.</p>
                      </div>
                   </div>
@@ -208,7 +208,7 @@ function CommunityStandingPage() {
 
                               <dl className="community-standing-action-details">
                                  <div>
-                                    <dt>Guidelines finding</dt>
+                                    <dt>Community rule</dt>
                                     <dd>{item.violation?.title || "Community Guidelines"}</dd>
                                  </div>
                                  <div>
