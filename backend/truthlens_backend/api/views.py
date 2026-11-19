@@ -5336,7 +5336,7 @@ def toggle_public_partner_follow_view(request, slug):
                 "code": "COMMUNITY_CONTRIBUTION_RESTRICTED",
                 "detail": str(error),
                 "restriction_ends_at": None,
-                "standing_url": "/dashboard#community-standing",
+                "standing_url": "/community-standing",
             }
         ) from error
 
