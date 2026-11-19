@@ -61,12 +61,7 @@ function CommunityStandingPage() {
    }, [authFetch]);
 
    const activeAction = useMemo(
-      () =>
-         standing?.history?.find(
-            (item) =>
-               item.state === "ACTIVE" ||
-               item.state === "WARNING",
-         ) || null,
+      () => standing?.history?.find((item) => item.state === "ACTIVE") || null,
       [standing],
    );
 
