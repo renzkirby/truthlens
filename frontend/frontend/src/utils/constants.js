@@ -205,6 +205,7 @@ export const API_ENDPOINTS = {
    // Moderation
    COMMUNITY_REPORTS: "community-reports/",
    COMMUNITY_GUIDELINES: "community/guidelines/",
+   COMMUNITY_STANDING: "community/standing/",
    COMMUNITY_MODERATION_OUTCOME: (decisionId) =>
       `community/moderation/outcomes/${encodeURIComponent(decisionId)}/`,
    COMMUNITY_MODERATION_RECONSIDERATION: (decisionId) =>
