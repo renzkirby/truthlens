@@ -1858,8 +1858,8 @@ export default function UserHub() {
                      <div>
                         <strong>
                            {standingHistory.length === 0
-                              ? "No account-level Safety actions"
-                              : `${standingHistory.length} account ${standingHistory.length === 1 ? "action" : "actions"} in your history`}
+                              ? "No Community warnings or restrictions"
+                              : `${standingHistory.length} ${standingHistory.length === 1 ? "warning or restriction" : "warnings or restrictions"} in your history`}
                         </strong>
                         <p>
                            {standingHistory.length === 0
