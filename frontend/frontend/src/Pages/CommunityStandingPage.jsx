@@ -38,6 +38,16 @@ function reviewSummary(review) {
    return review.status_label || "Review requested";
 }
 
+function policyRuleHref(item) {
+   const version = String(item?.policy?.version || "").trim();
+   const code = String(item?.violation?.code || "").trim();
+   const query = version ? `?version=${encodeURIComponent(version)}` : "";
+   const anchor = code
+      ? `#rule-${code.toLowerCase().replaceAll("_", "-")}`
+      : "";
+   return `/community-guidelines${query}${anchor}`;
+}
+
 function CommunityStandingPage() {
    const { authFetch } = useAuth();
    const [standing, setStanding] = useState(null);
@@ -249,12 +259,8 @@ function CommunityStandingPage() {
                                        View decision
                                     </Link>
                                  ) : null}
-                                 <Link
-                                    to={`/community-guidelines?version=${encodeURIComponent(
-                                       item.policy?.version || "",
-                                    )}`}
-                                 >
-                                    View policy version
+                                 <Link to={policyRuleHref(item)}>
+                                    View policy rule
                                  </Link>
                               </div>
                            </article>
