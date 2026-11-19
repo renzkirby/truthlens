@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from .accountability_service import record_accountability_event
 from .community_policy import community_policy_supports_account_enforcement
+from .community_governance_contract import restriction_capabilities_payload
 from .models import (
     AccountabilityEvent,
     CommunityAccountEnforcement,
@@ -64,73 +65,6 @@ REVIEW_STATUS_LABELS = {
 REVIEW_OUTCOME_LABELS = {
     CommunityAccountEnforcementReview.Outcome.UPHELD: "Account action upheld",
     CommunityAccountEnforcementReview.Outcome.REVERSED: "Account action reversed",
-}
-
-COMMUNITY_RESTRICTION_CAPABILITIES = {
-    "available": [
-        {
-            "code": "READ_COMMUNITY",
-            "label": "Read Community discussions",
-        },
-        {
-            "code": "USE_VERIFY",
-            "label": "Use TruthLens verification",
-        },
-        {
-            "code": "REPORT_SAFETY",
-            "label": "Report unsafe Community content",
-        },
-        {
-            "code": "VIEW_STANDING",
-            "label": "View Community Standing",
-        },
-        {
-            "code": "REQUEST_ELIGIBLE_REVIEW",
-            "label": "Request an eligible review",
-        },
-        {
-            "code": "DELETE_ELIGIBLE_OWN_CONTENT",
-            "label": "Delete eligible content you posted",
-        },
-        {
-            "code": "WITHDRAW_EXISTING_PARTICIPATION",
-            "label": "Remove an existing like or vote",
-        },
-        {
-            "code": "UNFOLLOW",
-            "label": "Unfollow users or Partners",
-        },
-    ],
-    "unavailable": [
-        {
-            "code": "CREATE_DISCUSSION",
-            "label": "Create a discussion",
-        },
-        {
-            "code": "COMMENT_REPLY",
-            "label": "Comment or reply",
-        },
-        {
-            "code": "SUBMIT_EVIDENCE",
-            "label": "Submit evidence",
-        },
-        {
-            "code": "EDIT_CONTRIBUTION",
-            "label": "Edit Community contributions",
-        },
-        {
-            "code": "ADD_OR_CHANGE_VOTE",
-            "label": "Add or change a vote",
-        },
-        {
-            "code": "LIKE",
-            "label": "Add a like",
-        },
-        {
-            "code": "FOLLOW",
-            "label": "Follow users or Partners",
-        },
-    ],
 }
 
 
@@ -448,16 +382,7 @@ def get_community_standing(user, *, history_limit=20):
             **access,
             "label": access_label,
         },
-        "restriction_capabilities": {
-            "available": [
-                dict(item)
-                for item in COMMUNITY_RESTRICTION_CAPABILITIES["available"]
-            ],
-            "unavailable": [
-                dict(item)
-                for item in COMMUNITY_RESTRICTION_CAPABILITIES["unavailable"]
-            ],
-        },
+        "restriction_capabilities": restriction_capabilities_payload(),
         "history": [
             serialize_enforcement(item, actor=user, now=now)
             for item in history
