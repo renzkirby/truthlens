@@ -175,7 +175,7 @@ class SafetyCaseApiTests(APITestCase):
             "HARASSMENT_TARGETED_ABUSE",
             {rule["code"] for rule in response.data["rules"]},
         )
-        self.assertIn("verification", response.data["verification_boundary"].lower())
+        self.assertIn("verify", response.data["verification_boundary"].lower())
 
         version_one_one = APIClient().get(
             reverse("community_guidelines"),
