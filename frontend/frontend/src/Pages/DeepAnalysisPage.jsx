@@ -918,7 +918,7 @@ function DeepAnalysisPage() {
                            ) : (
                               <div className="deep-analysis-community-restricted">
                                  <p>{restrictionSummary}</p>
-                                 <Link to="/dashboard#community-standing">
+                                 <Link to="/community-standing">
                                     View Community Standing
                                  </Link>
                               </div>
