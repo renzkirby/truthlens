@@ -378,7 +378,7 @@ function CreateThreadPage() {
                      <strong>Community contribution access is restricted</strong>
                      <p>{restrictionSummary}</p>
                      <p>You can still read Community discussions, report unsafe content, and use TruthLens verification.</p>
-                     <Link to="/dashboard#community-standing">View Community Standing</Link>
+                     <Link to="/community-standing">View Community Standing</Link>
                   </div>
                </section>
             )}
