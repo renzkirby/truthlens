@@ -717,6 +717,51 @@ class CommunityAccountEnforcementTests(APITestCase):
             hub_after.data["community_standing"]["history"][0]["seen"]
         )
 
+    def test_community_standing_endpoint_is_participant_only_and_plain_language(self):
+        response = self._client(self.author).get(reverse("community_standing"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["access"]["status"], "FULL_ACCESS")
+        self.assertEqual(response.data["access"]["label"], "Full access")
+        self.assertTrue(response.data["restriction_capabilities"]["available"])
+        self.assertTrue(response.data["restriction_capabilities"]["unavailable"])
+
+        platform_response = self._client(self.moderator).get(
+            reverse("community_standing")
+        )
+        self.assertEqual(platform_response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_standing_uses_plain_labels_and_keeps_internal_note_private(self):
+        _, case, _, _ = self._remove("standing-labels")
+        issued = self._issue(
+            case,
+            action="WARNING",
+            internal_note="Internal-only Safety detail.",
+        )
+        self.assertEqual(issued.status_code, status.HTTP_201_CREATED)
+
+        response = self._client(self.author).get(reverse("community_standing"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        item = response.data["history"][0]
+        self.assertEqual(item["action_label"], "Warning")
+        self.assertEqual(item["state_label"], "Recorded")
+        self.assertTrue(item["can_request_review"])
+        self.assertNotIn("internal_note", item)
+
+    def test_restricted_errors_point_to_canonical_standing_route(self):
+        _, case, _, _ = self._remove("standing-url")
+        self.assertEqual(self._issue(case).status_code, status.HTTP_201_CREATED)
+
+        response = self._client(self.author).post(
+            reverse("thread-list"),
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["standing_url"], "/community-standing")
+
     def test_partner_professional_authority_survives_community_restriction(self):
         organization = Organization.objects.create(
             name="Account Enforcement Partner",
