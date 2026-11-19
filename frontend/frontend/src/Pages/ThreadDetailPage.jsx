@@ -1437,7 +1437,7 @@ export default function ThreadDetailPage() {
                   {canParticipateInCommunity && !canContribute && (
                      <Link
                         className="thread-detail-governance-chip"
-                        to="/dashboard#community-standing"
+                        to="/community-standing"
                         title="Your Community contribution access is restricted. Reading and safety reporting remain available."
                      >
                         <Icons name="shield" size={13} aria-hidden="true" />
@@ -1617,7 +1617,7 @@ export default function ThreadDetailPage() {
                            <div className="thread-detail-restriction-note">
                               <Icons name="shield" size={16} />
                               <span>{restrictionSummary}</span>
-                              <Link to="/dashboard#community-standing">View Community Standing</Link>
+                              <Link to="/community-standing">View Community Standing</Link>
                            </div>
                         )}
                         {canParticipateInCommunity && canContribute && (
@@ -1724,7 +1724,7 @@ export default function ThreadDetailPage() {
                            <div className="thread-detail-restriction-note">
                               <Icons name="shield" size={16} />
                               <span>{restrictionSummary}</span>
-                              <Link to="/dashboard#community-standing">View Community Standing</Link>
+                              <Link to="/community-standing">View Community Standing</Link>
                            </div>
                         )}
                         {canParticipateInCommunity && canContribute && showEvidenceForm && (
