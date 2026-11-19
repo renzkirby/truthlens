@@ -254,6 +254,35 @@ _ACCOUNT_ENFORCEMENT_V1_1 = {
     ),
 }
 _ACCOUNT_ENFORCEMENT_V1_2 = deepcopy(_ACCOUNT_ENFORCEMENT_V1_1)
+_ACCOUNT_ENFORCEMENT_V1_2["actions"] = [
+    {
+        "code": "WARNING",
+        "title": "Warning",
+        "description": (
+            "A warning does not restrict Community access. It stays in Safety history "
+            "and may be considered by a human reviewer if a later confirmed violation "
+            "needs an account-level decision."
+        ),
+    },
+    {
+        "code": "TEMPORARY_RESTRICTION",
+        "title": "Temporary Community restriction",
+        "description": (
+            "Temporarily blocks new or edited Community contributions. You can still "
+            "read Community content, use Verify, report unsafe content, ask for an "
+            "eligible review, and remove eligible existing participation."
+        ),
+    },
+    {
+        "code": "INDEFINITE_RESTRICTION",
+        "title": "Indefinite Community restriction",
+        "description": (
+            "Blocks new or edited Community contributions with no automatic end date. "
+            "It does not disable your whole TruthLens account, Verify, reporting, or "
+            "separately authorized Partner Workspace access."
+        ),
+    },
+]
 _ACCOUNT_ENFORCEMENT_V1_2.update(
     {
         "overview": (
@@ -302,10 +331,10 @@ _PUBLIC_EXPLANATION_V1_2 = {
         },
     ],
     "content_reconsideration": (
-        "The content owner may request one reconsideration of an eligible content-removal decision."
+        "The content owner can ask Platform Safety to review an eligible content-removal decision again."
     ),
     "account_action_review": (
-        "The affected user may request one review of an eligible Community account action."
+        "The affected user can ask for one review of an eligible Community account action."
     ),
     "immediate_safety_note": (
         "If someone is in immediate danger, contact local emergency services or appropriate authorities. "
