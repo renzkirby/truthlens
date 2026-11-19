@@ -92,10 +92,10 @@ function CommunityModerationOutcomePage() {
       } catch (requestErrorValue) {
          setRequestError(
             userFacingErrorMessage(requestErrorValue, {
-               fallback: "We couldn't submit this reconsideration request. Try again.",
-               conflictMessage: "This removal can no longer accept a reconsideration request.",
+               fallback: "We couldn't submit this content decision review request. Try again.",
+               conflictMessage: "This removal can no longer accept a content decision review request.",
                permissionMessage: "This moderation outcome cannot be reconsidered by this account.",
-               serviceMessage: "Reconsideration is temporarily unavailable. Try again shortly.",
+               serviceMessage: "Content decision review is temporarily unavailable. Try again shortly.",
             }),
          );
       } finally {
@@ -189,9 +189,9 @@ function CommunityModerationOutcomePage() {
            ? `/thread/detail/${outcome.target?.thread_id || outcome.content?.thread_id}?tab=evidence`
            : `/thread/detail/${outcome.target?.thread_id || outcome.content?.thread_id}`;
    const report = outcome.report;
-   const reconsideration = outcome.reconsideration;
-   const reversed = reconsideration?.outcome === "REVERSED";
-   const reconsiderationPending = reconsideration?.status === "SUBMITTED";
+   const review = outcome.review;
+   const reversed = review?.outcome === "REVERSED";
+   const reviewPending = review?.status === "SUBMITTED";
    const accountEnforcement = outcome.account_enforcement || null;
    const accountActionLabel = accountEnforcement
       ? ({
@@ -320,7 +320,7 @@ function CommunityModerationOutcomePage() {
                               <p>{accountReview.resolution_rationale}</p>
                            </div>
                         ) : null}
-                        <div className="community-reconsideration-request">
+                        <div className="community-review-request">
                            <h3>Your request</h3>
                            <p>{accountReview.request_statement}</p>
                            <small>Submitted {formatDate(accountReview.submitted_at)}</small>
@@ -343,11 +343,11 @@ function CommunityModerationOutcomePage() {
                                  setAccountReviewError("");
                               }}
                            >
-                              Request review of this account action
+                              Ask for a review of this account action
                            </button>
                         ) : (
                            <form
-                              className="community-reconsideration-form"
+                              className="community-review-form"
                               onSubmit={handleAccountReviewSubmit}
                            >
                               <label htmlFor="community-account-review-statement">
@@ -366,13 +366,13 @@ function CommunityModerationOutcomePage() {
                                     setAccountReviewError("");
                                  }}
                               />
-                              <div className="community-reconsideration-form-meta">
+                              <div className="community-review-form-meta">
                                  <span>{accountReviewStatement.length}/3000</span>
                                  {accountReviewError ? (
                                     <strong role="alert">{accountReviewError}</strong>
                                  ) : null}
                               </div>
-                              <div className="community-reconsideration-actions">
+                              <div className="community-review-actions">
                                  <button
                                     type="button"
                                     className="community-outcome-secondary-action"
@@ -413,63 +413,63 @@ function CommunityModerationOutcomePage() {
                </section>
             ) : null}
 
-            {reconsideration ? (
-               <section className="community-outcome-card community-reconsideration-card">
-                  <span className="community-outcome-eyebrow">Reconsideration</span>
+            {review ? (
+               <section className="community-outcome-card community-review-card">
+                  <span className="community-outcome-eyebrow">Content decision review</span>
                   <div className="community-outcome-heading">
                      <div>
                         <h2>
-                           {reconsiderationPending
-                              ? "Reconsideration requested"
-                              : reconsideration.outcome === "REVERSED"
+                           {reviewPending
+                              ? "Content decision review requested"
+                              : review.outcome === "REVERSED"
                                 ? "Removal reversed"
                                 : "Removal upheld"}
                         </h2>
                      </div>
                      <strong>
-                        {reconsiderationPending
+                        {reviewPending
                            ? "Under review"
-                           : reconsideration.outcome === "REVERSED"
+                           : review.outcome === "REVERSED"
                              ? "Restored"
                              : "Upheld"}
                      </strong>
                   </div>
 
-                  {reconsiderationPending ? (
+                  {reviewPending ? (
                      <p>
                         Platform Safety will review the original removal again. The {targetLabel} remains removed
-                        while the reconsideration is pending.
+                        while the review is pending.
                      </p>
                   ) : (
                      <>
                         <p>
-                           {reconsideration.outcome === "REVERSED"
+                           {review.outcome === "REVERSED"
                               ? "Platform Safety reversed the original removal and restored the content."
                               : "Platform Safety reviewed the request and kept the original removal in place."}
                         </p>
                         <div className="community-outcome-rationale">
-                           <h3>Reconsideration explanation</h3>
-                           <p>{reconsideration.resolution_rationale}</p>
+                           <h3>Content decision review explanation</h3>
+                           <p>{review.resolution_rationale}</p>
                         </div>
                      </>
                   )}
 
-                  {isAuthor && reconsideration.request_statement ? (
-                     <div className="community-reconsideration-request">
+                  {isAuthor && review.request_statement ? (
+                     <div className="community-review-request">
                         <h3>Your request</h3>
-                        <p>{reconsideration.request_statement}</p>
-                        <small>Submitted {formatDate(reconsideration.submitted_at)}</small>
+                        <p>{review.request_statement}</p>
+                        <small>Submitted {formatDate(review.submitted_at)}</small>
                      </div>
                   ) : null}
                </section>
             ) : null}
 
-            {isAuthor && outcome.can_request_reconsideration ? (
+            {isAuthor && outcome.can_request_review ? (
                <section className="community-outcome-card">
-                  <span className="community-outcome-eyebrow">Reconsideration</span>
+                  <span className="community-outcome-eyebrow">Content decision review</span>
                   <h2>Think this removal was a mistake?</h2>
                   <p>
-                     You can request one reconsideration of this removal. Explain what Platform Safety
+                     You can request one review of this removal. Explain what Platform Safety
                      should review again. The content stays removed while the request is reviewed.
                   </p>
 
@@ -482,15 +482,15 @@ function CommunityModerationOutcomePage() {
                            setRequestError("");
                         }}
                      >
-                        Request reconsideration of this content decision
+                        Request review of this content decision
                      </button>
                   ) : (
-                     <form className="community-reconsideration-form" onSubmit={handleRequestSubmit}>
-                        <label htmlFor="community-reconsideration-statement">
+                     <form className="community-review-form" onSubmit={handleRequestSubmit}>
+                        <label htmlFor="community-review-statement">
                            Why should this decision be reconsidered?
                         </label>
                         <textarea
-                           id="community-reconsideration-statement"
+                           id="community-review-statement"
                            value={requestStatement}
                            minLength={20}
                            maxLength={2000}
@@ -502,11 +502,11 @@ function CommunityModerationOutcomePage() {
                               setRequestError("");
                            }}
                         />
-                        <div className="community-reconsideration-form-meta">
+                        <div className="community-review-form-meta">
                            <span>{requestStatement.length}/2000</span>
                            {requestError ? <strong role="alert">{requestError}</strong> : null}
                         </div>
-                        <div className="community-reconsideration-actions">
+                        <div className="community-review-actions">
                            <button
                               type="button"
                               className="community-outcome-secondary-action"
@@ -540,7 +540,7 @@ function CommunityModerationOutcomePage() {
                   {reversed ? (
                      <div className="community-outcome-restored">
                         <p className="community-outcome-helper">
-                           The {targetLabel} was restored after reconsideration.
+                           The {targetLabel} was restored after review.
                         </p>
                         <Link to={restoredTargetUrl}>
                            View restored {targetLabel}
