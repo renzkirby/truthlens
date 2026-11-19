@@ -34,6 +34,105 @@ TEMPORARY_DURATION_MAP = {
     "30_DAYS": timedelta(days=30),
 }
 
+ACTION_LABELS = {
+    CommunityAccountEnforcement.Action.WARNING: "Warning",
+    CommunityAccountEnforcement.Action.TEMPORARY_RESTRICTION: "Temporary Community restriction",
+    CommunityAccountEnforcement.Action.INDEFINITE_RESTRICTION: "Indefinite Community restriction",
+}
+
+STATE_LABELS = {
+    "ACTIVE": "Active",
+    "WARNING": "Recorded",
+    "EXPIRED": "Expired",
+    "REVOKED": "No longer active",
+}
+
+REVOCATION_REASON_LABELS = {
+    CommunityAccountEnforcement.RevocationReason.REVIEW_REVERSED: "Removed after account-action review",
+    CommunityAccountEnforcement.RevocationReason.BASIS_REVERSED: "Underlying content decision reversed",
+    CommunityAccountEnforcement.RevocationReason.LIFTED_EARLY: "Restriction lifted early",
+    CommunityAccountEnforcement.RevocationReason.SUPERSEDED: "Replaced by a later restriction",
+}
+
+REVIEW_STATUS_LABELS = {
+    CommunityAccountEnforcementReview.Status.SUBMITTED: "Review requested",
+    CommunityAccountEnforcementReview.Status.UNDER_REVIEW: "Under review",
+    CommunityAccountEnforcementReview.Status.RESOLVED: "Review completed",
+    CommunityAccountEnforcementReview.Status.MOOT: "Review closed",
+}
+
+REVIEW_OUTCOME_LABELS = {
+    CommunityAccountEnforcementReview.Outcome.UPHELD: "Account action upheld",
+    CommunityAccountEnforcementReview.Outcome.REVERSED: "Account action reversed",
+}
+
+COMMUNITY_RESTRICTION_CAPABILITIES = {
+    "available": [
+        {
+            "code": "READ_COMMUNITY",
+            "label": "Read Community discussions",
+        },
+        {
+            "code": "USE_VERIFY",
+            "label": "Use TruthLens verification",
+        },
+        {
+            "code": "REPORT_SAFETY",
+            "label": "Report unsafe Community content",
+        },
+        {
+            "code": "VIEW_STANDING",
+            "label": "View Community Standing",
+        },
+        {
+            "code": "REQUEST_ELIGIBLE_REVIEW",
+            "label": "Request an eligible review",
+        },
+        {
+            "code": "DELETE_ELIGIBLE_OWN_CONTENT",
+            "label": "Delete eligible content you posted",
+        },
+        {
+            "code": "WITHDRAW_EXISTING_PARTICIPATION",
+            "label": "Remove an existing like or vote",
+        },
+        {
+            "code": "UNFOLLOW",
+            "label": "Unfollow users or Partners",
+        },
+    ],
+    "unavailable": [
+        {
+            "code": "CREATE_DISCUSSION",
+            "label": "Create a discussion",
+        },
+        {
+            "code": "COMMENT_REPLY",
+            "label": "Comment or reply",
+        },
+        {
+            "code": "SUBMIT_EVIDENCE",
+            "label": "Submit evidence",
+        },
+        {
+            "code": "EDIT_CONTRIBUTION",
+            "label": "Edit Community contributions",
+        },
+        {
+            "code": "ADD_OR_CHANGE_VOTE",
+            "label": "Add or change a vote",
+        },
+        {
+            "code": "LIKE",
+            "label": "Add a like",
+        },
+        {
+            "code": "FOLLOW",
+            "label": "Follow users or Partners",
+        },
+    ],
+}
+
 
 class CommunityAccountEnforcementError(Exception):
     pass
@@ -147,7 +246,21 @@ def serialize_enforcement(enforcement, *, actor=None, now=None, include_internal
         "id": str(enforcement.pk),
         "safety_decision_id": str(enforcement.safety_decision_id),
         "action": enforcement.action,
+        "action_label": ACTION_LABELS.get(
+            enforcement.action,
+            enforcement.get_action_display(),
+        ),
         "state": state,
+        "state_label": STATE_LABELS.get(state, state.title()),
+        "state_reason": enforcement.revocation_reason or None,
+        "state_reason_label": (
+            REVOCATION_REASON_LABELS.get(
+                enforcement.revocation_reason,
+                enforcement.get_revocation_reason_display(),
+            )
+            if enforcement.revocation_reason
+            else None
+        ),
         "user_rationale": enforcement.user_rationale,
         "policy": {
             "title": enforcement.policy_title_snapshot,
@@ -170,10 +283,22 @@ def serialize_enforcement(enforcement, *, actor=None, now=None, include_internal
             {
                 "id": str(review.pk),
                 "status": review.status,
+                "status_label": REVIEW_STATUS_LABELS.get(
+                    review.status,
+                    review.get_status_display(),
+                ),
                 "request_statement": review.request_statement,
                 "submitted_at": review.submitted_at,
                 "review_started_at": review.review_started_at,
                 "outcome": review.outcome or None,
+                "outcome_label": (
+                    REVIEW_OUTCOME_LABELS.get(
+                        review.outcome,
+                        review.get_outcome_display(),
+                    )
+                    if review.outcome
+                    else None
+                ),
                 "resolution_rationale": review.resolution_rationale,
                 "resolved_at": review.resolved_at,
             }
@@ -311,8 +436,28 @@ def get_community_standing(user, *, history_limit=20):
         )
         .order_by("-issued_at", "-id")[:history_limit]
     )
+    access = get_user_community_access(user, now=now)
+    access_label = {
+        "FULL_ACCESS": "Full access",
+        "TEMPORARILY_RESTRICTED": "Temporarily restricted",
+        "INDEFINITELY_RESTRICTED": "Indefinitely restricted",
+    }.get(access["status"], "Full access")
+
     return {
-        "access": get_user_community_access(user, now=now),
+        "access": {
+            **access,
+            "label": access_label,
+        },
+        "restriction_capabilities": {
+            "available": [
+                dict(item)
+                for item in COMMUNITY_RESTRICTION_CAPABILITIES["available"]
+            ],
+            "unavailable": [
+                dict(item)
+                for item in COMMUNITY_RESTRICTION_CAPABILITIES["unavailable"]
+            ],
+        },
         "history": [
             serialize_enforcement(item, actor=user, now=now)
             for item in history
