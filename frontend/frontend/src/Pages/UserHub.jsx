@@ -1826,7 +1826,7 @@ export default function UserHub() {
                         </p>
                      </div>
                      <div className="hub-standing-alert-actions">
-                        <a href="#community-standing">View details</a>
+                        <Link to="/community-standing">View details</Link>
                         <button
                            type="button"
                            onClick={() => handleAcknowledgeEnforcement(unseenEnforcement)}
@@ -1844,76 +1844,30 @@ export default function UserHub() {
                         <h2 className="hub-section-heading">{standingLabel}</h2>
                         <p className="hub-section-description">{standingDescription}</p>
                      </div>
-                     <Link className="hub-standing-guidelines-link" to="/community-guidelines">
-                        Community Guidelines
+                     <Link className="hub-standing-guidelines-link" to="/community-standing">
+                        View Standing
                         <Icons name="arrow-right" size={14} />
                      </Link>
                   </div>
 
-                  {standingHistory.length === 0 ? (
-                     <div className="hub-standing-empty">
-                        <Icons name="shield-check" size={20} />
-                        <div>
-                           <strong>No account-level Safety actions</strong>
-                           <p>Your Community Standing has no warning or account restriction history.</p>
-                        </div>
+                  <div className="hub-standing-empty">
+                     <Icons
+                        name={standingAccess.status === "FULL_ACCESS" ? "shield-check" : "shield"}
+                        size={20}
+                     />
+                     <div>
+                        <strong>
+                           {standingHistory.length === 0
+                              ? "No account-level Safety actions"
+                              : `${standingHistory.length} account ${standingHistory.length === 1 ? "action" : "actions"} in your history`}
+                        </strong>
+                        <p>
+                           {standingHistory.length === 0
+                              ? "You have no warning or Community restriction history."
+                              : "Open Community Standing to see reasons, dates, review status, and related decisions."}
+                        </p>
                      </div>
-                  ) : (
-                     <div className="hub-standing-history">
-                        <h3>Recent account actions</h3>
-                        {standingHistory.map((item) => {
-                           const label = {
-                              WARNING: "Warning",
-                              TEMPORARY_RESTRICTION: "Temporary Community restriction",
-                              INDEFINITE_RESTRICTION: "Indefinite Community restriction",
-                           }[item.action] || item.action;
-                           const stateLabel =
-                              item.state === "EXPIRED"
-                                 ? "Expired"
-                                 : item.state === "REVOKED"
-                                   ? "No longer active"
-                                   : item.state === "ACTIVE"
-                                     ? "Active"
-                                     : "Recorded";
-                           return (
-                              <article key={item.id} className="hub-standing-history-item">
-                                 <div className="hub-standing-history-heading">
-                                    <div>
-                                       <strong>{label}</strong>
-                                       <span>{stateLabel}</span>
-                                    </div>
-                                    <time dateTime={item.issued_at}>
-                                       {new Date(item.issued_at).toLocaleDateString()}
-                                    </time>
-                                 </div>
-                                 <p>{item.user_rationale}</p>
-                                 <div className="hub-standing-history-meta">
-                                    <span>{item.violation?.title || "Community Guidelines"}</span>
-                                    <span>Policy {item.policy?.version}</span>
-                                    {item.restriction_ends_at && (
-                                       <span>
-                                          Until {new Date(item.restriction_ends_at).toLocaleString()}
-                                       </span>
-                                    )}
-                                 </div>
-                                 {item.review && (
-                                    <p className="hub-standing-review-state">
-                                       Review: {item.review.outcome || item.review.status}
-                                    </p>
-                                 )}
-                                 {item.safety_decision_id && (
-                                    <Link
-                                       className="hub-standing-review-link"
-                                       to={`/community/moderation/outcomes/${item.safety_decision_id}`}
-                                    >
-                                       Review decision
-                                    </Link>
-                                 )}
-                              </article>
-                           );
-                        })}
-                     </div>
-                  )}
+                  </div>
                </section>
 
                {/* Impact Overview */}
