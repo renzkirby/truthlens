@@ -15,6 +15,11 @@ urlpatterns = [
         name="community_guidelines",
     ),
     path(
+        "community/standing/",
+        views.community_standing,
+        name="community_standing",
+    ),
+    path(
         "community/account-enforcements/<uuid:enforcement_id>/seen/",
         community_account_enforcement_views.community_account_enforcement_seen,
         name="community_account_enforcement_seen",
