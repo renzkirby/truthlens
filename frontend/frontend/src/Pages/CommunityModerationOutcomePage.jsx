@@ -7,8 +7,11 @@ import { userFacingErrorMessage } from "../utils/userFacingError";
 import "./CommunityModerationOutcomePage.css";
 
 const formatter = new Intl.DateTimeFormat(undefined, {
-   dateStyle: "medium",
-   timeStyle: "short",
+   year: "numeric",
+   month: "short",
+   day: "numeric",
+   hour: "numeric",
+   minute: "2-digit",
    timeZoneName: "short",
 });
 
