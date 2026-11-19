@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 import { resolveApiEndpoint } from "../utils/api";
 import "./CommunityGuidelinesPage.css";
@@ -8,7 +8,7 @@ function ruleAnchorId(code) {
    return `rule-${String(code || "").toLowerCase().replaceAll("_", "-")}`;
 }
 
-function CommunityGuidelinesContent({ requestedVersion }) {
+function CommunityGuidelinesContent({ requestedVersion, locationHash }) {
    const [policy, setPolicy] = useState(null);
    const [error, setError] = useState(false);
 
@@ -39,18 +39,24 @@ function CommunityGuidelinesContent({ requestedVersion }) {
    }, [requestedVersion]);
 
    useEffect(() => {
-      if (!policy || !window.location.hash) return undefined;
+      if (!policy) return undefined;
 
-      const targetId = decodeURIComponent(window.location.hash.slice(1));
       const frame = window.requestAnimationFrame(() => {
+         if (!locationHash) {
+            window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+            return;
+         }
+
+         const targetId = decodeURIComponent(locationHash.slice(1));
          const target = document.getElementById(targetId);
          if (!target) return;
-         target.scrollIntoView({ block: "start" });
+
+         target.scrollIntoView({ block: "start", behavior: "auto" });
          target.focus({ preventScroll: true });
       });
 
       return () => window.cancelAnimationFrame(frame);
-   }, [policy]);
+   }, [locationHash, policy]);
 
    if (error) {
       return (
@@ -298,13 +304,17 @@ function CommunityGuidelinesContent({ requestedVersion }) {
 }
 
 function CommunityGuidelinesPage() {
-   const [searchParams] = useSearchParams();
-   const requestedVersion = (searchParams.get("version") || "").trim();
+   const location = useLocation();
+   const searchParams = new URLSearchParams(location.search);
+   const requestedVersion = (searchParams.get("version") || "")
+      .split("#", 1)[0]
+      .trim();
 
    return (
       <CommunityGuidelinesContent
          key={requestedVersion || "current"}
          requestedVersion={requestedVersion}
+         locationHash={location.hash}
       />
    );
 }
