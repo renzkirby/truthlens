@@ -18,6 +18,7 @@ import NotificationPage from "./Pages/NotificationPage.jsx";
 import GovernanceNoticePage from "./Pages/GovernanceNoticePage.jsx";
 import PartnerOrganizationGuidelinesPage from "./Pages/PartnerOrganizationGuidelinesPage.jsx";
 import CommunityGuidelinesPage from "./Pages/CommunityGuidelinesPage.jsx";
+import CommunityStandingPage from "./Pages/CommunityStandingPage.jsx";
 import CommunityModerationOutcomePage from "./Pages/CommunityModerationOutcomePage.jsx";
 import SettingsPage from "./Pages/SettingsPage.jsx";
 import DeepAnalysisPage from "./Pages/DeepAnalysisPage.jsx";
@@ -157,6 +158,7 @@ function App() {
                      />
                      <Route element={<CommunityParticipantRoute />}>
                         <Route path="/dashboard" element={<UserHub />} />
+                        <Route path="/community-standing" element={<CommunityStandingPage />} />
                         <Route path="/thread/create" element={<CreateThreadPage />} />
                         <Route path="/profile" element={<UserProfile />} />
                      </Route>
