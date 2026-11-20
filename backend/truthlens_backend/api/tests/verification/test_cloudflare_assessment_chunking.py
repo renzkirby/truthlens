@@ -364,6 +364,43 @@ class AssessmentReliabilityHardeningTests(SimpleTestCase):
         with self._env(ENABLE_PROVIDER_RELIABILITY_HARDENING="0"):
             self.assertFalse(cloudflare_assessment_chunking_enabled())
 
+    def test_master_off_preserves_original_nine_item_skip_and_full_groq_batch(self):
+        prompt = make_prompt(9)
+        gemini = Mock()
+        gemini.models.generate_content.side_effect = RuntimeError(
+            "simulated primary outage",
+        )
+        groq = Mock()
+        groq.with_options.return_value.chat.completions.create.return_value = (
+            SimpleNamespace(choices=[SimpleNamespace(
+                message=SimpleNamespace(content=response_for(prompt)),
+            )])
+        )
+
+        with (
+            self._env(ENABLE_PROVIDER_RELIABILITY_HARDENING="0"),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch(
+                "api.verification.cloudflare_pilot.generate_evaluation_json",
+            ) as cloudflare_http,
+        ):
+            with llm_provider_scope():
+                result = call_llm_with_fallback(
+                    "Assess every passage independently. Preserve each key.",
+                    prompt,
+                    operation=ASSESSMENT_OPERATION,
+                )
+
+        self.assertEqual(json.loads(result), json.loads(response_for(prompt)))
+        cloudflare_http.assert_not_called()
+        groq.with_options.return_value.chat.completions.create.assert_called_once()
+        self.assertEqual(
+            groq.with_options.return_value.chat.completions.create
+            .call_args.kwargs["messages"][1]["content"],
+            prompt,
+        )
+
     def test_successful_gemini_nine_item_assessment_never_invokes_chunk_fallbacks(self):
         prompt = make_prompt(9)
         gemini = Mock()
@@ -550,6 +587,45 @@ class AssessmentReliabilityHardeningTests(SimpleTestCase):
             [len(keys_and_contents(chunk)) for chunk in sent_prompts[1:]],
             [4, 4],
         )
+        self.assertEqual(gemini.models.generate_content.call_count, 2)
+        sleep.assert_called_once_with(1.0)
+
+    def test_groq_413_chunk_recovery_is_bounded_to_six_chunks(self):
+        prompt = make_prompt(25)
+
+        class Gemini503(RuntimeError):
+            code = 503
+
+        class Groq413(RuntimeError):
+            status_code = 413
+
+        gemini = Mock()
+        gemini.models.generate_content.side_effect = [
+            Gemini503("service unavailable"),
+            Gemini503("service still unavailable"),
+        ]
+        groq = Mock()
+        groq.with_options.return_value.chat.completions.create.side_effect = Groq413(
+            "request too large",
+        )
+
+        with (
+            self._env(),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.time.sleep") as sleep,
+        ):
+            with llm_provider_scope():
+                with self.assertRaises(LLMProviderUnavailableError):
+                    call_llm_with_fallback(
+                        "Assess every passage independently. Preserve each key.",
+                        prompt,
+                        operation=ASSESSMENT_OPERATION,
+                    )
+
+        # The full Groq request is attempted once. Planning refuses >24 items
+        # before any chunk requests are sent, so fallback fan-out stays bounded.
+        groq.with_options.return_value.chat.completions.create.assert_called_once()
         self.assertEqual(gemini.models.generate_content.call_count, 2)
         sleep.assert_called_once_with(1.0)
 
