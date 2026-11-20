@@ -155,21 +155,31 @@ def cloudflare_classification_http_timeout():
 
 
 def cloudflare_assessment_chunking_enabled():
-    """Opt-in bounded assessment chunks, never a production routing change."""
-    from .provider_hierarchy import hierarchy_enabled
+    """Use lossless assessment chunks for reliability hardening or legacy dev opt-in."""
+    from .provider_hierarchy import hierarchy_enabled, reliability_hardening_enabled
 
     return (
         hierarchy_enabled()
         and cloudflare_pilot_enabled(ASSESSMENT_OPERATION)
-        and os.getenv(ASSESSMENT_CHUNKING_FLAG, "") == "1"
+        and (
+            reliability_hardening_enabled()
+            or os.getenv(ASSESSMENT_CHUNKING_FLAG, "") == "1"
+        )
     )
 
 
-def _assessment_chunk_plan(system_instructions, user_prompt):
-    """Plan all chunks before any network request; preserve every item byte.
+def _assessment_chunk_plan(
+    system_instructions,
+    user_prompt,
+    *,
+    max_chunks=ASSESSMENT_MAX_CHUNKS,
+    max_input_chars=PILOT_MAX_INPUT_CHARS,
+):
+    """Plan lossless keyed chunks before any network request.
 
-    Fails locally instead of silently truncating, omitting, or reordering
-    original evidence. A single oversized item cannot be safely split.
+    Cloudflare keeps its original four-item/three-chunk/28K envelope. The same
+    planner may be reused by downstream provider recovery with a different
+    bounded chunk count and without silently trimming any evidence item.
     """
     if (
         not isinstance(system_instructions, str)
@@ -178,10 +188,32 @@ def _assessment_chunk_plan(system_instructions, user_prompt):
         or not user_prompt.strip()
     ):
         raise CloudflareEvaluationError("INVALID_ASSESSMENT_INPUT")
+    if (
+        max_chunks is not None
+        and (
+            isinstance(max_chunks, bool)
+            or not isinstance(max_chunks, int)
+            or max_chunks < 1
+        )
+    ):
+        raise CloudflareEvaluationError("INVALID_ASSESSMENT_INPUT")
+    if (
+        max_input_chars is not None
+        and (
+            isinstance(max_input_chars, bool)
+            or not isinstance(max_input_chars, int)
+            or max_input_chars < 1
+        )
+    ):
+        raise CloudflareEvaluationError("INVALID_ASSESSMENT_INPUT")
+
     _expected_assessment_keys(user_prompt)
     payload = json.loads(user_prompt[len(_ASSESSMENT_PREFIX):])
     items = payload["evidence_items"]
-    if len(items) > ASSESSMENT_MAX_ITEMS * ASSESSMENT_MAX_CHUNKS:
+    if (
+        max_chunks is not None
+        and len(items) > ASSESSMENT_MAX_ITEMS * max_chunks
+    ):
         raise CloudflareEvaluationError("ASSESSMENT_BATCH_TOO_LARGE")
 
     def prompt_for(chunk_items):
@@ -195,23 +227,49 @@ def _assessment_chunk_plan(system_instructions, user_prompt):
     for item in items:
         candidate = current + [item]
         candidate_prompt = prompt_for(candidate)
-        if (
-            len(candidate) > ASSESSMENT_MAX_ITEMS
-            or len(system_instructions) + len(candidate_prompt) > PILOT_MAX_INPUT_CHARS
-        ):
+        over_input_limit = (
+            max_input_chars is not None
+            and len(system_instructions) + len(candidate_prompt) > max_input_chars
+        )
+        if len(candidate) > ASSESSMENT_MAX_ITEMS or over_input_limit:
             if not current:
                 raise CloudflareEvaluationError("PROMPT_TOO_LONG")
             chunks.append(prompt_for(current))
             current = [item]
-            if len(system_instructions) + len(prompt_for(current)) > PILOT_MAX_INPUT_CHARS:
+            if (
+                max_input_chars is not None
+                and len(system_instructions) + len(prompt_for(current))
+                > max_input_chars
+            ):
                 raise CloudflareEvaluationError("PROMPT_TOO_LONG")
         else:
             current = candidate
     if current:
         chunks.append(prompt_for(current))
-    if len(chunks) > ASSESSMENT_MAX_CHUNKS:
+    if max_chunks is not None and len(chunks) > max_chunks:
         raise CloudflareEvaluationError("ASSESSMENT_BATCH_TOO_LARGE")
     return chunks, [item["key"] for item in items]
+
+
+def plan_lossless_assessment_chunks(
+    system_instructions,
+    user_prompt,
+    *,
+    max_chunks,
+):
+    """Return bounded four-item chunks for downstream 413 recovery.
+
+    This deliberately applies no provider-specific character truncation. If a
+    single original evidence item is itself too large for the downstream
+    provider, that provider must fail normally rather than receiving modified
+    evidence.
+    """
+    return _assessment_chunk_plan(
+        system_instructions,
+        user_prompt,
+        max_chunks=max_chunks,
+        max_input_chars=None,
+    )
 
 
 def cloudflare_assessment_chunking_bypass_reason(system_instructions, user_prompt):
