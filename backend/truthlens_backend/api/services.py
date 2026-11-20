@@ -40,9 +40,19 @@ from .verification.provider_hierarchy import (
     hierarchy_enabled,
     requires_strict_stage_contract,
     gemini_job_blocking_error,
+    gemini_transient_circuit_breaker_enabled,
+    groq_bounded_fallback_enabled,
+    reliability_hardening_enabled,
+)
+from .verification.evidence_budget import (
+    FINAL_PROMPT_TARGET,
+    LLMRequestBudgetExceededError,
+    bounded_reasoning_dossier,
+    estimate_prompt_tokens,
 )
 from .verification.cloudflare_evaluation import (
     CloudflareEvaluationError,
+    DEFAULT_MODEL as CLOUDFLARE_MODEL,
     MAX_INPUT_CHARS as CLOUDFLARE_MAX_INPUT_CHARS,
     sanitized_cloudflare_error_code,
 )
@@ -423,6 +433,70 @@ def _is_groq_request_too_large(error):
     return _provider_status_code(error) == 413
 
 
+def _cloudflare_failure_degrades_job(error):
+    """Only provider-scoped failures should trip the per-job Cloudflare breaker."""
+    code = sanitized_cloudflare_error_code(error)
+    return code not in {
+        "PROMPT_TOO_LONG",
+        "ASSESSMENT_BATCH_TOO_LARGE",
+        "HTTP_413",
+    }
+
+
+def _request_metadata(
+    system_instructions,
+    user_prompt,
+    *,
+    variant,
+    model_id=None,
+    retry_number=0,
+    estimate_tokens=False,
+    preserve_model_id_when_disabled=False,
+):
+    """Return bounded, privacy-safe numeric/provider request metadata."""
+    metadata = {}
+    if not reliability_hardening_enabled():
+        if (
+            preserve_model_id_when_disabled
+            and isinstance(model_id, str)
+            and model_id
+        ):
+            metadata["model_id"] = model_id
+        return metadata
+
+    if isinstance(model_id, str) and model_id:
+        metadata["model_id"] = model_id
+
+    metadata.update({
+        "prompt_chars": len(system_instructions) + len(user_prompt),
+        "request_variant": variant,
+        "retry_number": retry_number,
+    })
+    if estimate_tokens:
+        try:
+            metadata["prompt_tokens_est"] = estimate_prompt_tokens(
+                system_instructions,
+                user_prompt,
+            )
+        except Exception:
+            pass
+    return metadata
+
+
+def _bounded_fallback_is_smaller(system_instructions, full_prompt, fallback_prompt):
+    if not isinstance(fallback_prompt, str) or not fallback_prompt.strip():
+        return False
+    try:
+        full_estimate = estimate_prompt_tokens(system_instructions, full_prompt)
+        fallback_estimate = estimate_prompt_tokens(
+            system_instructions,
+            fallback_prompt,
+        )
+    except Exception:
+        return len(fallback_prompt) < len(full_prompt)
+    return fallback_estimate < full_estimate
+
+
 def _provider_error_label(error):
     """Return useful error metadata without including provider secrets."""
     if isinstance(error, CloudflareEvaluationError):
@@ -489,8 +563,14 @@ def call_llm_with_fallback(
     *,
     operation=None,
     gemini_timeout_ms=None,
+    fallback_user_prompt=None,
 ):
-    """Opt-in Gemini -> Cloudflare -> Groq; legacy order otherwise preserved."""
+    """Opt-in Gemini -> Cloudflare -> Groq; legacy order otherwise preserved.
+
+    Gemini always receives the original full prompt. A caller may provide a
+    deterministic bounded fallback prompt for providers with tighter request
+    budgets; it is never used on the normal successful Gemini path.
+    """
     provider_call_id = uuid.uuid4()
     pilot_active = cloudflare_pilot_enabled(operation)
     hierarchy_active = hierarchy_enabled()
@@ -502,9 +582,9 @@ def call_llm_with_fallback(
     gemini_model = _gemini_model_for_operation(operation)
     last_gemini_error = None
 
-    def _try_gemini():
+    def _try_gemini(*, force=False, retry_number=0):
         nonlocal last_gemini_error
-        if not _gemini_model_is_degraded(gemini_model):
+        if force or not _gemini_model_is_degraded(gemini_model):
             gemini_config = {
                 "system_instruction": system_instructions,
                 "response_mime_type": "application/json",
@@ -549,7 +629,13 @@ def call_llm_with_fallback(
                     # Do not repeatedly call a provider that cannot serve this job.
                     if (
                         hierarchy_active
-                        and gemini_job_blocking_error(gemini_err)
+                        and (
+                            gemini_job_blocking_error(gemini_err)
+                            or (
+                                gemini_transient_circuit_breaker_enabled()
+                                and _is_transient_gemini_server_error(gemini_err)
+                            )
+                        )
                         and _gemini_degraded_models.get() is not None
                     ):
                         _mark_gemini_model_degraded(gemini_model)
@@ -560,7 +646,15 @@ def call_llm_with_fallback(
                         gemini_started_at,
                         "failed",
                         gemini_err,
-                        metadata={"model_id": gemini_model},
+                        metadata=_request_metadata(
+                            system_instructions,
+                            user_prompt,
+                            variant="RECOVERY" if force else "FULL",
+                            model_id=gemini_model,
+                            retry_number=retry_number,
+                            estimate_tokens=True,
+                            preserve_model_id_when_disabled=True,
+                        ),
                     )
                     logger.warning(
                         "Gemini API failed (%s); continuing fallback routing.",
@@ -574,7 +668,14 @@ def call_llm_with_fallback(
                         provider_call_id,
                         gemini_started_at,
                         "success",
-                        metadata={"model_id": gemini_model},
+                        metadata=_request_metadata(
+                            system_instructions,
+                            user_prompt,
+                            variant="RECOVERY" if force else "FULL",
+                            model_id=gemini_model,
+                            retry_number=retry_number,
+                            preserve_model_id_when_disabled=True,
+                        ),
                     )
                     return content
 
@@ -584,6 +685,36 @@ def call_llm_with_fallback(
         primary_response = _try_gemini()
         if primary_response is not None:
             return primary_response
+
+    resolved_fallback_user_prompt = None
+    if hierarchy_active and groq_bounded_fallback_enabled():
+        if callable(fallback_user_prompt):
+            try:
+                resolved_fallback_user_prompt = fallback_user_prompt()
+            except Exception:
+                logger.warning("BOUNDED_FALLBACK_BUILDER_UNAVAILABLE")
+        elif isinstance(fallback_user_prompt, str):
+            resolved_fallback_user_prompt = fallback_user_prompt
+
+    bounded_fallback_available = (
+        hierarchy_active
+        and groq_bounded_fallback_enabled()
+        and _bounded_fallback_is_smaller(
+            system_instructions,
+            user_prompt,
+            resolved_fallback_user_prompt,
+        )
+    )
+    cloudflare_user_prompt = user_prompt
+    cloudflare_request_variant = "FULL"
+    if (
+        bounded_fallback_available
+        and len(system_instructions) + len(cloudflare_user_prompt) > CLOUDFLARE_MAX_INPUT_CHARS
+        and len(system_instructions) + len(resolved_fallback_user_prompt)
+        <= CLOUDFLARE_MAX_INPUT_CHARS
+    ):
+        cloudflare_user_prompt = resolved_fallback_user_prompt
+        cloudflare_request_variant = "BOUNDED"
 
     cloudflare_degraded = _cloudflare_pilot_degraded.get() is True
     assessment_bypass_reason = None
@@ -618,11 +749,12 @@ def call_llm_with_fallback(
         and not cloudflare_degraded
         and cloudflare_bypass_reason is None
         and not use_assessment_chunks
-        and len(system_instructions) + len(user_prompt) > CLOUDFLARE_MAX_INPUT_CHARS
+        and len(system_instructions) + len(cloudflare_user_prompt)
+        > CLOUDFLARE_MAX_INPUT_CHARS
     ):
         cloudflare_bypass_reason = "PROMPT_TOO_LONG"
-        # Local request ineligibility is not a provider outage. Preserve the
-        # complete prompt for downstream Groq instead of degrading Cloudflare.
+        # Local request ineligibility is not a provider outage. The downstream
+        # provider may still use a caller-supplied bounded execution prompt.
         _log_llm_provider_call(
             operation, "cloudflare", provider_call_id,
             time.perf_counter(), "skipped",
@@ -644,17 +776,17 @@ def call_llm_with_fallback(
                 )
             elif operation in {ASSESSMENT_OPERATION, CLASSIFICATION_OPERATION}:
                 cloudflare_text = call_validated_cloudflare_pilot(
-                    system_instructions, user_prompt,
+                    system_instructions, cloudflare_user_prompt,
                     operation=operation, audit_metadata=cloudflare_metrics,
                 )
             elif operation == PILOT_OPERATION:
                 cloudflare_text = call_validated_cloudflare_pilot(
-                    system_instructions, user_prompt,
+                    system_instructions, cloudflare_user_prompt,
                     audit_metadata=cloudflare_metrics,
                 )
             else:
                 cloudflare_text = call_validated_cloudflare_pilot(
-                    system_instructions, user_prompt,
+                    system_instructions, cloudflare_user_prompt,
                     operation=operation,
                     audit_metadata=cloudflare_metrics,
                 )
@@ -665,7 +797,16 @@ def call_llm_with_fallback(
                 # Even a failed JSON/empty response may expose safe usage and
                 # finish-status counters. Telemetry sanitizes all fields and
                 # never persists hidden reasoning, prompts, or raw evidence.
-                metadata=cloudflare_metrics,
+                metadata={
+                    **cloudflare_metrics,
+                    **_request_metadata(
+                        system_instructions,
+                        cloudflare_user_prompt,
+                        variant=cloudflare_request_variant,
+                        model_id=CLOUDFLARE_MODEL,
+                        estimate_tokens=True,
+                    ),
+                },
             )
             logger.warning(
                 "Cloudflare verification pilot failed (%s); continuing "
@@ -674,13 +815,28 @@ def call_llm_with_fallback(
             )
             # A provider failure should not trigger repeated quota-consuming
             # Cloudflare requests during the same scoped verification job.
-            if _cloudflare_pilot_degraded.get() is not None:
+            if (
+                _cloudflare_pilot_degraded.get() is not None
+                and (
+                    not reliability_hardening_enabled()
+                    or _cloudflare_failure_degrades_job(cloudflare_err)
+                )
+            ):
                 _cloudflare_pilot_degraded.set(True)
         else:
             _log_llm_provider_call(
                 operation, "cloudflare", provider_call_id,
                 cloudflare_started_at, "success",
-                metadata=cloudflare_metrics,
+                metadata={
+                    **cloudflare_metrics,
+                    **_request_metadata(
+                        system_instructions,
+                        cloudflare_user_prompt,
+                        variant=cloudflare_request_variant,
+                        model_id=CLOUDFLARE_MODEL,
+                        estimate_tokens=True,
+                    ),
+                },
             )
             return cloudflare_text
 
@@ -689,63 +845,141 @@ def call_llm_with_fallback(
         if legacy_gemini_response is not None:
             return legacy_gemini_response
 
-    groq_started_at = time.perf_counter()
-    try:
-        # Disable the Groq SDK's automatic HTTP retries in the opt-in lane.
-        # A 429 on one Groq model must not trigger a blind model carousel.
-        selected_groq_client = (
-            groq_client.with_options(max_retries=0)
-            if hierarchy_active else groq_client
-        )
-        chat_completion = selected_groq_client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": system_instructions},
-                {"role": "user", "content": user_prompt},
-            ],
-            model=_model_from_env("GROQ_MODEL", DEFAULT_GROQ_MODEL),
-            response_format={"type": "json_object"},
-            temperature=0.1,
-        )
-        content = chat_completion.choices[0].message.content
-        if hierarchy_active and (
-            not isinstance(content, str) or not content.strip()
-        ):
-            raise ValueError("EMPTY_PROVIDER_RESPONSE")
+    groq_model = _model_from_env("GROQ_MODEL", DEFAULT_GROQ_MODEL)
+    selected_groq_client = (
+        groq_client.with_options(max_retries=0)
+        if hierarchy_active else groq_client
+    )
+
+    groq_user_prompt = user_prompt
+    groq_request_variant = "FULL"
+    if bounded_fallback_available:
+        try:
+            full_prompt_estimate = estimate_prompt_tokens(
+                system_instructions,
+                user_prompt,
+            )
+        except Exception:
+            full_prompt_estimate = None
         if (
-            stage_contract_active
-            and not validate_pilot_response(operation, content, user_prompt)
+            full_prompt_estimate is not None
+            and full_prompt_estimate > FINAL_PROMPT_TARGET
         ):
-            raise ValueError("INVALID_PILOT_FALLBACK_JSON")
-    except Exception as groq_err:
+            groq_user_prompt = resolved_fallback_user_prompt
+            groq_request_variant = "BOUNDED"
+
+    def _try_groq_once(prompt, *, variant, retry_number=0):
+        groq_started_at = time.perf_counter()
+        try:
+            chat_completion = selected_groq_client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": system_instructions},
+                    {"role": "user", "content": prompt},
+                ],
+                model=groq_model,
+                response_format={"type": "json_object"},
+                temperature=0.1,
+            )
+            groq_content = chat_completion.choices[0].message.content
+            if hierarchy_active and (
+                not isinstance(groq_content, str) or not groq_content.strip()
+            ):
+                raise ValueError("EMPTY_PROVIDER_RESPONSE")
+            if (
+                stage_contract_active
+                and not validate_pilot_response(
+                    operation,
+                    groq_content,
+                    prompt,
+                )
+            ):
+                raise ValueError("INVALID_PILOT_FALLBACK_JSON")
+        except Exception as groq_error:
+            _log_llm_provider_call(
+                operation,
+                "groq",
+                provider_call_id,
+                groq_started_at,
+                "failed",
+                groq_error,
+                metadata=_request_metadata(
+                    system_instructions,
+                    prompt,
+                    variant=variant,
+                    model_id=groq_model,
+                    retry_number=retry_number,
+                    estimate_tokens=True,
+                ),
+            )
+            return None, groq_error
+
         _log_llm_provider_call(
             operation,
             "groq",
             provider_call_id,
             groq_started_at,
-            "failed",
-            groq_err,
+            "success",
+            metadata=_request_metadata(
+                system_instructions,
+                prompt,
+                variant=variant,
+                model_id=groq_model,
+                retry_number=retry_number,
+            ),
         )
+        return groq_content, None
+
+    content, groq_err = _try_groq_once(
+        groq_user_prompt,
+        variant=groq_request_variant,
+    )
+
+    if (
+        groq_err is not None
+        and _is_groq_request_too_large(groq_err)
+        and bounded_fallback_available
+        and groq_request_variant == "FULL"
+    ):
+        logger.warning(
+            "Groq rejected the full request as too large; retrying once with "
+            "the deterministic bounded fallback dossier."
+        )
+        content, groq_err = _try_groq_once(
+            resolved_fallback_user_prompt,
+            variant="BOUNDED",
+            retry_number=1,
+        )
+
+    if groq_err is not None:
         logger.error(
             "Groq fallback failed (%s).",
             _provider_error_label(groq_err),
         )
 
-        # A valid request can exceed a fallback provider's per-request/free-tier
-        # token budget while still fitting Gemini. If Gemini's first attempt
-        # failed only because of a transient server error and Groq explicitly
-        # rejects the unchanged request as too large, give Gemini one final
-        # chance instead of truncating or dropping evidence/context.
-        if (
-            _is_groq_request_too_large(groq_err)
-            and _is_transient_gemini_server_error(last_gemini_error)
+        transient_gemini_failure = _is_transient_gemini_server_error(
+            last_gemini_error
+        )
+        guarded_recovery = (
+            hierarchy_active
+            and gemini_transient_circuit_breaker_enabled()
+            and transient_gemini_failure
+        )
+        legacy_413_recovery = (
+            not guarded_recovery
+            and _is_groq_request_too_large(groq_err)
+            and transient_gemini_failure
             and not _gemini_model_is_degraded(gemini_model)
-        ):
+        )
+        if guarded_recovery or legacy_413_recovery:
             logger.warning(
-                "Groq rejected the request as too large; retrying Gemini once "
-                "after transient server failure."
+                "Fallback providers could not complete the request; retrying "
+                "Gemini once after the transient server failure."
             )
             time.sleep(1.0)
-            recovery_response = _try_gemini()
+            recovery_response = _try_gemini(
+                force=guarded_recovery,
+                retry_number=1,
+            )
             if recovery_response is not None:
                 return recovery_response
 
@@ -753,13 +987,6 @@ def call_llm_with_fallback(
             "No configured LLM provider successfully completed this request."
         ) from groq_err
 
-    _log_llm_provider_call(
-        operation,
-        "groq",
-        provider_call_id,
-        groq_started_at,
-        "success",
-    )
     # A successful takeover suppresses repeated calls only to the Gemini model
     # that failed. Routine and reasoning tiers have independent free quotas.
     _mark_gemini_model_degraded(gemini_model)
@@ -1969,6 +2196,32 @@ def build_persisted_evidence_prompt(
     return system_instructions, user_data
 
 
+def _build_bounded_provider_fallback_user_prompt(evidence_groups, prompt_builder):
+    """Build an execution-only fallback prompt without mutating persisted evidence."""
+    if not groq_bounded_fallback_enabled() or not evidence_groups:
+        return None
+
+    try:
+        fallback_context, metrics = bounded_reasoning_dossier(
+            evidence_groups,
+            prompt_builder,
+        )
+        _, fallback_user_prompt = prompt_builder(fallback_context)
+    except (LLMRequestBudgetExceededError, TypeError, ValueError):
+        logger.warning("PERSISTED_EVIDENCE_BOUNDED_FALLBACK_UNAVAILABLE")
+        return None
+
+    logger.info(
+        "PERSISTED_EVIDENCE_BOUNDED_FALLBACK selected=%s candidates=%s "
+        "prompt_tokens_est=%s prompt_budget=%s",
+        metrics.get("reasoning_selected"),
+        metrics.get("reasoning_candidates"),
+        metrics.get("final_prompt_tokens_est"),
+        metrics.get("final_prompt_budget"),
+    )
+    return fallback_user_prompt
+
+
 def _normalize_contextual_basis_metadata(result):
     """Validate confidence-only contextual metadata without changing the verdict."""
     normalized = result.copy()
@@ -2115,19 +2368,35 @@ def _audit_misleading_materiality(
 
     proposed_basis_kind = proposed_result.get("contextual_basis_kind", "NONE")
     proposed_basis_ids = proposed_result.get("contextual_basis_evidence_ids", [])
-    user_data = (
-        f"<claim>{original_claim}</claim>\n\n"
-        f"<proposed_basis_kind>{proposed_basis_kind}</proposed_basis_kind>\n"
-        f"<proposed_basis_evidence_ids>{json.dumps(proposed_basis_ids)}</proposed_basis_evidence_ids>\n\n"
-        f"<persisted_evidence>{evidence_context}</persisted_evidence>"
-    )
+
+    def audit_prompt(context):
+        audit_user_data = (
+            f"<claim>{original_claim}</claim>\n\n"
+            f"<proposed_basis_kind>{proposed_basis_kind}</proposed_basis_kind>\n"
+            f"<proposed_basis_evidence_ids>{json.dumps(proposed_basis_ids)}</proposed_basis_evidence_ids>\n\n"
+            f"<persisted_evidence>{context}</persisted_evidence>"
+        )
+        return system_instructions, audit_user_data
+
+    _, user_data = audit_prompt(evidence_context)
+    def fallback_user_prompt_builder():
+        return _build_bounded_provider_fallback_user_prompt(
+            evidence_groups,
+            audit_prompt,
+        )
+
+    provider_kwargs = {
+        "operation": "persisted_evidence_evaluation",
+        "gemini_timeout_ms": PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
+    }
+    if groq_bounded_fallback_enabled():
+        provider_kwargs["fallback_user_prompt"] = fallback_user_prompt_builder
 
     try:
         response_text = call_llm_with_fallback(
             system_instructions,
             user_data,
-            operation="persisted_evidence_evaluation",
-            gemini_timeout_ms=PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
+            **provider_kwargs,
         )
         audited = _parse_llm_json(response_text)
         required_fields = {
@@ -2202,20 +2471,34 @@ def evaluate_claim_with_persisted_evidence(
     if not isinstance(evidence_context, str) or not evidence_context.strip():
         return unavailable_result
 
-    system_instructions, user_data = build_persisted_evidence_prompt(
-        original_claim,
-        evidence_context,
-        article_stance,
-        official_fact_check_resolution,
-        official_satire_evidence_ids,
-    )
+    def persisted_prompt(context):
+        return build_persisted_evidence_prompt(
+            original_claim,
+            context,
+            article_stance,
+            official_fact_check_resolution,
+            official_satire_evidence_ids,
+        )
+
+    system_instructions, user_data = persisted_prompt(evidence_context)
+    def fallback_user_prompt_builder():
+        return _build_bounded_provider_fallback_user_prompt(
+            evidence_groups,
+            persisted_prompt,
+        )
+
+    provider_kwargs = {
+        "operation": "persisted_evidence_evaluation",
+        "gemini_timeout_ms": PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
+    }
+    if groq_bounded_fallback_enabled():
+        provider_kwargs["fallback_user_prompt"] = fallback_user_prompt_builder
 
     try:
         response_text = call_llm_with_fallback(
             system_instructions,
             user_data,
-            operation="persisted_evidence_evaluation",
-            gemini_timeout_ms=PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
+            **provider_kwargs,
         )
         parsed_result = _parse_llm_json(response_text)
         required_fields = {
