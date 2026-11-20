@@ -1,7 +1,9 @@
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 
 from api import services
 from api.models import Claim, VerificationRun, VerificationTelemetryEvent
@@ -392,3 +394,35 @@ class ProductionOperationLabelTests(TestCase):
             self.assertIn("source-count calculations", system_prompt)
             self.assertIn("Lack of supporting evidence alone is not", system_prompt)
             self.assertNotIn("Exactly two SHORT paragraphs", system_prompt)
+
+class PipelineTelemetryContextIsolationTests(SimpleTestCase):
+    def test_concurrent_scopes_keep_collectors_and_events_isolated(self):
+        barrier = Barrier(2)
+
+        @verification_telemetry_scope()
+        def execute(claim_id, stage_name):
+            record_pipeline_stage(stage_name, 1)
+            barrier.wait(timeout=5)
+            collector = get_current_collector()
+            return (
+                collector.claim_id,
+                tuple(event["name"] for event in collector.events),
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(execute, "claim-a", "stage-a")
+            second = executor.submit(execute, "claim-b", "stage-b")
+            results = {
+                first.result(timeout=10),
+                second.result(timeout=10),
+            }
+
+        self.assertEqual(
+            results,
+            {
+                ("claim-a", ("stage-a",)),
+                ("claim-b", ("stage-b",)),
+            },
+        )
+        self.assertIsNone(get_current_collector())
+
