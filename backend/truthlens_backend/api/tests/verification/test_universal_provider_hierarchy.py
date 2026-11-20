@@ -1,6 +1,8 @@
 """Offline policy checks for the opt-in universal provider hierarchy."""
 
 import json
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -9,6 +11,8 @@ from django.test import SimpleTestCase, override_settings
 from api.verification.cloudflare_pilot import (cloudflare_pilot_enabled, validate_pilot_response)
 from api.services import (
     LLMProviderUnavailableError,
+    _gemini_model_is_degraded,
+    _mark_gemini_model_degraded,
     call_llm_with_fallback,
     llm_provider_scope,
 )
@@ -830,4 +834,24 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
         gemini.models.generate_content.assert_called_once()
         self.assertEqual(cloudflare.call_count, 2)
         groq.with_options.return_value.chat.completions.create.assert_called_once()
+
+class ProviderScopeConcurrencyIsolationTests(SimpleTestCase):
+    def test_concurrent_scopes_do_not_share_gemini_degraded_state(self):
+        model = "gemini-3.5-flash-lite"
+        barrier = Barrier(2)
+
+        def execute(mark_degraded):
+            with llm_provider_scope():
+                if mark_degraded:
+                    _mark_gemini_model_degraded(model)
+                barrier.wait(timeout=5)
+                return _gemini_model_is_degraded(model)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            degraded = executor.submit(execute, True)
+            healthy = executor.submit(execute, False)
+            results = [degraded.result(timeout=10), healthy.result(timeout=10)]
+
+        self.assertCountEqual(results, [True, False])
+        self.assertFalse(_gemini_model_is_degraded(model))
 
