@@ -30,6 +30,7 @@ from .verification.cloudflare_pilot import (
     cloudflare_assessment_chunking_enabled,
     cloudflare_assessment_chunking_bypass_reason,
     call_validated_cloudflare_assessment_chunks,
+    plan_lossless_assessment_chunks,
     ASSESSMENT_OPERATION,
     PILOT_OPERATION,
 )
@@ -85,6 +86,9 @@ DEFAULT_GEMINI_REASONING_MODEL = DEFAULT_GEMINI_MODEL
 DEFAULT_GEMINI_ROUTINE_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
 DEFAULT_GROQ_VISION_MODEL = "qwen/qwen3.8-27b"
+# Bound 413 recovery fan-out: four original evidence items per chunk, at most
+# six sequential Groq chunk attempts (24 items) for one assessment stage.
+GROQ_ASSESSMENT_MAX_CHUNKS = 6
 
 # Bound verdict-sensitive Gemini stages so an overridden slower reasoning model
 # cannot consume the entire interactive verification window before fallbacks run.
@@ -929,6 +933,54 @@ def call_llm_with_fallback(
         )
         return groq_content, None
 
+    def _try_groq_assessment_chunks():
+        """Retry an assessment losslessly after Groq rejects the full batch."""
+        try:
+            chunk_prompts, ordered_keys = plan_lossless_assessment_chunks(
+                system_instructions,
+                user_prompt,
+                max_chunks=GROQ_ASSESSMENT_MAX_CHUNKS,
+            )
+        except CloudflareEvaluationError:
+            # The shared planner reports only bounded structural reasons. Keep
+            # provider logs generic because this is a Groq recovery decision.
+            return None, ValueError("ASSESSMENT_CHUNK_PLAN_UNAVAILABLE")
+
+        completed = {}
+        for chunk_index, chunk_prompt in enumerate(chunk_prompts, start=1):
+            chunk_content, chunk_error = _try_groq_once(
+                chunk_prompt,
+                variant="BOUNDED",
+                retry_number=chunk_index,
+            )
+            if chunk_error is not None:
+                return None, chunk_error
+            try:
+                chunk_results = json.loads(chunk_content)["assessments"]
+            except (TypeError, ValueError, KeyError):
+                return None, ValueError("INVALID_PILOT_FALLBACK_JSON")
+
+            for result in chunk_results:
+                key = result.get("key") if isinstance(result, dict) else None
+                if key in completed:
+                    return None, ValueError("INVALID_PILOT_FALLBACK_JSON")
+                completed[key] = result
+
+        if set(completed) != set(ordered_keys):
+            return None, ValueError("INVALID_PILOT_FALLBACK_JSON")
+
+        combined = json.dumps(
+            {"assessments": [completed[key] for key in ordered_keys]},
+            ensure_ascii=False,
+        )
+        if not validate_pilot_response(
+            ASSESSMENT_OPERATION,
+            combined,
+            user_prompt,
+        ):
+            return None, ValueError("INVALID_PILOT_FALLBACK_JSON")
+        return combined, None
+
     content, groq_err = _try_groq_once(
         groq_user_prompt,
         variant=groq_request_variant,
@@ -949,6 +1001,18 @@ def call_llm_with_fallback(
             variant="BOUNDED",
             retry_number=1,
         )
+
+    if (
+        groq_err is not None
+        and _is_groq_request_too_large(groq_err)
+        and operation == ASSESSMENT_OPERATION
+        and groq_bounded_fallback_enabled()
+    ):
+        logger.warning(
+            "Groq rejected the full evidence-assessment batch as too large; "
+            "retrying with bounded lossless keyed chunks."
+        )
+        content, groq_err = _try_groq_assessment_chunks()
 
     if groq_err is not None:
         logger.error(
