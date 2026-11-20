@@ -451,13 +451,21 @@ def _request_metadata(
     model_id=None,
     retry_number=0,
     estimate_tokens=False,
+    preserve_model_id_when_disabled=False,
 ):
     """Return bounded, privacy-safe numeric/provider request metadata."""
     metadata = {}
+    if not reliability_hardening_enabled():
+        if (
+            preserve_model_id_when_disabled
+            and isinstance(model_id, str)
+            and model_id
+        ):
+            metadata["model_id"] = model_id
+        return metadata
+
     if isinstance(model_id, str) and model_id:
         metadata["model_id"] = model_id
-    if not reliability_hardening_enabled():
-        return metadata
 
     metadata.update({
         "prompt_chars": len(system_instructions) + len(user_prompt),
@@ -645,6 +653,7 @@ def call_llm_with_fallback(
                             model_id=gemini_model,
                             retry_number=retry_number,
                             estimate_tokens=True,
+                            preserve_model_id_when_disabled=True,
                         ),
                     )
                     logger.warning(
@@ -665,6 +674,7 @@ def call_llm_with_fallback(
                             variant="RECOVERY" if force else "FULL",
                             model_id=gemini_model,
                             retry_number=retry_number,
+                            preserve_model_id_when_disabled=True,
                         ),
                     )
                     return content
@@ -2375,13 +2385,18 @@ def _audit_misleading_materiality(
             audit_prompt,
         )
 
+    provider_kwargs = {
+        "operation": "persisted_evidence_evaluation",
+        "gemini_timeout_ms": PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
+    }
+    if groq_bounded_fallback_enabled():
+        provider_kwargs["fallback_user_prompt"] = fallback_user_prompt_builder
+
     try:
         response_text = call_llm_with_fallback(
             system_instructions,
             user_data,
-            operation="persisted_evidence_evaluation",
-            gemini_timeout_ms=PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
-            fallback_user_prompt=fallback_user_prompt_builder,
+            **provider_kwargs,
         )
         audited = _parse_llm_json(response_text)
         required_fields = {
@@ -2472,13 +2487,18 @@ def evaluate_claim_with_persisted_evidence(
             persisted_prompt,
         )
 
+    provider_kwargs = {
+        "operation": "persisted_evidence_evaluation",
+        "gemini_timeout_ms": PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
+    }
+    if groq_bounded_fallback_enabled():
+        provider_kwargs["fallback_user_prompt"] = fallback_user_prompt_builder
+
     try:
         response_text = call_llm_with_fallback(
             system_instructions,
             user_data,
-            operation="persisted_evidence_evaluation",
-            gemini_timeout_ms=PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
-            fallback_user_prompt=fallback_user_prompt_builder,
+            **provider_kwargs,
         )
         parsed_result = _parse_llm_json(response_text)
         required_fields = {
