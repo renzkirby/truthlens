@@ -341,3 +341,215 @@ class CloudflareAssessmentChunkingTests(SimpleTestCase):
             "assessment_chunks_attempted": 3,
         })
         self.assertNotIn("DO_NOT_PERSIST", str(events))
+
+@override_settings(APP_ENV="production", DEBUG=False)
+class AssessmentReliabilityHardeningTests(SimpleTestCase):
+    def _env(self, **overrides):
+        values = {
+            "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+            "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+            "ENABLE_GROQ_BOUNDED_FALLBACK": "1",
+            "ENABLE_GEMINI_TRANSIENT_CIRCUIT_BREAKER": "1",
+            # Prove the reliability master switch, not the legacy dev flag,
+            # promotes Cloudflare assessment chunking in universal routing.
+            "CLOUDFLARE_PILOT_ASSESSMENT_CHUNKING": "0",
+        }
+        values.update(overrides)
+        return patch.dict(os.environ, values, clear=False)
+
+    def test_reliability_master_promotes_cloudflare_chunking_without_legacy_flag(self):
+        with self._env():
+            self.assertTrue(cloudflare_assessment_chunking_enabled())
+
+        with self._env(ENABLE_PROVIDER_RELIABILITY_HARDENING="0"):
+            self.assertFalse(cloudflare_assessment_chunking_enabled())
+
+    def test_successful_gemini_nine_item_assessment_never_invokes_chunk_fallbacks(self):
+        prompt = make_prompt(9)
+        gemini = Mock()
+        gemini.models.generate_content.return_value = SimpleNamespace(
+            text=response_for(prompt),
+        )
+        groq = Mock()
+
+        with (
+            self._env(),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch(
+                "api.services.call_validated_cloudflare_assessment_chunks",
+            ) as cloudflare_chunks,
+            patch("api.services.call_validated_cloudflare_pilot") as cloudflare_single,
+        ):
+            with llm_provider_scope():
+                result = call_llm_with_fallback(
+                    "Assess every passage independently. Preserve each key.",
+                    prompt,
+                    operation=ASSESSMENT_OPERATION,
+                )
+
+        self.assertEqual(json.loads(result), json.loads(response_for(prompt)))
+        self.assertEqual(
+            gemini.models.generate_content.call_args.kwargs["contents"],
+            prompt,
+        )
+        cloudflare_chunks.assert_not_called()
+        cloudflare_single.assert_not_called()
+        groq.with_options.return_value.chat.completions.create.assert_not_called()
+
+    def test_gemini_503_uses_lossless_cloudflare_chunks_for_nine_items(self):
+        prompt = make_prompt(9)
+
+        class Gemini503(RuntimeError):
+            code = 503
+
+        gemini = Mock()
+        gemini.models.generate_content.side_effect = Gemini503(
+            "service unavailable",
+        )
+        groq = Mock()
+        chunk_prompts = []
+
+        def cloudflare_generate(_system, chunk_prompt, **_kwargs):
+            chunk_prompts.append(chunk_prompt)
+            return response_for(chunk_prompt)
+
+        with (
+            self._env(),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch(
+                "api.verification.cloudflare_pilot.generate_evaluation_json",
+                side_effect=cloudflare_generate,
+            ),
+        ):
+            with llm_provider_scope():
+                result = call_llm_with_fallback(
+                    "Assess every passage independently. Preserve each key.",
+                    prompt,
+                    operation=ASSESSMENT_OPERATION,
+                )
+
+        self.assertEqual(
+            [len(keys_and_contents(chunk)) for chunk in chunk_prompts],
+            [4, 4, 1],
+        )
+        self.assertEqual(
+            [item for chunk in chunk_prompts for item in keys_and_contents(chunk)],
+            keys_and_contents(prompt),
+        )
+        self.assertEqual(
+            [item["key"] for item in json.loads(result)["assessments"]],
+            [f"item_{index}" for index in range(9)],
+        )
+        groq.with_options.return_value.chat.completions.create.assert_not_called()
+
+    def test_thirteen_item_batch_recovers_from_groq_413_with_lossless_chunks(self):
+        prompt = make_prompt(13)
+
+        class Gemini503(RuntimeError):
+            code = 503
+
+        class Groq413(RuntimeError):
+            status_code = 413
+
+        gemini = Mock()
+        gemini.models.generate_content.side_effect = Gemini503(
+            "service unavailable",
+        )
+        groq = Mock()
+        sent_prompts = []
+
+        def groq_call(**kwargs):
+            sent_prompt = kwargs["messages"][1]["content"]
+            sent_prompts.append(sent_prompt)
+            if len(sent_prompts) == 1:
+                raise Groq413("request too large")
+            return SimpleNamespace(choices=[SimpleNamespace(
+                message=SimpleNamespace(content=response_for(sent_prompt)),
+            )])
+
+        groq.with_options.return_value.chat.completions.create.side_effect = groq_call
+
+        with (
+            self._env(),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.time.sleep") as sleep,
+        ):
+            with llm_provider_scope():
+                result = call_llm_with_fallback(
+                    "Assess every passage independently. Preserve each key.",
+                    prompt,
+                    operation=ASSESSMENT_OPERATION,
+                )
+
+        self.assertEqual(sent_prompts[0], prompt)
+        self.assertEqual(
+            [len(keys_and_contents(chunk)) for chunk in sent_prompts[1:]],
+            [4, 4, 4, 1],
+        )
+        self.assertEqual(
+            [item for chunk in sent_prompts[1:] for item in keys_and_contents(chunk)],
+            keys_and_contents(prompt),
+        )
+        self.assertEqual(
+            [item["key"] for item in json.loads(result)["assessments"]],
+            [f"item_{index}" for index in range(13)],
+        )
+        self.assertEqual(gemini.models.generate_content.call_count, 1)
+        sleep.assert_not_called()
+
+    def test_failed_groq_chunk_never_returns_partial_assessment(self):
+        prompt = make_prompt(13)
+
+        class Gemini503(RuntimeError):
+            code = 503
+
+        class Groq413(RuntimeError):
+            status_code = 413
+
+        gemini = Mock()
+        gemini.models.generate_content.side_effect = [
+            Gemini503("service unavailable"),
+            Gemini503("service still unavailable"),
+        ]
+        groq = Mock()
+        sent_prompts = []
+
+        def groq_call(**kwargs):
+            sent_prompt = kwargs["messages"][1]["content"]
+            sent_prompts.append(sent_prompt)
+            if len(sent_prompts) == 1:
+                raise Groq413("request too large")
+            if len(sent_prompts) == 2:
+                return SimpleNamespace(choices=[SimpleNamespace(
+                    message=SimpleNamespace(content=response_for(sent_prompt)),
+                )])
+            raise RuntimeError("simulated second chunk failure")
+
+        groq.with_options.return_value.chat.completions.create.side_effect = groq_call
+
+        with (
+            self._env(),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.time.sleep") as sleep,
+        ):
+            with llm_provider_scope():
+                with self.assertRaises(LLMProviderUnavailableError):
+                    call_llm_with_fallback(
+                        "Assess every passage independently. Preserve each key.",
+                        prompt,
+                        operation=ASSESSMENT_OPERATION,
+                    )
+
+        # Full attempt, first successful chunk, then failed second chunk.
+        self.assertEqual(len(sent_prompts), 3)
+        self.assertEqual(
+            [len(keys_and_contents(chunk)) for chunk in sent_prompts[1:]],
+            [4, 4],
+        )
+        self.assertEqual(gemini.models.generate_content.call_count, 2)
+        sleep.assert_called_once_with(1.0)
+
