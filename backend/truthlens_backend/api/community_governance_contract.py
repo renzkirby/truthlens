@@ -8,11 +8,11 @@ single public description used by Standing and the Community Guidelines.
 COMMUNITY_RESTRICTION_CAPABILITIES = {
     "available": (
         ("READ_COMMUNITY", "Read Community discussions"),
-        ("USE_VERIFY", "Use TruthLens verification"),
+        ("USE_VERIFY", "Use Verify"),
         ("REPORT_SAFETY", "Report unsafe Community content"),
         ("VIEW_STANDING", "View Community Standing"),
-        ("REQUEST_ELIGIBLE_REVIEW", "Request an eligible review"),
-        ("DELETE_ELIGIBLE_OWN_CONTENT", "Delete eligible content you posted"),
+        ("REQUEST_ELIGIBLE_REVIEW", "Ask for a review when available"),
+        ("DELETE_ELIGIBLE_OWN_CONTENT", "Delete your own content when allowed"),
         ("WITHDRAW_EXISTING_PARTICIPATION", "Remove an existing like or vote"),
         ("UNFOLLOW", "Unfollow users or Partners"),
     ),
