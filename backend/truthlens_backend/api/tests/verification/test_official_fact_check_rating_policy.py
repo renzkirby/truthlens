@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from django.test import SimpleTestCase
 
@@ -549,3 +549,40 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
             OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
         )
         assess.assert_called_once_with(incoming, reviewed)
+
+    def test_claim_date_fallback_does_not_override_material_entity_difference(self):
+        incoming = (
+            "In September 2021, Toni Gonzaga signed a contract with ABS-CBN."
+        )
+        stripped = "Toni Gonzaga signed a contract with ABS-CBN."
+        reviewed = "Toni Gonzaga signed a contract with PTV-4."
+
+        with patch(
+            "api.tasks.assess_claim_equivalence",
+            return_value={
+                "equivalent": False,
+                "reasoning": "The broadcaster is materially different.",
+                "material_differences": ["ABS-CBN versus PTV-4"],
+            },
+        ) as assess:
+            result = tasks._resolve_official_fact_check_rating_policy(
+                incoming,
+                _groups((reviewed, "Satire")),
+                provider_claims=[{
+                    "text": reviewed,
+                    "claimDate": "2021-09-15T00:00:00Z",
+                }],
+                allow_claim_date_fallback=True,
+            )
+
+        self.assertEqual(
+            result["resolution"],
+            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+        )
+        self.assertEqual(
+            assess.call_args_list,
+            [
+                call(incoming, reviewed),
+                call(stripped, reviewed),
+            ],
+        )
