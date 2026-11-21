@@ -535,6 +535,76 @@ class ManagementApiTests(APITestCase):
         self.assertEqual(memberships.data["count"], 1)
         self.assertEqual(invitations.data["count"], 1)
 
+    def test_management_invitation_list_materializes_expired_pending_status(self):
+        expired = OrganizationInvitation.objects.create(
+            organization=self.organization,
+            email="expired-management-list@example.com",
+            invited_role=OrganizationMembership.Role.RESEARCHER,
+            purpose=OrganizationInvitation.InvitationPurpose.MEMBERSHIP,
+            invited_by=self.inviter,
+            token_digest="c" * 64,
+            status=OrganizationInvitation.Status.PENDING,
+            expires_at=timezone.now() - timedelta(minutes=1),
+            last_sent_at=timezone.now() - timedelta(days=7),
+        )
+        client = self.client_for(self.superuser)
+
+        response = client.get(reverse("management_invitations"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        expired.refresh_from_db()
+        self.assertEqual(expired.status, OrganizationInvitation.Status.EXPIRED)
+        serialized = next(
+            item
+            for item in response.data["results"]
+            if item["id"] == str(expired.id)
+        )
+        self.assertEqual(serialized["status"], OrganizationInvitation.Status.EXPIRED)
+
+        pending = client.get(
+            reverse("management_invitations")
+            + "?q=expired-management-list&status=PENDING"
+        )
+        expired_filter = client.get(
+            reverse("management_invitations")
+            + "?q=expired-management-list&status=EXPIRED"
+        )
+
+        self.assertEqual(pending.data["count"], 0)
+        self.assertEqual(expired_filter.data["count"], 1)
+        self.assertEqual(
+            expired_filter.data["results"][0]["status"],
+            OrganizationInvitation.Status.EXPIRED,
+        )
+
+    def test_management_invitation_detail_materializes_expired_pending_status(self):
+        expired = OrganizationInvitation.objects.create(
+            organization=self.organization,
+            email="expired-management-detail@example.com",
+            invited_role=OrganizationMembership.Role.RESEARCHER,
+            purpose=OrganizationInvitation.InvitationPurpose.MEMBERSHIP,
+            invited_by=self.inviter,
+            token_digest="d" * 64,
+            status=OrganizationInvitation.Status.PENDING,
+            expires_at=timezone.now() - timedelta(minutes=1),
+            last_sent_at=timezone.now() - timedelta(days=7),
+        )
+
+        response = self.client_for(self.superuser).get(
+            reverse(
+                "management_invitation_detail",
+                kwargs={"invitation_id": expired.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["status"],
+            OrganizationInvitation.Status.EXPIRED,
+        )
+        expired.refresh_from_db()
+        self.assertEqual(expired.status, OrganizationInvitation.Status.EXPIRED)
+
     def test_auth_me_management_access_is_true_for_active_superuser(self):
         response = self.client_for(self.superuser).get(reverse("auth_me"))
 
