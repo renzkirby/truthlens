@@ -413,6 +413,156 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         self.assertEqual(result["contextual_basis_kind"], "NONE")
         self.assertEqual(result["contextual_basis_evidence_ids"], [])
 
+    def test_structured_misleading_signal_can_arbitrate_fake_to_misleading(self):
+        evidence_id = "77777777-7777-7777-7777-777777777777"
+        initial = {
+            **self.result,
+            "verdict": "FAKE",
+            "reasoning": "The first evaluator treats the attribution as contradicted.",
+            "summary": "The attribution is contradicted by the evidence.",
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        }
+        audited = {
+            **self.result,
+            "verdict": "MISLEADING",
+            "reasoning": (
+                "The underlying footage is genuine, but the submitted framing "
+                "materially changes what the footage represents."
+            ),
+            "summary": (
+                "The footage is genuine, but it is presented with materially "
+                "false context."
+            ),
+            "confidence_score": 88,
+            "score_context": "Equivalent fact-check evidence establishes material false context.",
+            "contextual_basis_kind": "FALSE_CONTEXT",
+            "contextual_basis_evidence_ids": [evidence_id],
+        }
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            side_effect=[json.dumps(initial), json.dumps(audited)],
+        ) as call_llm:
+            result = evaluate_claim_with_persisted_evidence(
+                "A genuine video was presented as showing a different event.",
+                (
+                    f"Evidence link ID: {evidence_id}\n"
+                    "Rating: Misleading. The video is genuine but the framing "
+                    "changes the event it depicts."
+                ),
+                official_misleading_evidence_ids=[evidence_id],
+            )
+
+        self.assertEqual(result["verdict"], "MISLEADING")
+        self.assertEqual(result["contextual_basis_kind"], "FALSE_CONTEXT")
+        self.assertEqual(result["contextual_basis_evidence_ids"], [evidence_id])
+        self.assertEqual(call_llm.call_count, 2)
+        second_system, second_user = call_llm.call_args_list[1].args
+        self.assertIn("structured-rating conflict auditor", second_system)
+        self.assertIn(
+            "<first_evaluator_verdict>FAKE</first_evaluator_verdict>",
+            second_user,
+        )
+        self.assertIn(evidence_id, second_user)
+
+    def test_structured_misleading_signal_can_preserve_fake(self):
+        evidence_id = "88888888-8888-8888-8888-888888888888"
+        initial = {
+            **self.result,
+            "verdict": "FAKE",
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        }
+        audited = {
+            **initial,
+            "reasoning": (
+                "The submitted quote is wholly fabricated; the real image does "
+                "not create a materially true claim element."
+            ),
+            "summary": "The attributed quote is fabricated.",
+            "confidence_score": 90,
+            "score_context": "Persisted evidence directly establishes a fabricated attribution.",
+        }
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            side_effect=[json.dumps(initial), json.dumps(audited)],
+        ):
+            result = evaluate_claim_with_persisted_evidence(
+                "A politician said an invented quotation shown on a real photo.",
+                (
+                    f"Evidence link ID: {evidence_id}\n"
+                    "The photograph is real, but the quotation was fabricated."
+                ),
+                official_misleading_evidence_ids=[evidence_id],
+            )
+
+        self.assertEqual(result["verdict"], "FAKE")
+        self.assertEqual(result["contextual_basis_kind"], "NONE")
+        self.assertEqual(result["contextual_basis_evidence_ids"], [])
+
+    def test_structured_misleading_signal_failure_abstains_instead_of_forcing_label(self):
+        evidence_id = "99999999-9999-9999-9999-999999999999"
+        initial = {
+            **self.result,
+            "verdict": "FAKE",
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        }
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            side_effect=[
+                json.dumps(initial),
+                LLMProviderUnavailableError("audit providers unavailable"),
+            ],
+        ):
+            result = evaluate_claim_with_persisted_evidence(
+                "A claim with an equivalent structured Misleading rating.",
+                f"Evidence link ID: {evidence_id}\nPersisted evidence.",
+                official_misleading_evidence_ids=[evidence_id],
+            )
+
+        self.assertEqual(result["verdict"], "UNVERIFIED")
+        self.assertEqual(result["confidence_score"], 0)
+        self.assertEqual(result["contextual_basis_kind"], "NONE")
+        self.assertEqual(result["contextual_basis_evidence_ids"], [])
+        self.assertIn("conflicting contextual signal", result["summary"])
+
+    def test_structured_misleading_signal_keeps_existing_materiality_audit_for_misleading(self):
+        evidence_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        initial = {
+            **self.result,
+            "verdict": "MISLEADING",
+            "reasoning": "The claim has a materially false contextual framing.",
+            "summary": "The claim uses genuine material in a false context.",
+            "confidence_score": 91,
+            "contextual_basis_kind": "FALSE_CONTEXT",
+            "contextual_basis_evidence_ids": [evidence_id],
+        }
+        audited = {
+            **initial,
+            "confidence_score": 87,
+            "score_context": "Material false context is established by the persisted evidence.",
+        }
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            side_effect=[json.dumps(initial), json.dumps(audited)],
+        ) as call_llm:
+            result = evaluate_claim_with_persisted_evidence(
+                "A genuine item was presented in a materially false context.",
+                f"Evidence link ID: {evidence_id}\nPersisted evidence.",
+                official_misleading_evidence_ids=[evidence_id],
+            )
+
+        self.assertEqual(result["verdict"], "MISLEADING")
+        self.assertEqual(call_llm.call_count, 2)
+        second_system = call_llm.call_args_list[1].args[0]
+        self.assertIn("misleading-materiality auditor", second_system)
+        self.assertNotIn("structured-rating conflict auditor", second_system)
+
     def test_materiality_audit_provider_failure_preserves_strong_claim_scoped_misleading(self):
         evidence_id = "55555555-5555-5555-5555-555555555555"
         initial = {
