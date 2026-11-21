@@ -1344,7 +1344,7 @@ _DIRECT_TEXT_NUMBER_RE = re.compile(
 )
 _DIRECT_TEXT_NEGATION_RE = re.compile(
     r"\b(?:not|never|cannot|can't|didn't|doesn't|isn't|aren't|wasn't|"
-    r"weren't|won't|hindi|di|wala|walang)\b",
+    r"weren't|won't|hindi|wala|walang)\b|(?:^|\s)['’]di\b",
     flags=re.IGNORECASE | re.UNICODE,
 )
 _DIRECT_TEXT_PERCENT_RE = re.compile(
@@ -1368,6 +1368,18 @@ def _direct_text_numeric_anchors(value):
         _normalize_direct_text_numeric_anchor(token)
         for token in _DIRECT_TEXT_NUMBER_RE.findall(value)
     ]
+
+
+def _direct_text_has_material_negation(value):
+    """Detect factual negation without treating common discourse forms as negation."""
+    normalized = value.casefold()
+    normalized = re.sub(r"\bnot\s+(?:only|just)\b", "", normalized)
+    normalized = re.sub(
+        r"\b(?:hindi)\s+(?:lang|lamang)\b",
+        "",
+        normalized,
+    )
+    return bool(_DIRECT_TEXT_NEGATION_RE.search(normalized))
 
 
 def _direct_text_comparison_anchors(value):
@@ -1458,9 +1470,9 @@ def inspect_direct_text_claim_fidelity(raw_text, cleaned_claim):
     ):
         return "FAIL"
 
-    if bool(_DIRECT_TEXT_NEGATION_RE.search(raw_text)) != bool(
-        _DIRECT_TEXT_NEGATION_RE.search(cleaned_claim)
-    ):
+    if _direct_text_has_material_negation(
+        raw_text
+    ) != _direct_text_has_material_negation(cleaned_claim):
         return "FAIL"
 
     if bool(_DIRECT_TEXT_PERCENT_RE.search(raw_text)) != bool(

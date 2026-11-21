@@ -51,6 +51,21 @@ class DirectTextClaimFidelityTests(APITestCase):
             "FAIL",
         )
 
+    def test_non_negating_not_only_phrase_does_not_false_block(self):
+        self.assertEqual(
+            inspect_direct_text_claim_fidelity(
+                (
+                    "The program not only reached 10 schools but also opened "
+                    "new training centers."
+                ),
+                (
+                    "The program reached 10 schools and opened new training "
+                    "centers."
+                ),
+            ),
+            "PASS",
+        )
+
     def test_newly_introduced_year_fails(self):
         self.assertEqual(
             inspect_direct_text_claim_fidelity(
