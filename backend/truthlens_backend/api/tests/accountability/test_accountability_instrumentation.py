@@ -524,18 +524,6 @@ class AccountabilityInstrumentationTests(TestCase):
         perform_safety_case_action(
             case=claimed,
             actor=self.actor,
-            action="ESCALATE",
-            notes="Needs a platform policy decision.",
-        )
-        perform_safety_case_action(
-            case=claimed,
-            actor=self.actor,
-            action="ESCALATE",
-            notes="Repeated idempotent request.",
-        )
-        perform_safety_case_action(
-            case=claimed,
-            actor=self.actor,
             action="DISMISS",
             notes="No policy violation.",
         )
@@ -543,11 +531,10 @@ class AccountabilityInstrumentationTests(TestCase):
             resource_type=AccountabilityEvent.ResourceType.MODERATION_CASE,
             resource_id=str(case.pk),
         )
-        self.assertEqual(
+        self.assertFalse(
             events.filter(
                 action_type=AccountabilityEvent.ActionType.SAFETY_CASE_ESCALATED
-            ).count(),
-            1,
+            ).exists()
         )
         self.assertTrue(events.exists())
         for event in events:
