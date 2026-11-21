@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from .accountability_service import record_accountability_event
@@ -6,6 +7,7 @@ from .organization_service import (
     PartnerCapability,
     has_capability,
 )
+from .verification_domain_policy import validate_domains
 
 
 PUBLIC_PROFILE_MUTABLE_FIELDS = frozenset(
@@ -62,6 +64,18 @@ def update_organization_public_profile(
     changes,
 ):
     unsupported_fields = set(changes) - PUBLIC_PROFILE_MUTABLE_FIELDS
+
+    if "verification_specializations" in changes:
+        try:
+            changes = {
+                **changes,
+                "verification_specializations": validate_domains(
+                    changes["verification_specializations"],
+                    allow_empty=True,
+                ),
+            }
+        except ValidationError as error:
+            raise InvalidOrganizationPublicProfileChanges(str(error)) from error
 
     if unsupported_fields:
         field_list = ", ".join(sorted(unsupported_fields))
