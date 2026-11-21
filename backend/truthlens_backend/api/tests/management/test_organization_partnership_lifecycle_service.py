@@ -495,11 +495,16 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
             onboarding.partner_status,
             Organization.PartnerStatus.ACTIVE,
         )
+        self.assertTrue(onboarding.public_profile_enabled)
+        activation_event = AccountabilityEvent.objects.get(
+            subject_organization=onboarding,
+            reason_code=PARTNERSHIP_ACTIVATED_REASON,
+        )
+        self.assertFalse(
+            activation_event.previous_state["public_profile_enabled"]
+        )
         self.assertTrue(
-            AccountabilityEvent.objects.filter(
-                subject_organization=onboarding,
-                reason_code=PARTNERSHIP_ACTIVATED_REASON,
-            ).exists()
+            activation_event.new_state["public_profile_enabled"]
         )
 
         self.organization.partner_status = Organization.PartnerStatus.NONE
