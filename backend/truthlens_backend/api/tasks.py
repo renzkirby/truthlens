@@ -242,6 +242,7 @@ def _strip_gfc_aligned_month_year_qualifier(claim_text, claim_date):
         + claim_text[temporal_match.end():]
     )
     stripped = " ".join(stripped.split()).strip(" ,")
+    stripped = re.sub(r"\s+([,.;:!?])", r"\1", stripped)
     return stripped or None
 
 
