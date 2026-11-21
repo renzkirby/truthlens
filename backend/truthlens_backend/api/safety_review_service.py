@@ -295,40 +295,6 @@ def perform_safety_case_action(
         )
 
     with transaction.atomic():
-            locked_case = _get_locked_safety_case(case)
-            _ensure_active_case(locked_case)
-            _ensure_case_owner(locked_case, actor)
-            _ensure_not_pending_reconsideration(locked_case)
-            previous_status = locked_case.status
-
-            escalated_case = escalate_safety_case(
-                thread=locked_case.thread,
-                actor=actor,
-                notes=notes,
-                **_case_target_arguments(locked_case),
-            )
-
-            if previous_status != ModerationCase.Status.ESCALATED:
-                record_accountability_event(
-                    action_type=AccountabilityEvent.ActionType.SAFETY_CASE_ESCALATED,
-                    resource_type=AccountabilityEvent.ResourceType.MODERATION_CASE,
-                    resource_id=escalated_case.pk,
-                    authority_scope=AccountabilityEvent.AuthorityScope.PLATFORM,
-                    actor=actor,
-                    capability=PartnerCapability.REVIEW_SAFETY,
-                    previous_state={"status": previous_status},
-                    new_state={"status": escalated_case.status},
-                    reason_code="NEEDS_FURTHER_REVIEW",
-                    notes=notes,
-                    context=_case_accountability_context(escalated_case),
-                )
-
-            return {
-                "case": escalated_case,
-                "action": action,
-            }
-
-    with transaction.atomic():
         locked_case = _get_locked_safety_case(case)
         _ensure_active_case(locked_case)
         _ensure_case_owner(locked_case, actor)
