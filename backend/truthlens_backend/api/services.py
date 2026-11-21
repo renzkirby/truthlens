@@ -134,6 +134,9 @@ _OFFICIAL_FALSE_RATINGS = frozenset({
     "fake",
     "fabricated",
 })
+_OFFICIAL_MISLEADING_RATINGS = frozenset({
+    "misleading",
+})
 _OFFICIAL_SATIRE_RATING_PREFIXES = (
     "this is a satirical post",
     # Observed once in persisted Google Fact Check data without the space.
@@ -158,6 +161,8 @@ def classify_official_fact_check_rating(value):
         return "SATIRE"
     if normalized in _OFFICIAL_FALSE_RATINGS:
         return "FALSE"
+    if normalized in _OFFICIAL_MISLEADING_RATINGS:
+        return "MISLEADING"
     return None
 
 
@@ -2660,12 +2665,177 @@ def _audit_misleading_materiality(
         return _misleading_materiality_unverified_result()
 
 
+def _structured_misleading_signal_unverified_result():
+    return {
+        "reasoning": (
+            "A strictly equivalent structured fact-check carried a Misleading "
+            "rating, but the persisted evidence did not support a safe final "
+            "TruthLens classification."
+        ),
+        "verdict": "UNVERIFIED",
+        "summary": (
+            "The available evidence contains a conflicting contextual signal, "
+            "but it is not sufficient to support a reliable final verdict."
+        ),
+        "confidence_score": 0,
+        "score_context": (
+            "Structured misleading signal could not be resolved safely from "
+            "the persisted evidence."
+        ),
+        "contextual_basis_kind": "NONE",
+        "contextual_basis_evidence_ids": [],
+    }
+
+
+def _audit_structured_misleading_signal(
+    original_claim,
+    evidence_context,
+    evaluator_result,
+    official_misleading_evidence_ids,
+    evidence_groups=(),
+):
+    """Arbitrate a strict-equivalence ClaimReview Misleading signal.
+
+    The external textual rating is evidence metadata, not a TruthLens verdict.
+    This audit re-reads the same persisted dossier and may preserve FAKE, FACT,
+    or UNVERIFIED when the evidence does not establish claim-scoped material
+    context. It never performs new retrieval.
+    """
+    signal_ids = tuple(
+        value
+        for value in official_misleading_evidence_ids
+        if isinstance(value, str) and value.strip()
+    )
+    if not signal_ids:
+        return evaluator_result
+
+    system_instructions = """
+    Role: You are the TruthLens structured-rating conflict auditor.
+
+    Re-evaluate the exact submitted claim using ONLY the supplied persisted
+    evidence. Do not use pre-trained knowledge, external facts, or assumptions.
+
+    A structured Google ClaimReview for a strictly equivalent proposition carries
+    the exact textual rating "Misleading". Treat that publisher rating as a strong
+    contextual signal, NOT as an authoritative TruthLens verdict. The first
+    evidence evaluator may agree or disagree with it.
+
+    VERDICT RULES:
+    - FACT: every material assertion in the submitted claim is explicitly supported.
+    - FAKE: the core proposition is affirmatively contradicted, fabricated, or
+      falsely attributed, and no materially true/contextual structure justifies
+      MISLEADING.
+    - MISLEADING: the submitted claim contains a true or partly true element AND a
+      material omission, qualification, framing choice, or false context changes
+      the truth or ordinary factual impression of that same proposition.
+    - UNVERIFIED: the evidence is insufficient, conflicting, or cannot safely
+      establish one of the other verdicts.
+    - Do not return SATIRE from this audit.
+    - Do not copy the publisher rating merely because it is present.
+    - Do not preserve the first evaluator's verdict merely because it came first.
+    - Preserve entity, event, location, date/time, attribution, and action scope.
+    - A MISLEADING result must use exactly one of MISSING_CONTEXT, PARTIAL_TRUTH,
+      or FALSE_CONTEXT and cite one or more exact Evidence link IDs from the
+      supplied dossier that establish the material relationship.
+    - FACT, FAKE, and UNVERIFIED must use contextual_basis_kind="NONE" and an empty
+      contextual_basis_evidence_ids list.
+
+    Return only a valid JSON object with exactly these fields:
+    {
+        "reasoning": "Claim-scoped evidence explanation",
+        "verdict": "FACT, FAKE, MISLEADING, or UNVERIFIED",
+        "summary": "Concise user-facing factual summary",
+        "confidence_score": <numeric percentage 0 to 100>,
+        "score_context": "Concise explanation of the confidence score",
+        "contextual_basis_kind": "NONE, MISSING_CONTEXT, PARTIAL_TRUTH, or FALSE_CONTEXT",
+        "contextual_basis_evidence_ids": ["Exact Evidence link ID copied from the dossier"]
+    }
+    """
+    system_instructions = _with_user_facing_summary_rules(system_instructions)
+
+    first_verdict = evaluator_result.get("verdict", "UNVERIFIED")
+
+    def audit_prompt(context):
+        audit_user_data = (
+            f"<claim>{original_claim}</claim>\n\n"
+            f"<first_evaluator_verdict>{first_verdict}</first_evaluator_verdict>\n"
+            f"<structured_misleading_evidence_ids>"
+            f"{json.dumps(signal_ids)}</structured_misleading_evidence_ids>\n\n"
+            f"<persisted_evidence>{context}</persisted_evidence>"
+        )
+        return system_instructions, audit_user_data
+
+    _, user_data = audit_prompt(evidence_context)
+
+    def fallback_user_prompt_builder():
+        return _build_bounded_provider_fallback_user_prompt(
+            evidence_groups,
+            audit_prompt,
+        )
+
+    provider_kwargs = {
+        "operation": "persisted_evidence_evaluation",
+        "gemini_timeout_ms": PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
+    }
+    if groq_bounded_fallback_enabled():
+        provider_kwargs["fallback_user_prompt"] = fallback_user_prompt_builder
+
+    try:
+        response_text = call_llm_with_fallback(
+            system_instructions,
+            user_data,
+            **provider_kwargs,
+        )
+        audited = _parse_llm_json(response_text)
+        required_fields = {
+            "reasoning",
+            "verdict",
+            "summary",
+            "confidence_score",
+            "score_context",
+        }
+        if not isinstance(audited, dict) or not required_fields.issubset(audited):
+            raise ValueError(
+                "Structured misleading signal audit returned an invalid result"
+            )
+        if audited.get("verdict") not in {
+            "FACT",
+            "FAKE",
+            "MISLEADING",
+            "UNVERIFIED",
+        }:
+            raise ValueError(
+                "Structured misleading signal audit exceeded its verdict authority"
+            )
+        audited["confidence_score"] = _normalize_verdict_confidence_score(
+            audited["confidence_score"]
+        )
+        audited = _normalize_contextual_basis_metadata(audited)
+        if audited["verdict"] == "MISLEADING":
+            if (
+                audited["contextual_basis_kind"]
+                not in _MISLEADING_MATERIALITY_BASIS_KINDS
+                or not audited["contextual_basis_evidence_ids"]
+            ):
+                raise ValueError(
+                    "Structured misleading signal audit lacked a valid material basis"
+                )
+        return audited
+    except Exception as exc:
+        logger.warning(
+            "Structured misleading signal audit unavailable (%s).",
+            _provider_error_label(exc),
+        )
+        return _structured_misleading_signal_unverified_result()
+
+
 def evaluate_claim_with_persisted_evidence(
     original_claim,
     evidence_context,
     article_stance="NEUTRAL",
     official_fact_check_resolution=OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
     official_satire_evidence_ids=(),
+    official_misleading_evidence_ids=(),
     *,
     evidence_groups=(),
 ):
@@ -2735,6 +2905,32 @@ def evaluate_claim_with_persisted_evidence(
             official_fact_check_resolution,
         )
         parsed_result = _normalize_contextual_basis_metadata(parsed_result)
+
+        structured_misleading_ids = tuple(
+            value
+            for value in official_misleading_evidence_ids
+            if isinstance(value, str) and value.strip()
+        )
+        if structured_misleading_ids:
+            if (
+                parsed_result.get("verdict") == "MISLEADING"
+                and parsed_result.get("contextual_basis_kind")
+                != "SATIRE_ORIGIN_OF_MISINFORMATION"
+            ):
+                return _audit_misleading_materiality(
+                    original_claim,
+                    evidence_context,
+                    parsed_result,
+                    evidence_groups,
+                )
+            return _audit_structured_misleading_signal(
+                original_claim,
+                evidence_context,
+                parsed_result,
+                structured_misleading_ids,
+                evidence_groups,
+            )
+
         if (
             parsed_result.get("verdict") == "MISLEADING"
             and parsed_result.get("contextual_basis_kind")
