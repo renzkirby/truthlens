@@ -1807,7 +1807,11 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             fact_check_groups,
                             claim_id,
                             stage_prefix="gfc",
-                            material_scope_hardening=is_text_claim,
+                            **(
+                                {"material_scope_hardening": True}
+                                if is_text_claim
+                                else {}
+                            ),
                         )
                         gfc_evidence_assessed = True
                         evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
@@ -1832,10 +1836,13 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                                 ai_verdict,
                                 fact_check_groups,
                             )
-                            if not (
-                                official_rating_policy["resolution"]
-                                == OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT
-                                and ai_verdict.get("verdict") == "FAKE"
+                            if (
+                                is_text_claim
+                                and not (
+                                    official_rating_policy["resolution"]
+                                    == OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT
+                                    and ai_verdict.get("verdict") == "FAKE"
+                                )
                             ):
                                 ai_verdict = enforce_decisive_evidence_support(
                                     ai_verdict,
@@ -2031,7 +2038,11 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             secondary_groups,
                             claim_id,
                             stage_prefix="tavily",
-                            material_scope_hardening=is_text_claim,
+                            **(
+                                {"material_scope_hardening": True}
+                                if is_text_claim
+                                else {}
+                            ),
                         )
                         evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
                         secondary_groups = filter_reasoning_evidence_dossier_by_role(
@@ -2074,11 +2085,14 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             ai_verdict,
                             evaluation_groups,
                         )
-                        if not (
-                            gfc_evidence_assessed
-                            and official_rating_policy["resolution"]
-                            == OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT
-                            and ai_verdict.get("verdict") == "FAKE"
+                        if (
+                            is_text_claim
+                            and not (
+                                gfc_evidence_assessed
+                                and official_rating_policy["resolution"]
+                                == OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT
+                                and ai_verdict.get("verdict") == "FAKE"
+                            )
                         ):
                             ai_verdict = enforce_decisive_evidence_support(
                                 ai_verdict,

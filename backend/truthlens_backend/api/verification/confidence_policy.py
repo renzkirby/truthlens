@@ -475,15 +475,21 @@ def enforce_decisive_evidence_support(
     if consistent_stances is None:
         return result
 
+    has_usable_assessed_evidence = False
     for group in tuple(evidence_groups):
         for item in group.evidence:
             quality = _item_quality(item)
-            if (
-                quality is not None
-                and quality >= _USABLE_SCORE_FLOOR
-                and item.stance in consistent_stances
-            ):
+            if quality is None or quality < _USABLE_SCORE_FLOOR:
+                continue
+            has_usable_assessed_evidence = True
+            if item.stance in consistent_stances:
                 return result
+
+    # An unavailable/low-quality assessor must not override the final evaluator.
+    # The gate only adjudicates a contradiction already established by usable
+    # current-run assessment metadata.
+    if not has_usable_assessed_evidence:
+        return result
 
     final_score = min(
         _normalized_confidence(result.get("confidence_score", 0)),

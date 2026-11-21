@@ -125,6 +125,27 @@ class ConfidencePolicyTests(SimpleTestCase):
         self.assertEqual(fact["verdict"], "FACT")
         self.assertEqual(fake["verdict"], "FAKE")
 
+    def test_decisive_gate_does_not_overrule_unavailable_assessment(self):
+        for item in (
+            _item(
+                stance=VerificationEvidence.Stance.UNKNOWN,
+                relevance=0.4,
+                directness=0.2,
+            ),
+            _item(
+                stance=VerificationEvidence.Stance.CONTEXT,
+                relevance=0.6,
+                directness=0.3,
+            ),
+        ):
+            with self.subTest(stance=item.stance):
+                original = _verdict(verdict="FAKE", confidence=60)
+                result = enforce_decisive_evidence_support(
+                    original,
+                    [_group(item)],
+                )
+                self.assertEqual(result, original)
+
     def test_decisive_support_gate_does_not_replace_conflict_policy(self):
         result = enforce_decisive_evidence_support(
             _verdict(verdict="FACT", confidence=75),
