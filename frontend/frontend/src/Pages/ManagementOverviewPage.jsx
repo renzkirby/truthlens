@@ -14,12 +14,6 @@ const DESTINATIONS = [
       primary: true,
    },
    {
-      to: "/management/pipeline",
-      title: "Verification System Health",
-      description: "Check whether automated verification is completing successfully and investigate failures.",
-      icon: "activity",
-   },
-   {
       to: "/management/organizations",
       title: "Partner Organizations",
       description: "Review eligibility, verification status, partnership status, and governance records.",
@@ -67,10 +61,6 @@ function ManagementOverviewPage() {
    const invitationRequest = useManagementRequest(
       resolveApiEndpoint("MANAGEMENT_PLATFORM_STAFF_INVITATIONS"),
    );
-   const pipelineRequest = useManagementRequest(
-      `${resolveApiEndpoint("MANAGEMENT_PIPELINE_OVERVIEW")}?window=24h`,
-   );
-
    const organizations = overviewRequest.data?.organizations;
    const activeSafetyCases = attentionValue(
       safetyRequest,
@@ -80,11 +70,6 @@ function ManagementOverviewPage() {
       invitationRequest,
       (data) => Number(data?.summary?.pending ?? 0),
    );
-   const failedVerificationRuns = attentionValue(
-      pipelineRequest,
-      (data) => Number(data?.runs?.statuses?.FAILED ?? 0),
-   );
-
    return (
       <div className="management-page">
          <ManagementPageHeader
@@ -135,14 +120,6 @@ function ManagementOverviewPage() {
                   </div>
                </article>
                <article>
-                  <Icons name="activity" size={19} />
-                  <div>
-                     <strong>{failedVerificationRuns} failed verification runs in 24 hours</strong>
-                     <span>Technical verification failures that may require operational review.</span>
-                     <Link className="management-inline-link" to="/management/pipeline?window=24h&status=FAILED">Open system health</Link>
-                  </div>
-               </article>
-               <article>
                   <Icons name="mail" size={19} />
                   <div>
                      <strong>{pendingStaffInvitations} pending Platform Staff invitations</strong>
@@ -165,8 +142,8 @@ function ManagementOverviewPage() {
                </div>
                <div className="management-metrics" aria-label="Partner Organization summary">
                   <article>
-                     <span>Total Organizations</span>
-                     <strong>{organizations?.total ?? 0}</strong>
+                     <span>Current Partners</span>
+                     <strong>{organizations?.current_partners ?? 0}</strong>
                   </article>
                   <article>
                      <span>Active Partners</span>
