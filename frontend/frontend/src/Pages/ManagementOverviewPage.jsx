@@ -13,12 +13,12 @@ const DESTINATIONS = [
       icon: "shield-check",
       primary: true,
    },
-   {
-      to: "/management/pipeline",
-      title: "Verification System Health",
-      description: "Check whether automated verification is completing successfully and investigate failures.",
-      icon: "activity",
-   },
+   // {
+   //    to: "/management/pipeline",
+   //    title: "Verification System Health",
+   //    description: "Check whether automated verification is completing successfully and investigate failures.",
+   //    icon: "activity",
+   // },
    {
       to: "/management/organizations",
       title: "Partner Organizations",
@@ -58,32 +58,15 @@ function attentionValue(request, selector) {
 }
 
 function ManagementOverviewPage() {
-   const overviewRequest = useManagementRequest(
-      resolveApiEndpoint("MANAGEMENT_OVERVIEW"),
-   );
-   const safetyRequest = useManagementRequest(
-      resolveApiEndpoint("SAFETY_CASES"),
-   );
-   const invitationRequest = useManagementRequest(
-      resolveApiEndpoint("MANAGEMENT_PLATFORM_STAFF_INVITATIONS"),
-   );
-   const pipelineRequest = useManagementRequest(
-      `${resolveApiEndpoint("MANAGEMENT_PIPELINE_OVERVIEW")}?window=24h`,
-   );
+   const overviewRequest = useManagementRequest(resolveApiEndpoint("MANAGEMENT_OVERVIEW"));
+   const safetyRequest = useManagementRequest(resolveApiEndpoint("SAFETY_CASES"));
+   const invitationRequest = useManagementRequest(resolveApiEndpoint("MANAGEMENT_PLATFORM_STAFF_INVITATIONS"));
+   // const pipelineRequest = useManagementRequest(`${resolveApiEndpoint("MANAGEMENT_PIPELINE_OVERVIEW")}?window=24h`);
 
    const organizations = overviewRequest.data?.organizations;
-   const activeSafetyCases = attentionValue(
-      safetyRequest,
-      (data) => Number(data?.count ?? 0),
-   );
-   const pendingStaffInvitations = attentionValue(
-      invitationRequest,
-      (data) => Number(data?.summary?.pending ?? 0),
-   );
-   const failedVerificationRuns = attentionValue(
-      pipelineRequest,
-      (data) => Number(data?.runs?.statuses?.FAILED ?? 0),
-   );
+   const activeSafetyCases = attentionValue(safetyRequest, (data) => Number(data?.count ?? 0));
+   const pendingStaffInvitations = attentionValue(invitationRequest, (data) => Number(data?.summary?.pending ?? 0));
+   // const failedVerificationRuns = attentionValue(pipelineRequest, (data) => Number(data?.runs?.statuses?.FAILED ?? 0));
 
    return (
       <div className="management-page">
@@ -97,14 +80,17 @@ function ManagementOverviewPage() {
             <div>
                <strong>Platform Staff authority is separate from Partner Organization roles</strong>
                <p>
-                  Platform Staff operate and govern TruthLens at the platform level. A person may also
-                  belong to a Partner Organization, but that professional role does not grant Platform
-                  Staff authority, and Platform Staff access does not grant Partner Organization authority.
+                  Platform Staff operate and govern TruthLens at the platform level. A person may also belong to a
+                  Partner Organization, but that professional role does not grant Platform Staff authority, and Platform
+                  Staff access does not grant Partner Organization authority.
                </p>
             </div>
          </aside>
 
-         <section className="management-section management-attention-section" aria-labelledby="operator-attention-heading">
+         <section
+            className="management-section management-attention-section"
+            aria-labelledby="operator-attention-heading"
+         >
             <div className="management-section__heading">
                <h2 id="operator-attention-heading">Needs attention</h2>
                <p>Start here before opening detailed records or diagnostics.</p>
@@ -115,7 +101,9 @@ function ManagementOverviewPage() {
                   <div>
                      <strong>{activeSafetyCases} active Safety Review cases</strong>
                      <span>Reported Community content waiting for review or resolution.</span>
-                     <Link className="management-inline-link" to="/management/safety">Open Safety Review</Link>
+                     <Link className="management-inline-link" to="/management/safety">
+                        Open Safety Review
+                     </Link>
                   </div>
                </article>
                <article>
@@ -123,7 +111,12 @@ function ManagementOverviewPage() {
                   <div>
                      <strong>{organizations?.pending_verification ?? "…"} organizations pending verification</strong>
                      <span>Organizations that still require an institutional verification decision.</span>
-                     <Link className="management-inline-link" to="/management/organizations?verification_status=PENDING">Review organizations</Link>
+                     <Link
+                        className="management-inline-link"
+                        to="/management/organizations?verification_status=PENDING"
+                     >
+                        Review organizations
+                     </Link>
                   </div>
                </article>
                <article>
@@ -131,23 +124,29 @@ function ManagementOverviewPage() {
                   <div>
                      <strong>{organizations?.suspended_partners ?? "…"} suspended Partner Organizations</strong>
                      <span>Partnerships currently operating under suspension.</span>
-                     <Link className="management-inline-link" to="/management/organizations?partner_status=SUSPENDED">Review suspensions</Link>
+                     <Link className="management-inline-link" to="/management/organizations?partner_status=SUSPENDED">
+                        Review suspensions
+                     </Link>
                   </div>
                </article>
-               <article>
+               {/* <article>
                   <Icons name="activity" size={19} />
                   <div>
                      <strong>{failedVerificationRuns} failed verification runs in 24 hours</strong>
                      <span>Technical verification failures that may require operational review.</span>
-                     <Link className="management-inline-link" to="/management/pipeline?window=24h&status=FAILED">Open system health</Link>
+                     <Link className="management-inline-link" to="/management/pipeline?window=24h&status=FAILED">
+                        Open system health
+                     </Link>
                   </div>
-               </article>
+               </article> */}
                <article>
                   <Icons name="mail" size={19} />
                   <div>
                      <strong>{pendingStaffInvitations} pending Platform Staff invitations</strong>
                      <span>Invitations awaiting acceptance for Platform Safety access.</span>
-                     <Link className="management-inline-link" to="/management/platform-staff">Review Platform Staff</Link>
+                     <Link className="management-inline-link" to="/management/platform-staff">
+                        Review Platform Staff
+                     </Link>
                   </div>
                </article>
             </div>
