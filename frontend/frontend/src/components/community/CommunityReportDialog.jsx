@@ -17,6 +17,7 @@ export default function CommunityReportDialog({
    open,
    busy = false,
    targetLabel = "content",
+   variant = "report",
    onClose,
    onSubmit,
    fallbackFocusRef = null,
@@ -37,6 +38,7 @@ export default function CommunityReportDialog({
    const selectedReason = COMMUNITY_REPORT_REASONS.find((item) => item.value === reason);
    const otherSelected = reason === "OTHER";
    const trimmedNotes = notes.trim();
+   const isStaffFlag = variant === "staff-flag";
 
    useEffect(() => {
       if (!open) return undefined;
@@ -98,7 +100,11 @@ export default function CommunityReportDialog({
       if (busy) return;
 
       if (!reason) {
-         setError("Choose a reason before submitting the report.");
+         setError(
+            isStaffFlag
+               ? "Choose a reason before flagging this content for review."
+               : "Choose a reason before submitting the report.",
+         );
          firstReasonRef.current?.focus();
          return;
       }
@@ -132,13 +138,19 @@ export default function CommunityReportDialog({
             tabIndex="-1"
          >
             <p className="community-report-dialog-kicker">Platform safety</p>
-            <h2 id={titleId}>Report this {targetLabel}</h2>
+            <h2 id={titleId}>
+               {isStaffFlag ? `Flag this ${targetLabel} for Safety Review` : `Report this ${targetLabel}`}
+            </h2>
             <p id={descriptionId} className="community-report-dialog-intro">
-               Tell Platform Safety what seems wrong with this {targetLabel}.
+               {isStaffFlag
+                  ? `Record what Platform Safety should review about this ${targetLabel}. This creates a Safety case and does not count as a Community report.`
+                  : `Tell Platform Safety what seems wrong with this ${targetLabel}.`}
             </p>
 
             <fieldset className="community-report-dialog-reasons" aria-describedby={error ? errorId : undefined}>
-               <legend id={reasonLegendId}>Why are you reporting this?</legend>
+               <legend id={reasonLegendId}>
+                  {isStaffFlag ? "Why should Safety review this?" : "Why are you reporting this?"}
+               </legend>
                <div className="community-report-dialog-reason-list">
                   {COMMUNITY_REPORT_REASONS.map((item, index) => {
                      const descriptionOptionId = `${reasonLegendId}-${item.value.toLowerCase()}`;
@@ -171,7 +183,9 @@ export default function CommunityReportDialog({
             </fieldset>
 
             <p className="community-report-dialog-policy-note">
-               Your selection helps Platform Safety understand the report. It does not automatically determine whether a Community Guidelines violation occurred.{" "}
+               {isStaffFlag
+                  ? "This flag sends the content to Platform Safety review. It does not automatically determine whether a Community Guidelines violation occurred. "
+                  : "Your selection helps Platform Safety understand the report. It does not automatically determine whether a Community Guidelines violation occurred. "}
                <Link to="/community-guidelines" target="_blank" rel="noopener noreferrer">
                   Read Community Guidelines
                </Link>
@@ -211,7 +225,9 @@ export default function CommunityReportDialog({
                   placeholder={
                      otherSelected
                         ? "Describe why this content should be reviewed."
-                        : "Add context that may help Platform Safety review this report."
+                        : isStaffFlag
+                           ? "Add context that may help another Platform Safety reviewer."
+                           : "Add context that may help Platform Safety review this report."
                   }
                />
                <span className="community-report-dialog-count">
@@ -229,7 +245,9 @@ export default function CommunityReportDialog({
                   Cancel
                </button>
                <button type="button" className="community-report-dialog-primary" onClick={submit} disabled={busy}>
-                  {busy ? "Submitting…" : "Submit report"}
+                  {busy
+                     ? isStaffFlag ? "Flagging…" : "Submitting…"
+                     : isStaffFlag ? "Flag for review" : "Submit report"}
                </button>
             </div>
          </div>
