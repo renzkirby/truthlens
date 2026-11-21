@@ -1950,7 +1950,7 @@ class SafetyCaseQueueFilterSerializer(serializers.Serializer):
 
 class SafetyCaseActionSerializer(serializers.Serializer):
     action = serializers.ChoiceField(
-        choices=["DISMISS", "REMOVE", "ESCALATE"],
+        choices=["DISMISS", "REMOVE"],
     )
     notes = serializers.CharField(
         required=False,
@@ -1990,13 +1990,10 @@ class SafetyCaseActionSerializer(serializers.Serializer):
         violation_code = attrs.get("violation_code")
         confirmed_report_ids = attrs.get("confirmed_report_ids")
 
-        if action in {"REMOVE", "ESCALATE"} and not notes:
+        if action == "REMOVE" and not notes:
             raise serializers.ValidationError(
                 {
-                    "notes": (
-                        "Notes are required when removing content or "
-                        "escalating a Safety case."
-                    )
+                    "notes": "Notes are required when removing content."
                 }
             )
 
