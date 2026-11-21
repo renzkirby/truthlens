@@ -1749,6 +1749,10 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             "api.tasks.calibrate_verdict_confidence",
             side_effect=lambda verdict, _groups: verdict,
         )
+        self.decisive_support = self._patch(
+            "api.tasks.enforce_decisive_evidence_support",
+            side_effect=lambda verdict, _groups: verdict,
+        )
         self.gfc_retrieval = self._patch(
             "api.tasks._retrieve_and_ingest_gfc",
             return_value={

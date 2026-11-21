@@ -109,6 +109,10 @@ class VerificationRunTextRuntimeTests(TestCase):
             "api.tasks.calibrate_verdict_confidence",
             side_effect=lambda verdict, _groups: verdict,
         )
+        self.decisive_support = self._patch(
+            "api.tasks.enforce_decisive_evidence_support",
+            side_effect=lambda verdict, _groups: verdict,
+        )
         self.load_dossier = self._patch(
             "api.tasks.load_reasoning_evidence_dossier_for_run",
             return_value=["persisted dossier"],
