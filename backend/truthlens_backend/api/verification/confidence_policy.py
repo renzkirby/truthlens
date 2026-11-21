@@ -454,6 +454,64 @@ def enforce_noneditable_fallback_evidence_support(
     return result
 
 
+
+def enforce_decisive_evidence_support(
+    verdict_result: dict,
+    evidence_groups: Iterable[ReasoningEvidenceGroup],
+) -> dict:
+    """Fail closed when an automated FACT/FAKE has no usable aligned evidence.
+
+    This is intentionally narrower than conflict handling. A decisive verdict
+    survives when at least one assessed evidence item meets the existing usable
+    quality floor and has the stance aligned with that verdict. MISLEADING and
+    SATIRE retain their dedicated contextual-basis policies.
+    """
+    if not isinstance(verdict_result, dict):
+        raise TypeError("verdict_result must be a dictionary")
+
+    result = dict(verdict_result)
+    verdict = result.get("verdict")
+    consistent_stances = _CONSISTENT_STANCES.get(verdict)
+    if consistent_stances is None:
+        return result
+
+    for group in tuple(evidence_groups):
+        for item in group.evidence:
+            quality = _item_quality(item)
+            if (
+                quality is not None
+                and quality >= _USABLE_SCORE_FLOOR
+                and item.stance in consistent_stances
+            ):
+                return result
+
+    final_score = min(
+        _normalized_confidence(result.get("confidence_score", 0)),
+        _UNVERIFIED_MAX,
+    )
+    result.update({
+        "verdict": "UNVERIFIED",
+        "reasoning": (
+            "The current-run assessed evidence does not provide a usable "
+            "source-aligned basis for the proposed decisive factual conclusion. "
+            "TruthLens therefore abstains rather than presenting an unsupported "
+            "FACT or FAKE verdict."
+        ),
+        "summary": (
+            "The available assessed evidence was not strong enough to support "
+            "a decisive automated factual verdict, so this claim remains unverified."
+        ),
+        "confidence_score": final_score,
+        "score_context": (
+            "No usable assessed evidence supports a decisive automated verdict; "
+            f"final confidence is {_score_text(final_score)}%."
+        ),
+        "contextual_basis_kind": "NONE",
+        "contextual_basis_evidence_ids": [],
+    })
+    return result
+
+
 def calibrate_verdict_confidence(
     verdict_result: dict,
     evidence_groups: Iterable[ReasoningEvidenceGroup],

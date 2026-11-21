@@ -28,6 +28,7 @@ from .services import (
     llm_provider_scope,
     process_image,
     clean_ocr_text,
+    inspect_direct_text_claim_fidelity,
     clean_extracted_text,
     extract_search_query,
     extract_source_bounded_noneditable_claim,
@@ -64,6 +65,7 @@ from .verification.evidence_dossier import (
 )
 from .verification.confidence_policy import (
     calibrate_verdict_confidence,
+    enforce_decisive_evidence_support,
     enforce_noneditable_fallback_evidence_support,
 )
 from .verification.cloudflare_pilot import (
@@ -1524,6 +1526,24 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     selected_verdict = "UNVERIFIED"
                     return
 
+            if is_text_claim:
+                fidelity_started_at = time.perf_counter()
+                fidelity_outcome = inspect_direct_text_claim_fidelity(
+                    raw_text,
+                    cleaned_claim,
+                )
+                _log_stage(
+                    claim_id,
+                    "claim_fidelity_guard",
+                    fidelity_started_at,
+                    outcome=fidelity_outcome.lower(),
+                )
+                if fidelity_outcome == "FAIL":
+                    raise ClaimGateError(
+                        "ClaimGate analysis could not preserve material direct-text "
+                        "claim details reliably."
+                    )
+
             _set_claimability_status(
                 claim_id,
                 Claim.ClaimabilityStatus.CLAIMABLE,
@@ -1809,6 +1829,15 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                                 ai_verdict,
                                 fact_check_groups,
                             )
+                            if not (
+                                official_rating_policy["resolution"]
+                                == OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT
+                                and ai_verdict.get("verdict") == "FAKE"
+                            ):
+                                ai_verdict = enforce_decisive_evidence_support(
+                                    ai_verdict,
+                                    fact_check_groups,
+                                )
                             ai_verdict = _apply_noneditable_fallback_verdict_policy(
                                 ai_verdict,
                                 fact_check_groups,
@@ -2041,6 +2070,16 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             ai_verdict,
                             evaluation_groups,
                         )
+                        if not (
+                            gfc_evidence_assessed
+                            and official_rating_policy["resolution"]
+                            == OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT
+                            and ai_verdict.get("verdict") == "FAKE"
+                        ):
+                            ai_verdict = enforce_decisive_evidence_support(
+                                ai_verdict,
+                                evaluation_groups,
+                            )
                         ai_verdict = _apply_noneditable_fallback_verdict_policy(
                             ai_verdict,
                             evaluation_groups,

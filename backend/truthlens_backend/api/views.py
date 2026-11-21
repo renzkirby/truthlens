@@ -61,6 +61,7 @@ from .services import (
     upload_image_to_database,
     validate_public_url,
     check_url_threat_reputation,
+    inspect_direct_text_claim_fidelity,
 )
 from .profile_avatar_service import (
     ProfileAvatarStorageError,
@@ -4287,6 +4288,19 @@ def verify_text(request):
         ),
     )
     authenticated_user = _authenticated_user_or_none(request)
+
+    if (
+        matched_claim
+        and inspect_direct_text_claim_fidelity(
+            text_content,
+            matched_claim.context_text,
+        ) == "FAIL"
+    ):
+        logger.info(
+            "Bypassing TEXT cache reuse because the stored proposition does not "
+            "preserve deterministic material anchors from the submitted claim."
+        )
+        matched_claim = None
 
     if matched_claim and not _should_retry_unresolved_cached_claim(matched_claim):
         _record_authenticated_claim_check(authenticated_user, matched_claim)
