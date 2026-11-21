@@ -118,9 +118,9 @@ No event is emitted for an exact no-op replacement.
 
 This phase does not:
 
-- change `eligibility_reason()`;
-- bypass `verification_specializations`;
-- change verification assignment creation or intake;
+- change the legacy generic `eligibility_reason()` helper;
+- treat descriptive `verification_specializations` as authorization;
+- change ordinary Partner Organization assignment creation or intake;
 - compare claim institutions to Student Publication affiliations;
 - change `investigation_classifier.py`;
 - change prompts or provider calls;
