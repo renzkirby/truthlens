@@ -440,6 +440,35 @@ class EvidenceAssessmentTests(SimpleTestCase):
             system_instructions,
         )
 
+    def test_material_scope_hardening_va40_historical_rows_are_context(self):
+        self.claim_text = (
+            "The WHO World Malaria Report 2025 estimated approximately "
+            "282 million malaria cases worldwide during 2024."
+        )
+        historical_rows = (
+            "The disease killed 600000 people amid 263m cases globally in "
+            "2023, says WHO.",
+            "The World Malaria Report cited a total of 241 million cases of "
+            "the disease in 2020.",
+        )
+
+        for evidence_content in historical_rows:
+            with self.subTest(evidence_content=evidence_content):
+                self.evidence_item = self._item(content=evidence_content)
+                assessment, _ = self._assess(
+                    self._result(
+                        stance=VerificationEvidence.Stance.REFUTES,
+                        relevance_score=0.8,
+                        directness_score=1.0,
+                    ),
+                    enforce_material_scope=True,
+                )
+
+                self.assertEqual(
+                    assessment.stance,
+                    VerificationEvidence.Stance.CONTEXT,
+                )
+
     def test_material_scope_hardening_downgrades_cross_year_refutation(self):
         self.evidence_item = self._item(
             content=(
