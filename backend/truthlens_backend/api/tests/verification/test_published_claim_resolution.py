@@ -1713,6 +1713,10 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.clean_ocr = self._patch(
             "api.tasks.clean_ocr_text", return_value=self.cleaned
         )
+        self.claim_fidelity = self._patch(
+            "api.tasks.inspect_direct_text_claim_fidelity",
+            return_value="PASS",
+        )
         response = Mock(status_code=200)
         response.json.return_value = {"results": [{"raw_content": "Raw URL article"}]}
         self._patch("api.tasks.requests.post", return_value=response)
@@ -1747,6 +1751,10 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         )
         self.calibrate_confidence = self._patch(
             "api.tasks.calibrate_verdict_confidence",
+            side_effect=lambda verdict, _groups: verdict,
+        )
+        self.decisive_support = self._patch(
+            "api.tasks.enforce_decisive_evidence_support",
             side_effect=lambda verdict, _groups: verdict,
         )
         self.gfc_retrieval = self._patch(
@@ -2678,7 +2686,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         candidate = self.authority_candidates.return_value[0]
         self.vault.side_effect = services.search_official_vault
 
-        def evaluate_after_provenance(*args):
+        def evaluate_after_provenance(*args, **kwargs):
             # Vault retrieval provenance must exist before AI evaluation.
             # A related recommendation must NOT be accepted before a separate
             # completed classification. This is not human verdict authority.

@@ -2,6 +2,7 @@ import json
 import logging
 import math
 import os
+import re
 from dataclasses import dataclass
 from numbers import Real
 
@@ -11,6 +12,12 @@ from .evidence_dossier import ReasoningEvidenceItem
 
 
 logger = logging.getLogger(__name__)
+
+_YEAR_PATTERN = re.compile(r"(?<!\d)(?:19\d{2}|20\d{2}|2100)(?!\d)")
+_DECISIVE_STANCES = frozenset({
+    VerificationEvidence.Stance.SUPPORTS,
+    VerificationEvidence.Stance.REFUTES,
+})
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,6 +106,28 @@ key exactly and return one assessment per supplied evidence passage:
     ]
 }
 """
+_MATERIAL_SCOPE_INSTRUCTIONS = """
+MATERIAL SCOPE MATCHING:
+- SUPPORTS or REFUTES only when the evidence addresses the same material
+  proposition, or when the passage itself explicitly establishes how a differing
+  scope relates to that proposition.
+- Treat actor/entity, event/action, time period or date, location when material,
+  metric or measurement baseline, denominator, unit, and numeric comparison
+  boundary as part of the proposition's material scope.
+- A different actor, event, year/date, baseline, denominator, unit, or numeric
+  threshold is not a contradiction merely because another value differs.
+- If the passage is relevant background but does not establish the same material
+  scope, classify it as CONTEXT rather than forcing SUPPORTS or REFUTES.
+- If the scope relationship cannot responsibly be established from the passage
+  alone, classify it as UNKNOWN.
+- Do not perform unstated unit conversions, baseline conversions, denominator
+  assumptions, temporal carry-forward, or entity substitution. Only use a
+  relationship when the evidence passage itself establishes it.
+- Preserve numeric comparator semantics. Strict boundaries such as "less than"
+  or "greater than" are not interchangeable with inclusive boundaries such as
+  "up to", "at most", or "at least" unless the passage explicitly establishes
+  the relationship needed for the claim.
+"""
 
 
 def _gemini_timeout_ms_from_env():
@@ -129,6 +158,43 @@ def _valid_score(value):
     )
 
 
+def _extract_calendar_years(value):
+    if not isinstance(value, str):
+        return frozenset()
+    return frozenset(_YEAR_PATTERN.findall(value))
+
+
+def _enforce_deterministic_temporal_scope(
+    claim_text,
+    evidence_content,
+    assessment,
+):
+    """Downgrade decisive cross-year evidence when claim and evidence years do not overlap.
+
+    This guard is intentionally narrow. It only acts when both the claim and
+    evidence explicitly name calendar years and none overlap. If any year
+    overlaps, the model assessment is preserved because the passage may
+    explicitly compare time periods or establish a temporal relationship.
+    """
+    if assessment.stance not in _DECISIVE_STANCES:
+        return assessment
+
+    claim_years = _extract_calendar_years(claim_text)
+    evidence_years = _extract_calendar_years(evidence_content)
+    if (
+        not claim_years
+        or not evidence_years
+        or claim_years.intersection(evidence_years)
+    ):
+        return assessment
+
+    return EvidenceAssessment(
+        stance=VerificationEvidence.Stance.CONTEXT,
+        relevance_score=assessment.relevance_score,
+        directness_score=assessment.directness_score,
+    )
+
+
 def _assessment_from_result(result):
     required_fields = {"key", "stance", "relevance_score", "directness_score"}
     if not isinstance(result, dict) or set(result) != required_fields:
@@ -150,6 +216,8 @@ def _assessment_from_result(result):
 def assess_reasoning_evidence_batch_against_claim(
     claim_text: str,
     evidence_items,
+    *,
+    enforce_material_scope=False,
 ) -> list[EvidenceAssessment]:
     """Assess persisted evidence in one request with positional results."""
     evidence_items = list(evidence_items)
@@ -189,8 +257,16 @@ def assess_reasoning_evidence_batch_against_claim(
         gemini_timeout_ms = _gemini_timeout_ms_from_env()
         if gemini_timeout_ms is not None:
             provider_options["gemini_timeout_ms"] = gemini_timeout_ms
+        system_instructions = _SYSTEM_INSTRUCTIONS
+        if enforce_material_scope:
+            system_instructions = (
+                _SYSTEM_INSTRUCTIONS.rstrip()
+                + "\n\n"
+                + _MATERIAL_SCOPE_INSTRUCTIONS.strip()
+                + "\n"
+            )
         response_text = call_llm_with_fallback(
-            _SYSTEM_INSTRUCTIONS,
+            system_instructions,
             user_prompt,
             **provider_options,
         )
@@ -216,9 +292,16 @@ def assess_reasoning_evidence_batch_against_claim(
             key = f"item_{index}"
             matching_results = results_by_key.get(key, [])
             if len(matching_results) == 1:
-                assessments[index] = _assessment_from_result(
+                assessment = _assessment_from_result(
                     matching_results[0]
                 )
+                if enforce_material_scope:
+                    assessment = _enforce_deterministic_temporal_scope(
+                        claim_text,
+                        getattr(evidence_items[index], "content", None),
+                        assessment,
+                    )
+                assessments[index] = assessment
         return assessments
     except Exception as exc:
         logger.error("Evidence assessment batch AI error: %s", exc)
@@ -228,9 +311,12 @@ def assess_reasoning_evidence_batch_against_claim(
 def assess_reasoning_evidence_against_claim(
     claim_text: str,
     evidence_item: ReasoningEvidenceItem,
+    *,
+    enforce_material_scope=False,
 ) -> EvidenceAssessment:
     """Assess one persisted evidence item through the batch contract."""
     return assess_reasoning_evidence_batch_against_claim(
         claim_text,
         [evidence_item],
+        enforce_material_scope=enforce_material_scope,
     )[0]

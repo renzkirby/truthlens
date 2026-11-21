@@ -1336,6 +1336,153 @@ def clean_ocr_text(raw_text):
         ) from exc
 
 
+
+_DIRECT_TEXT_FIDELITY_MAX_CHARS = 500
+_DIRECT_TEXT_NUMBER_RE = re.compile(
+    r"(?<!\w)\d[\d,]*(?:\.\d+)?(?!\w)",
+    flags=re.UNICODE,
+)
+_DIRECT_TEXT_NEGATION_RE = re.compile(
+    r"\b(?:not|never|cannot|can't|didn't|doesn't|isn't|aren't|wasn't|"
+    r"weren't|won't|hindi|wala|walang)\b|(?:^|\s)['’]di\b",
+    flags=re.IGNORECASE | re.UNICODE,
+)
+_DIRECT_TEXT_PERCENT_RE = re.compile(
+    r"(?:%|\bpercent(?:age)?\b|\bporsyento\b)",
+    flags=re.IGNORECASE | re.UNICODE,
+)
+
+
+def _normalize_direct_text_numeric_anchor(value):
+    normalized = value.replace(",", "")
+    if "." in normalized:
+        whole, fraction = normalized.split(".", 1)
+        whole = whole.lstrip("0") or "0"
+        fraction = fraction.rstrip("0")
+        return whole + (("." + fraction) if fraction else "")
+    return normalized.lstrip("0") or "0"
+
+
+def _direct_text_numeric_anchors(value):
+    return [
+        _normalize_direct_text_numeric_anchor(token)
+        for token in _DIRECT_TEXT_NUMBER_RE.findall(value)
+    ]
+
+
+def _direct_text_has_material_negation(value):
+    """Detect factual negation without treating common discourse forms as negation."""
+    normalized = value.casefold()
+    normalized = re.sub(r"\bnot\s+(?:only|just)\b", "", normalized)
+    normalized = re.sub(
+        r"\b(?:hindi)\s+(?:lang|lamang)\b",
+        "",
+        normalized,
+    )
+    return bool(_DIRECT_TEXT_NEGATION_RE.search(normalized))
+
+
+def _direct_text_comparison_anchors(value):
+    text = value.casefold()
+    anchors = set()
+
+    if re.search(
+        r"(?:<=|≤|\bat\s+most\s+\d|\bno\s+more\s+than\s+\d|"
+        r"\bup\s+to\s+\d)",
+        text,
+    ):
+        anchors.add("AT_MOST")
+    if re.search(
+        r"(?:>=|≥|\bat\s+least\s+\d|\bno\s+less\s+than\s+\d)",
+        text,
+    ):
+        anchors.add("AT_LEAST")
+    if re.search(
+        r"(?:(?<![<>=])<(?![=])\s*\d|\bless\s+than\s+\d|"
+        r"\bunder\s+\d|\bbelow\s+\d)",
+        text,
+    ):
+        anchors.add("LESS_THAN")
+    if re.search(
+        r"(?:(?<![<>=])>(?![=])\s*\d|\bmore\s+than\s+\d|"
+        r"\bover\s+\d|\babove\s+\d)",
+        text,
+    ):
+        anchors.add("GREATER_THAN")
+    return anchors
+
+
+def inspect_direct_text_claim_fidelity(raw_text, cleaned_claim):
+    """Return PASS/FAIL/SKIP for a narrow direct-TEXT material-fidelity check.
+
+    The guard deliberately avoids semantic/entity equivalence. It is limited to
+    short, single-sentence text where deterministic numeric, comparison,
+    percentage, and polarity anchors can be compared without guessing. Long or
+    multi-sentence content is left to the existing ClaimGate contract.
+    """
+    if not isinstance(raw_text, str) or not raw_text.strip():
+        return "SKIP"
+
+    raw_text = raw_text.strip()
+    if (
+        len(raw_text) > _DIRECT_TEXT_FIDELITY_MAX_CHARS
+        or "\n" in raw_text
+        or "\r" in raw_text
+    ):
+        return "SKIP"
+
+    # Ignore decimal points when conservatively counting sentence punctuation.
+    sentence_probe = re.sub(r"(?<=\d)\.(?=\d)", "", raw_text)
+    if sum(sentence_probe.count(mark) for mark in ".!?") > 1:
+        return "SKIP"
+
+    if not isinstance(cleaned_claim, str) or not cleaned_claim.strip():
+        return "FAIL"
+    cleaned_claim = cleaned_claim.strip()
+    if cleaned_claim in {"OUT_OF_SCOPE", "INSUFFICIENT_CONTEXT"}:
+        return "SKIP"
+
+    raw_numbers = _direct_text_numeric_anchors(raw_text)
+    cleaned_numbers = _direct_text_numeric_anchors(cleaned_claim)
+    remaining_numbers = list(cleaned_numbers)
+    for anchor in raw_numbers:
+        if anchor not in remaining_numbers:
+            return "FAIL"
+        remaining_numbers.remove(anchor)
+
+    # A newly introduced four-digit year is especially high-risk because it can
+    # change which real-world event is being verified.
+    raw_years = {
+        token
+        for token in raw_numbers
+        if token.isdigit() and len(token) == 4 and 1900 <= int(token) <= 2100
+    }
+    cleaned_years = {
+        token
+        for token in cleaned_numbers
+        if token.isdigit() and len(token) == 4 and 1900 <= int(token) <= 2100
+    }
+    if not cleaned_years.issubset(raw_years):
+        return "FAIL"
+
+    if _direct_text_comparison_anchors(raw_text) != _direct_text_comparison_anchors(
+        cleaned_claim
+    ):
+        return "FAIL"
+
+    if _direct_text_has_material_negation(
+        raw_text
+    ) != _direct_text_has_material_negation(cleaned_claim):
+        return "FAIL"
+
+    if bool(_DIRECT_TEXT_PERCENT_RE.search(raw_text)) != bool(
+        _DIRECT_TEXT_PERCENT_RE.search(cleaned_claim)
+    ):
+        return "FAIL"
+
+    return "PASS"
+
+
 def _source_bounded_tokens(value):
     """Return normalized word-like tokens without interpreting their meaning."""
     if not isinstance(value, str):

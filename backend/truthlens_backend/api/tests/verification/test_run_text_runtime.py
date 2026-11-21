@@ -109,6 +109,10 @@ class VerificationRunTextRuntimeTests(TestCase):
             "api.tasks.calibrate_verdict_confidence",
             side_effect=lambda verdict, _groups: verdict,
         )
+        self.decisive_support = self._patch(
+            "api.tasks.enforce_decisive_evidence_support",
+            side_effect=lambda verdict, _groups: verdict,
+        )
         self.load_dossier = self._patch(
             "api.tasks.load_reasoning_evidence_dossier_for_run",
             return_value=["persisted dossier"],
@@ -1397,6 +1401,19 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
             [call.args[1] for call in self.log_stage.call_args_list],
         )
 
+    def test_decisive_fact_with_usable_refuting_evidence_abstains(self):
+        self.verdict["verdict"] = "FACT"
+
+        run = self._execute()
+
+        self.assertEqual(run.status, VerificationRun.Status.ABSTAINED)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
+        link = VerificationEvidence.objects.get()
+        self.assertEqual(link.stance, VerificationEvidence.Stance.REFUTES)
+        self.assertEqual(link.relevance_score, 0.9)
+        self.assertEqual(link.directness_score, 0.8)
+
     def test_gfc_assessment_preserves_existing_recency_score(self):
         record_running_run = self.bridge.side_effect
 
@@ -1588,7 +1605,10 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
             ("UNVERIFIED", VerificationRun.Status.ABSTAINED),
             ("OUT_OF_SCOPE", VerificationRun.Status.ABSTAINED),
         ):
-            with self.subTest(verdict=verdict):
+            with self.subTest(verdict=verdict), patch(
+                "api.tasks.enforce_decisive_evidence_support",
+                side_effect=lambda result, _groups: result,
+            ):
                 self.verdict["verdict"] = verdict
                 evaluator_calls_before = self.evaluate_persisted.call_count
                 with patch(

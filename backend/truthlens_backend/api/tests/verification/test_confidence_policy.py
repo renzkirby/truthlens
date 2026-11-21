@@ -5,6 +5,7 @@ from django.test import SimpleTestCase
 from api.models import VerificationEvidence
 from api.verification.confidence_policy import (
     calibrate_verdict_confidence,
+    enforce_decisive_evidence_support,
     enforce_noneditable_fallback_evidence_support,
     has_claim_scoped_misleading_support,
 )
@@ -72,6 +73,97 @@ def _verdict(
 
 
 class ConfidencePolicyTests(SimpleTestCase):
+
+    def test_decisive_fact_without_usable_support_fails_closed(self):
+        calibrated = calibrate_verdict_confidence(
+            _verdict(verdict="FACT", confidence=92),
+            [
+                _group(_item(stance=VerificationEvidence.Stance.CONTEXT)),
+                _group(_item(
+                    stance=VerificationEvidence.Stance.SUPPORTS,
+                    relevance=0.49,
+                    directness=0.99,
+                )),
+            ],
+        )
+
+        result = enforce_decisive_evidence_support(
+            calibrated,
+            [
+                _group(_item(stance=VerificationEvidence.Stance.CONTEXT)),
+                _group(_item(
+                    stance=VerificationEvidence.Stance.SUPPORTS,
+                    relevance=0.49,
+                    directness=0.99,
+                )),
+            ],
+        )
+
+        self.assertEqual(result["verdict"], "UNVERIFIED")
+        self.assertLessEqual(result["confidence_score"], 49)
+        self.assertIn("No usable assessed evidence", result["score_context"])
+
+    def test_decisive_fake_without_usable_refutation_fails_closed(self):
+        result = enforce_decisive_evidence_support(
+            _verdict(verdict="FAKE", confidence=88),
+            [_group(_item(stance=VerificationEvidence.Stance.SUPPORTS))],
+        )
+
+        self.assertEqual(result["verdict"], "UNVERIFIED")
+        self.assertEqual(result["confidence_score"], 49)
+
+    def test_decisive_verdict_with_one_usable_aligned_item_survives(self):
+        fact = enforce_decisive_evidence_support(
+            _verdict(verdict="FACT", confidence=88),
+            [_group(_item(stance=VerificationEvidence.Stance.SUPPORTS))],
+        )
+        fake = enforce_decisive_evidence_support(
+            _verdict(verdict="FAKE", confidence=88),
+            [_group(_item(stance=VerificationEvidence.Stance.REFUTES))],
+        )
+
+        self.assertEqual(fact["verdict"], "FACT")
+        self.assertEqual(fake["verdict"], "FAKE")
+
+    def test_decisive_gate_does_not_overrule_unavailable_assessment(self):
+        for item in (
+            _item(
+                stance=VerificationEvidence.Stance.UNKNOWN,
+                relevance=0.4,
+                directness=0.2,
+            ),
+            _item(
+                stance=VerificationEvidence.Stance.CONTEXT,
+                relevance=0.6,
+                directness=0.3,
+            ),
+        ):
+            with self.subTest(stance=item.stance):
+                original = _verdict(verdict="FAKE", confidence=60)
+                result = enforce_decisive_evidence_support(
+                    original,
+                    [_group(item)],
+                )
+                self.assertEqual(result, original)
+
+    def test_decisive_support_gate_does_not_replace_conflict_policy(self):
+        result = enforce_decisive_evidence_support(
+            _verdict(verdict="FACT", confidence=75),
+            [
+                _group(_item(stance=VerificationEvidence.Stance.SUPPORTS)),
+                _group(_item(stance=VerificationEvidence.Stance.REFUTES)),
+            ],
+        )
+
+        self.assertEqual(result["verdict"], "FACT")
+
+    def test_contextual_and_unverified_verdicts_are_unchanged_by_decisive_gate(self):
+        for verdict in ("MISLEADING", "SATIRE", "UNVERIFIED"):
+            with self.subTest(verdict=verdict):
+                original = _verdict(verdict=verdict, confidence=42)
+                result = enforce_decisive_evidence_support(original, [])
+                self.assertEqual(result, original)
+
     def test_multiple_records_in_one_source_identity_count_once(self):
         group = _group(
             _item(
