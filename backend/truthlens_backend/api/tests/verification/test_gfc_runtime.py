@@ -296,6 +296,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             ["persisted fact-check group"],
             provider_claims=gfc_payload["claims"],
             allow_claim_date_fallback=True,
+            submitted_claim_text="Raw submitted claim.",
         )
 
         relevance_check.assert_called_once_with(
