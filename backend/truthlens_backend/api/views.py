@@ -3112,9 +3112,9 @@ def verification_intake(request):
 
     queryset = get_available_verification_assignments()
 
-    # Taxonomy routing is authoritative only in the separately approved
-    # enforce rollout. Off/shadow preserve today's partner intake; shadow
-    # suggestions never silently remove claims from the shared pool.
+    # Routing enforcement is retained only for reviewed institutional-scope
+    # rules (currently Student Publications). Descriptive verification
+    # specializations never remove ordinary Partner Organizations from intake.
     if subject_eligibility_enforced():
         eligible = []
         for assignment in queryset:

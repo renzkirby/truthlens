@@ -285,14 +285,21 @@ class VerificationAssignmentApiTests(APITestCase):
     # =====================================
 
     @override_settings(INVESTIGATION_ROUTING_MODE="enforce")
-    def test_unclassified_intake_is_not_visible_to_partner(self):
+    def test_unclassified_intake_remains_visible_to_ordinary_partner(self):
         fixture = self._create_available_assignment(suffix="needs-classification")
         ClaimInvestigationClassification.objects.filter(claim=fixture["claim"]).delete()
+
         response = self.lead_a_client.get(
-            reverse("verification_intake"), {"organization_id": str(self.organization_a.id)},
+            reverse("verification_intake"),
+            {"organization_id": str(self.organization_a.id)},
         )
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["count"], 0)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(
+            response.data["results"][0]["id"],
+            str(fixture["assignment"].id),
+        )
 
     @override_settings(INVESTIGATION_ROUTING_MODE="off")
     def test_routing_off_keeps_unclassified_intake_visible(self):

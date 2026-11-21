@@ -29,6 +29,7 @@ class OrganizationPublicProfileAdminApiTests(APITestCase):
         "website",
         "logo_url",
         "expertise_areas",
+        "verification_specializations",
         "public_profile_enabled",
         "public_logo_enabled",
         "publicly_visible",
@@ -47,6 +48,7 @@ class OrganizationPublicProfileAdminApiTests(APITestCase):
             verification_status=Organization.VerificationStatus.VERIFIED,
             partner_status=Organization.PartnerStatus.ACTIVE,
             expertise_areas=["Original expertise"],
+            verification_specializations=["SCIENCE"],
         )
 
         self.other_organization = Organization.objects.create(
@@ -246,6 +248,7 @@ class OrganizationPublicProfileAdminApiTests(APITestCase):
                 "description": "Updated public description",
                 "website": "https://example.org/updated",
                 "expertise_areas": ["Elections", "Health"],
+                "verification_specializations": ["SCIENCE", "HEALTH"],
                 "public_profile_enabled": True,
                 "public_logo_enabled": True,
             },
@@ -265,6 +268,10 @@ class OrganizationPublicProfileAdminApiTests(APITestCase):
             "https://example.com/original-logo.png",
         )
         self.assertEqual(self.organization.expertise_areas, ["Elections", "Health"])
+        self.assertEqual(
+            self.organization.verification_specializations,
+            ["HEALTH", "SCIENCE"],
+        )
         self.assertTrue(self.organization.public_profile_enabled)
         self.assertTrue(self.organization.public_logo_enabled)
 
@@ -272,6 +279,7 @@ class OrganizationPublicProfileAdminApiTests(APITestCase):
         original_website = self.organization.website
         original_logo_url = self.organization.logo_url
         original_expertise = self.organization.expertise_areas
+        original_specializations = self.organization.verification_specializations
 
         response = self.client_for(self.owner).patch(
             self.url,
@@ -289,6 +297,10 @@ class OrganizationPublicProfileAdminApiTests(APITestCase):
         self.assertEqual(self.organization.website, original_website)
         self.assertEqual(self.organization.logo_url, original_logo_url)
         self.assertEqual(self.organization.expertise_areas, original_expertise)
+        self.assertEqual(
+            self.organization.verification_specializations,
+            original_specializations,
+        )
         self.assertFalse(self.organization.public_profile_enabled)
         self.assertFalse(self.organization.public_logo_enabled)
 
@@ -485,6 +497,58 @@ class OrganizationPublicProfileAdminApiTests(APITestCase):
                 "Health",
                 "Media Literacy",
             ],
+        )
+
+    def test_verification_specializations_are_validated_and_sorted(self):
+        response = self.client_for(self.owner).patch(
+            self.url,
+            {
+                "verification_specializations": ["SCIENCE", "HEALTH"],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["verification_specializations"],
+            ["HEALTH", "SCIENCE"],
+        )
+
+        invalid = self.client_for(self.owner).patch(
+            self.url,
+            {
+                "verification_specializations": ["UNKNOWN"],
+            },
+            format="json",
+        )
+        self.assertEqual(invalid.status_code, status.HTTP_400_BAD_REQUEST)
+
+        duplicate = self.client_for(self.owner).patch(
+            self.url,
+            {
+                "verification_specializations": ["SCIENCE", "SCIENCE"],
+            },
+            format="json",
+        )
+        self.assertEqual(duplicate.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_public_detail_reflects_specialization_metadata(self):
+        response = self.client_for(self.owner).patch(
+            self.url,
+            {
+                "verification_specializations": ["HEALTH", "SCIENCE"],
+                "public_profile_enabled": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        public_response = APIClient().get(self.public_detail_url)
+        self.assertEqual(public_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            public_response.data["verification_specializations"],
+            ["HEALTH", "SCIENCE"],
         )
 
     def test_blank_website_is_normalized_to_null(self):

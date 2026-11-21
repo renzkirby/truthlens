@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../hooks/useNotification";
 import { resolveApiEndpoint } from "../../utils/api";
+import { MANAGEMENT_VERIFICATION_DOMAINS } from "../../utils/management";
 import {
    userFacingErrorMessage,
    userFacingFieldError,
@@ -19,11 +20,18 @@ const EMPTY_DRAFT = {
    description: "",
    website: "",
    expertise_areas: "",
+   verification_specializations: [],
    public_profile_enabled: false,
    public_logo_enabled: false,
 };
 
-const EDITABLE_FIELDS = ["description", "website", "public_profile_enabled", "public_logo_enabled"];
+const EDITABLE_FIELDS = [
+   "description",
+   "website",
+   "verification_specializations",
+   "public_profile_enabled",
+   "public_logo_enabled",
+];
 
 const MAX_LOGO_BYTES = 2 * 1024 * 1024;
 const SUPPORTED_LOGO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -44,6 +52,9 @@ function profileToDraft(profile) {
       description: profile?.description ?? "",
       website: profile?.website ?? "",
       expertise_areas: Array.isArray(profile?.expertise_areas) ? profile.expertise_areas.join("\n") : "",
+      verification_specializations: Array.isArray(profile?.verification_specializations)
+         ? profile.verification_specializations
+         : [],
       public_profile_enabled: profile?.public_profile_enabled === true,
       public_logo_enabled: profile?.public_logo_enabled === true,
    };
@@ -116,6 +127,7 @@ function normalizeProfileValues(draft) {
          description: draft.description.trim(),
          website: draft.website.trim() || null,
          expertise_areas: expertise.value,
+         verification_specializations: [...draft.verification_specializations].sort(),
          public_profile_enabled: draft.public_profile_enabled,
          public_logo_enabled: draft.public_logo_enabled,
       },
@@ -128,6 +140,9 @@ function normalizeSavedValues(profile) {
       description: profile?.description ?? "",
       website: profile?.website || null,
       expertise_areas: Array.isArray(profile?.expertise_areas) ? profile.expertise_areas : [],
+      verification_specializations: Array.isArray(profile?.verification_specializations)
+         ? [...profile.verification_specializations].sort()
+         : [],
       public_profile_enabled: profile?.public_profile_enabled === true,
       public_logo_enabled: profile?.public_logo_enabled === true,
    };
@@ -170,7 +185,7 @@ function getVisibilityState(profile) {
          className: "disabled",
          icon: "eye-off",
          label: "Public profile disabled",
-         description: "TruthLens will not list this organization publicly while public profile consent is disabled.",
+         description: "TruthLens will not list this organization publicly while public profile visibility is disabled.",
       };
    }
 
@@ -893,19 +908,45 @@ function OrganizationPublicProfilePanel({ organizationId }) {
                         </div>
                      </div>
 
-                     <div className="org-public-profile-field org-public-profile-field-wide">
-                        <strong>Verification specializations</strong>
+                     <fieldset className="org-public-profile-field org-public-profile-field-wide org-public-specializations">
+                        <legend>Verification specializations</legend>
                         <p className="org-public-profile-help">
-                           Your organization's Organization Admin selects investigation subjects
-                           in the Verification scope tab. These organization-declared
-                           specializations are used when TruthLens enables subject-based intake
-                           matching. Descriptive profile interests do not grant investigation authority.
+                           Select subjects that describe the organization's verification interests and experience.
+                           These are public profile information only and do not authorize or restrict investigation work.
                         </p>
-                     </div>
+                        <div className="org-public-specializations-grid">
+                           {MANAGEMENT_VERIFICATION_DOMAINS.map(([code, label]) => (
+                              <label
+                                 key={code}
+                                 className={`org-public-specialization-option ${draft.verification_specializations.includes(code) ? "selected" : ""}`}
+                              >
+                                 <input
+                                    type="checkbox"
+                                    checked={draft.verification_specializations.includes(code)}
+                                    onChange={(event) =>
+                                       updateDraft(
+                                          "verification_specializations",
+                                          event.target.checked
+                                             ? [...draft.verification_specializations, code]
+                                             : draft.verification_specializations.filter((item) => item !== code),
+                                       )
+                                    }
+                                    disabled={saving || Boolean(logoBusy)}
+                                 />
+                                 <span>{label}</span>
+                              </label>
+                           ))}
+                        </div>
+                        {fieldErrors.verification_specializations && (
+                           <span className="org-public-profile-field-error" role="alert">
+                              {fieldErrors.verification_specializations}
+                           </span>
+                        )}
+                     </fieldset>
                   </div>
 
                   <fieldset className="org-public-profile-consent" disabled={saving || Boolean(logoBusy)}>
-                     <legend>Public presence consent</legend>
+                     <legend>Public presence visibility</legend>
 
                      <label className="org-public-profile-consent-option">
                         <input
@@ -917,8 +958,8 @@ function OrganizationPublicProfilePanel({ organizationId }) {
                         <span>
                            <strong>Enable public partner profile</strong>
                            <small id="org-public-profile-enabled-help">
-                              Consent to show the approved profile publicly when TruthLens eligibility requirements are
-                              also satisfied. This does not change verification, partnership, or publication authority.
+                              Show this organization publicly when TruthLens eligibility requirements are also satisfied.
+                              This does not change verification, partnership, or publication authority.
                            </small>
                            {fieldErrors.public_profile_enabled && (
                               <small

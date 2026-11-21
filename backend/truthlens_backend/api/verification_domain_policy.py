@@ -66,12 +66,12 @@ def jurisdiction_covers(approved, actual):
 
 
 def organization_specializations(organization):
-    """Single authoritative specialization set declared by the organization."""
+    """Return descriptive public specialization tags declared by the organization."""
     return sorted(set(organization.verification_specializations or []) & DOMAIN_CODES)
 
 
 def effective_organization_scope(organization):
-    """Compatibility projection for older read surfaces (no geographic authority)."""
+    """Legacy compatibility projection for historical specialization read surfaces."""
     return organization_specializations(organization), []
 
 
@@ -169,17 +169,16 @@ def student_publication_institution_eligibility_reason(
 
 
 def organization_claim_eligibility_reason(*, classification, organization):
-    """Return the authoritative intake refusal reason for one organization."""
-    if classification is None or not getattr(classification, "domains", None):
-        return NEEDS_CLASSIFICATION
+    """Return an authoritative intake refusal only for reviewed institutional scope.
 
+    Verification specializations are descriptive public-profile metadata and do
+    not authorize or restrict ordinary Partner Organization investigation intake.
+    Student Publications retain the separate verified-institution routing rule.
+    """
     if is_student_publication(organization):
         return student_publication_institution_eligibility_reason(
             classification=classification,
             organization=organization,
         )
 
-    return eligibility_reason(
-        classification=classification,
-        specializations=organization_specializations(organization),
-    )
+    return None

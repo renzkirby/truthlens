@@ -11,9 +11,11 @@ investigation subject domains and selects one explicit `primary_subject` from
 those domains for public-topic projection. It does **not** change factual
 verification and it does **not** define a Partner Organization's expertise.
 
-Partner Organization specializations are managed independently. Subject
-classification affects Partner Organization intake only after a separately
-approved `enforce` rollout.
+Partner Organization verification specializations are descriptive public-profile
+metadata managed under Public Presence. They do not authorize or restrict ordinary
+Partner Organization intake. Subject classification remains useful for topic
+projection and intake filtering, while reviewed Student Publication institution
+scope is the separately enforceable routing rule.
 
 ## Runtime files
 
@@ -64,8 +66,9 @@ Partner intake has a separate rollout switch:
   classifications exist.
 
 `INVESTIGATION_ROUTING_MODE=enforce`
-- use authoritative subject/institution classification for Partner Organization
-  intake and direct-claim authorization.
+- enforce reviewed institution-routing rules for organization types that have
+  an authoritative scope contract (currently Student Publications). Ordinary
+  Partner Organization verification specializations remain descriptive metadata.
 
 Classifier tuning must proceed through `shadow` first. Enabling authoritative
 classification and enabling partner-routing enforcement are separate review

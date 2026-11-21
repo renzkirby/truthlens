@@ -1,5 +1,7 @@
 # PARTNER-GOV-1 — owner-managed specializations and subject-only classification
 
+> **Current-state note (November 2026):** The subject-authorization portion of this rollout is superseded. `verification_specializations` are now descriptive public-profile metadata managed under **Public Presence** and do not authorize or restrict ordinary Partner Organization intake. The former standalone **Verification scope** workspace surface is hidden. Claim classification remains useful for categorization/browsing, while reviewed Student Publication institution affiliation remains a separate enforceable routing rule. Historical migration and audit records are preserved.
+
 Status: **development rollout and classifier shadow evaluation pending**.
 Branch: `feat/partner-governance-eligibility`.
 
