@@ -477,3 +477,75 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
         )
         self.assertEqual(result["satire_evidence_ids"], ())
         assess.assert_called_once_with(incoming, reviewed)
+
+    def test_text_satire_rating_accepts_leading_matching_claim_date(self):
+        incoming = (
+            "In September 2021, actress Toni Gonzaga signed a contract to work "
+            "for the Philippine state broadcaster PTV-4."
+        )
+        stripped = (
+            "actress Toni Gonzaga signed a contract to work for the Philippine "
+            "state broadcaster PTV-4."
+        )
+        reviewed = (
+            "Toni Gonzaga signed a contract with PTV-4 to be part of its "
+            "artist agency."
+        )
+
+        def equivalence(incoming_claim, reviewed_claim):
+            self.assertEqual(reviewed_claim, reviewed)
+            return {
+                "equivalent": incoming_claim == stripped,
+                "reasoning": "Equivalent only after the verified date is removed.",
+                "material_differences": (
+                    [] if incoming_claim == stripped else ["September 2021"]
+                ),
+            }
+
+        with patch(
+            "api.tasks.assess_claim_equivalence",
+            side_effect=equivalence,
+        ):
+            result = tasks._resolve_official_fact_check_rating_policy(
+                incoming,
+                _groups((reviewed, "Satire")),
+                provider_claims=[{
+                    "text": reviewed,
+                    "claimDate": "2021-09-15T00:00:00Z",
+                }],
+                allow_claim_date_fallback=True,
+            )
+
+        self.assertEqual(
+            result["resolution"],
+            OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
+        )
+
+    def test_claim_date_fallback_fails_closed_without_structured_claim_date(self):
+        incoming = (
+            "Actress Toni Gonzaga signed a contract with PTV-4 in September 2021."
+        )
+        reviewed = "Toni Gonzaga signed a contract with PTV-4."
+
+        with patch(
+            "api.tasks.assess_claim_equivalence",
+            return_value={
+                "equivalent": False,
+                "reasoning": "The submitted claim adds a material date.",
+                "material_differences": ["September 2021"],
+            },
+        ) as assess:
+            result = tasks._resolve_official_fact_check_rating_policy(
+                incoming,
+                _groups((reviewed, "Satire")),
+                provider_claims=[{
+                    "text": reviewed,
+                }],
+                allow_claim_date_fallback=True,
+            )
+
+        self.assertEqual(
+            result["resolution"],
+            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+        )
+        assess.assert_called_once_with(incoming, reviewed)
