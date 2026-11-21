@@ -170,7 +170,7 @@ function getVisibilityState(profile) {
          className: "disabled",
          icon: "eye-off",
          label: "Public profile disabled",
-         description: "TruthLens will not list this organization publicly while public profile consent is disabled.",
+         description: "TruthLens will not list this organization publicly while public profile visibility is disabled.",
       };
    }
 
