@@ -133,6 +133,7 @@ from .platform_staff_service import (
     list_platform_staff,
     revoke_platform_safety_moderator,
 )
+from .organization_invitation_service import expire_stale_invitations
 from .organization_provisioning_service import (
     OrganizationProvisioningAuthorizationError,
     OrganizationProvisioningConflict,
@@ -1440,6 +1441,7 @@ class ManagementInvitationListView(generics.ListAPIView):
     pagination_class = ManagementPagination
 
     def get_queryset(self):
+        expire_stale_invitations()
         queryset = OrganizationInvitation.objects.select_related(
             "organization",
             "invited_by",
@@ -1487,3 +1489,7 @@ class ManagementInvitationDetailView(generics.RetrieveAPIView):
         "cancelled_by",
     )
     lookup_url_kwarg = "invitation_id"
+
+    def get_queryset(self):
+        expire_stale_invitations()
+        return super().get_queryset()
