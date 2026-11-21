@@ -36,6 +36,7 @@ SAFE_STAGE_METADATA_KEYS = frozenset(
         "covered_candidate_count",
         "terminally_sufficient",
         "reason_code",
+        "resolution",
     }
 )
 SAFE_LLM_OPERATION_LABELS = frozenset(
@@ -76,6 +77,11 @@ SAFE_GFC_COVERAGE_REASON_CODES = frozenset({
     "ASSESSMENT_UNCERTAIN",
     "ASSESSMENT_FAILED",
 })
+SAFE_OFFICIAL_FACT_CHECK_RESOLUTIONS = frozenset({
+    "NONE",
+    "SATIRE",
+    "FAKE_CONFLICT",
+})
 
 
 @dataclass
@@ -95,6 +101,10 @@ def sanitize_stage_metadata(metadata):
         value = metadata.get(key)
         if key == "reason_code":
             if value in SAFE_GFC_COVERAGE_REASON_CODES:
+                safe[key] = value
+            continue
+        if key == "resolution":
+            if value in SAFE_OFFICIAL_FACT_CHECK_RESOLUTIONS:
                 safe[key] = value
             continue
         if isinstance(value, bool) or isinstance(value, int):
