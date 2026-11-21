@@ -203,11 +203,12 @@ class PipelineTelemetryCollectorTests(TestCase):
         @verification_telemetry_scope()
         def execute(claim_id):
             bind_verification_run(self.run)
-            record_pipeline_stage(
-                "gfc_official_rating_resolution",
-                1,
-                resolution="SATIRE",
-            )
+            for resolution in ("NONE", "SATIRE", "FAKE_CONFLICT"):
+                record_pipeline_stage(
+                    "gfc_official_rating_resolution",
+                    1,
+                    resolution=resolution,
+                )
             record_pipeline_stage(
                 "gfc_official_rating_resolution",
                 1,
@@ -215,12 +216,17 @@ class PipelineTelemetryCollectorTests(TestCase):
             )
 
         execute(self.claim.id)
-        valid_event, invalid_event = list(
-            self.run.telemetry_events.order_by("sequence")
+        events = list(self.run.telemetry_events.order_by("sequence"))
+        self.assertEqual(
+            [event.metadata for event in events[:3]],
+            [
+                {"resolution": "NONE"},
+                {"resolution": "SATIRE"},
+                {"resolution": "FAKE_CONFLICT"},
+            ],
         )
-        self.assertEqual(valid_event.metadata, {"resolution": "SATIRE"})
-        self.assertEqual(invalid_event.metadata, {})
-        self.assertNotIn("PRIVATE", repr(invalid_event.metadata))
+        self.assertEqual(events[3].metadata, {})
+        self.assertNotIn("PRIVATE", repr(events[3].metadata))
 
     def test_gemini_model_metadata_is_allowlisted_without_private_fields(self):
         @verification_telemetry_scope()
