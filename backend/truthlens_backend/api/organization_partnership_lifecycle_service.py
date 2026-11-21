@@ -849,7 +849,14 @@ def activate_partner_organization_partnership(*, organization_id, actor):
     notice_recipients = snapshot_governance_notice_recipients(organization)
     previous_state = _organization_status_state(organization)
     organization.partner_status = Organization.PartnerStatus.ACTIVE
-    organization.save(update_fields=["partner_status", "updated_at"])
+    organization.public_profile_enabled = True
+    organization.save(
+        update_fields=[
+            "partner_status",
+            "public_profile_enabled",
+            "updated_at",
+        ]
+    )
     _record_organization_transition(
         organization=organization,
         actor=actor,
