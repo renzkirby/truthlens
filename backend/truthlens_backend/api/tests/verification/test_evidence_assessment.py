@@ -440,6 +440,97 @@ class EvidenceAssessmentTests(SimpleTestCase):
             system_instructions,
         )
 
+    def test_material_scope_hardening_downgrades_cross_year_refutation(self):
+        self.evidence_item = self._item(
+            content=(
+                "WHO reported 263 million malaria cases worldwide in 2023."
+            )
+        )
+        assessment, _ = self._assess(
+            self._result(
+                stance=VerificationEvidence.Stance.REFUTES,
+                relevance_score=0.8,
+                directness_score=1.0,
+            ),
+            enforce_material_scope=True,
+        )
+
+        self.assertEqual(
+            assessment,
+            EvidenceAssessment(
+                stance=VerificationEvidence.Stance.CONTEXT,
+                relevance_score=0.8,
+                directness_score=1.0,
+            ),
+        )
+
+    def test_material_scope_hardening_downgrades_cross_year_support(self):
+        self.evidence_item = self._item(
+            content=(
+                "WHO reported 241 million malaria cases worldwide in 2020."
+            )
+        )
+        assessment, _ = self._assess(
+            self._result(
+                stance=VerificationEvidence.Stance.SUPPORTS,
+                relevance_score=0.7,
+                directness_score=0.9,
+            ),
+            enforce_material_scope=True,
+        )
+
+        self.assertEqual(
+            assessment.stance,
+            VerificationEvidence.Stance.CONTEXT,
+        )
+
+    def test_material_scope_hardening_keeps_same_year_decisive_stance(self):
+        self.evidence_item = self._item(
+            content=(
+                "WHO reported 263 million malaria cases worldwide in 2024, "
+                "not 282 million."
+            )
+        )
+        assessment, _ = self._assess(
+            self._result(stance=VerificationEvidence.Stance.REFUTES),
+            enforce_material_scope=True,
+        )
+
+        self.assertEqual(
+            assessment.stance,
+            VerificationEvidence.Stance.REFUTES,
+        )
+
+    def test_material_scope_hardening_keeps_explicit_cross_year_comparison(self):
+        self.evidence_item = self._item(
+            content=(
+                "Cases rose from 263 million in 2023 to 282 million in 2024."
+            )
+        )
+        assessment, _ = self._assess(
+            self._result(stance=VerificationEvidence.Stance.SUPPORTS),
+            enforce_material_scope=True,
+        )
+
+        self.assertEqual(
+            assessment.stance,
+            VerificationEvidence.Stance.SUPPORTS,
+        )
+
+    def test_material_scope_hardening_does_not_guess_without_evidence_year(self):
+        self.evidence_item = self._item(
+            content="WHO reported approximately 282 million malaria cases."
+        )
+        assessment, _ = self._assess(
+            self._result(stance=VerificationEvidence.Stance.SUPPORTS),
+            enforce_material_scope=True,
+        )
+
+        self.assertEqual(
+            assessment.stance,
+            VerificationEvidence.Stance.SUPPORTS,
+        )
+
     def test_system_instructions_separate_stance_from_directness(self):
         _, call_llm = self._assess()
         system_instructions = call_llm.call_args.args[0]
