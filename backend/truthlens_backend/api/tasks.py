@@ -214,9 +214,18 @@ _GFC_CLAIM_DATE_MONTH_PATTERN = re.compile(
 )
 
 
-def _strip_gfc_aligned_month_year_qualifier(claim_text, claim_date):
-    """Remove one explicit month/year only when Google's claimDate agrees."""
-    if not isinstance(claim_text, str) or not isinstance(claim_date, str):
+def _strip_gfc_aligned_month_year_qualifier(
+    claim_text,
+    claim_date,
+    *,
+    submitted_claim_text,
+):
+    """Remove one month/year only when raw TEXT and Google's claimDate agree."""
+    if (
+        not isinstance(claim_text, str)
+        or not isinstance(claim_date, str)
+        or not isinstance(submitted_claim_text, str)
+    ):
         return None
 
     date_match = _GFC_CLAIM_DATE_MONTH_PATTERN.match(claim_date.strip())
@@ -224,15 +233,25 @@ def _strip_gfc_aligned_month_year_qualifier(claim_text, claim_date):
         return None
 
     temporal_matches = list(_OFFICIAL_RATING_MONTH_YEAR_PATTERN.finditer(claim_text))
-    if len(temporal_matches) != 1:
+    submitted_temporal_matches = list(
+        _OFFICIAL_RATING_MONTH_YEAR_PATTERN.finditer(submitted_claim_text)
+    )
+    if len(temporal_matches) != 1 or len(submitted_temporal_matches) != 1:
         return None
 
     temporal_match = temporal_matches[0]
+    submitted_temporal_match = submitted_temporal_matches[0]
     month_name, year_text = temporal_match.groups()
+    submitted_month_name, submitted_year_text = submitted_temporal_match.groups()
+    month_number = _OFFICIAL_RATING_MONTH_NUMBERS[month_name.casefold()]
+    submitted_month_number = _OFFICIAL_RATING_MONTH_NUMBERS[
+        submitted_month_name.casefold()
+    ]
     if (
         int(year_text) != int(date_match.group("year"))
-        or _OFFICIAL_RATING_MONTH_NUMBERS[month_name.casefold()]
-        != int(date_match.group("month"))
+        or month_number != int(date_match.group("month"))
+        or int(submitted_year_text) != int(year_text)
+        or submitted_month_number != month_number
     ):
         return None
 
@@ -276,6 +295,7 @@ def _resolve_official_fact_check_rating_policy(
     *,
     provider_claims=(),
     allow_claim_date_fallback=False,
+    submitted_claim_text=None,
 ):
     """Resolve high-precision SATIRE/FALSE ClaimReview ratings from persisted GFC evidence.
 
@@ -340,6 +360,7 @@ def _resolve_official_fact_check_rating_policy(
         stripped_claim = _strip_gfc_aligned_month_year_qualifier(
             claim_text,
             claim_date,
+            submitted_claim_text=submitted_claim_text,
         )
         if not stripped_claim:
             return False
@@ -1838,6 +1859,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                                 precheck_fact_check_groups,
                                 provider_claims=gfc_claims,
                                 allow_claim_date_fallback=is_text_claim,
+                                submitted_claim_text=raw_text if is_text_claim else None,
                             )
                         )
                         _log_stage(
