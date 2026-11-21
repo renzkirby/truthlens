@@ -1060,11 +1060,17 @@ function SafetyReviewPanel() {
                                        ? reasonSummary
                                             .map((reason) => `${reason.reason_label}: ${reason.count}`)
                                             .join(" · ")
-                                       : "No unresolved report reasons"}
+                                       : caseItem.source === "MODERATOR"
+                                          ? "Flagged directly by Platform Staff"
+                                          : "No unresolved report reasons"}
                                  </span>
 
                                  <span className="safety-case-row-meta">
-                                    <span>{caseItem.report_count} {caseItem.report_count === 1 ? "report" : "reports"}</span>
+                                    <span>
+                                       {caseItem.source === "MODERATOR"
+                                          ? "Staff Safety flag"
+                                          : `${caseItem.report_count} ${caseItem.report_count === 1 ? "report" : "reports"}`}
+                                    </span>
                                     <span>{getAssignmentLabel(caseItem, currentUserId)}</span>
                                     <span>Created {formatDateTime(caseItem.created_at)}</span>
                                     <span>Updated {formatDateTime(caseItem.updated_at)}</span>
@@ -1218,8 +1224,12 @@ function SafetyReviewPanel() {
                      <section className="safety-detail-section">
                         <div className="safety-subheading-row safety-major-section-heading">
                            <div>
-                              <h4>Reports</h4>
-                              <p>{detail.report_count} case-specific {detail.report_count === 1 ? "report" : "reports"}</p>
+                              <h4>{detail.source === "MODERATOR" ? "Safety intake" : "Reports"}</h4>
+                              <p>
+                                 {detail.source === "MODERATOR"
+                                    ? "This case was flagged directly by Platform Staff. The recorded reason and context appear in Case history."
+                                    : `${detail.report_count} case-specific ${detail.report_count === 1 ? "report" : "reports"}`}
+                              </p>
                            </div>
                         </div>
 
@@ -1241,7 +1251,11 @@ function SafetyReviewPanel() {
                               ))}
                            </ul>
                         ) : (
-                           <p className="safety-inline-empty">No report details are associated with this case.</p>
+                           <p className="safety-inline-empty">
+                              {detail.source === "MODERATOR"
+                                 ? "No Community report is associated with this staff-created Safety case."
+                                 : "No report details are associated with this case."}
+                           </p>
                         )}
                      </section>
 

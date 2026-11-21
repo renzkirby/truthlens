@@ -7,7 +7,10 @@ from rest_framework.test import APIClient
 
 from api.models import (
     Claim,
+    CommunityReport,
     EvidenceSubmission,
+    ModerationCase,
+    ModerationEvent,
     Thread,
     ThreadComment,
     UserProfile,
@@ -167,6 +170,100 @@ class PlatformStaffCommunityIdentityTests(TestCase):
                         response.status_code,
                         status.HTTP_403_FORBIDDEN,
                     )
+
+    def test_platform_staff_can_flag_thread_for_safety_review_without_community_report(self):
+        claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="Community discussion requiring staff Safety review",
+        )
+        thread = Thread.objects.create(
+            claim=claim,
+            author=self.community_user,
+            caption="Potentially abusive Community discussion",
+            status=Thread.Status.OPEN,
+        )
+        endpoint = f"/api/threads/{thread.id}/flag-for-safety-review/"
+
+        response = self._client_for(self.safety_moderator).post(
+            endpoint,
+            {
+                "reason": CommunityReport.Reason.HARASSMENT,
+                "notes": "Platform Safety observed targeted abusive language.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(response.data["created"])
+        case = ModerationCase.objects.get(pk=response.data["safety_case_id"])
+        self.assertEqual(case.case_type, ModerationCase.CaseType.SAFETY)
+        self.assertEqual(case.source, ModerationCase.Source.MODERATOR)
+        self.assertEqual(
+            case.safety_target_type,
+            ModerationCase.SafetyTargetType.THREAD,
+        )
+        self.assertEqual(case.thread, thread)
+        self.assertFalse(CommunityReport.objects.filter(thread=thread).exists())
+
+        event = ModerationEvent.objects.get(
+            case=case,
+            event_type=ModerationEvent.EventType.CASE_CREATED,
+        )
+        self.assertEqual(event.actor, self.safety_moderator)
+        self.assertEqual(event.reason_code, CommunityReport.Reason.HARASSMENT)
+        self.assertEqual(
+            event.notes,
+            "Platform Safety observed targeted abusive language.",
+        )
+        self.assertTrue(event.metadata["staff_flag"])
+
+        duplicate = self._client_for(self.platform_admin).post(
+            endpoint,
+            {
+                "reason": CommunityReport.Reason.SPAM,
+                "notes": "A second staff member noticed the same discussion.",
+            },
+            format="json",
+        )
+        self.assertEqual(duplicate.status_code, status.HTTP_200_OK)
+        self.assertFalse(duplicate.data["created"])
+        self.assertEqual(duplicate.data["safety_case_id"], str(case.id))
+        self.assertEqual(
+            ModerationCase.objects.filter(
+                thread=thread,
+                case_type=ModerationCase.CaseType.SAFETY,
+            ).count(),
+            1,
+        )
+
+    def test_ordinary_community_user_cannot_use_staff_safety_flag_endpoint(self):
+        claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="Ordinary user cannot create moderator Safety cases",
+        )
+        thread = Thread.objects.create(
+            claim=claim,
+            author=self.platform_admin,
+            caption="Historical staff-authored discussion",
+            status=Thread.Status.OPEN,
+        )
+
+        response = self._client_for(self.community_user).post(
+            f"/api/threads/{thread.id}/flag-for-safety-review/",
+            {
+                "reason": CommunityReport.Reason.SPAM,
+                "notes": "This must remain a staff-only action.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(
+            ModerationCase.objects.filter(
+                thread=thread,
+                case_type=ModerationCase.CaseType.SAFETY,
+            ).exists()
+        )
 
     def test_platform_staff_can_still_read_community_threads(self):
         for staff_user in (self.platform_admin, self.safety_moderator):

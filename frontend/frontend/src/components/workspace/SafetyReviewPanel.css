@@ -997,9 +997,9 @@
 .safety-access-panel,
 .safety-account-action-card {
    margin: 14px 0;
-   border: 1px solid var(--workspace-border, #dbe3ec);
+   border: 1px solid var(--border-light);
    border-radius: 14px;
-   background: var(--workspace-surface, #ffffff);
+   background: var(--bg-surface);
 }
 
 .safety-access-panel-header,
@@ -1021,19 +1021,19 @@
 
 .safety-access-panel-header strong,
 .safety-account-action-card h4 {
-   color: var(--text-primary, #162033);
+   color: var(--text-main);
 }
 
 .safety-access-panel-header p,
 .safety-account-action-card .safety-subheading-row p {
    margin: 0;
-   color: var(--text-muted, #667085);
+   color: var(--text-muted);
    font-size: 0.82rem;
 }
 
 .safety-access-panel-body {
    padding: 0 18px 18px;
-   border-top: 1px solid var(--workspace-border, #dbe3ec);
+   border-top: 1px solid var(--border-light);
 }
 
 .safety-access-controls {
@@ -1052,7 +1052,7 @@
 .safety-access-controls label > span,
 .safety-account-action-form label > span,
 .safety-access-inline-form label > span {
-   color: var(--text-secondary, #344054);
+   color: var(--text-body);
    font-size: 0.76rem;
    font-weight: 700;
 }
@@ -1064,7 +1064,7 @@
 
 .safety-access-item {
    overflow: hidden;
-   border: 1px solid var(--workspace-border, #dbe3ec);
+   border: 1px solid var(--border-light);
    border-radius: 11px;
 }
 
@@ -1089,29 +1089,29 @@
 }
 
 .safety-access-item-summary small {
-   color: var(--text-muted, #667085);
+   color: var(--text-muted);
 }
 
 .safety-access-item-detail {
    display: grid;
    gap: 13px;
    padding: 14px;
-   border-top: 1px solid var(--workspace-border, #dbe3ec);
-   background: var(--workspace-subtle, #f8fafc);
+   border-top: 1px solid var(--border-light);
+   background: var(--bg-subtle);
 }
 
 .safety-account-action-status {
    padding: 4px 9px;
    border-radius: 999px;
-   background: var(--workspace-subtle, #f1f5f9);
-   color: var(--text-secondary, #475467);
+   background: var(--bg-subtle);
+   color: var(--text-body);
    font-size: 0.68rem;
    font-weight: 800;
    text-transform: uppercase;
 }
 
 .safety-account-action-card.is-disabled {
-   background: var(--workspace-subtle, #f8fafc);
+   background: var(--bg-subtle);
 }
 
 .safety-account-action-disabled {
@@ -1141,7 +1141,7 @@
 
 .safety-account-action-form label small,
 .safety-access-inline-form label small {
-   color: var(--text-muted, #667085);
+   color: var(--text-muted);
    font-size: 0.74rem;
    line-height: 1.45;
 }
@@ -1164,9 +1164,9 @@
 .safety-account-internal-note,
 .safety-access-review-block {
    padding: 12px 14px;
-   border: 1px solid var(--workspace-border, #dbe3ec);
+   border: 1px solid var(--border-light);
    border-radius: 9px;
-   background: #ffffff;
+   background: var(--bg-surface);
 }
 
 .safety-account-action-reason p,
@@ -1174,7 +1174,7 @@
 .safety-access-review-block p,
 .safety-access-review-block blockquote {
    margin: 5px 0 0;
-   color: var(--text-secondary, #475467);
+   color: var(--text-body);
    font-size: 0.8rem;
    line-height: 1.55;
 }
@@ -1185,23 +1185,23 @@
 
 .safety-access-review-block h5 {
    margin: 0 0 7px;
-   color: var(--text-primary, #162033);
+   color: var(--text-main);
    font-size: 0.84rem;
 }
 
 .safety-access-review-block blockquote {
    padding-left: 10px;
-   border-left: 2px solid var(--brand-primary, #4f46e5);
+   border-left: 2px solid var(--brand-primary);
 }
 
 .safety-access-lift {
-   border-top: 1px solid var(--workspace-border, #dbe3ec);
+   border-top: 1px solid var(--border-light);
    padding-top: 10px;
 }
 
 .safety-access-lift summary {
    width: fit-content;
-   color: var(--text-secondary, #475467);
+   color: var(--text-body);
    font-size: 0.78rem;
    font-weight: 700;
    cursor: pointer;

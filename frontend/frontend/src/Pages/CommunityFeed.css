@@ -454,6 +454,18 @@
   right: 0;
 }
 
+.feed-thread-menu--staff {
+  min-width: 240px;
+}
+
+.feed-popup-item--staff-flag {
+  white-space: nowrap;
+}
+
+.feed-popup-item--staff-flag svg {
+  flex: 0 0 auto;
+}
+
 .feed-card-body {
   display: flex;
   min-width: 0;
