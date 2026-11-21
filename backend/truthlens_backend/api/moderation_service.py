@@ -108,6 +108,9 @@ def create_moderation_case(
     evidence_submission=None,
     organization=None,
     safety_target_type=None,
+    creation_reason_code="",
+    creation_notes="",
+    creation_metadata=None,
 ):
     if (
         case_type == ModerationCase.CaseType.SAFETY
@@ -146,15 +149,20 @@ def create_moderation_case(
         with transaction.atomic():
             case.save()
 
+            event_metadata = {
+                "source": source,
+                "priority": priority,
+            }
+            event_metadata.update(creation_metadata or {})
+
             ModerationEvent.objects.create(
                 case=case,
                 actor=actor,
                 event_type=ModerationEvent.EventType.CASE_CREATED,
                 to_status=ModerationCase.Status.OPEN,
-                metadata={
-                    "source": source,
-                    "priority": priority,
-                },
+                reason_code=creation_reason_code or None,
+                notes=creation_notes or None,
+                metadata=event_metadata,
             )
 
     except IntegrityError as error:
