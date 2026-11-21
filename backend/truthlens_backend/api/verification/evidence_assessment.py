@@ -2,6 +2,7 @@ import json
 import logging
 import math
 import os
+import re
 from dataclasses import dataclass
 from numbers import Real
 
@@ -11,6 +12,12 @@ from .evidence_dossier import ReasoningEvidenceItem
 
 
 logger = logging.getLogger(__name__)
+
+_YEAR_PATTERN = re.compile(r"(?<!\\d)(?:19\\d{2}|20\\d{2}|2100)(?!\\d)")
+_DECISIVE_STANCES = frozenset({
+    VerificationEvidence.Stance.SUPPORTS,
+    VerificationEvidence.Stance.REFUTES,
+})
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +158,43 @@ def _valid_score(value):
     )
 
 
+def _extract_calendar_years(value):
+    if not isinstance(value, str):
+        return frozenset()
+    return frozenset(_YEAR_PATTERN.findall(value))
+
+
+def _enforce_deterministic_temporal_scope(
+    claim_text,
+    evidence_content,
+    assessment,
+):
+    """Downgrade decisive cross-year evidence when no claim year is present.
+
+    This guard is intentionally narrow. It only acts when both the claim and
+    evidence explicitly name calendar years and none overlap. If any year
+    overlaps, the model assessment is preserved because the passage may
+    explicitly compare time periods or establish a temporal relationship.
+    """
+    if assessment.stance not in _DECISIVE_STANCES:
+        return assessment
+
+    claim_years = _extract_calendar_years(claim_text)
+    evidence_years = _extract_calendar_years(evidence_content)
+    if (
+        not claim_years
+        or not evidence_years
+        or claim_years.intersection(evidence_years)
+    ):
+        return assessment
+
+    return EvidenceAssessment(
+        stance=VerificationEvidence.Stance.CONTEXT,
+        relevance_score=assessment.relevance_score,
+        directness_score=assessment.directness_score,
+    )
+
+
 def _assessment_from_result(result):
     required_fields = {"key", "stance", "relevance_score", "directness_score"}
     if not isinstance(result, dict) or set(result) != required_fields:
@@ -248,9 +292,16 @@ def assess_reasoning_evidence_batch_against_claim(
             key = f"item_{index}"
             matching_results = results_by_key.get(key, [])
             if len(matching_results) == 1:
-                assessments[index] = _assessment_from_result(
+                assessment = _assessment_from_result(
                     matching_results[0]
                 )
+                if enforce_material_scope:
+                    assessment = _enforce_deterministic_temporal_scope(
+                        claim_text,
+                        getattr(evidence_items[index], "content", None),
+                        assessment,
+                    )
+                assessments[index] = assessment
         return assessments
     except Exception as exc:
         logger.error("Evidence assessment batch AI error: %s", exc)
