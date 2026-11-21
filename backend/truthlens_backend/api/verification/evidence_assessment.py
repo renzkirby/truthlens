@@ -169,7 +169,7 @@ def _enforce_deterministic_temporal_scope(
     evidence_content,
     assessment,
 ):
-    """Downgrade decisive cross-year evidence when no claim year is present.
+    """Downgrade decisive cross-year evidence when claim and evidence years do not overlap.
 
     This guard is intentionally narrow. It only acts when both the claim and
     evidence explicitly name calendar years and none overlap. If any year
