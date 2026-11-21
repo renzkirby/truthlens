@@ -399,15 +399,19 @@ class ManagementOverviewView(APIView):
             current_partners=Count(
                 "id",
                 filter=Q(
+                    verification_status=Organization.VerificationStatus.VERIFIED,
                     partner_status__in=[
                         Organization.PartnerStatus.ACTIVE,
                         Organization.PartnerStatus.SUSPENDED,
-                    ]
+                    ],
                 ),
             ),
             active_partners=Count(
                 "id",
-                filter=Q(partner_status=Organization.PartnerStatus.ACTIVE),
+                filter=Q(
+                    verification_status=Organization.VerificationStatus.VERIFIED,
+                    partner_status=Organization.PartnerStatus.ACTIVE,
+                ),
             ),
             pending_verification=Count(
                 "id",
@@ -417,7 +421,10 @@ class ManagementOverviewView(APIView):
             ),
             suspended_partners=Count(
                 "id",
-                filter=Q(partner_status=Organization.PartnerStatus.SUSPENDED),
+                filter=Q(
+                    verification_status=Organization.VerificationStatus.VERIFIED,
+                    partner_status=Organization.PartnerStatus.SUSPENDED,
+                ),
             ),
         )
         return Response({"organizations": counts}, status=status.HTTP_200_OK)
