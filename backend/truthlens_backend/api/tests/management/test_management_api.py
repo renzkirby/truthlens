@@ -358,6 +358,13 @@ class ManagementApiTests(APITestCase):
             verification_status=Organization.VerificationStatus.VERIFIED,
             partner_status=Organization.PartnerStatus.FORMER,
         )
+        Organization.objects.create(
+            name="Verified Suspended Partner",
+            slug="verified-suspended-partner",
+            organization_type=Organization.OrganizationType.NGO,
+            verification_status=Organization.VerificationStatus.VERIFIED,
+            partner_status=Organization.PartnerStatus.SUSPENDED,
+        )
 
         response = self.client_for(self.superuser).get(
             reverse("management_overview")
@@ -367,7 +374,7 @@ class ManagementApiTests(APITestCase):
             response.data,
             {
                 "organizations": {
-                    "total": 4,
+                    "total": 5,
                     "current_partners": 2,
                     "active_partners": 1,
                     "pending_verification": 1,
