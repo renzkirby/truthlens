@@ -97,7 +97,7 @@ key exactly and return one assessment per supplied evidence passage:
             "directness_score": 0.90
         }
     ]
-} 
+}
 """
 _MATERIAL_SCOPE_INSTRUCTIONS = """
 MATERIAL SCOPE MATCHING:
