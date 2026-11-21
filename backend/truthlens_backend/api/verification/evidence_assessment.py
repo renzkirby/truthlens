@@ -63,27 +63,6 @@ Classify stance as exactly one of:
 - UNKNOWN: the relationship cannot responsibly be established from the
   evidence.
 
-MATERIAL SCOPE MATCHING:
-- SUPPORTS or REFUTES only when the evidence addresses the same material
-  proposition, or when the passage itself explicitly establishes how a differing
-  scope relates to that proposition.
-- Treat actor/entity, event/action, time period or date, location when material,
-  metric or measurement baseline, denominator, unit, and numeric comparison
-  boundary as part of the proposition's material scope.
-- A different actor, event, year/date, baseline, denominator, unit, or numeric
-  threshold is not a contradiction merely because another value differs.
-- If the passage is relevant background but does not establish the same material
-  scope, classify it as CONTEXT rather than forcing SUPPORTS or REFUTES.
-- If the scope relationship cannot responsibly be established from the passage
-  alone, classify it as UNKNOWN.
-- Do not perform unstated unit conversions, baseline conversions, denominator
-  assumptions, temporal carry-forward, or entity substitution. Only use a
-  relationship when the evidence passage itself establishes it.
-- Preserve numeric comparator semantics. Strict boundaries such as "less than"
-  or "greater than" are not interchangeable with inclusive boundaries such as
-  "up to", "at most", or "at least" unless the passage explicitly establishes
-  the relationship needed for the claim.
-
 Stance and directness are separate dimensions. Evidence may SUPPORT or REFUTE
 a claim even when its directness is less than 1.0. Do not downgrade supporting
 or refuting evidence to CONTEXT merely because it is indirect.
@@ -118,7 +97,29 @@ key exactly and return one assessment per supplied evidence passage:
             "directness_score": 0.90
         }
     ]
-}
+} 
+"""
+_MATERIAL_SCOPE_INSTRUCTIONS = """
+MATERIAL SCOPE MATCHING:
+- SUPPORTS or REFUTES only when the evidence addresses the same material
+  proposition, or when the passage itself explicitly establishes how a differing
+  scope relates to that proposition.
+- Treat actor/entity, event/action, time period or date, location when material,
+  metric or measurement baseline, denominator, unit, and numeric comparison
+  boundary as part of the proposition's material scope.
+- A different actor, event, year/date, baseline, denominator, unit, or numeric
+  threshold is not a contradiction merely because another value differs.
+- If the passage is relevant background but does not establish the same material
+  scope, classify it as CONTEXT rather than forcing SUPPORTS or REFUTES.
+- If the scope relationship cannot responsibly be established from the passage
+  alone, classify it as UNKNOWN.
+- Do not perform unstated unit conversions, baseline conversions, denominator
+  assumptions, temporal carry-forward, or entity substitution. Only use a
+  relationship when the evidence passage itself establishes it.
+- Preserve numeric comparator semantics. Strict boundaries such as "less than"
+  or "greater than" are not interchangeable with inclusive boundaries such as
+  "up to", "at most", or "at least" unless the passage explicitly establishes
+  the relationship needed for the claim.
 """
 
 
@@ -171,6 +172,8 @@ def _assessment_from_result(result):
 def assess_reasoning_evidence_batch_against_claim(
     claim_text: str,
     evidence_items,
+    *,
+    enforce_material_scope=False,
 ) -> list[EvidenceAssessment]:
     """Assess persisted evidence in one request with positional results."""
     evidence_items = list(evidence_items)
@@ -210,8 +213,16 @@ def assess_reasoning_evidence_batch_against_claim(
         gemini_timeout_ms = _gemini_timeout_ms_from_env()
         if gemini_timeout_ms is not None:
             provider_options["gemini_timeout_ms"] = gemini_timeout_ms
+        system_instructions = _SYSTEM_INSTRUCTIONS
+        if enforce_material_scope:
+            system_instructions = (
+                _SYSTEM_INSTRUCTIONS.rstrip()
+                + "\n\n"
+                + _MATERIAL_SCOPE_INSTRUCTIONS.strip()
+                + "\n"
+            )
         response_text = call_llm_with_fallback(
-            _SYSTEM_INSTRUCTIONS,
+            system_instructions,
             user_prompt,
             **provider_options,
         )
@@ -249,9 +260,12 @@ def assess_reasoning_evidence_batch_against_claim(
 def assess_reasoning_evidence_against_claim(
     claim_text: str,
     evidence_item: ReasoningEvidenceItem,
+    *,
+    enforce_material_scope=False,
 ) -> EvidenceAssessment:
     """Assess one persisted evidence item through the batch contract."""
     return assess_reasoning_evidence_batch_against_claim(
         claim_text,
         [evidence_item],
+        enforce_material_scope=enforce_material_scope,
     )[0]

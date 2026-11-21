@@ -1099,6 +1099,7 @@ def _assess_and_persist_reasoning_evidence(
     claim_id,
     *,
     stage_prefix,
+    material_scope_hardening=False,
 ):
     stage_name = f"{stage_prefix}_evidence_assessment"
     eligible_items = []
@@ -1120,6 +1121,7 @@ def _assess_and_persist_reasoning_evidence(
         assessments = assess_reasoning_evidence_batch_against_claim(
             claim_text,
             eligible_items,
+            enforce_material_scope=material_scope_hardening,
         )
     except Exception as exc:
         _log_stage(
@@ -1805,6 +1807,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             fact_check_groups,
                             claim_id,
                             stage_prefix="gfc",
+                            material_scope_hardening=is_text_claim,
                         )
                         gfc_evidence_assessed = True
                         evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
@@ -2028,6 +2031,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             secondary_groups,
                             claim_id,
                             stage_prefix="tavily",
+                            material_scope_hardening=is_text_claim,
                         )
                         evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
                         secondary_groups = filter_reasoning_evidence_dossier_by_role(

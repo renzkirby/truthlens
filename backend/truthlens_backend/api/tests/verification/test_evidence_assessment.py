@@ -54,7 +54,7 @@ class EvidenceAssessmentTests(SimpleTestCase):
         result.update(overrides)
         return result
 
-    def _assess(self, result=None):
+    def _assess(self, result=None, *, enforce_material_scope=False):
         if result is None:
             result = self._result()
         with patch(
@@ -66,6 +66,7 @@ class EvidenceAssessmentTests(SimpleTestCase):
             assessment = assess_reasoning_evidence_against_claim(
                 self.claim_text,
                 self.evidence_item,
+                enforce_material_scope=enforce_material_scope,
             )
         return assessment, call_llm
 
@@ -396,9 +397,17 @@ class EvidenceAssessmentTests(SimpleTestCase):
             with self.subTest(prohibited_inference=prohibited_inference):
                 self.assertIn(prohibited_inference, system_instructions)
 
-    def test_system_instructions_preserve_material_claim_scope(self):
-        _, call_llm = self._assess()
+    def test_material_scope_hardening_is_opt_in(self):
+        _, default_call = self._assess()
+        self.assertNotIn(
+            "MATERIAL SCOPE MATCHING",
+            default_call.call_args.args[0],
+        )
+
+        _, call_llm = self._assess(enforce_material_scope=True)
         system_instructions = call_llm.call_args.args[0]
+
+        self.assertIn("MATERIAL SCOPE MATCHING", system_instructions)
 
         for required_scope in (
             "actor/entity",
