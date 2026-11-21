@@ -184,7 +184,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         }
 
         claim_queryset = Mock()
-        claim_queryset.first.return_value = Mock(claim_type=Claim.ClaimType.TEXT)
+        claim_queryset.first.return_value = Mock()
 
         stack = ExitStack()
         self.addCleanup(stack.close)
@@ -255,13 +255,6 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
                 return_value=gfc_payload,
             ) as retrieve_gfc,
             patch(
-                "api.tasks._resolve_official_fact_check_rating_policy",
-                return_value={
-                    "resolution": "NONE",
-                    "satire_evidence_ids": (),
-                },
-            ) as rating_policy,
-            patch(
                 "api.tasks.assess_fact_check_proposition_coverage",
                 return_value={
                     "candidate_count": 1,
@@ -291,14 +284,6 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             verification_run=start_run.return_value,
         )
 
-        rating_policy.assert_called_once_with(
-            cleaned_claim,
-            ["persisted fact-check group"],
-            provider_claims=gfc_payload["claims"],
-            allow_claim_date_fallback=True,
-            submitted_claim_text="Raw submitted claim.",
-        )
-
         relevance_check.assert_called_once_with(
             cleaned_claim,
             ["Example public claim."],
@@ -323,7 +308,6 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             ["persisted fact-check group"],
             claim_id,
             stage_prefix="gfc",
-            material_scope_hardening=True,
         )
         render_dossier.assert_called_once_with(
             ["persisted fact-check group"],
@@ -567,7 +551,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         }
 
         claim_queryset = Mock()
-        claim_queryset.first.return_value = Mock(claim_type=Claim.ClaimType.URL)
+        claim_queryset.first.return_value = Mock()
 
         stack = ExitStack()
         self.addCleanup(stack.close)
@@ -639,13 +623,6 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
                 return_value=gfc_payload,
             ) as retrieve_gfc,
             patch(
-                "api.tasks._resolve_official_fact_check_rating_policy",
-                return_value={
-                    "resolution": "NONE",
-                    "satire_evidence_ids": (),
-                },
-            ) as rating_policy,
-            patch(
                 "api.tasks.assess_fact_check_proposition_coverage",
                 return_value={
                     "candidate_count": 1,
@@ -677,11 +654,6 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
             claim_id,
             stage_prefix="url_",
             verification_run=start_run.return_value,
-        )
-
-        rating_policy.assert_called_once_with(
-            cleaned_claim,
-            ["persisted fact-check group"],
         )
 
         relevance_check.assert_called_once_with(
