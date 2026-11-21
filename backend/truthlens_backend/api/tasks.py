@@ -189,12 +189,18 @@ def _claims_are_equivalent_for_official_rating(incoming_claim, reviewed_claim):
 
 
 def _resolve_official_fact_check_rating_policy(claim_text, evidence_groups):
-    """Resolve high-precision SATIRE/FALSE ClaimReview ratings from persisted GFC evidence.
+    """Resolve high-precision structured ClaimReview rating signals.
 
-    The helper is intentionally dormant unless an explicit SATIRE rating exists.
-    Related but non-equivalent fact-checks cannot authorize SATIRE. If equivalence
-    cannot be established safely, SATIRE authorization fails closed to NONE.
+    SATIRE remains the only deterministic single-rating resolution. Exact
+    "Misleading" is a contextual signal only and may activate a second
+    evidence-bound arbitration stage after strict proposition equivalence.
+    Related or conflicting reviews never control the verdict.
     """
+    empty_policy = {
+        "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+        "satire_evidence_ids": (),
+        "misleading_evidence_ids": (),
+    }
     records = []
     for group in evidence_groups:
         for item in getattr(group, "evidence", ()):
@@ -218,11 +224,14 @@ def _resolve_official_fact_check_rating_policy(claim_text, evidence_groups):
                 "evidence_link_id": str(evidence_link_id),
             })
 
-    if not any(record["rating_kind"] == "SATIRE" for record in records):
-        return {
-            "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
-            "satire_evidence_ids": (),
-        }
+    # FALSE remains ordinary evidence unless paired with equivalent SATIRE.
+    # Unknown publisher labels remain ordinary evidence. Avoid equivalence work
+    # unless a high-precision SATIRE or exact Misleading signal is present.
+    if not any(
+        record["rating_kind"] in {"SATIRE", "MISLEADING"}
+        for record in records
+    ):
+        return empty_policy
 
     equivalence_cache = {}
 
@@ -235,58 +244,79 @@ def _resolve_official_fact_check_rating_policy(claim_text, evidence_groups):
             )
         return equivalence_cache[identity]
 
-    equivalent_satire = []
+    equivalent_signal_records = []
     for record in records:
-        if record["rating_kind"] != "SATIRE":
+        if record["rating_kind"] not in {"SATIRE", "MISLEADING"}:
             continue
         match = equivalent(record["claim_text"])
         if match is None:
-            return {
-                "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
-                "satire_evidence_ids": (),
-            }
+            return empty_policy
         if match:
-            equivalent_satire.append(record)
+            equivalent_signal_records.append(record)
 
-    if not equivalent_satire:
-        return {
-            "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
-            "satire_evidence_ids": (),
-        }
+    if not equivalent_signal_records:
+        return empty_policy
 
+    # Once a supported rating is strictly equivalent, inspect other reviews of
+    # the same proposition. Equivalent unknown/conflicting ratings prevent a
+    # publisher label from becoming an automated control signal.
+    equivalent_records = list(equivalent_signal_records)
+    signal_ids = {
+        record["evidence_link_id"] for record in equivalent_signal_records
+    }
     for record in records:
-        if record["rating_kind"] == "SATIRE":
+        if record["evidence_link_id"] in signal_ids:
             continue
         match = equivalent(record["claim_text"])
         if match is None:
+            return empty_policy
+        if match:
+            equivalent_records.append(record)
+
+    equivalent_kinds = {record["rating_kind"] for record in equivalent_records}
+    equivalent_satire = [
+        record for record in equivalent_records
+        if record["rating_kind"] == "SATIRE"
+    ]
+    equivalent_misleading = [
+        record for record in equivalent_records
+        if record["rating_kind"] == "MISLEADING"
+    ]
+
+    # Preserve the existing SATIRE + explicit FALSE conflict policy. Any extra
+    # equivalent rating makes the publisher signals non-deterministic.
+    if equivalent_satire:
+        if equivalent_kinds == {"SATIRE"}:
             return {
-                "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
-                "satire_evidence_ids": (),
+                "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
+                "satire_evidence_ids": tuple(
+                    item["evidence_link_id"] for item in equivalent_satire
+                ),
+                "misleading_evidence_ids": (),
             }
-        if not match:
-            continue
-        if record["rating_kind"] == "FALSE":
+        if equivalent_kinds == {"SATIRE", "FALSE"}:
             return {
                 "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT,
                 "satire_evidence_ids": tuple(
                     item["evidence_link_id"] for item in equivalent_satire
                 ),
+                "misleading_evidence_ids": (),
             }
-        # An equivalent publisher-specific rating with unknown semantics
-        # prevents deterministic SATIRE consensus. Defer verdict selection to
-        # the normal persisted-evidence evaluator rather than guessing how to
-        # normalize the publisher's rating.
+        return empty_policy
+
+    # Exact "Misleading" is not a deterministic verdict. It is eligible only
+    # when every equivalent recognized review agrees on that exact rating and
+    # no equivalent unknown/False review introduces ambiguity.
+    if equivalent_misleading and equivalent_kinds == {"MISLEADING"}:
         return {
             "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
             "satire_evidence_ids": (),
+            "misleading_evidence_ids": tuple(
+                item["evidence_link_id"] for item in equivalent_misleading
+            ),
         }
 
-    return {
-        "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
-        "satire_evidence_ids": tuple(
-            item["evidence_link_id"] for item in equivalent_satire
-        ),
-    }
+    return empty_policy
 
 
 def _evaluate_persisted_with_official_rating_policy(
@@ -297,22 +327,13 @@ def _evaluate_persisted_with_official_rating_policy(
     *,
     evidence_groups=(),
 ):
-    if (
-        official_rating_policy["resolution"]
-        == OFFICIAL_FACT_CHECK_RESOLUTION_NONE
-    ):
-        return evaluate_claim_with_persisted_evidence(
-            claim_text,
-            evidence_context,
-            article_stance,
-            evidence_groups=evidence_groups,
-        )
     return evaluate_claim_with_persisted_evidence(
         claim_text,
         evidence_context,
         article_stance,
         official_rating_policy["resolution"],
         official_rating_policy["satire_evidence_ids"],
+        official_rating_policy["misleading_evidence_ids"],
         evidence_groups=evidence_groups,
     )
 
@@ -1679,6 +1700,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
             official_rating_policy = {
                 "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
                 "satire_evidence_ids": (),
+                "misleading_evidence_ids": (),
             }
             precheck_fact_check_groups = ()
 
@@ -1733,6 +1755,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     if (
                         official_rating_policy["resolution"]
                         != OFFICIAL_FACT_CHECK_RESOLUTION_NONE
+                        or official_rating_policy["misleading_evidence_ids"]
                     ):
                         is_relevant = True
                         gfc_terminally_sufficient = True
@@ -1744,6 +1767,11 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             claim_id,
                             "gfc_relevance_bypassed",
                             time.perf_counter(),
+                            outcome=(
+                                "structured_misleading_signal"
+                                if official_rating_policy["misleading_evidence_ids"]
+                                else "official_rating_resolution"
+                            ),
                             resolution=official_rating_policy["resolution"],
                         )
                     else:
@@ -2646,6 +2674,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
         official_rating_policy = {
             "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
             "satire_evidence_ids": (),
+            "misleading_evidence_ids": (),
         }
         precheck_fact_check_groups = ()
 
@@ -2701,6 +2730,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                 if (
                     official_rating_policy["resolution"]
                     != OFFICIAL_FACT_CHECK_RESOLUTION_NONE
+                    or official_rating_policy["misleading_evidence_ids"]
                 ):
                     is_relevant = True
                     gfc_terminally_sufficient = True
@@ -2712,6 +2742,11 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         claim_id,
                         "url_gfc_relevance_bypassed",
                         time.perf_counter(),
+                        outcome=(
+                            "structured_misleading_signal"
+                            if official_rating_policy["misleading_evidence_ids"]
+                            else "official_rating_resolution"
+                        ),
                         resolution=official_rating_policy["resolution"],
                     )
                 else:
