@@ -396,6 +396,15 @@ class ManagementOverviewView(APIView):
     def get(self, request):
         counts = Organization.objects.aggregate(
             total=Count("id"),
+            current_partners=Count(
+                "id",
+                filter=Q(
+                    partner_status__in=[
+                        Organization.PartnerStatus.ACTIVE,
+                        Organization.PartnerStatus.SUSPENDED,
+                    ]
+                ),
+            ),
             active_partners=Count(
                 "id",
                 filter=Q(partner_status=Organization.PartnerStatus.ACTIVE),
