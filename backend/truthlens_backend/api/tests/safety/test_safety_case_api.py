@@ -579,17 +579,36 @@ class SafetyCaseApiTests(APITestCase):
         )
         self.assertGreaterEqual(recompute.call_count, 3)
 
-    def test_remove_and_escalate_require_notes(self):
+    def test_remove_requires_notes(self):
         self._claim_case()
-        client = self._client_for(self.moderator)
+        response = self._client_for(self.moderator).post(
+            self._url("safety_case_action", self.case),
+            {"action": "REMOVE", "notes": "   "},
+            format="json",
+        )
 
-        for action in ["REMOVE", "ESCALATE"]:
-            response = client.post(
-                self._url("safety_case_action", self.case),
-                {"action": action, "notes": "   "},
-                format="json",
-            )
-            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_escalate_action_is_no_longer_supported(self):
+        self._claim_case()
+        response = self._client_for(self.moderator).post(
+            self._url("safety_case_action", self.case),
+            {
+                "action": "ESCALATE",
+                "notes": "This legacy action should not create a new escalation.",
+            },
+            format="json",
+        )
+
+        self.case.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(self.case.status, ModerationCase.Status.OPEN)
+        self.assertEqual(self.case.assigned_to, self.moderator)
+        self.assertFalse(
+            self.case.events.filter(
+                event_type=ModerationEvent.EventType.CASE_ESCALATED
+            ).exists()
+        )
 
     @patch("api.trust_service.recompute_user_trust_score")
     def test_remove_preserves_legacy_state_audit_and_trust_effects(self, recompute):
@@ -655,34 +674,36 @@ class SafetyCaseApiTests(APITestCase):
                 self.contributor.id,
             },
         )
-    def test_escalate_keeps_case_and_reports_active_and_is_idempotent(self):
+    @patch("api.trust_service.recompute_user_trust_score")
+    def test_legacy_escalated_case_can_still_be_dismissed(self, recompute):
         self._claim_case()
-        client = self._client_for(self.moderator)
-        payload = {"action": "ESCALATE", "notes": "Specialist review needed."}
-
-        first = client.post(
-            self._url("safety_case_action", self.case), payload, format="json"
-        )
-        second = client.post(
-            self._url("safety_case_action", self.case), payload, format="json"
+        ModerationCase.objects.filter(pk=self.case.pk).update(
+            status=ModerationCase.Status.ESCALATED,
         )
         self.case.refresh_from_db()
 
-        self.assertEqual(first.status_code, status.HTTP_200_OK)
-        self.assertEqual(second.status_code, status.HTTP_200_OK)
-        self.assertEqual(self.case.status, ModerationCase.Status.ESCALATED)
-        self.assertEqual(
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self._client_for(self.moderator).post(
+                self._url("safety_case_action", self.case),
+                {
+                    "action": "DISMISS",
+                    "notes": "Legacy escalated case resolved after review.",
+                },
+                format="json",
+            )
+
+        self.case.refresh_from_db()
+        self.thread.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.case.status, ModerationCase.Status.RESOLVED)
+        self.assertEqual(self.thread.status, Thread.Status.OPEN)
+        self.assertFalse(
             CommunityReport.objects.filter(
-                thread=self.thread, resolved_at__isnull=True
-            ).count(),
-            2,
+                thread=self.thread,
+                resolved_at__isnull=True,
+            ).exists()
         )
-        self.assertEqual(
-            self.case.events.filter(
-                event_type=ModerationEvent.EventType.CASE_ESCALATED
-            ).count(),
-            1,
-        )
+        self.assertGreaterEqual(recompute.call_count, 3)
 
     def test_remove_requires_violation_and_explicit_report_review(self):
         self._claim_case()

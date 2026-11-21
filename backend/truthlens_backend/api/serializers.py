@@ -63,6 +63,7 @@ from .organization_public_affiliation_service import (
     get_public_partner_affiliations,
 )
 from .organization_member_identity_service import get_partner_professional_identity
+from .verification_domain_policy import VERIFICATION_DOMAINS
 from .public_publication_query_service import (
     PublicPublicationNotFound,
     get_public_partner_fact_check_detail,
@@ -1050,6 +1051,12 @@ class OrganizationPublicProfileUpdateSerializer(serializers.Serializer):
         ),
     )
 
+    verification_specializations = serializers.ListField(
+        required=False,
+        max_length=len(VERIFICATION_DOMAINS),
+        child=serializers.ChoiceField(choices=VERIFICATION_DOMAINS),
+    )
+
     public_profile_enabled = StrictBooleanField(
         required=False,
     )
@@ -1101,6 +1108,17 @@ class OrganizationPublicProfileUpdateSerializer(serializers.Serializer):
         return normalized_values
 
 
+    def validate_verification_specializations(
+        self,
+        values,
+    ):
+        if len(values) != len(set(values)):
+            raise serializers.ValidationError(
+                "Duplicate verification specializations are not allowed."
+            )
+        return sorted(values)
+
+
 class OrganizationPublicProfileAdminSerializer(serializers.ModelSerializer):
     organization_type_label = serializers.CharField(
         source="get_organization_type_display",
@@ -1130,6 +1148,7 @@ class OrganizationPublicProfileAdminSerializer(serializers.ModelSerializer):
             "website",
             "logo_url",
             "expertise_areas",
+            "verification_specializations",
             "public_profile_enabled",
             "public_logo_enabled",
             "publicly_visible",
@@ -1931,7 +1950,7 @@ class SafetyCaseQueueFilterSerializer(serializers.Serializer):
 
 class SafetyCaseActionSerializer(serializers.Serializer):
     action = serializers.ChoiceField(
-        choices=["DISMISS", "REMOVE", "ESCALATE"],
+        choices=["DISMISS", "REMOVE"],
     )
     notes = serializers.CharField(
         required=False,
@@ -1971,13 +1990,10 @@ class SafetyCaseActionSerializer(serializers.Serializer):
         violation_code = attrs.get("violation_code")
         confirmed_report_ids = attrs.get("confirmed_report_ids")
 
-        if action in {"REMOVE", "ESCALATE"} and not notes:
+        if action == "REMOVE" and not notes:
             raise serializers.ValidationError(
                 {
-                    "notes": (
-                        "Notes are required when removing content or "
-                        "escalating a Safety case."
-                    )
+                    "notes": "Notes are required when removing content."
                 }
             )
 

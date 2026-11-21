@@ -4,7 +4,6 @@ import { Search, SlidersHorizontal } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { resolveApiEndpoint } from "../utils/api";
-import { formatVerificationDomain } from "../utils/management";
 import { userFacingErrorMessage } from "../utils/userFacingError";
 import PartnerLogo from "../components/partners/PartnerLogo";
 import "./PartnersPage.css";
@@ -21,13 +20,6 @@ const ORGANIZATION_TYPES = [
 ];
 
 function PartnerCard({ partner, directorySearch }) {
-   const hasVerificationSpecializations = Array.isArray(partner.verification_specializations);
-   const expertise = hasVerificationSpecializations
-      ? partner.verification_specializations
-      : Array.isArray(partner.expertise_areas) ? partner.expertise_areas : [];
-   const visibleExpertise = expertise.slice(0, 3);
-   const remainingExpertise = expertise.length - visibleExpertise.length;
-
    return (
       <Link
          to={`/partners/${encodeURIComponent(partner.slug)}`}
@@ -45,20 +37,6 @@ function PartnerCard({ partner, directorySearch }) {
                {partner.description || "No public description provided."}
             </p>
          </div>
-
-         {visibleExpertise.length > 0 && (
-            <ul className="partner-directory-card__expertise"
-               aria-label={hasVerificationSpecializations
-                  ? "Organization-declared investigation specializations"
-                  : "Expertise areas"}>
-               {visibleExpertise.map((area, index) => (
-                  <li key={`${area}-${index}`}>
-                     {hasVerificationSpecializations ? formatVerificationDomain(area) : area}
-                  </li>
-               ))}
-               {remainingExpertise > 0 && <li>+{remainingExpertise} more</li>}
-            </ul>
-         )}
 
          <span className="partner-directory-card__action">View public profile</span>
       </Link>
@@ -174,7 +152,7 @@ function PartnersPage() {
                   <p className="partners-eyebrow">Public partner directory</p>
                   <h1 id="partners-heading">TruthLens Partners</h1>
                   <p className="partners-hero__lead">
-                     Explore organizations that have chosen to maintain a public partner profile on TruthLens.
+                     Explore active Partner Organizations with public profiles on TruthLens.
                   </p>
                   <p className="partners-hero__boundary">
                      Public partner presence does not imply endorsement of every TruthLens analysis or publication.

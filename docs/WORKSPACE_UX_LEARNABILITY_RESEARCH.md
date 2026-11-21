@@ -263,8 +263,7 @@ The Workspace exposes an `Organization` section beside factual verification tool
 
 That section itself contains:
 - Members & invitations;
-- Public presence;
-- Verification scope.
+- Public presence, including descriptive verification specializations.
 
 These are administrative tasks, not investigation steps.
 

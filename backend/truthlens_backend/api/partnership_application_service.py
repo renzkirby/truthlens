@@ -490,10 +490,12 @@ def finalize_approved_partnership_onboarding(*, organization, accepted_by):
 
     organization.verification_status = Organization.VerificationStatus.VERIFIED
     organization.partner_status = Organization.PartnerStatus.ACTIVE
+    organization.public_profile_enabled = True
     organization.save(
         update_fields=[
             "verification_status",
             "partner_status",
+            "public_profile_enabled",
             "updated_at",
         ]
     )
