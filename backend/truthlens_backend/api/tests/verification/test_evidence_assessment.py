@@ -11,6 +11,7 @@ from django.test import SimpleTestCase
 from api.models import VerificationEvidence
 from api.verification.evidence_assessment import (
     EvidenceAssessment,
+    _extract_calendar_years,
     assess_reasoning_evidence_against_claim,
     assess_reasoning_evidence_batch_against_claim,
 )
@@ -18,6 +19,16 @@ from api.verification.evidence_dossier import ReasoningEvidenceItem
 
 
 class EvidenceAssessmentTests(SimpleTestCase):
+    def test_calendar_year_extraction_matches_actual_digits(self):
+        self.assertEqual(
+            _extract_calendar_years("Cases rose from 2020 to 2023 and 2024."),
+            frozenset({"2020", "2023", "2024"}),
+        )
+        self.assertEqual(
+            _extract_calendar_years(r"literal \d should not count as a year"),
+            frozenset(),
+        )
+
     def setUp(self):
         self.claim_text = "The city opened the bridge in 2024."
         self.evidence_content = "Official records say the bridge opened in 2024."
