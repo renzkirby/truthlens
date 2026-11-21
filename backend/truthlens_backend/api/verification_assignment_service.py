@@ -33,7 +33,6 @@ from .verification_domain_policy import (
     NEEDS_CLASSIFICATION,
     NEEDS_INSTITUTION_IDENTITY,
     OUTSIDE_INSTITUTION_SCOPE,
-    OUTSIDE_SPECIALIZATIONS,
     organization_claim_eligibility_reason,
     subject_eligibility_enforced,
 )
@@ -619,10 +618,6 @@ def claim_verification_assignment(
                         OUTSIDE_INSTITUTION_SCOPE: (
                             "This claim is outside this Student Publication's "
                             "verified institution scope."
-                        ),
-                        OUTSIDE_SPECIALIZATIONS: (
-                            "The claim is outside this organization's selected "
-                            "verification specializations."
                         ),
                     }[refusal]
                 )
