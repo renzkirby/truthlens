@@ -396,6 +396,41 @@ class EvidenceAssessmentTests(SimpleTestCase):
             with self.subTest(prohibited_inference=prohibited_inference):
                 self.assertIn(prohibited_inference, system_instructions)
 
+    def test_system_instructions_preserve_material_claim_scope(self):
+        _, call_llm = self._assess()
+        system_instructions = call_llm.call_args.args[0]
+
+        for required_scope in (
+            "actor/entity",
+            "time period or date",
+            "metric or measurement baseline",
+            "denominator",
+            "numeric comparison",
+        ):
+            with self.subTest(required_scope=required_scope):
+                self.assertIn(required_scope, system_instructions)
+
+        self.assertIn(
+            "not a contradiction merely because another value differs",
+            system_instructions,
+        )
+        self.assertIn(
+            "Do not perform unstated unit conversions, baseline conversions",
+            system_instructions,
+        )
+        self.assertIn(
+            'Strict boundaries such as "less than"',
+            system_instructions,
+        )
+        self.assertIn(
+            "classify it as CONTEXT rather than forcing SUPPORTS or REFUTES",
+            system_instructions,
+        )
+        self.assertIn(
+            "classify it as UNKNOWN",
+            system_instructions,
+        )
+
     def test_system_instructions_separate_stance_from_directness(self):
         _, call_llm = self._assess()
         system_instructions = call_llm.call_args.args[0]

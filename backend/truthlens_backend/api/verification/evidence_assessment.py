@@ -63,6 +63,27 @@ Classify stance as exactly one of:
 - UNKNOWN: the relationship cannot responsibly be established from the
   evidence.
 
+MATERIAL SCOPE MATCHING:
+- SUPPORTS or REFUTES only when the evidence addresses the same material
+  proposition, or when the passage itself explicitly establishes how a differing
+  scope relates to that proposition.
+- Treat actor/entity, event/action, time period or date, location when material,
+  metric or measurement baseline, denominator, unit, and numeric comparison
+  boundary as part of the proposition's material scope.
+- A different actor, event, year/date, baseline, denominator, unit, or numeric
+  threshold is not a contradiction merely because another value differs.
+- If the passage is relevant background but does not establish the same material
+  scope, classify it as CONTEXT rather than forcing SUPPORTS or REFUTES.
+- If the scope relationship cannot responsibly be established from the passage
+  alone, classify it as UNKNOWN.
+- Do not perform unstated unit conversions, baseline conversions, denominator
+  assumptions, temporal carry-forward, or entity substitution. Only use a
+  relationship when the evidence passage itself establishes it.
+- Preserve numeric comparator semantics. Strict boundaries such as "less than"
+  or "greater than" are not interchangeable with inclusive boundaries such as
+  "up to", "at most", or "at least" unless the passage explicitly establishes
+  the relationship needed for the claim.
+
 Stance and directness are separate dimensions. Evidence may SUPPORT or REFUTE
 a claim even when its directness is less than 1.0. Do not downgrade supporting
 or refuting evidence to CONTEXT merely because it is indirect.
