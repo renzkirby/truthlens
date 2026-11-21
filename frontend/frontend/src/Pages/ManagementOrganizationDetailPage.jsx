@@ -1567,25 +1567,6 @@ function GovernanceContactSection({
    );
 }
 
-function VerificationScopeSection({ organization }) {
-   const specializations = organization.verification_specializations || [];
-   return (
-      <section className="management-detail-section">
-         <h2>Organization verification specializations</h2>
-         <p className="management-section__description">
-            The Organization Admin manages these investigation subjects in the partner workspace.
-            Platform administration oversees partnership status and onboarding, not the
-            organization's subject choices.
-         </p>
-         <DetailList items={[
-            { label: "Selected subjects", value: specializations.length
-               ? specializations.map(formatVerificationDomain).join(", ") : "Not configured" },
-            { label: "Managed by", value: "Organization Admin" },
-         ]} />
-      </section>
-   );
-}
-
 function OrganizationAdminState({
    organizationId,
    primaryAdmin,
@@ -1902,7 +1883,6 @@ function ManagementOrganizationDetailPage() {
                      onRefresh={retry}
                      onFeedback={showFeedback}
                   />
-                  <VerificationScopeSection organization={data} />
                   <section className="management-detail-section">
                      <OrganizationAdminState
                         organizationId={data.id}
