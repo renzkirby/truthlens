@@ -408,6 +408,7 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
                     "claimDate": "2021-09-15T00:00:00Z",
                 }],
                 allow_claim_date_fallback=True,
+                submitted_claim_text=incoming,
             )
 
         self.assertEqual(
@@ -439,6 +440,7 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
                     "claimDate": "2021-09-15T00:00:00Z",
                 }],
                 allow_claim_date_fallback=True,
+                submitted_claim_text=incoming,
             )
 
         self.assertEqual(
@@ -514,6 +516,7 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
                     "claimDate": "2021-09-15T00:00:00Z",
                 }],
                 allow_claim_date_fallback=True,
+                submitted_claim_text=incoming,
             )
 
         self.assertEqual(
@@ -542,6 +545,7 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
                     "text": reviewed,
                 }],
                 allow_claim_date_fallback=True,
+                submitted_claim_text=incoming,
             )
 
         self.assertEqual(
@@ -573,6 +577,7 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
                     "claimDate": "2021-09-15T00:00:00Z",
                 }],
                 allow_claim_date_fallback=True,
+                submitted_claim_text=incoming,
             )
 
         self.assertEqual(
@@ -586,3 +591,37 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
                 call(stripped, reviewed),
             ],
         )
+
+    def test_claim_date_fallback_rejects_cleaned_month_not_in_submitted_text(self):
+        cleaned_claim = (
+            "Actress Toni Gonzaga signed a contract with PTV-4 in September 2021."
+        )
+        submitted_claim = (
+            "Actress Toni Gonzaga signed a contract with PTV-4 in October 2021."
+        )
+        reviewed = "Toni Gonzaga signed a contract with PTV-4."
+
+        with patch(
+            "api.tasks.assess_claim_equivalence",
+            return_value={
+                "equivalent": False,
+                "reasoning": "The submitted proposition is not strictly equivalent.",
+                "material_differences": ["Temporal qualifier"],
+            },
+        ) as assess:
+            result = tasks._resolve_official_fact_check_rating_policy(
+                cleaned_claim,
+                _groups((reviewed, "Satire")),
+                provider_claims=[{
+                    "text": reviewed,
+                    "claimDate": "2021-09-15T00:00:00Z",
+                }],
+                allow_claim_date_fallback=True,
+                submitted_claim_text=submitted_claim,
+            )
+
+        self.assertEqual(
+            result["resolution"],
+            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+        )
+        assess.assert_called_once_with(cleaned_claim, reviewed)
