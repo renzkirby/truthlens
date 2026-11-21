@@ -606,6 +606,10 @@
   box-shadow: var(--tl-shadow-sm);
 }
 
+.management-section__heading + .management-metrics {
+  margin-top: var(--tl-space-4);
+}
+
 .management-metrics article {
   display: flex;
   min-width: 0;
@@ -921,6 +925,10 @@
   border: 1px solid var(--tl-color-border-default);
   border-radius: var(--tl-radius-lg);
   text-align: center;
+}
+
+.management-attention-section + .management-state {
+  margin-top: var(--tl-space-10);
 }
 
 .management-state strong {

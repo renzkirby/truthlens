@@ -164,8 +164,8 @@ function ManagementOverviewPage() {
                </div>
                <div className="management-metrics" aria-label="Partner Organization summary">
                   <article>
-                     <span>Total Organizations</span>
-                     <strong>{organizations?.total ?? 0}</strong>
+                     <span>Current Partners</span>
+                     <strong>{organizations?.current_partners ?? 0}</strong>
                   </article>
                   <article>
                      <span>Active Partners</span>
