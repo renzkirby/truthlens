@@ -133,7 +133,7 @@ class OrganizationPublicProfileAdminServiceTests(TestCase):
         self.assertEqual(updated.description, "Public partner profile")
         self.assertEqual(updated.website, "https://example.com/profile")
         self.assertEqual(updated.expertise_areas, ["Elections", "Media literacy"])
-        self.assertEqual(updated.verification_specializations, ["SCIENCE", "HEALTH"])
+        self.assertEqual(updated.verification_specializations, ["HEALTH", "SCIENCE"])
         self.assertTrue(updated.public_profile_enabled)
         self.assertTrue(updated.public_logo_enabled)
 
@@ -282,6 +282,31 @@ class OrganizationPublicProfileAdminServiceTests(TestCase):
                 organization=self.organization,
             )
         )
+
+    def test_service_validates_verification_specialization_metadata(self):
+        updated = self.update_as(
+            self.owner,
+            {
+                "verification_specializations": ["SCIENCE", "HEALTH"],
+            },
+        )
+        self.assertEqual(
+            updated.verification_specializations,
+            ["HEALTH", "SCIENCE"],
+        )
+
+        for invalid in (
+            ["UNKNOWN"],
+            ["SCIENCE", "SCIENCE"],
+        ):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(InvalidOrganizationPublicProfileChanges):
+                    self.update_as(
+                        self.owner,
+                        {
+                            "verification_specializations": invalid,
+                        },
+                    )
 
     def test_service_rejects_unsupported_changes(self):
         for changes in [
