@@ -22,7 +22,6 @@ from .moderation_service import (
     ACTIVE_CASE_STATUSES,
     ModerationCaseError,
     assign_moderation_case,
-    escalate_safety_case,
     resolve_safety_case,
     unassign_moderation_case,
 )
@@ -290,8 +289,12 @@ def perform_safety_case_action(
             "This Safety case no longer has reviewable Community content."
         )
 
-    if action == "ESCALATE":
-        with transaction.atomic():
+    if action not in {"DISMISS", "REMOVE"}:
+        raise SafetyCaseConflict(
+            "Safety actions must resolve the case by dismissing it or removing content."
+        )
+
+    with transaction.atomic():
             locked_case = _get_locked_safety_case(case)
             _ensure_active_case(locked_case)
             _ensure_case_owner(locked_case, actor)
