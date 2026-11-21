@@ -13,7 +13,7 @@ from .evidence_dossier import ReasoningEvidenceItem
 
 logger = logging.getLogger(__name__)
 
-_YEAR_PATTERN = re.compile(r"(?<!\\d)(?:19\\d{2}|20\\d{2}|2100)(?!\\d)")
+_YEAR_PATTERN = re.compile(r"(?<!\d)(?:19\d{2}|20\d{2}|2100)(?!\d)")
 _DECISIVE_STANCES = frozenset({
     VerificationEvidence.Stance.SUPPORTS,
     VerificationEvidence.Stance.REFUTES,
