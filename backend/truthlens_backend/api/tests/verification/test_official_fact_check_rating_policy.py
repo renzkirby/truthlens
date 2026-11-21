@@ -363,3 +363,117 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
             result["resolution"],
             OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
         )
+
+
+    def test_text_satire_rating_accepts_matching_structured_claim_date(self):
+        incoming = (
+            "Actress Toni Gonzaga signed a contract with Philippine state "
+            "broadcaster PTV-4 in September 2021."
+        )
+        reviewed = (
+            "Toni Gonzaga signed a contract with PTV-4 to be part of its "
+            "artist agency."
+        )
+
+        def equivalence(incoming_claim, reviewed_claim):
+            self.assertEqual(reviewed_claim, reviewed)
+            if incoming_claim == incoming:
+                return {
+                    "equivalent": False,
+                    "reasoning": "The submitted claim adds a material date.",
+                    "material_differences": ["September 2021"],
+                }
+            self.assertEqual(
+                incoming_claim,
+                (
+                    "Actress Toni Gonzaga signed a contract with Philippine "
+                    "state broadcaster PTV-4."
+                ),
+            )
+            return {
+                "equivalent": True,
+                "reasoning": "Same underlying reviewed proposition.",
+                "material_differences": [],
+            }
+
+        with patch(
+            "api.tasks.assess_claim_equivalence",
+            side_effect=equivalence,
+        ) as assess:
+            result = tasks._resolve_official_fact_check_rating_policy(
+                incoming,
+                _groups((reviewed, "Satire")),
+                provider_claims=[{
+                    "text": reviewed,
+                    "claimDate": "2021-09-15T00:00:00Z",
+                }],
+                allow_claim_date_fallback=True,
+            )
+
+        self.assertEqual(
+            result["resolution"],
+            OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
+        )
+        self.assertEqual(result["satire_evidence_ids"], ("evidence-1",))
+        self.assertEqual(assess.call_count, 2)
+
+    def test_claim_date_fallback_rejects_conflicting_month(self):
+        incoming = (
+            "Actress Toni Gonzaga signed a contract with PTV-4 in October 2021."
+        )
+        reviewed = "Toni Gonzaga signed a contract with PTV-4."
+
+        with patch(
+            "api.tasks.assess_claim_equivalence",
+            return_value={
+                "equivalent": False,
+                "reasoning": "The submitted claim adds a material date.",
+                "material_differences": ["October 2021"],
+            },
+        ) as assess:
+            result = tasks._resolve_official_fact_check_rating_policy(
+                incoming,
+                _groups((reviewed, "Satire")),
+                provider_claims=[{
+                    "text": reviewed,
+                    "claimDate": "2021-09-15T00:00:00Z",
+                }],
+                allow_claim_date_fallback=True,
+            )
+
+        self.assertEqual(
+            result["resolution"],
+            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+        )
+        self.assertEqual(result["satire_evidence_ids"], ())
+        assess.assert_called_once_with(incoming, reviewed)
+
+    def test_claim_date_fallback_is_disabled_by_default(self):
+        incoming = (
+            "Actress Toni Gonzaga signed a contract with PTV-4 in September 2021."
+        )
+        reviewed = "Toni Gonzaga signed a contract with PTV-4."
+
+        with patch(
+            "api.tasks.assess_claim_equivalence",
+            return_value={
+                "equivalent": False,
+                "reasoning": "The submitted claim adds a material date.",
+                "material_differences": ["September 2021"],
+            },
+        ) as assess:
+            result = tasks._resolve_official_fact_check_rating_policy(
+                incoming,
+                _groups((reviewed, "Satire")),
+                provider_claims=[{
+                    "text": reviewed,
+                    "claimDate": "2021-09-15T00:00:00Z",
+                }],
+            )
+
+        self.assertEqual(
+            result["resolution"],
+            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+        )
+        self.assertEqual(result["satire_evidence_ids"], ())
+        assess.assert_called_once_with(incoming, reviewed)
