@@ -1393,9 +1393,8 @@ def safety_case_action(request, case_id):
     except (SafetyCaseConflict, ModerationCaseError) as error:
         return _safety_case_conflict_response(error)
 
-    if payload.validated_data["action"] != "ESCALATE":
-        schedule_safety_resolution_notifications(result)
-        schedule_safety_resolution_trust_updates(result)
+    schedule_safety_resolution_notifications(result)
+    schedule_safety_resolution_trust_updates(result)
 
     return _safety_case_detail_response(case_id)
 
