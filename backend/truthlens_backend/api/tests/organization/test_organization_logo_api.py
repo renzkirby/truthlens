@@ -80,6 +80,7 @@ class OrganizationLogoApiTests(APITestCase):
         "website",
         "logo_url",
         "expertise_areas",
+        "verification_specializations",
         "public_profile_enabled",
         "public_logo_enabled",
         "publicly_visible",
