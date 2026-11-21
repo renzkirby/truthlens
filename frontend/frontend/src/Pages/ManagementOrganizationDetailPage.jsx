@@ -16,7 +16,6 @@ import { useManagementRequest } from "../hooks/useManagementRequest";
 import { resolveApiEndpoint } from "../utils/api";
 import {
    formatManagementDate,
-   formatVerificationDomain,
 } from "../utils/management";
 
 function FieldError({ id, children }) {
