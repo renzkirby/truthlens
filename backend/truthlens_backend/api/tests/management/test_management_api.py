@@ -344,6 +344,28 @@ class ManagementApiTests(APITestCase):
                 self.assert_all_management_write_endpoints(user, expected_status)
 
     def test_overview_counts_are_explicit_and_correct(self):
+        Organization.objects.create(
+            name="Unverified Applicant",
+            slug="unverified-applicant",
+            organization_type=Organization.OrganizationType.NGO,
+            verification_status=Organization.VerificationStatus.UNVERIFIED,
+            partner_status=Organization.PartnerStatus.NONE,
+        )
+        Organization.objects.create(
+            name="Former Partner",
+            slug="former-partner",
+            organization_type=Organization.OrganizationType.RESEARCH,
+            verification_status=Organization.VerificationStatus.VERIFIED,
+            partner_status=Organization.PartnerStatus.FORMER,
+        )
+        Organization.objects.create(
+            name="Verified Suspended Partner",
+            slug="verified-suspended-partner",
+            organization_type=Organization.OrganizationType.NGO,
+            verification_status=Organization.VerificationStatus.VERIFIED,
+            partner_status=Organization.PartnerStatus.SUSPENDED,
+        )
+
         response = self.client_for(self.superuser).get(
             reverse("management_overview")
         )
@@ -352,7 +374,8 @@ class ManagementApiTests(APITestCase):
             response.data,
             {
                 "organizations": {
-                    "total": 2,
+                    "total": 5,
+                    "current_partners": 2,
                     "active_partners": 1,
                     "pending_verification": 1,
                     "suspended_partners": 1,
