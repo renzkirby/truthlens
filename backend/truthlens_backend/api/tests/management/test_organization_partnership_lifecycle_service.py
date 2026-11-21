@@ -432,6 +432,7 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
             onboarding.verification_status,
             Organization.VerificationStatus.VERIFIED,
         )
+        self.assertFalse(onboarding.public_profile_enabled)
         event = AccountabilityEvent.objects.get(
             action_type=AccountabilityEvent.ActionType.ORGANIZATION_PLATFORM_TRUST_UPDATED,
             subject_organization=onboarding,
@@ -484,6 +485,8 @@ class OrganizationPartnershipLifecycleServiceTests(TestCase):
             verification_status=Organization.VerificationStatus.VERIFIED,
             partner_status=Organization.PartnerStatus.NONE,
         )
+
+        self.assertFalse(onboarding.public_profile_enabled)
 
         activate_partner_organization_partnership(
             organization_id=onboarding.pk,
