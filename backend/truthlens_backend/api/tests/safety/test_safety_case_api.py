@@ -602,7 +602,8 @@ class SafetyCaseApiTests(APITestCase):
 
         self.case.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(self.case.status, ModerationCase.Status.IN_REVIEW)
+        self.assertEqual(self.case.status, ModerationCase.Status.OPEN)
+        self.assertEqual(self.case.assigned_to, self.moderator)
         self.assertFalse(
             self.case.events.filter(
                 event_type=ModerationEvent.EventType.CASE_ESCALATED
