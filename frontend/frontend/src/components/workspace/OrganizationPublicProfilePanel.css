@@ -257,7 +257,54 @@
    grid-column: 1 / -1;
 }
 
+.org-public-specializations {
+   margin: 0;
+   padding: 0;
+   border: 0;
+}
+
+.org-public-specializations-grid {
+   display: grid;
+   grid-template-columns: repeat(3, minmax(0, 1fr));
+   gap: 8px;
+   margin-top: 4px;
+}
+
+.org-public-specialization-option {
+   display: flex;
+   align-items: center;
+   gap: 8px;
+   min-width: 0;
+   padding: 10px 11px;
+   border: 1px solid var(--border-default);
+   border-radius: 9px;
+   background: var(--bg-subtle);
+   color: var(--text-body);
+   cursor: pointer;
+}
+
+.org-public-specialization-option.selected {
+   border-color: var(--brand-primary);
+   background: var(--bg-surface);
+}
+
+.org-public-specialization-option input {
+   width: 16px;
+   height: 16px;
+   flex: 0 0 auto;
+   margin: 0;
+   accent-color: var(--brand-primary);
+}
+
+.org-public-specialization-option span {
+   min-width: 0;
+   overflow-wrap: anywhere;
+   font-size: 0.73rem;
+   font-weight: 650;
+}
+
 .org-public-profile-field label,
+.org-public-profile-field legend,
 .org-public-profile-consent legend {
    color: var(--text-body);
    font-size: 0.76rem;
@@ -514,6 +561,10 @@
 }
 
 @media (max-width: 760px) {
+   .org-public-specializations-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+   }
+
    .org-public-profile-fields,
    .org-public-profile-consent {
       grid-template-columns: 1fr;
