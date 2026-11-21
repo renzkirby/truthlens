@@ -38,12 +38,6 @@ const ACTION_DETAILS = {
       consequence: "The case will be resolved and the thread will be removed from active circulation.",
       notesRequired: true,
    },
-   ESCALATE: {
-      label: "Escalate review",
-      confirmation: "Escalate for further Safety review",
-      consequence: "The case will remain active and its reports will remain unresolved for deeper review.",
-      notesRequired: true,
-   },
    UPHOLD_RECONSIDERATION: {
       label: "Uphold removal",
       confirmation: "Keep the original removal",
@@ -183,7 +177,6 @@ function SafetyReviewPanel() {
    const decisionNotesRef = useRef(null);
    const dismissActionRef = useRef(null);
    const removeActionRef = useRef(null);
-   const escalateActionRef = useRef(null);
    const upholdReconsiderationRef = useRef(null);
    const reverseReconsiderationRef = useRef(null);
    const decisionReturnFocusRef = useRef(null);
@@ -416,8 +409,6 @@ function SafetyReviewPanel() {
          dismissActionRef.current?.focus();
       } else if (returnAction === "REMOVE") {
          removeActionRef.current?.focus();
-      } else if (returnAction === "ESCALATE") {
-         escalateActionRef.current?.focus();
       } else if (returnAction === "UPHOLD_RECONSIDERATION") {
          upholdReconsiderationRef.current?.focus();
       } else if (returnAction === "REVERSE_RECONSIDERATION") {
@@ -824,39 +815,31 @@ function SafetyReviewPanel() {
          setConfirmingRelease(false);
          setShowAccountActionForm(false);
 
-         if (action === "ESCALATE") {
-            updateQueueCase(updatedCase);
-            showWorkspaceSuccess(addToast, {
-               title: "Safety case escalated",
-               message: `Case ${formatCaseReference(caseId)} remains active for further Platform Safety review.`,
-            });
-         } else {
-            removeCompletedQueueCase(caseId);
+         removeCompletedQueueCase(caseId);
 
-            const title =
-               action === "REVERSE_RECONSIDERATION"
-                  ? "Removal reversed"
-                  : action === "UPHOLD_RECONSIDERATION"
-                    ? "Removal upheld"
-                    : action === "REMOVE"
-                      ? "Content removed"
-                      : "Safety case dismissed";
+         const title =
+            action === "REVERSE_RECONSIDERATION"
+               ? "Removal reversed"
+               : action === "UPHOLD_RECONSIDERATION"
+                 ? "Removal upheld"
+                 : action === "REMOVE"
+                   ? "Content removed"
+                   : "Safety case dismissed";
 
-            const message =
-               action === "REVERSE_RECONSIDERATION"
-                  ? `Case ${formatCaseReference(caseId)} is complete and the content was restored.`
-                  : action === "UPHOLD_RECONSIDERATION"
-                    ? `Case ${formatCaseReference(caseId)} is complete and the original removal remains in place.`
-                    : action === "REMOVE"
-                      ? `Case ${formatCaseReference(caseId)} is complete and the reported content was removed from active circulation.`
-                      : `Case ${formatCaseReference(caseId)} is complete. No policy violation was found and the thread remains visible.`;
+         const message =
+            action === "REVERSE_RECONSIDERATION"
+               ? `Case ${formatCaseReference(caseId)} is complete and the content was restored.`
+               : action === "UPHOLD_RECONSIDERATION"
+                 ? `Case ${formatCaseReference(caseId)} is complete and the original removal remains in place.`
+                 : action === "REMOVE"
+                   ? `Case ${formatCaseReference(caseId)} is complete and the reported content was removed from active circulation.`
+                   : `Case ${formatCaseReference(caseId)} is complete. No policy violation was found and the thread remains visible.`;
 
-            showWorkspaceSuccess(addToast, {
-               title,
-               message,
-               duration: WORKSPACE_LONG_TOAST_DURATION,
-            });
-         }
+         showWorkspaceSuccess(addToast, {
+            title,
+            message,
+            duration: WORKSPACE_LONG_TOAST_DURATION,
+         });
 
          requestQueueRefresh();
       } catch (error) {
@@ -1448,19 +1431,6 @@ function SafetyReviewPanel() {
                                        >
                                           Remove content
                                        </Button>
-                                       {detail.status !== "ESCALATED" && (
-                                          <Button
-                                             ref={escalateActionRef}
-                                             type="button"
-                                             variant="secondary"
-                                             density="comfortable"
-                                             className="safety-warning-action"
-                                             disabled={isBusy || confirmingRelease}
-                                             onClick={() => handleOpenDecision("ESCALATE")}
-                                          >
-                                             Escalate review
-                                          </Button>
-                                       )}
                                     </div>
                                  )
                               ) : (
@@ -1539,16 +1509,12 @@ function SafetyReviewPanel() {
                                     <label htmlFor="safety-moderator-notes">
                                        {isReconsiderationAction
                                           ? "Reconsideration explanation"
-                                          : decisionAction === "ESCALATE"
-                                            ? "Escalation notes"
-                                            : "Decision explanation"}{" "}
+                                          : "Decision explanation"}{" "}
                                        {selectedActionDetail.notesRequired ? "(required)" : "(optional)"}
                                     </label>
-                                    {decisionAction !== "ESCALATE" && (
-                                       <p className="safety-decision-explanation-helper">
-                                          This explanation is shown to affected users. Keep it concise and do not include internal-only details.
-                                       </p>
-                                    )}
+                                    <p className="safety-decision-explanation-helper">
+                                       This explanation is shown to affected users. Keep it concise and do not include internal-only details.
+                                    </p>
                                     <Textarea
                                        ref={decisionNotesRef}
                                        id="safety-moderator-notes"
@@ -1586,7 +1552,6 @@ function SafetyReviewPanel() {
                                                   : "secondary"
                                           }
                                           density="comfortable"
-                                          className={decisionAction === "ESCALATE" ? "safety-warning-action" : ""}
                                           disabled={isBusy}
                                           loading={pendingOperation?.kind === "action"}
                                           loadingLabel="Submitting…"
