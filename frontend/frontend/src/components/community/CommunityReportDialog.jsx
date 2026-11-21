@@ -195,9 +195,11 @@ export default function CommunityReportDialog({
                </Link>
             </p>
 
-            <p className="community-report-dialog-verify-note">
-               Think a factual claim is wrong? <Link to="/verify">Use Verify</Link> or submit evidence instead of reporting it as a Safety violation.
-            </p>
+            {!isStaffFlag && (
+               <p className="community-report-dialog-verify-note">
+                  Think a factual claim is wrong? <Link to="/verify">Use Verify</Link> or submit evidence instead of reporting it as a Safety violation.
+               </p>
+            )}
 
             {selectedReason?.sensitive && (
                <div className="community-report-dialog-safety-note" role="note">
