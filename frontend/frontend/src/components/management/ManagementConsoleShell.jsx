@@ -3,10 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-do
 
 import LogoImage from "../../assets/truthlens_logo.png";
 import { useAuth } from "../../hooks/useAuth";
-import {
-   canAccessManagementConsole,
-   isPlatformSafetyModerator,
-} from "../../utils/management";
+import { canAccessManagementConsole, isPlatformSafetyModerator } from "../../utils/management";
 import Icons from "../Icons";
 import Button from "../ui/Button";
 
@@ -14,10 +11,23 @@ import "./ManagementConsole.css";
 
 const NAVIGATION_ITEMS = [
    { to: "/management", label: "Overview", icon: "dashboard", end: true, access: "admin" },
-   { to: "/management/pipeline", label: "Verification System", icon: "activity", section: "Operations", access: "admin" },
-   { to: "/management/safety", label: "Safety Review", icon: "shield-check", section: "Platform Safety", access: "safety", end: true },
+   // { to: "/management/pipeline", label: "Verification System", icon: "activity", section: "Operations", access: "admin" },
+   {
+      to: "/management/safety",
+      label: "Safety Review",
+      icon: "shield-check",
+      section: "Platform Safety",
+      access: "safety",
+      end: true,
+   },
    { to: "/management/safety/audit", label: "Safety History", icon: "activity", access: "safety" },
-   { to: "/management/platform-staff", label: "Platform Staff", icon: "shield-user", section: "Governance", access: "admin" },
+   {
+      to: "/management/platform-staff",
+      label: "Platform Staff",
+      icon: "shield-user",
+      section: "Governance",
+      access: "admin",
+   },
    { to: "/management/partnership-applications", label: "Partner Applications", icon: "file-text", access: "admin" },
    { to: "/management/organizations", label: "Partner Organizations", icon: "landmark", access: "admin" },
    { to: "/management/memberships", label: "Membership Records", icon: "users", access: "admin" },
@@ -39,9 +49,7 @@ function ManagementNavigation({ label, onNavigate, firstLinkRef, items }) {
                      ref={index === 0 ? firstLinkRef : undefined}
                      to={item.to}
                      end={item.end}
-                     className={({ isActive }) =>
-                        `management-shell__nav-link ${isActive ? "active" : ""}`
-                     }
+                     className={({ isActive }) => `management-shell__nav-link ${isActive ? "active" : ""}`}
                      onClick={onNavigate}
                   >
                      <Icons name={item.icon} size={18} />
@@ -64,9 +72,7 @@ function ManagementConsoleShell() {
    const location = useLocation();
    const isPlatformAdmin = canAccessManagementConsole(user);
    const isSafetyModerator = isPlatformSafetyModerator(user);
-   const navigationItems = NAVIGATION_ITEMS.filter((item) =>
-      isPlatformAdmin ? true : item.access === "safety",
-   );
+   const navigationItems = NAVIGATION_ITEMS.filter((item) => (isPlatformAdmin ? true : item.access === "safety"));
    const homePath = isPlatformAdmin ? "/management" : "/management/safety";
    const documentationView = location.pathname === "/management/partner-guidelines";
    const explicitLogoutRef = useRef(false);
@@ -80,9 +86,12 @@ function ManagementConsoleShell() {
       window.requestAnimationFrame(() => menuTriggerRef.current?.focus());
    }, []);
 
-   useEffect(() => () => {
-      if (explicitLogoutRef.current) logout();
-   }, [logout]);
+   useEffect(
+      () => () => {
+         if (explicitLogoutRef.current) logout();
+      },
+      [logout],
+   );
 
    useEffect(() => {
       if (!mobileNavigationOpen) return undefined;
@@ -146,7 +155,9 @@ function ManagementConsoleShell() {
                <img src={LogoImage} alt="" />
                <span>
                   <strong>TruthLens</strong>
-                  <small>{isSafetyModerator && !isPlatformAdmin ? "Platform Safety Console" : "Management Console"}</small>
+                  <small>
+                     {isSafetyModerator && !isPlatformAdmin ? "Platform Safety Console" : "Management Console"}
+                  </small>
                </span>
             </Link>
             <div className="management-shell__account">
