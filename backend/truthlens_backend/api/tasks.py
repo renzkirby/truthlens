@@ -1,7 +1,6 @@
 from celery import shared_task
 from concurrent.futures import ThreadPoolExecutor
 import math
-import re
 import os
 import logging
 import time
@@ -189,122 +188,12 @@ def _claims_are_equivalent_for_official_rating(incoming_claim, reviewed_claim):
         return None
 
 
-_OFFICIAL_RATING_MONTH_NUMBERS = {
-    "january": 1,
-    "february": 2,
-    "march": 3,
-    "april": 4,
-    "may": 5,
-    "june": 6,
-    "july": 7,
-    "august": 8,
-    "september": 9,
-    "october": 10,
-    "november": 11,
-    "december": 12,
-}
-_OFFICIAL_RATING_MONTH_YEAR_PATTERN = re.compile(
-    r"\b(?:(?:in|during|on)\s+)?"
-    r"(January|February|March|April|May|June|July|August|September|October|"
-    r"November|December)\s+((?:19|20)\d{2}|2100)\b(?:,\s*)?",
-    re.IGNORECASE,
-)
-_GFC_CLAIM_DATE_MONTH_PATTERN = re.compile(
-    r"^(?P<year>\d{4})-(?P<month>0[1-9]|1[0-2])-"
-)
-
-
-def _strip_gfc_aligned_month_year_qualifier(
-    claim_text,
-    claim_date,
-    *,
-    submitted_claim_text,
-):
-    """Remove one month/year only when raw TEXT and Google's claimDate agree."""
-    if (
-        not isinstance(claim_text, str)
-        or not isinstance(claim_date, str)
-        or not isinstance(submitted_claim_text, str)
-    ):
-        return None
-
-    date_match = _GFC_CLAIM_DATE_MONTH_PATTERN.match(claim_date.strip())
-    if date_match is None:
-        return None
-
-    temporal_matches = list(_OFFICIAL_RATING_MONTH_YEAR_PATTERN.finditer(claim_text))
-    submitted_temporal_matches = list(
-        _OFFICIAL_RATING_MONTH_YEAR_PATTERN.finditer(submitted_claim_text)
-    )
-    if len(temporal_matches) != 1 or len(submitted_temporal_matches) != 1:
-        return None
-
-    temporal_match = temporal_matches[0]
-    submitted_temporal_match = submitted_temporal_matches[0]
-    month_name, year_text = temporal_match.groups()
-    submitted_month_name, submitted_year_text = submitted_temporal_match.groups()
-    month_number = _OFFICIAL_RATING_MONTH_NUMBERS[month_name.casefold()]
-    submitted_month_number = _OFFICIAL_RATING_MONTH_NUMBERS[
-        submitted_month_name.casefold()
-    ]
-    if (
-        int(year_text) != int(date_match.group("year"))
-        or month_number != int(date_match.group("month"))
-        or int(submitted_year_text) != int(year_text)
-        or submitted_month_number != month_number
-    ):
-        return None
-
-    stripped = (
-        claim_text[:temporal_match.start()]
-        + " "
-        + claim_text[temporal_match.end():]
-    )
-    stripped = " ".join(stripped.split()).strip(" ,")
-    stripped = re.sub(r"\s+([,.;:!?])", r"\1", stripped)
-    return stripped or None
-
-
-def _gfc_claim_date_for_reviewed_claim(reviewed_claim, provider_claims):
-    """Return one unambiguous structured claimDate for the reviewed proposition."""
-    reviewed_identity = _normalized_claim_identity(reviewed_claim)
-    if not reviewed_identity:
-        return None
-
-    dates = set()
-    for claim_data in provider_claims or ():
-        if not isinstance(claim_data, dict):
-            continue
-        if _normalized_claim_identity(claim_data.get("text")) != reviewed_identity:
-            continue
-        claim_date = claim_data.get("claimDate")
-        if (
-            isinstance(claim_date, str)
-            and _GFC_CLAIM_DATE_MONTH_PATTERN.match(claim_date.strip())
-        ):
-            dates.add(claim_date.strip())
-
-    if len(dates) != 1:
-        return None
-    return next(iter(dates))
-
-
-def _resolve_official_fact_check_rating_policy(
-    claim_text,
-    evidence_groups,
-    *,
-    provider_claims=(),
-    allow_claim_date_fallback=False,
-    submitted_claim_text=None,
-):
+def _resolve_official_fact_check_rating_policy(claim_text, evidence_groups):
     """Resolve high-precision SATIRE/FALSE ClaimReview ratings from persisted GFC evidence.
 
     The helper is intentionally dormant unless an explicit SATIRE rating exists.
-    Related but non-equivalent fact-checks cannot authorize SATIRE. Direct TEXT
-    verification may reconcile one explicit month/year qualifier only when the
-    live Google Claim.claimDate agrees and the remaining proposition passes the
-    existing strict equivalence contract. If equivalence cannot be established
-    safely, SATIRE authorization fails closed to NONE.
+    Related but non-equivalent fact-checks cannot authorize SATIRE. If equivalence
+    cannot be established safely, SATIRE authorization fails closed to NONE.
     """
     records = []
     for group in evidence_groups:
@@ -337,52 +226,20 @@ def _resolve_official_fact_check_rating_policy(
 
     equivalence_cache = {}
 
-    def strict_equivalent(reviewed_claim):
+    def equivalent(reviewed_claim):
         identity = _normalized_claim_identity(reviewed_claim)
-        cache_key = ("STRICT", identity)
-        if cache_key not in equivalence_cache:
-            equivalence_cache[cache_key] = _claims_are_equivalent_for_official_rating(
+        if identity not in equivalence_cache:
+            equivalence_cache[identity] = _claims_are_equivalent_for_official_rating(
                 claim_text,
                 reviewed_claim,
             )
-        return equivalence_cache[cache_key]
-
-    def satire_equivalent(record):
-        reviewed_claim = record["claim_text"]
-        strict_match = strict_equivalent(reviewed_claim)
-        if strict_match is not False or not allow_claim_date_fallback:
-            return strict_match
-
-        claim_date = _gfc_claim_date_for_reviewed_claim(
-            reviewed_claim,
-            provider_claims,
-        )
-        stripped_claim = _strip_gfc_aligned_month_year_qualifier(
-            claim_text,
-            claim_date,
-            submitted_claim_text=submitted_claim_text,
-        )
-        if not stripped_claim:
-            return False
-
-        cache_key = (
-            "CLAIM_DATE_ALIGNED",
-            _normalized_claim_identity(stripped_claim),
-            _normalized_claim_identity(reviewed_claim),
-            claim_date,
-        )
-        if cache_key not in equivalence_cache:
-            equivalence_cache[cache_key] = _claims_are_equivalent_for_official_rating(
-                stripped_claim,
-                reviewed_claim,
-            )
-        return equivalence_cache[cache_key]
+        return equivalence_cache[identity]
 
     equivalent_satire = []
     for record in records:
         if record["rating_kind"] != "SATIRE":
             continue
-        match = satire_equivalent(record)
+        match = equivalent(record["claim_text"])
         if match is None:
             return {
                 "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
@@ -400,7 +257,7 @@ def _resolve_official_fact_check_rating_policy(
     for record in records:
         if record["rating_kind"] == "SATIRE":
             continue
-        match = strict_equivalent(record["claim_text"])
+        match = equivalent(record["claim_text"])
         if match is None:
             return {
                 "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
@@ -1857,9 +1714,6 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             _resolve_official_fact_check_rating_policy(
                                 cleaned_claim,
                                 precheck_fact_check_groups,
-                                provider_claims=gfc_claims,
-                                allow_claim_date_fallback=is_text_claim,
-                                submitted_claim_text=raw_text if is_text_claim else None,
                             )
                         )
                         _log_stage(
