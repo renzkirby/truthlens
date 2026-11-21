@@ -750,6 +750,7 @@ export default function ThreadDetailPage() {
       accessStatus,
       restrictionEndsAt,
    );
+   const isPlatformStaff = Boolean(user?.community_identity?.platform_role);
    const { threadId } = useParams();
    const navigate = useNavigate();
    const location = useLocation();
@@ -1323,35 +1324,63 @@ export default function ThreadDetailPage() {
 
    function openReportDialog(target) {
       if (!target?.type || !target?.id || !canParticipateInCommunity) return;
-      setReportTarget(target);
+      setReportTarget({ ...target, mode: "report" });
+      setReportDialogOpen(true);
+   }
+
+   function openStaffFlagDialog() {
+      if (!thread?.id || !isPlatformStaff) return;
+      setReportTarget({
+         type: "THREAD",
+         id: thread.id,
+         label: "discussion",
+         mode: "staff-flag",
+      });
       setReportDialogOpen(true);
    }
 
    async function submitReport({ reason, notes }) {
       if (reporting || !reportTarget || !reason) return;
 
-      const body = {
-         target_type: reportTarget.type,
-         thread_id: thread.id,
-         reason,
-         notes,
-      };
-      if (reportTarget.type === "COMMENT") body.comment_id = reportTarget.id;
-      if (reportTarget.type === "EVIDENCE") body.evidence_submission_id = reportTarget.id;
-
       setReporting(true);
       try {
-         await authFetch(apiUrl("community-reports/"), {
-            method: "POST",
-            body,
-         });
+         if (reportTarget.mode === "staff-flag") {
+            const response = await authFetch(
+               apiUrl(`threads/${thread.id}/flag-for-safety-review/`),
+               {
+                  method: "POST",
+                  body: { reason, notes },
+               },
+            );
+            addToast({
+               type: "success",
+               message: response?.created
+                  ? "Discussion flagged for Safety Review."
+                  : "Discussion is already in Safety Review.",
+               duration: 2200,
+            });
+         } else {
+            const body = {
+               target_type: reportTarget.type,
+               thread_id: thread.id,
+               reason,
+               notes,
+            };
+            if (reportTarget.type === "COMMENT") body.comment_id = reportTarget.id;
+            if (reportTarget.type === "EVIDENCE") body.evidence_submission_id = reportTarget.id;
+
+            await authFetch(apiUrl("community-reports/"), {
+               method: "POST",
+               body,
+            });
+            addToast({
+               type: "success",
+               message: "Report submitted for Platform Safety review.",
+               duration: 2200,
+            });
+         }
          setReportDialogOpen(false);
          setReportTarget(null);
-         addToast({
-            type: "success",
-            message: "Report submitted for Platform Safety review.",
-            duration: 2200,
-         });
       } catch (error) {
          console.error("Failed to report Community content", error);
          addToast({ type: "error", message: userFacingErrorMessage(error, {
@@ -1388,6 +1417,7 @@ export default function ThreadDetailPage() {
    const authorUsername = thread.author?.username || "Unknown";
    const isThreadOwner = thread.author?.id === user?.id;
    const canReportThread = canParticipateInCommunity && !isThreadOwner;
+   const canFlagThreadForSafety = isPlatformStaff;
    const authorProfessionalAffiliation = thread.author?.partner_affiliations?.[0] || null;
    const authorTrustVisible =
       thread.author?.trust_score !== null && thread.author?.trust_score !== undefined;
@@ -1447,7 +1477,7 @@ export default function ThreadDetailPage() {
                   {!canParticipateInCommunity && (
                      <span
                         className="thread-detail-governance-chip"
-                        title="Platform staff can inspect and share Community content, but cannot participate or build Community reputation."
+                        title="Platform staff can inspect, flag Community content for Safety Review, and share it, but cannot participate or build Community reputation."
                      >
                         <Icons name="shield-check" size={13} aria-hidden="true" />
                         Governance view · Read only
@@ -1885,7 +1915,17 @@ export default function ThreadDetailPage() {
                )}
 
                <div className="thread-detail-sidebar-actions thread-detail-sidebar-actions--classic" role="group" aria-label="Thread actions">
-                  {canReportThread && (
+                  {canFlagThreadForSafety ? (
+                     <button
+                        type="button"
+                        className="is-danger"
+                        onClick={openStaffFlagDialog}
+                        disabled={reporting}
+                     >
+                        <Icons name="flag" size={15} />
+                        {reporting ? "Flagging…" : "Flag for Safety Review"}
+                     </button>
+                  ) : canReportThread ? (
                      <button
                         type="button"
                         className="is-danger"
@@ -1895,7 +1935,7 @@ export default function ThreadDetailPage() {
                            label: "discussion",
                         })}
                      ><Icons name="flag" size={15} /> Report</button>
-                  )}
+                  ) : null}
                   <button type="button" onClick={shareThread}><Icons name="share-2" size={15} /> Share</button>
                </div>
             </aside>
@@ -1913,6 +1953,7 @@ export default function ThreadDetailPage() {
                open
                busy={reporting}
                targetLabel={reportTarget.label || "content"}
+               variant={reportTarget.mode === "staff-flag" ? "staff-flag" : "report"}
                onClose={() => {
                   if (reporting) return;
                   setReportDialogOpen(false);

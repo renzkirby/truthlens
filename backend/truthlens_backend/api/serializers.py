@@ -1852,6 +1852,60 @@ class CommunityReportSerializer(serializers.ModelSerializer):
 
 
 
+class PlatformStaffThreadSafetyFlagSerializer(serializers.Serializer):
+    reason = serializers.ChoiceField(
+        choices=[
+            (CommunityReport.Reason.SPAM, CommunityReport.Reason.SPAM.label),
+            (CommunityReport.Reason.HARASSMENT, CommunityReport.Reason.HARASSMENT.label),
+            (CommunityReport.Reason.HATE, CommunityReport.Reason.HATE.label),
+            (
+                CommunityReport.Reason.VIOLENCE_DANGEROUS,
+                CommunityReport.Reason.VIOLENCE_DANGEROUS.label,
+            ),
+            (CommunityReport.Reason.PRIVACY, CommunityReport.Reason.PRIVACY.label),
+            (
+                CommunityReport.Reason.SEXUAL_EXPLOITATIVE,
+                CommunityReport.Reason.SEXUAL_EXPLOITATIVE.label,
+            ),
+            (
+                CommunityReport.Reason.IMPERSONATION_FRAUD,
+                CommunityReport.Reason.IMPERSONATION_FRAUD.label,
+            ),
+            (CommunityReport.Reason.OTHER, CommunityReport.Reason.OTHER.label),
+        ],
+    )
+    notes = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        max_length=1000,
+        default="",
+    )
+
+    def validate(self, attrs):
+        unsupported_fields = set(self.initial_data) - {"reason", "notes"}
+        if unsupported_fields:
+            raise serializers.ValidationError(
+                {
+                    field: "This field is not supported."
+                    for field in sorted(unsupported_fields)
+                }
+            )
+
+        notes = attrs.get("notes", "").strip()
+        if attrs["reason"] == CommunityReport.Reason.OTHER and len(notes) < 10:
+            raise serializers.ValidationError(
+                {
+                    "notes": (
+                        "Explain the Safety concern in at least 10 characters "
+                        "when selecting Others."
+                    )
+                }
+            )
+        attrs["notes"] = notes
+        return attrs
+
+
 class SafetyCaseQueueFilterSerializer(serializers.Serializer):
     status = serializers.ChoiceField(
         choices=[

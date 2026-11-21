@@ -99,7 +99,9 @@ from .models import (
 )
 from .moderation_service import (
     ACTIVE_CASE_STATUSES,
+    DuplicateActiveModerationCase,
     ModerationCaseError,
+    create_moderation_case,
     ensure_safety_case,
     get_active_safety_case,
 )
@@ -392,6 +394,7 @@ from .serializers import (
     ThreadDetailSerializer,
     VoteSerializer,
     CommunityReportSerializer,
+    PlatformStaffThreadSafetyFlagSerializer,
     AdjudicationActionSerializer,
     AdjudicationCaseDetailQuerySerializer,
     AdjudicationCaseDetailSerializer,
@@ -3678,6 +3681,72 @@ class ThreadViewSet(viewsets.ModelViewSet):
             queryset,
             claim_path="claim",
             include_legacy_threads=True,
+        )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="flag-for-safety-review",
+        permission_classes=[IsAuthenticated, CanReviewSafety],
+    )
+    def flag_for_safety_review(self, request, pk=None):
+        payload = PlatformStaffThreadSafetyFlagSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+
+        thread = self.get_object()
+        existing_case = get_active_safety_case(
+            thread,
+            target_type=ModerationCase.SafetyTargetType.THREAD,
+        )
+        if existing_case is not None:
+            return Response(
+                {
+                    "created": False,
+                    "safety_case_id": str(existing_case.pk),
+                    "status": existing_case.status,
+                    "source": existing_case.source,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        reason = payload.validated_data["reason"]
+        notes = payload.validated_data.get("notes", "")
+        try:
+            case = create_moderation_case(
+                case_type=ModerationCase.CaseType.SAFETY,
+                actor=request.user,
+                source=ModerationCase.Source.MODERATOR,
+                thread=thread,
+                safety_target_type=ModerationCase.SafetyTargetType.THREAD,
+                creation_reason_code=reason,
+                creation_notes=notes,
+                creation_metadata={
+                    "staff_flag": True,
+                    "reason_label": CommunityReport.Reason(reason).label,
+                },
+            )
+            created = True
+        except DuplicateActiveModerationCase:
+            case = get_active_safety_case(
+                thread,
+                target_type=ModerationCase.SafetyTargetType.THREAD,
+            )
+            if case is None:
+                raise
+            created = False
+
+        return Response(
+            {
+                "created": created,
+                "safety_case_id": str(case.pk),
+                "status": case.status,
+                "source": case.source,
+            },
+            status=(
+                status.HTTP_201_CREATED
+                if created
+                else status.HTTP_200_OK
+            ),
         )
 
     def perform_create(self, serializer):
