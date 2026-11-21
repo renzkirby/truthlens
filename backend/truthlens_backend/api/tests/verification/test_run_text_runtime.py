@@ -1027,6 +1027,46 @@ class VerificationRunTextRuntimeTests(TestCase):
         )
         self.retrieve_tavily.assert_not_called()
 
+    def test_strict_misleading_rating_signal_bypasses_coverage_and_reaches_evaluator(self):
+        evidence_id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        policy = {
+            "resolution": services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+            "misleading_evidence_ids": (evidence_id,),
+        }
+
+        with patch(
+            "api.tasks._resolve_official_fact_check_rating_policy",
+            return_value=policy,
+        ):
+            run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        self.relevance.assert_not_called()
+        self.retrieve_tavily.assert_not_called()
+        self.evaluate_persisted.assert_called_once()
+        self.assertEqual(
+            self.evaluate_persisted.call_args.args[:6],
+            (
+                self.cleaned["cleaned_claim"],
+                "Persisted evidence context.",
+                "NEUTRAL",
+                services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+                (),
+                (evidence_id,),
+            ),
+        )
+        bypass_calls = [
+            call
+            for call in self.log_stage.call_args_list
+            if len(call.args) >= 2 and call.args[1] == "gfc_relevance_bypassed"
+        ]
+        self.assertEqual(len(bypass_calls), 1)
+        self.assertEqual(
+            bypass_calls[0].kwargs.get("outcome"),
+            "structured_misleading_signal",
+        )
+
     def test_gfc_evaluation_failure_continues_to_tavily(self):
         self.evaluate_persisted.side_effect = [
             RuntimeError("GFC evaluation unavailable"),
