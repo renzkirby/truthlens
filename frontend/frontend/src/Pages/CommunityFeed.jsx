@@ -526,9 +526,17 @@ function CommunityFeed() {
 
    const openReportDialog = (event, thread) => {
       event.stopPropagation();
-      if (!thread?.id || isThreadOwner(thread)) return;
+      if (!thread?.id || isThreadOwner(thread) || !canParticipateInCommunity) return;
       dialogReturnFocusRef.current = threadMenuRefs.current.get(thread.id);
-      setReportDialog({ open: true, threadId: thread.id });
+      setReportDialog({ open: true, threadId: thread.id, mode: "report" });
+      setOpenMenuThreadId(null);
+   };
+
+   const openStaffFlagDialog = (event, thread) => {
+      event.stopPropagation();
+      if (!thread?.id || !isPlatformStaff) return;
+      dialogReturnFocusRef.current = threadMenuRefs.current.get(thread.id);
+      setReportDialog({ open: true, threadId: thread.id, mode: "staff-flag" });
       setOpenMenuThreadId(null);
    };
 
@@ -537,23 +545,42 @@ function CommunityFeed() {
 
       try {
          setReportingThreadId(reportDialog.threadId);
-         await authFetch(communityReportsEndpoint, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-               target_type: "THREAD",
-               thread_id: reportDialog.threadId,
-               reason,
-               notes,
-            }),
-         });
-         addToast({ type: "success", message: "Report submitted for review." });
-         setReportDialog({ open: false, threadId: null });
+         if (reportDialog.mode === "staff-flag") {
+            const response = await authFetch(
+               `${threadDetailUrl(reportDialog.threadId)}flag-for-safety-review/`,
+               {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ reason, notes }),
+               },
+            );
+            addToast({
+               type: "success",
+               message: response?.created
+                  ? "Discussion flagged for Safety Review."
+                  : "Discussion is already in Safety Review.",
+            });
+         } else {
+            await authFetch(communityReportsEndpoint, {
+               method: "POST",
+               headers: { "Content-Type": "application/json" },
+               body: JSON.stringify({
+                  target_type: "THREAD",
+                  thread_id: reportDialog.threadId,
+                  reason,
+                  notes,
+               }),
+            });
+            addToast({ type: "success", message: "Report submitted for review." });
+         }
+         setReportDialog({ open: false, threadId: null, mode: "report" });
          restoreDialogFocus();
       } catch (error) {
          addToast({ type: "error", message: userFacingErrorMessage(error, {
-               fallback: "We couldn't submit this report. Please try again.",
-               notFoundMessage: "This discussion is no longer available to report.",
+               fallback: reportDialog.mode === "staff-flag"
+                  ? "We couldn't flag this discussion for Safety Review. Please try again."
+                  : "We couldn't submit this report. Please try again.",
+               notFoundMessage: "This discussion is no longer available.",
             }) });
       } finally {
          setReportingThreadId(null);
