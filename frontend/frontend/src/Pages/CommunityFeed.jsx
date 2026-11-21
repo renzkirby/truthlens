@@ -238,6 +238,7 @@ function CommunityFeed() {
       accessStatus,
       restrictionEndsAt,
    );
+   const isPlatformStaff = Boolean(user?.community_identity?.platform_role);
    const threadsEndpoint = resolveApiEndpoint("THREADS");
 
    const [threads, setThreads] = useState([]);
@@ -263,7 +264,7 @@ function CommunityFeed() {
    const [reportingThreadId, setReportingThreadId] = useState(null);
    const [sharingThreadId, setSharingThreadId] = useState(null);
    const [failedMediaIds, setFailedMediaIds] = useState(() => new Set());
-   const [reportDialog, setReportDialog] = useState({ open: false, threadId: null });
+   const [reportDialog, setReportDialog] = useState({ open: false, threadId: null, mode: "report" });
    const [deleteDialog, setDeleteDialog] = useState({ open: false, threadId: null, caption: "" });
 
    const observerTarget = useRef(null);
@@ -305,7 +306,7 @@ function CommunityFeed() {
 
    const closeReportDialog = useCallback(() => {
       if (reportingThreadId) return;
-      setReportDialog({ open: false, threadId: null });
+      setReportDialog({ open: false, threadId: null, mode: "report" });
       restoreDialogFocus();
    }, [reportingThreadId, restoreDialogFocus]);
 
@@ -525,9 +526,17 @@ function CommunityFeed() {
 
    const openReportDialog = (event, thread) => {
       event.stopPropagation();
-      if (!thread?.id || isThreadOwner(thread)) return;
+      if (!thread?.id || isThreadOwner(thread) || !canParticipateInCommunity) return;
       dialogReturnFocusRef.current = threadMenuRefs.current.get(thread.id);
-      setReportDialog({ open: true, threadId: thread.id });
+      setReportDialog({ open: true, threadId: thread.id, mode: "report" });
+      setOpenMenuThreadId(null);
+   };
+
+   const openStaffFlagDialog = (event, thread) => {
+      event.stopPropagation();
+      if (!thread?.id || !isPlatformStaff) return;
+      dialogReturnFocusRef.current = threadMenuRefs.current.get(thread.id);
+      setReportDialog({ open: true, threadId: thread.id, mode: "staff-flag" });
       setOpenMenuThreadId(null);
    };
 
@@ -536,23 +545,42 @@ function CommunityFeed() {
 
       try {
          setReportingThreadId(reportDialog.threadId);
-         await authFetch(communityReportsEndpoint, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-               target_type: "THREAD",
-               thread_id: reportDialog.threadId,
-               reason,
-               notes,
-            }),
-         });
-         addToast({ type: "success", message: "Report submitted for review." });
-         setReportDialog({ open: false, threadId: null });
+         if (reportDialog.mode === "staff-flag") {
+            const response = await authFetch(
+               `${threadDetailUrl(reportDialog.threadId)}flag-for-safety-review/`,
+               {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ reason, notes }),
+               },
+            );
+            addToast({
+               type: "success",
+               message: response?.created
+                  ? "Discussion flagged for Safety Review."
+                  : "Discussion is already in Safety Review.",
+            });
+         } else {
+            await authFetch(communityReportsEndpoint, {
+               method: "POST",
+               headers: { "Content-Type": "application/json" },
+               body: JSON.stringify({
+                  target_type: "THREAD",
+                  thread_id: reportDialog.threadId,
+                  reason,
+                  notes,
+               }),
+            });
+            addToast({ type: "success", message: "Report submitted for review." });
+         }
+         setReportDialog({ open: false, threadId: null, mode: "report" });
          restoreDialogFocus();
       } catch (error) {
          addToast({ type: "error", message: userFacingErrorMessage(error, {
-               fallback: "We couldn't submit this report. Please try again.",
-               notFoundMessage: "This discussion is no longer available to report.",
+               fallback: reportDialog.mode === "staff-flag"
+                  ? "We couldn't flag this discussion for Safety Review. Please try again."
+                  : "We couldn't submit this report. Please try again.",
+               notFoundMessage: "This discussion is no longer available.",
             }) });
       } finally {
          setReportingThreadId(null);
@@ -1169,9 +1197,23 @@ function CommunityFeed() {
                                        onKeyDown={(event) => moveMenuFocus(event, closeThreadMenu)}
                                     >
                                        {!canParticipateInCommunity ? (
-                                          <button type="button" role="menuitem" className="feed-popup-item" onClick={(event) => shareThread(event, thread)} disabled={sharingThreadId === thread.id}>
-                                             <Icons name="share-2" size={16} aria-hidden="true" /> {sharingThreadId === thread.id ? "Sharing..." : "Share"}
-                                          </button>
+                                          <>
+                                             {isPlatformStaff && (
+                                                <button
+                                                   type="button"
+                                                   role="menuitem"
+                                                   className="feed-popup-item"
+                                                   onClick={(event) => openStaffFlagDialog(event, thread)}
+                                                   disabled={reportingThreadId === thread.id}
+                                                >
+                                                   <Icons name="flag" size={16} aria-hidden="true" />
+                                                   {reportingThreadId === thread.id ? "Flagging..." : "Flag for Safety Review"}
+                                                </button>
+                                             )}
+                                             <button type="button" role="menuitem" className="feed-popup-item" onClick={(event) => shareThread(event, thread)} disabled={sharingThreadId === thread.id}>
+                                                <Icons name="share-2" size={16} aria-hidden="true" /> {sharingThreadId === thread.id ? "Sharing..." : "Share"}
+                                             </button>
+                                          </>
                                        ) : isThreadOwner(thread) ? (
                                           <>
                                              {canContribute && (
@@ -1306,6 +1348,7 @@ function CommunityFeed() {
                   open
                   busy={Boolean(reportingThreadId)}
                   targetLabel="discussion"
+                  variant={reportDialog.mode === "staff-flag" ? "staff-flag" : "report"}
                   onClose={closeReportDialog}
                   onSubmit={submitReportThread}
                   fallbackFocusRef={mainRef}
