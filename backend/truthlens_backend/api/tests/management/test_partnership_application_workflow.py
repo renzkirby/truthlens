@@ -368,6 +368,7 @@ class PartnershipApplicationWorkflowTests(APITestCase):
             application.organization.partner_status,
             Organization.PartnerStatus.ACTIVE,
         )
+        self.assertTrue(application.organization.public_profile_enabled)
         self.assertEqual(
             result["membership"].role,
             OrganizationMembership.Role.ADMIN,
