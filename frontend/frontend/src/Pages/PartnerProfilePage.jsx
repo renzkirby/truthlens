@@ -513,10 +513,9 @@ function PartnerProfileContent({ slug, isCommunity }) {
          professionalOrganization.slug === partner.slug
       )
    );
-   const hasVerificationSpecializations = Array.isArray(partner.verification_specializations);
-   const expertiseAreas = hasVerificationSpecializations
+   const verificationSpecializations = Array.isArray(partner.verification_specializations)
       ? partner.verification_specializations
-      : Array.isArray(partner.expertise_areas) ? partner.expertise_areas : [];
+      : [];
    const currentTabDescription =
       activeTab === "published"
          ? `Institutionally published fact-checks from ${partner.name}.`
@@ -679,20 +678,22 @@ function PartnerProfileContent({ slug, isCommunity }) {
 
                      <section className="user-profile__activity-item partner-profile__about-section">
                         <div className="user-profile__activity-copy">
-                           <h3>{hasVerificationSpecializations ? "Verification specializations" : "Expertise"}</h3>
-                           {expertiseAreas.length > 0 ? (
+                           <h3>Verification specializations</h3>
+                           {verificationSpecializations.length > 0 ? (
                               <ul className="partner-profile-expertise">
-                                 {expertiseAreas.map((area, index) => (
+                                 {verificationSpecializations.map((area, index) => (
                                     <li key={`${area}-${index}`}>
-                                       {hasVerificationSpecializations ? formatVerificationDomain(area) : area}
+                                       {formatVerificationDomain(area)}
                                     </li>
                                  ))}
                               </ul>
                            ) : (
-                              <p>{hasVerificationSpecializations
-                                 ? "This organization has not selected investigation specializations yet."
-                                 : "No public expertise areas have been listed."}</p>
+                              <p>No public verification specializations have been listed.</p>
                            )}
+                           <p>
+                              These specializations describe the organization&apos;s public interests and experience.
+                              They do not determine which TruthLens investigations the organization may claim.
+                           </p>
                         </div>
                      </section>
 
@@ -718,8 +719,8 @@ function PartnerProfileContent({ slug, isCommunity }) {
                         <div>
                            <h3>Partnership context</h3>
                            <p>
-                              This public profile indicates that the organization has chosen to maintain a public
-                              presence on TruthLens. Partner participation does not automatically imply endorsement
+                              This organization currently maintains a public presence on TruthLens. Partner
+                              participation does not automatically imply endorsement
                               of all TruthLens analyses, verdicts, or content.
                            </p>
                         </div>
