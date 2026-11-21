@@ -204,13 +204,13 @@ _OFFICIAL_RATING_MONTH_NUMBERS = {
     "december": 12,
 }
 _OFFICIAL_RATING_MONTH_YEAR_PATTERN = re.compile(
-    r"\\b(?:(?:in|during|on)\\s+)?"
+    r"\b(?:(?:in|during|on)\s+)?"
     r"(January|February|March|April|May|June|July|August|September|October|"
-    r"November|December)\\s+((?:19|20)\\d{2}|2100)\\b(?:,\\s*)?",
+    r"November|December)\s+((?:19|20)\d{2}|2100)\b(?:,\s*)?",
     re.IGNORECASE,
 )
 _GFC_CLAIM_DATE_MONTH_PATTERN = re.compile(
-    r"^(?P<year>\\d{4})-(?P<month>0[1-9]|1[0-2])-"
+    r"^(?P<year>\d{4})-(?P<month>0[1-9]|1[0-2])-"
 )
 
 
