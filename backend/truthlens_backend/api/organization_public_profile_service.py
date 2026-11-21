@@ -13,6 +13,7 @@ PUBLIC_PROFILE_MUTABLE_FIELDS = frozenset(
         "description",
         "website",
         "expertise_areas",
+        "verification_specializations",
         "public_profile_enabled",
         "public_logo_enabled",
     }
@@ -91,6 +92,7 @@ def update_organization_public_profile(
     safe_fields = {
         "website",
         "expertise_areas",
+        "verification_specializations",
         "public_profile_enabled",
         "public_logo_enabled",
     }
