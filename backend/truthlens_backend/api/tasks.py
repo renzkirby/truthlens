@@ -327,13 +327,33 @@ def _evaluate_persisted_with_official_rating_policy(
     *,
     evidence_groups=(),
 ):
+    misleading_ids = official_rating_policy["misleading_evidence_ids"]
+    if misleading_ids:
+        return evaluate_claim_with_persisted_evidence(
+            claim_text,
+            evidence_context,
+            article_stance,
+            official_rating_policy["resolution"],
+            official_rating_policy["satire_evidence_ids"],
+            misleading_ids,
+            evidence_groups=evidence_groups,
+        )
+    if (
+        official_rating_policy["resolution"]
+        == OFFICIAL_FACT_CHECK_RESOLUTION_NONE
+    ):
+        return evaluate_claim_with_persisted_evidence(
+            claim_text,
+            evidence_context,
+            article_stance,
+            evidence_groups=evidence_groups,
+        )
     return evaluate_claim_with_persisted_evidence(
         claim_text,
         evidence_context,
         article_stance,
         official_rating_policy["resolution"],
         official_rating_policy["satire_evidence_ids"],
-        official_rating_policy["misleading_evidence_ids"],
         evidence_groups=evidence_groups,
     )
 
