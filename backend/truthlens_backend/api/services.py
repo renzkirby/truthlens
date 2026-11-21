@@ -1339,16 +1339,16 @@ def clean_ocr_text(raw_text):
 
 _DIRECT_TEXT_FIDELITY_MAX_CHARS = 500
 _DIRECT_TEXT_NUMBER_RE = re.compile(
-    r"(?<!\\w)\\d[\\d,]*(?:\\.\\d+)?(?!\\w)",
+    r"(?<!\w)\d[\d,]*(?:\.\d+)?(?!\w)",
     flags=re.UNICODE,
 )
 _DIRECT_TEXT_NEGATION_RE = re.compile(
-    r"\\b(?:not|never|cannot|can't|didn't|doesn't|isn't|aren't|wasn't|"
-    r"weren't|won't|hindi|di|wala|walang)\\b",
+    r"\b(?:not|never|cannot|can't|didn't|doesn't|isn't|aren't|wasn't|"
+    r"weren't|won't|hindi|di|wala|walang)\b",
     flags=re.IGNORECASE | re.UNICODE,
 )
 _DIRECT_TEXT_PERCENT_RE = re.compile(
-    r"(?:%|\\bpercent(?:age)?\\b|\\bporsyento\\b)",
+    r"(?:%|\bpercent(?:age)?\b|\bporsyento\b)",
     flags=re.IGNORECASE | re.UNICODE,
 )
 
@@ -1374,13 +1374,28 @@ def _direct_text_comparison_anchors(value):
     text = value.casefold()
     anchors = set()
 
-    if re.search(r"(?:<=|≤|\\bat\\s+most\\s+\\d|\\bno\\s+more\\s+than\\s+\\d|\\bup\\s+to\\s+\\d)", text):
+    if re.search(
+        r"(?:<=|≤|\bat\s+most\s+\d|\bno\s+more\s+than\s+\d|"
+        r"\bup\s+to\s+\d)",
+        text,
+    ):
         anchors.add("AT_MOST")
-    if re.search(r"(?:>=|≥|\\bat\\s+least\\s+\\d|\\bno\\s+less\\s+than\\s+\\d)", text):
+    if re.search(
+        r"(?:>=|≥|\bat\s+least\s+\d|\bno\s+less\s+than\s+\d)",
+        text,
+    ):
         anchors.add("AT_LEAST")
-    if re.search(r"(?:(?<![<>=])<(?![=])\\s*\\d|\\bless\\s+than\\s+\\d|\\bunder\\s+\\d|\\bbelow\\s+\\d)", text):
+    if re.search(
+        r"(?:(?<![<>=])<(?![=])\s*\d|\bless\s+than\s+\d|"
+        r"\bunder\s+\d|\bbelow\s+\d)",
+        text,
+    ):
         anchors.add("LESS_THAN")
-    if re.search(r"(?:(?<![<>=])>(?![=])\\s*\\d|\\bmore\\s+than\\s+\\d|\\bover\\s+\\d|\\babove\\s+\\d)", text):
+    if re.search(
+        r"(?:(?<![<>=])>(?![=])\s*\d|\bmore\s+than\s+\d|"
+        r"\bover\s+\d|\babove\s+\d)",
+        text,
+    ):
         anchors.add("GREATER_THAN")
     return anchors
 
@@ -1405,7 +1420,7 @@ def inspect_direct_text_claim_fidelity(raw_text, cleaned_claim):
         return "SKIP"
 
     # Ignore decimal points when conservatively counting sentence punctuation.
-    sentence_probe = re.sub(r"(?<=\\d)\\.(?=\\d)", "", raw_text)
+    sentence_probe = re.sub(r"(?<=\d)\.(?=\d)", "", raw_text)
     if sum(sentence_probe.count(mark) for mark in ".!?") > 1:
         return "SKIP"
 
