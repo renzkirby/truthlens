@@ -1191,7 +1191,7 @@ function CommunityFeed() {
                                  {menuIsOpen && (
                                     <div
                                        id={`thread-actions-${thread.id}`}
-                                       className="feed-popup-menu feed-thread-menu"
+                                       className={`feed-popup-menu feed-thread-menu ${isPlatformStaff ? "feed-thread-menu--staff" : ""}`}
                                        role="menu"
                                        aria-label={`Discussion actions for ${thread.author.username}`}
                                        onKeyDown={(event) => moveMenuFocus(event, closeThreadMenu)}
@@ -1202,7 +1202,7 @@ function CommunityFeed() {
                                                 <button
                                                    type="button"
                                                    role="menuitem"
-                                                   className="feed-popup-item"
+                                                   className="feed-popup-item feed-popup-item--staff-flag"
                                                    onClick={(event) => openStaffFlagDialog(event, thread)}
                                                    disabled={reportingThreadId === thread.id}
                                                 >
