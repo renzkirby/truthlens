@@ -124,6 +124,7 @@ class OrganizationPublicProfileAdminServiceTests(TestCase):
                 "description": "Public partner profile",
                 "website": "https://example.com/profile",
                 "expertise_areas": ["Elections", "Media literacy"],
+                "verification_specializations": ["SCIENCE", "HEALTH"],
                 "public_profile_enabled": True,
                 "public_logo_enabled": True,
             },
@@ -132,6 +133,7 @@ class OrganizationPublicProfileAdminServiceTests(TestCase):
         self.assertEqual(updated.description, "Public partner profile")
         self.assertEqual(updated.website, "https://example.com/profile")
         self.assertEqual(updated.expertise_areas, ["Elections", "Media literacy"])
+        self.assertEqual(updated.verification_specializations, ["SCIENCE", "HEALTH"])
         self.assertTrue(updated.public_profile_enabled)
         self.assertTrue(updated.public_logo_enabled)
 
@@ -225,6 +227,7 @@ class OrganizationPublicProfileAdminServiceTests(TestCase):
             self.owner,
             {
                 "description": "Presentation only",
+                "verification_specializations": ["CULTURE"],
                 "public_profile_enabled": True,
                 "public_logo_enabled": True,
             },
