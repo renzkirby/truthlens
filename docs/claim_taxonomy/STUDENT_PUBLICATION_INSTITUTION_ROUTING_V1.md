@@ -116,8 +116,9 @@ The organization-aware policy returns stable reasons:
   have a valid verified active institution-wide affiliation;
 - `OUTSIDE_INSTITUTION_SCOPE` — the claim is not about the publication's
   verified institution;
-- `OUTSIDE_SPECIALIZATIONS` — an ordinary partner lacks one or more required
-  subject specializations.
+Verification specializations are descriptive public-profile metadata and do not gate
+ordinary Partner Organization intake. Student Publication routing is instead based on
+the separately verified institution affiliation and claim institution identity.
 
 ## Enforcement surfaces
 
