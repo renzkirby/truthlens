@@ -109,7 +109,11 @@ export default function CommunityReportDialog({
          return;
       }
       if (trimmedNotes.length > 1000) {
-         setError("Report details must be 1000 characters or fewer.");
+         setError(
+            isStaffFlag
+               ? "Safety flag details must be 1000 characters or fewer."
+               : "Report details must be 1000 characters or fewer.",
+         );
          return;
       }
       if (otherSelected && trimmedNotes.length < 10) {
