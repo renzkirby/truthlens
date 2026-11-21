@@ -199,6 +199,29 @@ class PipelineTelemetryCollectorTests(TestCase):
         event = self.run.telemetry_events.get()
         self.assertEqual(event.metadata, {"candidate_count": 1})
 
+    def test_official_rating_resolution_metadata_is_safely_allowlisted(self):
+        @verification_telemetry_scope()
+        def execute(claim_id):
+            bind_verification_run(self.run)
+            record_pipeline_stage(
+                "gfc_official_rating_resolution",
+                1,
+                resolution="SATIRE",
+            )
+            record_pipeline_stage(
+                "gfc_official_rating_resolution",
+                1,
+                resolution="PRIVATE_ARBITRARY_RESOLUTION",
+            )
+
+        execute(self.claim.id)
+        valid_event, invalid_event = list(
+            self.run.telemetry_events.order_by("sequence")
+        )
+        self.assertEqual(valid_event.metadata, {"resolution": "SATIRE"})
+        self.assertEqual(invalid_event.metadata, {})
+        self.assertNotIn("PRIVATE", repr(invalid_event.metadata))
+
     def test_gemini_model_metadata_is_allowlisted_without_private_fields(self):
         @verification_telemetry_scope()
         def execute(claim_id):
