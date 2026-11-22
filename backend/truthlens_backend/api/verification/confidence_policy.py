@@ -242,6 +242,24 @@ def _contextual_basis_qualities(verdict_result, verdict, evidence_groups):
     return basis_qualities
 
 
+def has_usable_contextual_basis(
+    verdict_result: dict,
+    evidence_groups: Iterable[ReasoningEvidenceGroup],
+    verdict: str,
+) -> bool:
+    """Return whether contextual basis IDs resolve to usable assessed evidence."""
+    if (
+        not isinstance(verdict_result, dict)
+        or verdict_result.get("verdict") != verdict
+    ):
+        return False
+    return _contextual_basis_qualities(
+        verdict_result,
+        verdict,
+        tuple(evidence_groups),
+    ) is not None
+
+
 def has_claim_scoped_satire_support(
     verdict_result: dict,
     evidence_groups: Iterable[ReasoningEvidenceGroup],
@@ -252,11 +270,11 @@ def has_claim_scoped_satire_support(
         or verdict_result.get("verdict") != "SATIRE"
     ):
         return False
-    return _contextual_basis_qualities(
+    return has_usable_contextual_basis(
         verdict_result,
+        evidence_groups,
         "SATIRE",
-        tuple(evidence_groups),
-    ) is not None
+    )
 
 
 def has_claim_scoped_misleading_support(
