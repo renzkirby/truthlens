@@ -169,6 +169,7 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         self.assertEqual(result["contextual_basis_kind"], "NONE")
         self.assertEqual(result["contextual_basis_evidence_ids"], [])
 
+
     def test_persisted_same_content_satire_provenance_can_authorize_satire(self):
         evidence_id = "12121212-1212-1212-1212-121212121212"
         evidence_groups = [SimpleNamespace(evidence=(SimpleNamespace(
@@ -183,11 +184,8 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         ),))]
         audited = {
             "provenance": "DIRECT_SATIRE_PROVENANCE",
-            "reasoning": "The persisted fact-check establishes same-content satire provenance.",
-            "summary": "The same viral content was explicitly published as satire.",
-            "confidence_score": 95,
-            "score_context": "Direct persisted provenance identifies the same content as satire.",
-            "evidence_ids": [evidence_id],
+            "evidence_aliases": ["S1"],
+            "note": "Harmless extra field should not invalidate the compact audit.",
         }
 
         with patch(
@@ -204,6 +202,11 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         self.assertEqual(result["contextual_basis_kind"], "SATIRE_PROVENANCE")
         self.assertEqual(result["contextual_basis_evidence_ids"], [evidence_id])
         self.assertEqual(call_llm.call_count, 2)
+        self.assertEqual(
+            call_llm.call_args_list[1].kwargs["operation"],
+            "satire_provenance_audit",
+        )
+
 
     def test_satire_origin_only_does_not_override_fake(self):
         evidence_id = "13131313-1313-1313-1313-131313131313"
@@ -216,11 +219,7 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         ),))]
         audited = {
             "provenance": "SATIRE_ORIGIN_ONLY",
-            "reasoning": "The dossier establishes an origin story, not direct submitted-content provenance.",
-            "summary": "The false claim has satire in its history but is presented here as factual.",
-            "confidence_score": 90,
-            "score_context": "Satire origin does not establish direct satire provenance.",
-            "evidence_ids": [],
+            "evidence_aliases": [],
         }
 
         with patch(
@@ -236,6 +235,7 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         self.assertEqual(result["verdict"], "FAKE")
         self.assertEqual(result["contextual_basis_kind"], "NONE")
 
+
     def test_direct_satire_audit_rejects_invented_evidence_id(self):
         evidence_id = "14141414-1414-1414-1414-141414141414"
         evidence_groups = [SimpleNamespace(evidence=(SimpleNamespace(
@@ -247,11 +247,7 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         ),))]
         audited = {
             "provenance": "DIRECT_SATIRE_PROVENANCE",
-            "reasoning": "Direct satire provenance.",
-            "summary": "The same content was satire.",
-            "confidence_score": 95,
-            "score_context": "Direct provenance.",
-            "evidence_ids": ["invented-evidence-id"],
+            "evidence_aliases": ["S99"],
         }
 
         with patch(
@@ -264,7 +260,35 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
                 evidence_groups=evidence_groups,
             )
 
-        self.assertEqual(result["verdict"], "FAKE")
+        self.assertEqual(result["verdict"], "UNVERIFIED")
+        self.assertEqual(result["confidence_score"], 0)
+        self.assertEqual(result["contextual_basis_kind"], "NONE")
+
+    def test_satire_provenance_audit_unavailable_fails_closed(self):
+        evidence_id = "15151515-1515-1515-1515-151515151515"
+        evidence_groups = [SimpleNamespace(evidence=(SimpleNamespace(
+            evidence_link_id=evidence_id,
+            stance="CONTEXT",
+            relevance_score=0.9,
+            directness_score=0.9,
+            content="The same submitted content is explicitly described as satire.",
+        ),))]
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            side_effect=[
+                json.dumps(self.result),
+                LLMProviderUnavailableError("audit providers unavailable"),
+            ],
+        ):
+            result = evaluate_claim_with_persisted_evidence(
+                "A factual-looking claim with direct satire evidence.",
+                f"Evidence link ID: {evidence_id}\nExplicit satire provenance.",
+                evidence_groups=evidence_groups,
+            )
+
+        self.assertEqual(result["verdict"], "UNVERIFIED")
+        self.assertEqual(result["confidence_score"], 0)
         self.assertEqual(result["contextual_basis_kind"], "NONE")
 
     def test_deterministic_satire_stance_allows_satire_verdict(self):
@@ -512,6 +536,7 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         self.assertEqual(result["contextual_basis_kind"], "NONE")
         self.assertEqual(result["contextual_basis_evidence_ids"], [])
 
+
     def test_structured_misleading_signal_can_arbitrate_fake_to_misleading(self):
         evidence_id = "77777777-7777-7777-7777-777777777777"
         initial = {
@@ -523,21 +548,17 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
             "contextual_basis_evidence_ids": [],
         }
         audited = {
-            **self.result,
-            "verdict": "MISLEADING",
-            "reasoning": (
-                "The underlying footage is genuine, but the submitted framing "
-                "materially changes what the footage represents."
-            ),
-            "summary": (
-                "The footage is genuine, but it is presented with materially "
-                "false context."
-            ),
-            "confidence_score": 88,
-            "score_context": "Equivalent fact-check evidence establishes material false context.",
-            "contextual_basis_kind": "FALSE_CONTEXT",
-            "contextual_basis_evidence_ids": [evidence_id],
+            "relationship": "MATERIAL_MISDESCRIPTION",
+            "basis_kind": "FALSE_CONTEXT",
+            "summary": "The underlying event is real but materially misdescribed.",
+            "extra": "Harmless extra field.",
         }
+        evidence_groups = [SimpleNamespace(evidence=(SimpleNamespace(
+            evidence_link_id=evidence_id,
+            stance="REFUTES",
+            relevance_score=0.9,
+            directness_score=0.9,
+        ),))]
 
         with patch(
             "api.services.call_llm_with_fallback",
@@ -551,21 +572,18 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
                     "changes the event it depicts."
                 ),
                 official_misleading_evidence_ids=[evidence_id],
+                evidence_groups=evidence_groups,
             )
 
         self.assertEqual(result["verdict"], "MISLEADING")
         self.assertEqual(result["contextual_basis_kind"], "FALSE_CONTEXT")
         self.assertEqual(result["contextual_basis_evidence_ids"], [evidence_id])
         self.assertEqual(call_llm.call_count, 2)
-        second_system, second_user = call_llm.call_args_list[1].args
-        self.assertIn("structured-rating conflict auditor", second_system)
-        self.assertIn("substantial genuine factual substrate", second_system)
-        self.assertIn("Incidental truth", second_system)
-        self.assertIn(
-            "<first_evaluator_verdict>FAKE</first_evaluator_verdict>",
-            second_user,
+        self.assertEqual(
+            call_llm.call_args_list[1].kwargs["operation"],
+            "structured_misleading_audit",
         )
-        self.assertIn(evidence_id, second_user)
+
 
     def test_structured_misleading_signal_can_preserve_fake(self):
         evidence_id = "88888888-8888-8888-8888-888888888888"
@@ -576,15 +594,16 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
             "contextual_basis_evidence_ids": [],
         }
         audited = {
-            **initial,
-            "reasoning": (
-                "The submitted quote is wholly fabricated; the real image does "
-                "not create a materially true claim element."
-            ),
+            "relationship": "FABRICATED_CORE",
+            "basis_kind": "NONE",
             "summary": "The attributed quote is fabricated.",
-            "confidence_score": 90,
-            "score_context": "Persisted evidence directly establishes a fabricated attribution.",
         }
+        evidence_groups = [SimpleNamespace(evidence=(SimpleNamespace(
+            evidence_link_id=evidence_id,
+            stance="REFUTES",
+            relevance_score=0.9,
+            directness_score=0.9,
+        ),))]
 
         with patch(
             "api.services.call_llm_with_fallback",
@@ -597,6 +616,7 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
                     "The photograph is real, but the quotation was fabricated."
                 ),
                 official_misleading_evidence_ids=[evidence_id],
+                evidence_groups=evidence_groups,
             )
 
         self.assertEqual(result["verdict"], "FAKE")
@@ -623,6 +643,12 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
                 "A claim with an equivalent structured Misleading rating.",
                 f"Evidence link ID: {evidence_id}\nPersisted evidence.",
                 official_misleading_evidence_ids=[evidence_id],
+                evidence_groups=[SimpleNamespace(evidence=(SimpleNamespace(
+                    evidence_link_id=evidence_id,
+                    stance="REFUTES",
+                    relevance_score=0.9,
+                    directness_score=0.9,
+                ),))],
             )
 
         self.assertEqual(result["verdict"], "UNVERIFIED")
