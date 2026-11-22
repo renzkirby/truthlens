@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "TruthLens Popup Latency Control",
+  "version": "1.0.0",
+  "description": "Minimal local control extension for measuring Chrome action popup latency.",
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
