@@ -17,6 +17,7 @@ UNIVERSAL_HIERARCHY_FLAG = "ENABLE_UNIVERSAL_LLM_HIERARCHY"
 RELIABILITY_HARDENING_FLAG = "ENABLE_PROVIDER_RELIABILITY_HARDENING"
 GROQ_BOUNDED_FALLBACK_FLAG = "ENABLE_GROQ_BOUNDED_FALLBACK"
 GEMINI_TRANSIENT_CIRCUIT_BREAKER_FLAG = "ENABLE_GEMINI_TRANSIENT_CIRCUIT_BREAKER"
+GEMINI_TRANSIENT_MODEL_FALLBACK_FLAG = "ENABLE_GEMINI_TRANSIENT_MODEL_FALLBACK"
 STAGE_CONTRACT_OPERATIONS = frozenset({
     ASSESSMENT_OPERATION,
     PILOT_OPERATION,
@@ -84,6 +85,14 @@ def groq_bounded_fallback_enabled():
 def gemini_transient_circuit_breaker_enabled():
     """Suppress repeat 5xx Gemini calls within one scoped verification job."""
     return _reliability_subfeature_enabled(GEMINI_TRANSIENT_CIRCUIT_BREAKER_FLAG)
+
+
+def gemini_transient_model_fallback_enabled():
+    """Try the configured alternate Gemini model only after transient 5xx failure."""
+    return (
+        reliability_hardening_enabled()
+        and os.getenv(GEMINI_TRANSIENT_MODEL_FALLBACK_FLAG, "") == "1"
+    )
 
 
 def requires_strict_stage_contract(operation, *, pilot_active, hierarchy_active):

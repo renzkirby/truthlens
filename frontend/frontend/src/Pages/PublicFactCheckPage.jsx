@@ -162,7 +162,8 @@ function ArticleBody({ value, richValue }) {
 
 function SourceItem({ source }) {
    const safeUrl = safeSource(source?.url);
-   const title = typeof source?.title === "string" ? source.title.trim() : "";
+   const storedTitle = typeof source?.title === "string" ? source.title.trim() : "";
+   const title = source?.source_origin === "DECISION_EVIDENCE" ? "" : storedTitle;
 
    return (
       <li className="public-fact-check-source">

@@ -253,6 +253,36 @@ class PipelineTelemetryCollectorTests(TestCase):
         )
         self.assertNotIn("PRIVATE", repr(event.metadata))
 
+    def test_gemini_3_6_fallback_model_metadata_is_allowlisted(self):
+        @verification_telemetry_scope()
+        def execute(claim_id):
+            bind_verification_run(self.run)
+            record_llm_provider_call(
+                "claim_gate",
+                "gemini",
+                self.run.id,
+                11,
+                "success",
+                metadata={
+                    "model_id": "gemini-3.6-flash",
+                    "request_variant": "RECOVERY",
+                    "retry_number": 1,
+                    "prompt": "PRIVATE PROMPT",
+                },
+            )
+
+        execute(self.claim.id)
+        event = self.run.telemetry_events.get()
+        self.assertEqual(
+            event.metadata,
+            {
+                "model_id": "gemini-3.6-flash",
+                "request_variant": "RECOVERY",
+                "retry_number": 1,
+            },
+        )
+        self.assertNotIn("PRIVATE", repr(event.metadata))
+
     def test_provider_request_metadata_is_numeric_allowlisted_and_private_safe(self):
         @verification_telemetry_scope()
         def execute(claim_id):
