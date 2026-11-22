@@ -562,6 +562,87 @@ html[data-theme="dark"] .hub-page-layout .hub-trust-note {
    background: var(--tl-color-bg-surface);
 }
 
+html[data-theme="dark"] .hub-page-layout :is(
+   .hub-standing-alert,
+   .hub-standing-empty,
+   .hub-standing-history-item
+) {
+   border-color: var(--tl-color-border-soft);
+   background: var(--tl-color-bg-subtle);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-standing-alert {
+   border-color: color-mix(in srgb, var(--tl-color-brand-primary) 32%, var(--tl-color-border-soft));
+   background: var(--tl-color-status-info-bg);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-standing-alert-icon {
+   color: var(--tl-color-brand-primary);
+   background: color-mix(in srgb, var(--tl-color-brand-primary) 14%, var(--tl-color-bg-subtle));
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-standing-empty {
+   color: var(--tl-color-fact-text);
+}
+
+html[data-theme="dark"] .hub-page-layout :is(
+   .hub-standing-alert-copy strong,
+   .hub-standing-empty strong,
+   .hub-standing-history-item strong,
+   .hub-standing-history > h3
+) {
+   color: var(--tl-color-text-main);
+}
+
+html[data-theme="dark"] .hub-page-layout :is(
+   .hub-standing-alert-copy p,
+   .hub-standing-empty p,
+   .hub-standing-history-item p,
+   .hub-standing-history-meta,
+   .hub-standing-history-heading time
+) {
+   color: var(--tl-color-text-muted);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-standing-history-heading span {
+   color: var(--tl-color-text-muted);
+   background: var(--tl-color-bg-surface);
+}
+
+html[data-theme="dark"] .hub-page-layout :is(
+   .hub-standing-alert-actions a,
+   .hub-standing-alert-actions button,
+   .hub-standing-guidelines-link,
+   .hub-standing-review-link
+) {
+   border-color: var(--tl-color-border-default);
+   color: var(--tl-color-text-body);
+   background: var(--tl-color-bg-surface);
+}
+
+html[data-theme="dark"] .hub-page-layout :is(
+   .hub-standing-alert-actions a,
+   .hub-standing-review-link
+) {
+   border-color: color-mix(in srgb, var(--tl-color-brand-primary) 38%, var(--tl-color-border-default));
+   color: var(--tl-color-brand-primary);
+}
+
+html[data-theme="dark"] .hub-page-layout :is(
+   .hub-standing-alert-actions a,
+   .hub-standing-alert-actions button,
+   .hub-standing-guidelines-link,
+   .hub-standing-review-link
+):hover {
+   border-color: color-mix(in srgb, var(--tl-color-brand-primary) 50%, var(--tl-color-border-default));
+   color: var(--tl-color-text-main);
+   background: var(--tl-color-bg-elevated);
+}
+
+html[data-theme="dark"] .hub-page-layout .hub-standing-review-state {
+   color: var(--tl-color-text-body) !important;
+}
+
 /* Dashboard impact cards retain their semantic accent colors on dark surfaces. */
 html[data-theme="dark"] .hub-impact-card--indigo .hub-impact-icon {
    color: #a5b4fc;
