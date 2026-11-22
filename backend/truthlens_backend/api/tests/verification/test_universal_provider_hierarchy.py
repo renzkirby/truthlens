@@ -19,6 +19,7 @@ from api.services import (
 from api.verification.cloudflare_evaluation import CloudflareEvaluationError
 from api.verification.provider_hierarchy import (
     gemini_transient_circuit_breaker_enabled,
+    gemini_transient_model_fallback_enabled,
     groq_bounded_fallback_enabled,
     hierarchy_enabled,
     reliability_hardening_enabled,
@@ -34,11 +35,13 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
                 "ENABLE_PROVIDER_RELIABILITY_HARDENING": "0",
                 "ENABLE_GROQ_BOUNDED_FALLBACK": "1",
                 "ENABLE_GEMINI_TRANSIENT_CIRCUIT_BREAKER": "1",
+                "ENABLE_GEMINI_TRANSIENT_MODEL_FALLBACK": "1",
             },
         ):
             self.assertFalse(reliability_hardening_enabled())
             self.assertFalse(groq_bounded_fallback_enabled())
             self.assertFalse(gemini_transient_circuit_breaker_enabled())
+            self.assertFalse(gemini_transient_model_fallback_enabled())
 
         with patch.dict(
             "os.environ",
@@ -46,11 +49,13 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
                 "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
                 "ENABLE_GROQ_BOUNDED_FALLBACK": "1",
                 "ENABLE_GEMINI_TRANSIENT_CIRCUIT_BREAKER": "0",
+                "ENABLE_GEMINI_TRANSIENT_MODEL_FALLBACK": "1",
             },
         ):
             self.assertTrue(reliability_hardening_enabled())
             self.assertTrue(groq_bounded_fallback_enabled())
             self.assertFalse(gemini_transient_circuit_breaker_enabled())
+            self.assertTrue(gemini_transient_model_fallback_enabled())
 
     @override_settings(APP_ENV="production", DEBUG=False)
     def test_universal_hierarchy_can_be_opted_in_outside_development(self):
@@ -644,6 +649,235 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
         self.assertEqual(
             gemini.models.generate_content.call_args.kwargs["contents"],
             full_prompt,
+        )
+        cloudflare.assert_not_called()
+        groq.with_options.return_value.chat.completions.create.assert_not_called()
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_transient_gemini_503_uses_3_6_before_cross_provider_fallback(self):
+        payload = json.dumps({
+            "cleaned_claim": "An announcement occurred.",
+            "search_query": "official announcement details",
+            "search_queries": ["official announcement details"],
+            "article_stance": "NEUTRAL",
+        })
+
+        class ProviderError(RuntimeError):
+            pass
+
+        gemini_503 = ProviderError("service unavailable")
+        gemini_503.code = 503
+        models_called = []
+        gemini = Mock()
+
+        def generate_content(**kwargs):
+            models_called.append(kwargs["model"])
+            if kwargs["model"] == "gemini-3.5-flash-lite":
+                raise gemini_503
+            if kwargs["model"] == "gemini-3.6-flash":
+                return SimpleNamespace(text=payload)
+            raise AssertionError(f"Unexpected Gemini model: {kwargs['model']}")
+
+        gemini.models.generate_content.side_effect = generate_content
+        cloudflare = Mock()
+        groq = Mock()
+
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+                    "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                    "ENABLE_GEMINI_TRANSIENT_MODEL_FALLBACK": "1",
+                    "GEMINI_TRANSIENT_FALLBACK_MODEL": "gemini-3.6-flash",
+                },
+            ),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.call_validated_cloudflare_pilot", cloudflare),
+        ):
+            with llm_provider_scope():
+                result = call_llm_with_fallback(
+                    "Instructions",
+                    "FULL ORIGINAL PROMPT",
+                    operation="claim_gate",
+                )
+
+        self.assertEqual(result, payload)
+        self.assertEqual(
+            models_called,
+            ["gemini-3.5-flash-lite", "gemini-3.6-flash"],
+        )
+        cloudflare.assert_not_called()
+        groq.with_options.return_value.chat.completions.create.assert_not_called()
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_job_blocking_gemini_429_skips_3_6_model_fallback(self):
+        payload = json.dumps({
+            "cleaned_claim": "An announcement occurred.",
+            "search_query": "official announcement details",
+            "search_queries": ["official announcement details"],
+            "article_stance": "NEUTRAL",
+        })
+
+        class ProviderError(RuntimeError):
+            pass
+
+        gemini_429 = ProviderError("quota unavailable")
+        gemini_429.code = 429
+        models_called = []
+        gemini = Mock()
+
+        def generate_content(**kwargs):
+            models_called.append(kwargs["model"])
+            raise gemini_429
+
+        gemini.models.generate_content.side_effect = generate_content
+        cloudflare = Mock(return_value=payload)
+        groq = Mock()
+
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+                    "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                    "ENABLE_GEMINI_TRANSIENT_MODEL_FALLBACK": "1",
+                    "GEMINI_TRANSIENT_FALLBACK_MODEL": "gemini-3.6-flash",
+                },
+            ),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.call_validated_cloudflare_pilot", cloudflare),
+        ):
+            with llm_provider_scope():
+                result = call_llm_with_fallback(
+                    "Instructions",
+                    "FULL ORIGINAL PROMPT",
+                    operation="claim_gate",
+                )
+
+        self.assertEqual(result, payload)
+        self.assertEqual(models_called, ["gemini-3.5-flash-lite"])
+        cloudflare.assert_called_once()
+        groq.with_options.return_value.chat.completions.create.assert_not_called()
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_both_gemini_models_503_continue_to_cloudflare(self):
+        payload = json.dumps({
+            "cleaned_claim": "An announcement occurred.",
+            "search_query": "official announcement details",
+            "search_queries": ["official announcement details"],
+            "article_stance": "NEUTRAL",
+        })
+
+        class ProviderError(RuntimeError):
+            pass
+
+        gemini_503 = ProviderError("service unavailable")
+        gemini_503.code = 503
+        models_called = []
+        gemini = Mock()
+
+        def generate_content(**kwargs):
+            models_called.append(kwargs["model"])
+            raise gemini_503
+
+        gemini.models.generate_content.side_effect = generate_content
+        cloudflare = Mock(return_value=payload)
+        groq = Mock()
+
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+                    "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                    "ENABLE_GEMINI_TRANSIENT_MODEL_FALLBACK": "1",
+                    "GEMINI_TRANSIENT_FALLBACK_MODEL": "gemini-3.6-flash",
+                },
+            ),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.call_validated_cloudflare_pilot", cloudflare),
+        ):
+            with llm_provider_scope():
+                result = call_llm_with_fallback(
+                    "Instructions",
+                    "FULL ORIGINAL PROMPT",
+                    operation="claim_gate",
+                )
+
+        self.assertEqual(result, payload)
+        self.assertEqual(
+            models_called,
+            ["gemini-3.5-flash-lite", "gemini-3.6-flash"],
+        )
+        cloudflare.assert_called_once()
+        groq.with_options.return_value.chat.completions.create.assert_not_called()
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_later_stage_uses_3_6_after_primary_transient_circuit_break(self):
+        payload = json.dumps({
+            "cleaned_claim": "An announcement occurred.",
+            "search_query": "official announcement details",
+            "search_queries": ["official announcement details"],
+            "article_stance": "NEUTRAL",
+        })
+
+        class ProviderError(RuntimeError):
+            pass
+
+        gemini_503 = ProviderError("service unavailable")
+        gemini_503.code = 503
+        models_called = []
+        gemini = Mock()
+
+        def generate_content(**kwargs):
+            models_called.append(kwargs["model"])
+            if kwargs["model"] == "gemini-3.5-flash-lite":
+                raise gemini_503
+            return SimpleNamespace(text=payload)
+
+        gemini.models.generate_content.side_effect = generate_content
+        cloudflare = Mock()
+        groq = Mock()
+
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+                    "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                    "ENABLE_GEMINI_TRANSIENT_MODEL_FALLBACK": "1",
+                    "GEMINI_TRANSIENT_FALLBACK_MODEL": "gemini-3.6-flash",
+                },
+            ),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.call_validated_cloudflare_pilot", cloudflare),
+        ):
+            with llm_provider_scope():
+                first = call_llm_with_fallback(
+                    "Instructions",
+                    "Prompt one",
+                    operation="claim_gate",
+                )
+                second = call_llm_with_fallback(
+                    "Instructions",
+                    "Prompt two",
+                    operation="claim_gate",
+                )
+
+        self.assertEqual(first, payload)
+        self.assertEqual(second, payload)
+        self.assertEqual(
+            models_called,
+            [
+                "gemini-3.5-flash-lite",
+                "gemini-3.6-flash",
+                "gemini-3.6-flash",
+            ],
         )
         cloudflare.assert_not_called()
         groq.with_options.return_value.chat.completions.create.assert_not_called()
