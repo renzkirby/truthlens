@@ -1032,7 +1032,8 @@ class VerificationRunTextRuntimeTests(TestCase):
         )
         self.retrieve_tavily.assert_not_called()
 
-    def test_strict_misleading_rating_signal_bypasses_coverage_and_reaches_evaluator(self):
+
+    def test_strict_misleading_rating_signal_requires_tavily_enrichment(self):
         evidence_id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
         policy = {
             "resolution": services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
@@ -1048,10 +1049,11 @@ class VerificationRunTextRuntimeTests(TestCase):
 
         self._assert_terminal(run, VerificationRun.Status.COMPLETED)
         self.relevance.assert_not_called()
-        self.retrieve_tavily.assert_not_called()
-        self.evaluate_persisted.assert_called_once()
+        self.retrieve_tavily.assert_called_once()
+        self.assertEqual(self.evaluate_persisted.call_count, 2)
+        first_call, second_call = self.evaluate_persisted.call_args_list
         self.assertEqual(
-            self.evaluate_persisted.call_args.args[:6],
+            first_call.args[:6],
             (
                 self.cleaned["cleaned_claim"],
                 "Persisted evidence context.",
@@ -1061,16 +1063,31 @@ class VerificationRunTextRuntimeTests(TestCase):
                 (evidence_id,),
             ),
         )
-        bypass_calls = [
-            call
-            for call in self.log_stage.call_args_list
-            if len(call.args) >= 2 and call.args[1] == "gfc_relevance_bypassed"
-        ]
-        self.assertEqual(len(bypass_calls), 1)
         self.assertEqual(
-            bypass_calls[0].kwargs.get("outcome"),
-            "structured_misleading_signal",
+            second_call.args[:6],
+            (
+                self.cleaned["cleaned_claim"],
+                "Persisted evidence context.",
+                "NEUTRAL",
+                services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+                (),
+                (evidence_id,),
+            ),
         )
+        self.assertEqual(
+            second_call.kwargs["evidence_groups"],
+            self.filter_dossier_roles.return_value,
+        )
+        self.assertEqual(self.save_claim.call_args.args[2], "Live Web Search")
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("gfc_relevance_bypassed", stages)
+        self.assertIn("gfc_continued_to_tavily", stages)
+        coverage_calls = [
+            call for call in self.log_stage.call_args_list
+            if len(call.args) >= 2 and call.args[1] == "gfc_proposition_coverage_check"
+        ]
+        self.assertEqual(len(coverage_calls), 1)
+        self.assertFalse(coverage_calls[0].kwargs["terminally_sufficient"])
 
     def test_gfc_evaluation_failure_continues_to_tavily(self):
         self.evaluate_persisted.side_effect = [
