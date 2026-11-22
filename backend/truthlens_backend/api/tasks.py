@@ -1145,6 +1145,7 @@ def _attempt_primary_source_recovery(
     official_rating_policy,
     gfc_evidence_assessed,
     is_text_claim,
+    normal_tavily_had_results=False,
     noneditable_context_fallback=False,
     required_anchor_tokens=(),
     assertion_complete=True,
@@ -1166,6 +1167,29 @@ def _attempt_primary_source_recovery(
         return initial_result
 
     evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
+    # Fail closed before any role filtering. Placeholder/malformed dossier values
+    # must never reach the recovery path or trigger a second provider request.
+    if evidence_dossier and any(
+        not hasattr(group, "evidence") for group in evidence_dossier
+    ):
+        return initial_result
+
+    secondary_groups = filter_reasoning_evidence_dossier_by_role(
+        evidence_dossier,
+        VerificationEvidence.EvidenceRole.SECONDARY,
+    )
+    # If normal Tavily returned results but none reached the persisted secondary
+    # dossier, the problem is storage/linking rather than evidence scarcity.
+    # Recovery must not hide that technical gap with a second search.
+    if normal_tavily_had_results and not secondary_groups:
+        _log_stage(
+            claim_id,
+            f"{stage_prefix}primary_source_recovery",
+            time.perf_counter(),
+            outcome="skipped_normal_evidence_persistence_unavailable",
+        )
+        return initial_result
+
     evaluation_groups = filter_reasoning_evidence_dossier_by_roles(
         evidence_dossier,
         (
@@ -1173,13 +1197,6 @@ def _attempt_primary_source_recovery(
             VerificationEvidence.EvidenceRole.SECONDARY,
         ),
     )
-    # Fail closed on malformed/legacy dossier shapes. Production dossier groups
-    # expose an evidence tuple; placeholder values must not trigger an open-domain
-    # provider request.
-    if evaluation_groups and any(
-        not hasattr(group, "evidence") for group in evaluation_groups
-    ):
-        return initial_result
     if _has_material_support_or_refutation(evaluation_groups):
         return initial_result
 
@@ -1227,6 +1244,10 @@ def _attempt_primary_source_recovery(
     )
 
     evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
+    if evidence_dossier and any(
+        not hasattr(group, "evidence") for group in evidence_dossier
+    ):
+        return initial_result
     secondary_groups = filter_reasoning_evidence_dossier_by_role(
         evidence_dossier,
         VerificationEvidence.EvidenceRole.SECONDARY,
@@ -1241,6 +1262,10 @@ def _attempt_primary_source_recovery(
         )
 
     evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
+    if evidence_dossier and any(
+        not hasattr(group, "evidence") for group in evidence_dossier
+    ):
+        return initial_result
     evaluation_groups = filter_reasoning_evidence_dossier_by_roles(
         evidence_dossier,
         (
@@ -2373,6 +2398,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         official_rating_policy=official_rating_policy,
                         gfc_evidence_assessed=gfc_evidence_assessed,
                         is_text_claim=is_text_claim,
+                        normal_tavily_had_results=bool(tavily_results),
                         noneditable_context_fallback=noneditable_context_fallback,
                         required_anchor_tokens=noneditable_fallback_anchor_tokens,
                         assertion_complete=noneditable_fallback_assertion_complete,
@@ -2456,6 +2482,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 "Required evidence retrieval unavailable for claim %s.",
                 claim_id,
             )
+            raise
 
         # This catches other catastrophic errors. Lifecycle status, not a
         # synthetic factual verdict, represents an incomplete verification.
@@ -3353,6 +3380,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     official_rating_policy=official_rating_policy,
                     gfc_evidence_assessed=gfc_evidence_assessed,
                     is_text_claim=False,
+                    normal_tavily_had_results=bool(tavily_results),
                     noneditable_context_fallback=noneditable_context_fallback,
                     required_anchor_tokens=noneditable_fallback_anchor_tokens,
                     assertion_complete=noneditable_fallback_assertion_complete,
