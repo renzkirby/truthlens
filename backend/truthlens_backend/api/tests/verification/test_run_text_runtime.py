@@ -1089,6 +1089,31 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.assertEqual(len(coverage_calls), 1)
         self.assertFalse(coverage_calls[0].kwargs["terminally_sufficient"])
 
+    def test_strict_misleading_enrichment_failure_does_not_keep_gfc_only_verdict(self):
+        evidence_id = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+        policy = {
+            "resolution": services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+            "misleading_evidence_ids": (evidence_id,),
+        }
+        self.retrieve_tavily.side_effect = requests.Timeout("Tavily unavailable")
+
+        with patch(
+            "api.tasks._resolve_official_fact_check_rating_policy",
+            return_value=policy,
+        ):
+            with self.assertRaises(tasks.EvidenceRetrievalUnavailableError):
+                self._execute()
+
+        run = self.claim.verification_runs.get()
+        self._assert_terminal(run, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "evidence_retrieval")
+        self.assertEqual(run.failure_code, "EVIDENCE_RETRIEVAL_FAILED")
+        self.evaluate_persisted.assert_called_once()
+        self.save_claim.assert_not_called()
+        self.claim.refresh_from_db()
+        self.assertIsNone(self.claim.ai_verdict)
+
     def test_gfc_evaluation_failure_continues_to_tavily(self):
         self.evaluate_persisted.side_effect = [
             RuntimeError("GFC evaluation unavailable"),
