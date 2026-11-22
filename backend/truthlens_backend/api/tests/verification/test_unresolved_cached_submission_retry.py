@@ -169,6 +169,28 @@ class UnresolvedCachedSubmissionRetryTests(APITestCase):
         previous.refresh_from_db()
         self.assertEqual(previous.pipeline_version, "1.0.0")
 
+    def test_extension_precheck_does_not_return_stale_ai_result(self):
+        text = "An old automated result must not bypass the current pipeline."
+        old, _ = self._old_claim(
+            Claim.ClaimType.TEXT,
+            text,
+            VerificationRun.Status.COMPLETED,
+            ai_verdict="FACT",
+            pipeline_version="1.0.0",
+        )
+
+        response = self.client.get(
+            reverse("claim_match"),
+            {
+                "fingerprint": old.claim_fingerprint,
+                "claim_type": "TEXT",
+                "text": text,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json()["match"])
+
     def test_legacy_decisive_cache_cannot_bypass_current_claim_gate(self):
         text = "Joel stole 800 million pesos"
         old, _ = self._old_claim(
