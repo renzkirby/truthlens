@@ -1131,7 +1131,7 @@ def _has_material_support_or_refutation(evidence_groups):
             VerificationEvidence.Stance.REFUTES,
         }
         for group in evidence_groups or ()
-        for item in group.evidence
+        for item in getattr(group, "evidence", ())
     )
 
 
@@ -1173,6 +1173,13 @@ def _attempt_primary_source_recovery(
             VerificationEvidence.EvidenceRole.SECONDARY,
         ),
     )
+    # Fail closed on malformed/legacy dossier shapes. Production dossier groups
+    # expose an evidence tuple; placeholder values must not trigger an open-domain
+    # provider request.
+    if evaluation_groups and any(
+        not hasattr(group, "evidence") for group in evaluation_groups
+    ):
+        return initial_result
     if _has_material_support_or_refutation(evaluation_groups):
         return initial_result
 
@@ -2441,6 +2448,14 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 claim_id,
             )
             raise
+
+        except EvidenceRetrievalUnavailableError as e:
+            pipeline_error = e
+            outcome = "evidence_retrieval_failed"
+            logger.error(
+                "Required evidence retrieval unavailable for claim %s.",
+                claim_id,
+            )
 
         # This catches other catastrophic errors. Lifecycle status, not a
         # synthetic factual verdict, represents an incomplete verification.
