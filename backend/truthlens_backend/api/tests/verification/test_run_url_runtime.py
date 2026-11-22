@@ -384,6 +384,41 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.evaluate_persisted.assert_not_called()
         self.save_claim.assert_not_called()
 
+    def test_empty_basic_extraction_retries_with_advanced_mode(self):
+        basic_response = Mock(status_code=200)
+        basic_response.json.return_value = {
+            "results": [],
+            "failed_results": [
+                {
+                    "url": self.url,
+                    "error": "Basic extraction unavailable.",
+                }
+            ],
+        }
+        advanced_response = Mock(status_code=200)
+        advanced_response.json.return_value = {
+            "results": [{"raw_content": "Advanced article content."}],
+            "failed_results": [],
+        }
+        self.extract.side_effect = [basic_response, advanced_response]
+
+        run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        self.assertEqual(self.extract.call_count, 2)
+        self.assertEqual(
+            self.extract.call_args_list[0].kwargs["json"],
+            {"urls": [self.url], "extract_depth": "basic"},
+        )
+        self.assertEqual(
+            self.extract.call_args_list[1].kwargs["json"],
+            {"urls": [self.url], "extract_depth": "advanced"},
+        )
+        self.clean.assert_called_once_with("Advanced article content.")
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("tavily_extract", stages)
+        self.assertIn("tavily_extract_advanced", stages)
+
     def test_extraction_failure_preserves_claim_and_marks_run_failed(self):
         self.extract.side_effect = requests.Timeout("Extraction timed out")
 
