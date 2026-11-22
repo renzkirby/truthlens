@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.test import SimpleTestCase
@@ -167,6 +168,95 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         self.assertEqual(result["confidence_score"], 0)
         self.assertEqual(result["contextual_basis_kind"], "NONE")
         self.assertEqual(result["contextual_basis_evidence_ids"], [])
+
+    def test_persisted_same_content_satire_provenance_can_authorize_satire(self):
+        evidence_id = "12121212-1212-1212-1212-121212121212"
+        evidence_groups = [SimpleNamespace(evidence=(SimpleNamespace(
+            evidence_link_id=evidence_id,
+            content=(
+                "VERA Files reviewed the same viral list and reports that the "
+                "original post was explicitly labeled satire by the parody page."
+            ),
+        ),))]
+        audited = {
+            "provenance": "DIRECT_SATIRE_PROVENANCE",
+            "reasoning": "The persisted fact-check establishes same-content satire provenance.",
+            "summary": "The same viral content was explicitly published as satire.",
+            "confidence_score": 95,
+            "score_context": "Direct persisted provenance identifies the same content as satire.",
+            "evidence_ids": [evidence_id],
+        }
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            side_effect=[json.dumps(self.result), json.dumps(audited)],
+        ) as call_llm:
+            result = evaluate_claim_with_persisted_evidence(
+                "The government released an official banned-games list.",
+                f"Evidence link ID: {evidence_id}\nThe same viral list was labeled satire.",
+                evidence_groups=evidence_groups,
+            )
+
+        self.assertEqual(result["verdict"], "SATIRE")
+        self.assertEqual(result["contextual_basis_kind"], "SATIRE_PROVENANCE")
+        self.assertEqual(result["contextual_basis_evidence_ids"], [evidence_id])
+        self.assertEqual(call_llm.call_count, 2)
+
+    def test_satire_origin_only_does_not_override_fake(self):
+        evidence_id = "13131313-1313-1313-1313-131313131313"
+        evidence_groups = [SimpleNamespace(evidence=(SimpleNamespace(
+            evidence_link_id=evidence_id,
+            content="The false rumor later circulated from a parody or satire post.",
+        ),))]
+        audited = {
+            "provenance": "SATIRE_ORIGIN_ONLY",
+            "reasoning": "The dossier establishes an origin story, not direct submitted-content provenance.",
+            "summary": "The false claim has satire in its history but is presented here as factual.",
+            "confidence_score": 90,
+            "score_context": "Satire origin does not establish direct satire provenance.",
+            "evidence_ids": [],
+        }
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            side_effect=[json.dumps(self.result), json.dumps(audited)],
+        ):
+            result = evaluate_claim_with_persisted_evidence(
+                "A factual claim that originated from a parody post.",
+                f"Evidence link ID: {evidence_id}\nThe rumor originated from satire.",
+                evidence_groups=evidence_groups,
+            )
+
+        self.assertEqual(result["verdict"], "FAKE")
+        self.assertEqual(result["contextual_basis_kind"], "NONE")
+
+    def test_direct_satire_audit_rejects_invented_evidence_id(self):
+        evidence_id = "14141414-1414-1414-1414-141414141414"
+        evidence_groups = [SimpleNamespace(evidence=(SimpleNamespace(
+            evidence_link_id=evidence_id,
+            content="The same viral content was explicitly labeled satire.",
+        ),))]
+        audited = {
+            "provenance": "DIRECT_SATIRE_PROVENANCE",
+            "reasoning": "Direct satire provenance.",
+            "summary": "The same content was satire.",
+            "confidence_score": 95,
+            "score_context": "Direct provenance.",
+            "evidence_ids": ["invented-evidence-id"],
+        }
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            side_effect=[json.dumps(self.result), json.dumps(audited)],
+        ):
+            result = evaluate_claim_with_persisted_evidence(
+                "A factual-looking claim.",
+                f"Evidence link ID: {evidence_id}\nSame-content satire provenance.",
+                evidence_groups=evidence_groups,
+            )
+
+        self.assertEqual(result["verdict"], "FAKE")
+        self.assertEqual(result["contextual_basis_kind"], "NONE")
 
     def test_deterministic_satire_stance_allows_satire_verdict(self):
         result_payload = {
@@ -460,6 +550,8 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         self.assertEqual(call_llm.call_count, 2)
         second_system, second_user = call_llm.call_args_list[1].args
         self.assertIn("structured-rating conflict auditor", second_system)
+        self.assertIn("substantial genuine factual substrate", second_system)
+        self.assertIn("Incidental truth", second_system)
         self.assertIn(
             "<first_evaluator_verdict>FAKE</first_evaluator_verdict>",
             second_user,
