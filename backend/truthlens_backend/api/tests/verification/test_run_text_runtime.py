@@ -1477,6 +1477,10 @@ class PrimarySourceRecoveryTests(TestCase):
                 return_value=[self.support_group],
             ),
             patch(
+                "api.tasks.filter_reasoning_evidence_dossier_by_role",
+                side_effect=lambda groups, _role: groups,
+            ),
+            patch(
                 "api.tasks.filter_reasoning_evidence_dossier_by_roles",
                 side_effect=lambda groups, _roles: groups,
             ),
