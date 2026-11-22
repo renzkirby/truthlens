@@ -70,7 +70,14 @@ def _is_primary_recovery_source_url(value: Any) -> bool:
     labels = hostname.split(".")
     if labels[-1] in {"gov", "mil", "int"}:
         return True
-    if len(labels) >= 2 and labels[-2] in {"gov", "go", "gob", "gouv"}:
+    # Government namespaces such as gov.ph, go.jp, gob.mx, and gouv.fr are
+    # accepted only under a country-code TLD. This deliberately rejects lookalike
+    # commercial hosts such as example.gov.com or fake.go.net.
+    if (
+        len(labels) >= 2
+        and len(labels[-1]) == 2
+        and labels[-2] in {"gov", "go", "gob", "gouv"}
+    ):
         return True
     if hostname == "gc.ca" or hostname.endswith(".gc.ca"):
         return True
