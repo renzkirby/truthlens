@@ -27,7 +27,7 @@
 .thread-detail-page .evidence-card-semantics,
 .thread-detail-page .evidence-card-votes,
 .thread-detail-page .evidence-card-vote-cluster,
-.thread-detail-page .evidence-card-edit > div {
+.thread-detail-page .evidence-card-edit-actions {
    display: flex;
    align-items: center;
 }
@@ -439,7 +439,7 @@
 
 .thread-detail-page .evidence-card-edit textarea { resize: vertical; }
 .thread-detail-page .evidence-card-edit p { margin: 0; color: #64748b; font-size: 10px; }
-.thread-detail-page .evidence-card-edit > div { justify-content: flex-end; gap: 8px; }
+.thread-detail-page .evidence-card-edit-actions { justify-content: flex-end; gap: 8px; }
 .thread-detail-page .evidence-card-edit button.is-primary { border-color: #4f46e5; color: #ffffff; background: #4f46e5; }
 .thread-detail-page .evidence-card-edit button:disabled { opacity: 0.55; cursor: not-allowed; }
 
