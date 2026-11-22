@@ -1260,6 +1260,27 @@ class VerificationRunTextRuntimeTests(TestCase):
         ])
 
 
+    def test_stale_pipeline_second_chance_ai_result_is_not_reused(self):
+        old_claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text=self.claim.context_text,
+            ai_verdict="FACT",
+        )
+        VerificationRun.objects.create(
+            claim=old_claim,
+            status=VerificationRun.Status.COMPLETED,
+            pipeline_version="1.0.0",
+        )
+        self.match.return_value = old_claim
+
+        with patch("api.tasks._reuse_second_chance_ai_analysis") as reuse:
+            run = self._execute()
+
+        reuse.assert_not_called()
+        self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, self.verdict["verdict"])
+
     def test_required_tavily_retrieval_failure_is_failed_not_unverified(self):
         self.retrieve_gfc.return_value = {"claims": []}
         self.retrieve_tavily.side_effect = RuntimeError("Tavily unavailable")
