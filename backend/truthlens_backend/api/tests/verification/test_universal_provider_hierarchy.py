@@ -116,6 +116,8 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
                 "claim_gate",
                 "gfc_evaluation",
                 "tavily_evaluation",
+                "satire_provenance_audit",
+                "structured_misleading_audit",
             ):
                 with self.subTest(operation=operation):
                     self.assertTrue(cloudflare_pilot_enabled(operation))
@@ -158,8 +160,59 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
             '{"is_relevant": "false", "reasoning": "Different event."}', "",
         ))
 
+    def test_satire_provenance_contract_accepts_compact_output_and_rejects_bad_alias(self):
+        prompt = (
+            '<satire_signal_aliases>{"S1":"evidence-id"}</satire_signal_aliases>'
+        )
+        valid = {
+            "provenance": "DIRECT_SATIRE_PROVENANCE",
+            "evidence_aliases": ["S1"],
+            "explanation": "Harmless optional field.",
+        }
+        self.assertTrue(validate_pilot_response(
+            "satire_provenance_audit", json.dumps(valid), prompt,
+        ))
+        invalid = {**valid, "evidence_aliases": ["S99"]}
+        self.assertFalse(validate_pilot_response(
+            "satire_provenance_audit", json.dumps(invalid), prompt,
+        ))
+        origin_only = {
+            "provenance": "SATIRE_ORIGIN_ONLY",
+            "evidence_aliases": [],
+        }
+        self.assertTrue(validate_pilot_response(
+            "satire_provenance_audit", json.dumps(origin_only), prompt,
+        ))
+
+    def test_structured_misleading_contract_requires_relationship_specific_basis(self):
+        material = {
+            "relationship": "MATERIAL_MISDESCRIPTION",
+            "basis_kind": "FALSE_CONTEXT",
+            "explanation": "Harmless optional field.",
+        }
+        self.assertTrue(validate_pilot_response(
+            "structured_misleading_audit", json.dumps(material), "Evidence",
+        ))
+        self.assertFalse(validate_pilot_response(
+            "structured_misleading_audit",
+            json.dumps({**material, "basis_kind": "NONE"}),
+            "Evidence",
+        ))
+        fabricated = {
+            "relationship": "FABRICATED_CORE",
+            "basis_kind": "NONE",
+        }
+        self.assertTrue(validate_pilot_response(
+            "structured_misleading_audit", json.dumps(fabricated), "Evidence",
+        ))
+
     def test_new_decision_stages_use_strict_contract_when_hierarchy_enabled(self):
-        for operation in ("claim_equivalence", "fact_check_relevance"):
+        for operation in (
+            "claim_equivalence",
+            "fact_check_relevance",
+            "satire_provenance_audit",
+            "structured_misleading_audit",
+        ):
             with self.subTest(operation=operation):
                 self.assertTrue(requires_strict_stage_contract(
                     operation, pilot_active=True, hierarchy_active=True,
@@ -266,6 +319,14 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
             },
             "fact_check_relevance": {
                 "reasoning": "Different events.", "is_relevant": False,
+            },
+            "satire_provenance_audit": {
+                "provenance": "SATIRE_ORIGIN_ONLY",
+                "evidence_aliases": [],
+            },
+            "structured_misleading_audit": {
+                "relationship": "FABRICATED_CORE",
+                "basis_kind": "NONE",
             },
             "claim_gate": {
                 "cleaned_claim": "An announcement occurred.",
