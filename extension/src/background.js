@@ -8,6 +8,9 @@ import {
 } from "./modules/auth.js";
 import { state } from "./modules/state.js";
 import { extensionErrorPresentation } from "./modules/userFacingError.js";
+import { diagnosticDurationMs, diagnosticNowMs, logStartupTiming } from "./modules/startupDiagnostics.js";
+
+logStartupTiming("background_module_evaluated", { context: "background" });
 
 if (import.meta.env.DEV) {
    console.info("[TruthLens Local] Background endpoints", {
@@ -122,8 +125,15 @@ function hasUsableGuestClaimId(scan) {
 }
 
 async function fetchAuthenticatedUsername() {
+   const startedAt = diagnosticNowMs();
+   logStartupTiming("background_username_fetch_started", { context: "background" });
    const session = await getAuthSession();
    if (!session.accessToken) {
+      logStartupTiming("background_username_fetch_finished", {
+         context: "background",
+         durationMs: Number(diagnosticDurationMs(startedAt).toFixed(2)),
+         outcome: "missing_access_token",
+      });
       return null;
    }
 
@@ -137,14 +147,29 @@ async function fetchAuthenticatedUsername() {
    );
 
    if (!response.ok) {
+      logStartupTiming("background_username_fetch_finished", {
+         context: "background",
+         durationMs: Number(diagnosticDurationMs(startedAt).toFixed(2)),
+         outcome: `http_${response.status}`,
+      });
       return null;
    }
 
    const payload = await response.json().catch(() => null);
    if (!payload || typeof payload.username !== "string") {
+      logStartupTiming("background_username_fetch_finished", {
+         context: "background",
+         durationMs: Number(diagnosticDurationMs(startedAt).toFixed(2)),
+         outcome: "invalid_payload",
+      });
       return null;
    }
 
+   logStartupTiming("background_username_fetch_finished", {
+      context: "background",
+      durationMs: Number(diagnosticDurationMs(startedAt).toFixed(2)),
+      outcome: "success",
+   });
    return payload.username;
 }
 
@@ -520,10 +545,17 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
    }
 
    if (request.type === "GET_AUTH_CONTEXT") {
+      const authContextStartedAt = diagnosticNowMs();
+      logStartupTiming("background_auth_context_started", { context: "background" });
       (async () => {
          const session = await getAuthSession();
          const hasAccessToken = Boolean(session?.accessToken);
          if (!hasAccessToken) {
+            logStartupTiming("background_auth_context_finished", {
+               context: "background",
+               durationMs: Number(diagnosticDurationMs(authContextStartedAt).toFixed(2)),
+               mode: "guest",
+            });
             sendResponse({ accepted: true, isGuest: true, username: null });
             return;
          }
@@ -532,12 +564,27 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
          const currentSession = await getAuthSession();
 
          if (!currentSession?.accessToken) {
+            logStartupTiming("background_auth_context_finished", {
+               context: "background",
+               durationMs: Number(diagnosticDurationMs(authContextStartedAt).toFixed(2)),
+               mode: "session_lost",
+            });
             sendResponse({ accepted: true, isGuest: true, username: null });
             return;
          }
 
+         logStartupTiming("background_auth_context_finished", {
+            context: "background",
+            durationMs: Number(diagnosticDurationMs(authContextStartedAt).toFixed(2)),
+            mode: "authenticated",
+         });
          sendResponse({ accepted: true, isGuest: false, username });
       })().catch((error) => {
+         logStartupTiming("background_auth_context_finished", {
+            context: "background",
+            durationMs: Number(diagnosticDurationMs(authContextStartedAt).toFixed(2)),
+            mode: "error",
+         });
          sendResponse({
             accepted: false,
             error: error?.message || "Failed to load auth context.",
