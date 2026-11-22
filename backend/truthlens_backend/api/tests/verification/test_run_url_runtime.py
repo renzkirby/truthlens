@@ -1124,7 +1124,8 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.evaluate_persisted.assert_not_called()
         self.load_dossier.assert_not_called()
 
-    def test_tavily_retrieval_failure_preserves_evaluated_claim_without_verdict(self):
+    def test_tavily_retrieval_failure_preserves_submitted_claim_without_verdict(self):
+        submitted_context = self.claim.context_text
         self.bridge.return_value = {"claims": []}
         self.retrieve_tavily.side_effect = requests.Timeout("Retrieval unavailable")
         with self.assertRaises(tasks.EvidenceRetrievalUnavailableError):
@@ -1133,9 +1134,9 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.assertEqual(run.status, VerificationRun.Status.FAILED)
         self.assertEqual(run.failure_stage, "evidence_retrieval")
         self.claim.refresh_from_db()
-        self.assertEqual(self.claim.context_text, self.cleaned["cleaned_claim"])
-        self.assertNotEqual(self.claim.context_text, self.cleaned_text)
+        self.assertEqual(self.claim.context_text, submitted_context)
         self.assertIsNone(self.claim.ai_verdict)
+        self.assertIsNone(self.claim.ai_summary)
 
     def test_tavily_retrieval_failure_marks_failed_without_factual_verdict(self):
         self.bridge.return_value = {"claims": []}
