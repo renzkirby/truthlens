@@ -61,6 +61,13 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
                     "FALSE",
                 )
 
+        for rating in ("Misleading", "MISLEADING", " misleading "):
+            with self.subTest(rating=rating):
+                self.assertEqual(
+                    classify_official_fact_check_rating(rating),
+                    "MISLEADING",
+                )
+
         for rating in (
             "False - originated as satire",
             "Mostly false",
@@ -133,6 +140,22 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
             OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
         )
         self.assertEqual(result["satire_evidence_ids"], ())
+        self.assertEqual(result["misleading_evidence_ids"], ())
+        equivalence.assert_not_called()
+
+    def test_exact_misleading_rating_becomes_context_signal_without_llm_call(self):
+        with patch("api.tasks.assess_claim_equivalence") as equivalence:
+            result = tasks._resolve_official_fact_check_rating_policy(
+                "Same claim.",
+                _groups(("Same claim.", "Misleading")),
+            )
+
+        self.assertEqual(
+            result["resolution"],
+            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+        )
+        self.assertEqual(result["satire_evidence_ids"], ())
+        self.assertEqual(result["misleading_evidence_ids"], ("evidence-1",))
         equivalence.assert_not_called()
 
     def test_exact_equivalent_satire_rating_authorizes_satire_without_llm_call(self):
@@ -297,6 +320,115 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
             OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
         )
         self.assertEqual(result["satire_evidence_ids"], ("evidence-1",))
+
+    def test_semantically_equivalent_misleading_rating_becomes_context_signal(self):
+        with patch(
+            "api.tasks.assess_claim_equivalence",
+            return_value={
+                "equivalent": True,
+                "reasoning": "Same complete proposition.",
+                "material_differences": [],
+            },
+        ):
+            result = tasks._resolve_official_fact_check_rating_policy(
+                "Mayor X signed the railway agreement.",
+                _groups((
+                    "The railway agreement was signed by Mayor X.",
+                    "Misleading",
+                )),
+            )
+
+        self.assertEqual(
+            result["resolution"],
+            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+        )
+        self.assertEqual(result["satire_evidence_ids"], ())
+        self.assertEqual(result["misleading_evidence_ids"], ("evidence-1",))
+
+    def test_non_equivalent_misleading_rating_does_not_activate_signal(self):
+        with patch(
+            "api.tasks.assess_claim_equivalence",
+            return_value={
+                "equivalent": False,
+                "reasoning": "The date and medium materially differ.",
+                "material_differences": ["Different date and medium."],
+            },
+        ) as equivalence:
+            result = tasks._resolve_official_fact_check_rating_policy(
+                (
+                    "A July 2026 video showed Senator Erwin Tulfo calling for "
+                    "the flood-control corruption investigation to be stopped."
+                ),
+                _groups((
+                    (
+                        "Erwin Tulfo said stop meddling with the flood control "
+                        "issue and end the investigation."
+                    ),
+                    "Misleading",
+                )),
+            )
+
+        self.assertEqual(
+            result["resolution"],
+            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+        )
+        self.assertEqual(result["satire_evidence_ids"], ())
+        self.assertEqual(result["misleading_evidence_ids"], ())
+        equivalence.assert_called_once()
+
+    def test_equivalent_misleading_and_false_ratings_disable_context_signal(self):
+        with patch("api.tasks.assess_claim_equivalence") as equivalence:
+            result = tasks._resolve_official_fact_check_rating_policy(
+                "Same claim.",
+                _groups(
+                    ("Same claim.", "Misleading"),
+                    ("Same claim.", "False"),
+                ),
+            )
+
+        self.assertEqual(
+            result["resolution"],
+            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+        )
+        self.assertEqual(result["satire_evidence_ids"], ())
+        self.assertEqual(result["misleading_evidence_ids"], ())
+        equivalence.assert_not_called()
+
+    def test_equivalent_misleading_and_unknown_ratings_disable_context_signal(self):
+        with patch("api.tasks.assess_claim_equivalence") as equivalence:
+            result = tasks._resolve_official_fact_check_rating_policy(
+                "Same claim.",
+                _groups(
+                    ("Same claim.", "Misleading"),
+                    ("Same claim.", "Mostly False"),
+                ),
+            )
+
+        self.assertEqual(
+            result["resolution"],
+            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+        )
+        self.assertEqual(result["satire_evidence_ids"], ())
+        self.assertEqual(result["misleading_evidence_ids"], ())
+        equivalence.assert_not_called()
+
+    def test_equivalent_misleading_and_satire_ratings_disable_both_signals(self):
+        with patch("api.tasks.assess_claim_equivalence") as equivalence:
+            result = tasks._resolve_official_fact_check_rating_policy(
+                "Same claim.",
+                _groups(
+                    ("Same claim.", "Misleading"),
+                    ("Same claim.", "Satire"),
+                ),
+            )
+
+        self.assertEqual(
+            result["resolution"],
+            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+        )
+        self.assertEqual(result["satire_evidence_ids"], ())
+        self.assertEqual(result["misleading_evidence_ids"], ())
+        equivalence.assert_not_called()
 
     def test_semantically_equivalent_satire_rating_authorizes_satire(self):
         with patch(
