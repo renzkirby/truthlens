@@ -279,6 +279,40 @@ class TavilyProviderTests(TestCase):
         self.assertNotIn("request_timeout", self.client.search.call_args.kwargs)
         self.assertNotIn("max_results", self.client.search.call_args.kwargs)
 
+    def test_primary_source_recovery_is_bounded_and_filters_open_web(self):
+        payload = {
+            "answer": "Provider answer",
+            "results": [
+                {"url": "https://random-blog.example/post", "content": "Untrusted."},
+                {"url": "https://psa.gov.ph/statistics", "content": "Official PSA data."},
+                {"url": "https://www.who.int/report", "content": "Official WHO report."},
+                {"url": "https://www.noaa.gov/climate", "content": "Official NOAA data."},
+                {"url": "https://example.edu/research", "content": "Not recovery-admitted."},
+                {"url": "https://www.un.org/report", "content": "Fourth official result."},
+            ],
+        }
+        self.client.search.return_value = payload
+
+        returned, evidence = self.provider.search_with_payload(
+            "exact factual claim",
+            limit=3,
+            primary_source_recovery=True,
+        )
+
+        kwargs = self.client.search.call_args.kwargs
+        self.assertEqual(kwargs["max_results"], 3)
+        self.assertNotIn("include_domains", kwargs)
+        self.assertEqual(
+            [item.url for item in evidence],
+            [
+                "https://psa.gov.ph/statistics",
+                "https://www.who.int/report",
+                "https://www.noaa.gov/climate",
+            ],
+        )
+        self.assertEqual(len(returned["results"]), 3)
+        self.assertEqual(len(payload["results"]), 6)
+
     def test_query_is_stripped_without_truncation(self):
         query = "claim " * 100
         self.provider.search(" \n" + query + "\t ")
