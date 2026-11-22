@@ -71,7 +71,9 @@ export default function RichTextEditor({
 
    useEffect(() => {
       if (!editor) return;
-      editor.setEditable(!disabled);
+      const editable = !disabled;
+      if (editor.isEditable === editable) return;
+      editor.setEditable(editable, false);
    }, [disabled, editor]);
 
    useEffect(() => {
