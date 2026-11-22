@@ -440,6 +440,10 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
                 "api.tasks.evaluate_image_claim_with_tavily",
             ) as evaluate_legacy_tavily,
             patch("api.tasks._save_claim") as save_claim,
+            patch(
+                "api.tasks._attempt_primary_source_recovery",
+                side_effect=lambda **kwargs: kwargs["initial_result"],
+            ),
             patch("api.tasks._retrieve_and_ingest_tavily") as retrieve_tavily,
             patch("api.tasks.requests.get") as requests_get,
             patch("api.tasks._log_stage"),
@@ -833,6 +837,10 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
                 return_value=["persisted secondary preview"],
             ) as source_previews,
             patch("api.tasks._save_claim") as save_claim,
+            patch(
+                "api.tasks._attempt_primary_source_recovery",
+                side_effect=lambda **kwargs: kwargs["initial_result"],
+            ),
             patch("api.tasks._retrieve_and_ingest_tavily") as retrieve_tavily,
             patch("api.tasks._log_stage"),
         ):
