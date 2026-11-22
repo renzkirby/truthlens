@@ -48,6 +48,7 @@ from .verification.provider_hierarchy import (
     requires_strict_stage_contract,
     gemini_job_blocking_error,
     gemini_transient_circuit_breaker_enabled,
+    gemini_transient_model_fallback_enabled,
     groq_bounded_fallback_enabled,
     reliability_hardening_enabled,
 )
@@ -90,6 +91,7 @@ gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_GEMINI_REASONING_MODEL = DEFAULT_GEMINI_MODEL
 DEFAULT_GEMINI_ROUTINE_MODEL = "gemini-3.5-flash-lite"
+DEFAULT_GEMINI_TRANSIENT_FALLBACK_MODEL = "gemini-3.6-flash"
 DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
 DEFAULT_GROQ_VISION_MODEL = "qwen/qwen3.8-27b"
 # Bound 413 recovery fan-out: four original evidence items per chunk, at most
@@ -263,6 +265,10 @@ GEMINI_ROUTINE_OPERATIONS = frozenset({
 
 
 _gemini_degraded_models = ContextVar("gemini_degraded_models", default=None)
+_gemini_transient_degraded_models = ContextVar(
+    "gemini_transient_degraded_models",
+    default=None,
+)
 _cloudflare_pilot_degraded = ContextVar("cloudflare_pilot_degraded", default=None)
 
 
@@ -270,11 +276,13 @@ _cloudflare_pilot_degraded = ContextVar("cloudflare_pilot_degraded", default=Non
 def llm_provider_scope():
     """Give one synchronous verification execution fresh provider state."""
     token = _gemini_degraded_models.set(frozenset())
+    transient_token = _gemini_transient_degraded_models.set(frozenset())
     cloudflare_token = _cloudflare_pilot_degraded.set(False)
     try:
         yield
     finally:
         _cloudflare_pilot_degraded.reset(cloudflare_token)
+        _gemini_transient_degraded_models.reset(transient_token)
         _gemini_degraded_models.reset(token)
 
 
@@ -423,10 +431,29 @@ def _gemini_model_is_degraded(model):
     return degraded_models is not None and model in degraded_models
 
 
+def _gemini_model_is_transiently_degraded(model):
+    degraded_models = _gemini_transient_degraded_models.get()
+    return degraded_models is not None and model in degraded_models
+
+
 def _mark_gemini_model_degraded(model):
     degraded_models = _gemini_degraded_models.get()
     if degraded_models is not None:
         _gemini_degraded_models.set(degraded_models | {model})
+
+
+def _mark_gemini_model_transiently_degraded(model):
+    _mark_gemini_model_degraded(model)
+    degraded_models = _gemini_transient_degraded_models.get()
+    if degraded_models is not None:
+        _gemini_transient_degraded_models.set(degraded_models | {model})
+
+
+def _gemini_transient_fallback_model():
+    return _model_from_env(
+        "GEMINI_TRANSIENT_FALLBACK_MODEL",
+        DEFAULT_GEMINI_TRANSIENT_FALLBACK_MODEL,
+    )
 
 
 def _provider_status_code(error):
