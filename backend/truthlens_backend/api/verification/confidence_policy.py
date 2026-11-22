@@ -242,6 +242,23 @@ def _contextual_basis_qualities(verdict_result, verdict, evidence_groups):
     return basis_qualities
 
 
+def has_claim_scoped_satire_support(
+    verdict_result: dict,
+    evidence_groups: Iterable[ReasoningEvidenceGroup],
+) -> bool:
+    """Require SATIRE provenance IDs to resolve to usable assessed evidence."""
+    if (
+        not isinstance(verdict_result, dict)
+        or verdict_result.get("verdict") != "SATIRE"
+    ):
+        return False
+    return _contextual_basis_qualities(
+        verdict_result,
+        "SATIRE",
+        tuple(evidence_groups),
+    ) is not None
+
+
 def has_claim_scoped_misleading_support(
     verdict_result: dict,
     evidence_groups: Iterable[ReasoningEvidenceGroup],
