@@ -325,6 +325,11 @@ class VerificationRunTextRuntimeTests(TestCase):
             ai_sources=["https://example.com/cached"],
             is_ai_generated=True,
         )
+        VerificationRun.objects.create(
+            claim=cached,
+            status=VerificationRun.Status.COMPLETED,
+            pipeline_version=runs.CURRENT_VERIFICATION_PIPELINE_VERSION,
+        )
         self.match.return_value = cached
         return cached
 
@@ -335,7 +340,7 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.assertEqual(run.claim_id, self.claim.id)
         self.assertEqual(
             run.pipeline_version,
-            VerificationRun._meta.get_field("pipeline_version").get_default(),
+            runs.CURRENT_VERIFICATION_PIPELINE_VERSION,
         )
         self.assertIsNone(run.triggered_by)
         self.create_run.assert_called_once_with(self.claim, triggered_by=None)
@@ -1076,18 +1081,19 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.fail_run.assert_not_called()
         self.retrieve_tavily.assert_called_once()
 
-    def test_handled_tavily_failure_abstains(self):
+    def test_tavily_retrieval_failure_marks_failed_without_factual_verdict(self):
         self.retrieve_gfc.return_value = {"claims": []}
         self.retrieve_tavily.side_effect = requests.Timeout("Tavily timed out")
-        self._assert_terminal(self._execute(), VerificationRun.Status.ABSTAINED)
+        with self.assertRaises(tasks.EvidenceRetrievalUnavailableError):
+            self._execute()
+        run = self.claim.verification_runs.get()
+        self._assert_terminal(run, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "evidence_retrieval")
+        self.assertEqual(run.failure_code, "EVIDENCE_RETRIEVAL_FAILED")
         self.claim.refresh_from_db()
-        self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
-        self.assertEqual(self.claim.consensus_score, 0)
-        self.assertIn(
-            "insufficient for a decisive verdict",
-            self.claim.score_context,
-        )
-        self.fail_run.assert_not_called()
+        self.assertIsNone(self.claim.ai_verdict)
+        self.assertIsNone(self.claim.ai_summary)
+        self.assertIsNone(self.claim.consensus_score)
 
     def test_fatal_core_exception_fails_with_original_metadata(self):
         error = RuntimeError("Preprocessor unavailable: " + "details " * 30)
@@ -1098,9 +1104,9 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.assertEqual(run.failure_code, "UNHANDLED_EXCEPTION")
         self.assertEqual(run.failure_message, str(error))
         self.claim.refresh_from_db()
-        self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
+        self.assertIsNone(self.claim.ai_verdict)
         self.assertIsNone(self.claim.final_verdict)
-        self.assertEqual(self.claim.ai_summary, "An error occurred during analysis.")
+        self.assertIsNone(self.claim.ai_summary)
         self.retrieve_gfc.assert_not_called()
         self.retrieve_tavily.assert_not_called()
 
@@ -1285,7 +1291,9 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.retrieve_gfc.return_value = {"claims": []}
         self.retrieve_tavily.side_effect = RuntimeError("Tavily unavailable")
 
-        run = self._execute()
+        with self.assertRaises(tasks.EvidenceRetrievalUnavailableError):
+            self._execute()
+        run = self.claim.verification_runs.get()
 
         self.assertEqual(run.status, VerificationRun.Status.FAILED)
         self.assertEqual(run.failure_stage, "evidence_retrieval")
