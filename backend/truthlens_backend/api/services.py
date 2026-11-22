@@ -2472,15 +2472,163 @@ def _normalize_contextual_basis_metadata(result):
     return normalized
 
 
+def _persisted_evidence_link_ids(evidence_groups):
+    ids = set()
+    for group in evidence_groups or ():
+        for item in getattr(group, "evidence", ()):
+            evidence_id = getattr(item, "evidence_link_id", None)
+            if evidence_id:
+                ids.add(str(evidence_id))
+    return ids
+
+
+def _has_persisted_satire_signal(evidence_groups):
+    """Cheap trigger only; the audit below decides whether provenance is direct."""
+    for group in evidence_groups or ():
+        for item in getattr(group, "evidence", ()):
+            content = str(getattr(item, "content", "") or "").casefold()
+            if "satir" in content or "parody" in content:
+                return True
+    return False
+
+
+def _audit_persisted_satire_provenance(
+    original_claim,
+    evidence_context,
+    evaluator_result,
+    evidence_groups=(),
+):
+    """Allow SATIRE only when persisted evidence proves same-content provenance."""
+    system_instructions = """
+    Role: You are the TruthLens satire-provenance auditor.
+
+    Use ONLY the supplied persisted evidence. Do not use outside knowledge,
+    absurdity, humor, or the presence of the words satire/parody by themselves.
+
+    Classify the provenance relationship for the EXACT submitted claim/content:
+    - DIRECT_SATIRE_PROVENANCE: the evidence explicitly establishes that the same
+      submitted claim/content was created, published, or labeled as satire/parody.
+    - SATIRE_ORIGIN_ONLY: a false/misleading factual rumor merely originated from,
+      copied, or adapted a satire/parody item; the submitted factual proposition is
+      not itself safely classifiable as satire.
+    - CONFLICTING_PROVENANCE: supplied evidence materially conflicts about whether
+      the same submitted claim/content is satire versus a factual falsehood.
+    - NOT_ESTABLISHED: direct provenance cannot be established safely.
+
+    DIRECT_SATIRE_PROVENANCE requires one or more exact Evidence link IDs from the
+    supplied dossier. Do not invent, transform, or infer IDs. A related parody,
+    satirical source on the same topic, or an origin story alone is insufficient.
+
+    Return ONLY JSON with exactly these fields:
+    {
+      "provenance": "DIRECT_SATIRE_PROVENANCE|SATIRE_ORIGIN_ONLY|CONFLICTING_PROVENANCE|NOT_ESTABLISHED",
+      "reasoning": "Evidence-bound explanation",
+      "summary": "Concise user-facing explanation",
+      "confidence_score": <numeric percentage 0 to 100>,
+      "score_context": "Concise confidence explanation",
+      "evidence_ids": ["Exact Evidence link ID copied from the dossier"]
+    }
+    """
+    system_instructions = _with_user_facing_summary_rules(system_instructions)
+    first_verdict = evaluator_result.get("verdict", "UNVERIFIED")
+
+    def audit_prompt(context):
+        return system_instructions, (
+            f"<claim>{original_claim}</claim>\n\n"
+            f"<first_evaluator_verdict>{first_verdict}</first_evaluator_verdict>\n\n"
+            f"<persisted_evidence>{context}</persisted_evidence>"
+        )
+
+    _, user_data = audit_prompt(evidence_context)
+
+    def fallback_user_prompt_builder():
+        return _build_bounded_provider_fallback_user_prompt(
+            evidence_groups,
+            audit_prompt,
+        )
+
+    provider_kwargs = {
+        "operation": "persisted_evidence_evaluation",
+        "gemini_timeout_ms": PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
+    }
+    if groq_bounded_fallback_enabled():
+        provider_kwargs["fallback_user_prompt"] = fallback_user_prompt_builder
+
+    try:
+        response_text = call_llm_with_fallback(
+            system_instructions,
+            user_data,
+            **provider_kwargs,
+        )
+        audited = _parse_llm_json(response_text)
+        required = {
+            "provenance",
+            "reasoning",
+            "summary",
+            "confidence_score",
+            "score_context",
+            "evidence_ids",
+        }
+        if not isinstance(audited, dict) or set(audited) != required:
+            raise ValueError("Satire provenance audit returned an invalid result")
+        if audited["provenance"] not in {
+            "DIRECT_SATIRE_PROVENANCE",
+            "SATIRE_ORIGIN_ONLY",
+            "CONFLICTING_PROVENANCE",
+            "NOT_ESTABLISHED",
+        }:
+            raise ValueError("Satire provenance audit returned an invalid class")
+        if not isinstance(audited["evidence_ids"], list):
+            raise ValueError("Satire provenance audit returned invalid evidence IDs")
+
+        if audited["provenance"] != "DIRECT_SATIRE_PROVENANCE":
+            return evaluator_result
+
+        evidence_ids = [
+            value.strip()
+            for value in audited["evidence_ids"]
+            if isinstance(value, str) and value.strip()
+        ]
+        allowed_ids = _persisted_evidence_link_ids(evidence_groups)
+        if (
+            not evidence_ids
+            or len(set(evidence_ids)) != len(evidence_ids)
+            or any(value not in allowed_ids for value in evidence_ids)
+        ):
+            raise ValueError(
+                "Direct satire provenance was not tied to persisted evidence"
+            )
+
+        return {
+            "reasoning": audited["reasoning"],
+            "verdict": "SATIRE",
+            "summary": audited["summary"],
+            "confidence_score": _normalize_verdict_confidence_score(
+                audited["confidence_score"]
+            ),
+            "score_context": audited["score_context"],
+            "contextual_basis_kind": "SATIRE_PROVENANCE",
+            "contextual_basis_evidence_ids": evidence_ids,
+        }
+    except Exception as exc:
+        logger.warning(
+            "Persisted satire provenance audit unavailable (%s).",
+            _provider_error_label(exc),
+        )
+        return evaluator_result
+
+
 def _enforce_satire_verdict_eligibility(
     result,
     article_stance,
     official_fact_check_resolution=OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+    persisted_satire_provenance=False,
 ):
-    """Reject SATIRE when neither submitted nor equivalent official provenance exists."""
+    """Reject SATIRE unless direct provenance has been established safely."""
     satire_eligible = (
         article_stance == "SATIRE"
         or official_fact_check_resolution == OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE
+        or persisted_satire_provenance
     )
     if result.get("verdict") == "SATIRE" and not satire_eligible:
         raise ValueError(
@@ -2722,12 +2870,18 @@ def _audit_structured_misleading_signal(
 
     VERDICT RULES:
     - FACT: every material assertion in the submitted claim is explicitly supported.
-    - FAKE: the core proposition is affirmatively contradicted, fabricated, or
-      falsely attributed, and no materially true/contextual structure justifies
-      MISLEADING.
-    - MISLEADING: the submitted claim contains a true or partly true element AND a
-      material omission, qualification, framing choice, or false context changes
-      the truth or ordinary factual impression of that same proposition.
+    - FAKE: the core asserted event, action, quotation, policy, attribution, or
+      relationship is fabricated or affirmatively contradicted. Incidental truth
+      such as a real person, photo, place, or topic does not by itself create a
+      materially true substrate.
+    - MISLEADING: the evidence establishes a substantial genuine factual substrate
+      of the submitted proposition (for example the same real event, program,
+      media, amount, actor/object relationship, or occurrence), BUT a material
+      predicate, legal/status relationship, date, quantity, framing, omission, or
+      context changes its truth or ordinary factual impression.
+    - A real surrounding photo/person/topic plus a fabricated quote or invented
+      action remains FAKE; do not call it MISLEADING merely because incidental
+      background details are genuine.
     - UNVERIFIED: the evidence is insufficient, conflicting, or cannot safely
       establish one of the other verdicts.
     - Do not return SATIRE from this audit.
@@ -2899,10 +3053,28 @@ def evaluate_claim_with_persisted_evidence(
         parsed_result["confidence_score"] = _normalize_verdict_confidence_score(
             parsed_result["confidence_score"]
         )
+
+        persisted_satire_provenance = False
+        if (
+            official_fact_check_resolution == OFFICIAL_FACT_CHECK_RESOLUTION_NONE
+            and article_stance != "SATIRE"
+            and not official_misleading_evidence_ids
+            and parsed_result.get("verdict") in {"FAKE", "UNVERIFIED", "SATIRE"}
+            and _has_persisted_satire_signal(evidence_groups)
+        ):
+            parsed_result = _audit_persisted_satire_provenance(
+                original_claim,
+                evidence_context,
+                parsed_result,
+                evidence_groups,
+            )
+            persisted_satire_provenance = parsed_result.get("verdict") == "SATIRE"
+
         parsed_result = _enforce_satire_verdict_eligibility(
             parsed_result,
             article_stance,
             official_fact_check_resolution,
+            persisted_satire_provenance=persisted_satire_provenance,
         )
         parsed_result = _normalize_contextual_basis_metadata(parsed_result)
 
