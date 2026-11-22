@@ -35,7 +35,10 @@ from .verification.cloudflare_pilot import (
     PILOT_OPERATION,
 )
 from .verification.provider_audit_metrics import validate_user_facing_evaluation
-from .verification.confidence_policy import has_claim_scoped_misleading_support
+from .verification.confidence_policy import (
+    has_claim_scoped_misleading_support,
+    has_claim_scoped_satire_support,
+)
 from .verification.classification_contract import CLASSIFICATION_OPERATION
 from .verification.provider_hierarchy import (
     hierarchy_enabled,
@@ -2599,7 +2602,7 @@ def _audit_persisted_satire_provenance(
                 "Direct satire provenance was not tied to persisted evidence"
             )
 
-        return {
+        result = {
             "reasoning": audited["reasoning"],
             "verdict": "SATIRE",
             "summary": audited["summary"],
@@ -2610,6 +2613,11 @@ def _audit_persisted_satire_provenance(
             "contextual_basis_kind": "SATIRE_PROVENANCE",
             "contextual_basis_evidence_ids": evidence_ids,
         }
+        if not has_claim_scoped_satire_support(result, evidence_groups):
+            raise ValueError(
+                "Direct satire provenance evidence did not meet the usable quality floor"
+            )
+        return result
     except Exception as exc:
         logger.warning(
             "Persisted satire provenance audit unavailable (%s).",
