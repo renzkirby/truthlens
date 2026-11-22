@@ -10,7 +10,6 @@ function PublicSiteHeader() {
    const [isMenuOpen, setIsMenuOpen] = useState(false);
    const menuToggleRef = useRef(null);
    const isPartnerRoute = pathname === "/partners" || pathname.startsWith("/partners/");
-   const isGuidelinesRoute = pathname === "/community-guidelines";
    const isLandingPage = pathname === "/landing";
    const featuresHref = isLandingPage ? "#features" : "/landing#features";
    const aboutHref = isLandingPage ? "#about" : "/landing#about";
@@ -53,9 +52,6 @@ function PublicSiteHeader() {
                <a href={aboutHref}>About</a>
                <Link to="/partners" aria-current={isPartnerRoute ? "page" : undefined}>
                   Partners
-               </Link>
-               <Link to="/community-guidelines" aria-current={isGuidelinesRoute ? "page" : undefined}>
-                  Guidelines
                </Link>
             </div>
 
@@ -102,13 +98,6 @@ function PublicSiteHeader() {
                </a>
                <Link to="/partners" aria-current={isPartnerRoute ? "page" : undefined} onClick={closeMenu}>
                   Partners
-               </Link>
-               <Link
-                  to="/community-guidelines"
-                  aria-current={isGuidelinesRoute ? "page" : undefined}
-                  onClick={closeMenu}
-               >
-                  Guidelines
                </Link>
 
                <div className="public-site-header__mobile-actions">
