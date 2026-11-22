@@ -607,11 +607,13 @@ def call_llm_with_fallback(
     gemini_timeout_ms=None,
     fallback_user_prompt=None,
 ):
-    """Opt-in Gemini -> Cloudflare -> Groq; legacy order otherwise preserved.
+    """Opt-in Gemini -> alternate Gemini -> Cloudflare -> Groq routing.
 
-    Gemini always receives the original full prompt. A caller may provide a
+    Gemini models always receive the original full prompt. The alternate model
+    is attempted only for transient primary Gemini 5xx failures when the
+    defense-period fallback flag is explicitly enabled. A caller may provide a
     deterministic bounded fallback prompt for providers with tighter request
-    budgets; it is never used on the normal successful Gemini path.
+    budgets; it is never used on a successful Gemini path.
     """
     provider_call_id = uuid.uuid4()
     pilot_active = cloudflare_pilot_enabled(operation)
@@ -622,11 +624,13 @@ def call_llm_with_fallback(
     )
 
     gemini_model = _gemini_model_for_operation(operation)
+    gemini_fallback_model = _gemini_transient_fallback_model()
     last_gemini_error = None
+    primary_gemini_error = None
 
-    def _try_gemini(*, force=False, retry_number=0):
-        nonlocal last_gemini_error
-        if force or not _gemini_model_is_degraded(gemini_model):
+    def _try_gemini(model, *, force=False, retry_number=0, request_variant=None):
+        nonlocal last_gemini_error, primary_gemini_error
+        if force or not _gemini_model_is_degraded(model):
             gemini_config = {
                 "system_instruction": system_instructions,
                 "response_mime_type": "application/json",
@@ -643,6 +647,8 @@ def call_llm_with_fallback(
                 request_config = types.GenerateContentConfig(**gemini_config)
             except Exception as gemini_err:
                 last_gemini_error = gemini_err
+                if model == gemini_model:
+                    primary_gemini_error = gemini_err
                 logger.warning(
                     "Gemini API failed (%s); continuing fallback routing.",
                     _provider_error_label(gemini_err),
@@ -651,7 +657,7 @@ def call_llm_with_fallback(
                 gemini_started_at = time.perf_counter()
                 try:
                     response = gemini_client.models.generate_content(
-                        model=gemini_model,
+                        model=model,
                         contents=user_prompt,
                         config=request_config,
                     )
@@ -667,20 +673,25 @@ def call_llm_with_fallback(
                         raise ValueError("INVALID_PILOT_FALLBACK_JSON")
                 except Exception as gemini_err:
                     last_gemini_error = gemini_err
-                    # Billing, model-availability, and quota failures are job-scoped.
-                    # Do not repeatedly call a provider that cannot serve this job.
+                    if model == gemini_model:
+                        primary_gemini_error = gemini_err
+                    transient_server_error = _is_transient_gemini_server_error(
+                        gemini_err
+                    )
                     if (
                         hierarchy_active
-                        and (
-                            gemini_job_blocking_error(gemini_err)
-                            or (
-                                gemini_transient_circuit_breaker_enabled()
-                                and _is_transient_gemini_server_error(gemini_err)
-                            )
-                        )
                         and _gemini_degraded_models.get() is not None
                     ):
-                        _mark_gemini_model_degraded(gemini_model)
+                        if gemini_job_blocking_error(gemini_err):
+                            _mark_gemini_model_degraded(model)
+                        elif (
+                            gemini_transient_circuit_breaker_enabled()
+                            and transient_server_error
+                        ):
+                            _mark_gemini_model_transiently_degraded(model)
+                    variant = request_variant or (
+                        "RECOVERY" if force or model != gemini_model else "FULL"
+                    )
                     _log_llm_provider_call(
                         operation,
                         "gemini",
@@ -691,8 +702,8 @@ def call_llm_with_fallback(
                         metadata=_request_metadata(
                             system_instructions,
                             user_prompt,
-                            variant="RECOVERY" if force else "FULL",
-                            model_id=gemini_model,
+                            variant=variant,
+                            model_id=model,
                             retry_number=retry_number,
                             estimate_tokens=True,
                             preserve_model_id_when_disabled=True,
@@ -704,6 +715,9 @@ def call_llm_with_fallback(
                     )
                 else:
                     last_gemini_error = None
+                    variant = request_variant or (
+                        "RECOVERY" if force or model != gemini_model else "FULL"
+                    )
                     _log_llm_provider_call(
                         operation,
                         "gemini",
@@ -713,8 +727,8 @@ def call_llm_with_fallback(
                         metadata=_request_metadata(
                             system_instructions,
                             user_prompt,
-                            variant="RECOVERY" if force else "FULL",
-                            model_id=gemini_model,
+                            variant=variant,
+                            model_id=model,
                             retry_number=retry_number,
                             preserve_model_id_when_disabled=True,
                         ),
@@ -724,9 +738,27 @@ def call_llm_with_fallback(
         return None
 
     if hierarchy_active:
-        primary_response = _try_gemini()
+        primary_response = _try_gemini(gemini_model)
         if primary_response is not None:
             return primary_response
+
+        should_try_gemini_fallback = (
+            gemini_transient_model_fallback_enabled()
+            and gemini_fallback_model != gemini_model
+            and not _gemini_model_is_degraded(gemini_fallback_model)
+            and (
+                _is_transient_gemini_server_error(primary_gemini_error)
+                or _gemini_model_is_transiently_degraded(gemini_model)
+            )
+        )
+        if should_try_gemini_fallback:
+            fallback_response = _try_gemini(
+                gemini_fallback_model,
+                retry_number=1,
+                request_variant="RECOVERY",
+            )
+            if fallback_response is not None:
+                return fallback_response
 
     resolved_fallback_user_prompt = None
     if hierarchy_active and groq_bounded_fallback_enabled():
@@ -883,7 +915,7 @@ def call_llm_with_fallback(
             return cloudflare_text
 
     if not hierarchy_active:
-        legacy_gemini_response = _try_gemini()
+        legacy_gemini_response = _try_gemini(gemini_model)
         if legacy_gemini_response is not None:
             return legacy_gemini_response
 
@@ -1059,7 +1091,7 @@ def call_llm_with_fallback(
         )
 
         transient_gemini_failure = _is_transient_gemini_server_error(
-            last_gemini_error
+            primary_gemini_error
         )
         guarded_recovery = (
             hierarchy_active
@@ -1079,8 +1111,10 @@ def call_llm_with_fallback(
             )
             time.sleep(1.0)
             recovery_response = _try_gemini(
+                gemini_model,
                 force=guarded_recovery,
-                retry_number=1,
+                retry_number=2 if hierarchy_active else 1,
+                request_variant="RECOVERY",
             )
             if recovery_response is not None:
                 return recovery_response
