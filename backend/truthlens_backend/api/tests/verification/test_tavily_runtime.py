@@ -590,6 +590,10 @@ class TavilyTextRuntimeIngestionTests(TestCase):
             "api.tasks._assess_and_persist_reasoning_evidence"
         )
         self.save_claim = self._patch("api.tasks._save_claim", wraps=tasks._save_claim)
+        self.recovery = self._patch(
+            "api.tasks._attempt_primary_source_recovery",
+            side_effect=lambda **kwargs: kwargs["initial_result"],
+        )
         real_bridge = tasks._retrieve_and_ingest_tavily
         self.observed_runs = []
 
@@ -866,18 +870,25 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         self.assertEqual(EvidenceSource.objects.filter(provider="TAVILY").count(), 4)
         self._assert_unavailable_evidence_abstains_and_preserves_sources()
 
-    def test_provider_failure_reaches_existing_unverified_fallback(self):
+    def test_provider_failure_marks_failed_without_factual_verdict(self):
         self.client.search.side_effect = requests.Timeout("Provider unavailable")
         with patch("api.tasks.ingest_raw_evidence") as ingest:
-            self._execute(VerificationRun.Status.ABSTAINED, expected_links=0)
+            with self.assertRaises(tasks.EvidenceRetrievalUnavailableError):
+                tasks.execute_core_text_pipeline(
+                    self.claim.context_text,
+                    self.claim.pk,
+                )
+        run = self.claim.verification_runs.get()
+        self.assertEqual(run.status, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "evidence_retrieval")
+        self.assertEqual(run.failure_code, "EVIDENCE_RETRIEVAL_FAILED")
         ingest.assert_not_called()
         self.evaluate_tavily.assert_not_called()
         self.evaluate_persisted.assert_not_called()
         self.client.search.assert_called_once()
         self.claim.refresh_from_db()
-        self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
-        self.assertEqual(self.claim.ai_sources, [])
-        self.assertEqual(self.claim.source_type, "Live Web Search")
+        self.assertIsNone(self.claim.ai_verdict)
+        self.assertIsNone(self.claim.ai_summary)
         self.assertEqual(EvidenceSource.objects.count(), 0)
 
     def _execute_url(self, status=VerificationRun.Status.COMPLETED, *, expected_links=4):
@@ -1098,17 +1109,20 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         self.assertEqual(EvidenceSource.objects.filter(provider="TAVILY").count(), 4)
         self._assert_unavailable_url_evidence_abstains(evaluate_url)
 
-    def test_url_provider_failure_reaches_existing_unverified_fallback(self):
+    def test_url_provider_failure_marks_failed_without_factual_verdict(self):
         self.client.search.side_effect = requests.Timeout("Provider unavailable")
         with patch("api.tasks.ingest_raw_evidence") as ingest:
-            evaluate_url = self._execute_url(VerificationRun.Status.ABSTAINED, expected_links=0)
+            with self.assertRaises(tasks.EvidenceRetrievalUnavailableError):
+                self._execute_url(VerificationRun.Status.FAILED, expected_links=0)
+        run = self.claim.verification_runs.get()
+        self.assertEqual(run.status, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "evidence_retrieval")
+        self.assertEqual(run.failure_code, "EVIDENCE_RETRIEVAL_FAILED")
         ingest.assert_not_called()
-        evaluate_url.assert_not_called()
         self.evaluate_persisted.assert_not_called()
         self.claim.refresh_from_db()
-        self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
-        self.assertEqual(self.claim.ai_sources, [])
-        self.assertEqual(self.claim.source_type, "Live Web Search")
+        self.assertIsNone(self.claim.ai_verdict)
+        self.assertIsNone(self.claim.ai_summary)
         self.assertEqual(EvidenceSource.objects.count(), 0)
         self.assertFalse(any(
             "tavily_evidence_ingestion" in call.args[1]
