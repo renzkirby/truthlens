@@ -36,6 +36,8 @@ RELEVANCE_OPERATION = "fact_check_relevance"
 CLAIM_GATE_OPERATION = "claim_gate"
 GFC_EVALUATION_OPERATION = "gfc_evaluation"
 TAVILY_EVALUATION_OPERATION = "tavily_evaluation"
+SATIRE_PROVENANCE_AUDIT_OPERATION = "satire_provenance_audit"
+STRUCTURED_MISLEADING_AUDIT_OPERATION = "structured_misleading_audit"
 ASSESSMENT_OPERATION = "evidence_assessment"
 PILOT_COMPLETION_TOKENS = 2048
 ASSESSMENT_COMPLETION_TOKENS = 2048
@@ -72,6 +74,8 @@ def cloudflare_pilot_enabled(operation):
             PILOT_OPERATION, ASSESSMENT_OPERATION, CLASSIFICATION_OPERATION,
             EQUIVALENCE_OPERATION, RELEVANCE_OPERATION,
             GFC_EVALUATION_OPERATION, TAVILY_EVALUATION_OPERATION,
+            SATIRE_PROVENANCE_AUDIT_OPERATION,
+            STRUCTURED_MISLEADING_AUDIT_OPERATION,
             CLAIM_GATE_OPERATION,
         }
 
@@ -461,8 +465,30 @@ def _valid_assessment_batch(raw, user_prompt):
     return seen == expected
 
 
-def _valid_small_decision(operation, raw):
-    """Strict JSON shape for the two bounded decision-only operations."""
+def _satire_aliases_from_prompt(user_prompt):
+    if not isinstance(user_prompt, str):
+        return set()
+    start_tag = "<satire_signal_aliases>"
+    end_tag = "</satire_signal_aliases>"
+    start = user_prompt.find(start_tag)
+    end = user_prompt.find(end_tag, start + len(start_tag))
+    if start < 0 or end < 0:
+        return set()
+    try:
+        mapping = json.loads(user_prompt[start + len(start_tag):end])
+    except (TypeError, ValueError):
+        return set()
+    if not isinstance(mapping, dict):
+        return set()
+    return {
+        key for key, value in mapping.items()
+        if isinstance(key, str) and key.strip()
+        and isinstance(value, str) and value.strip()
+    }
+
+
+def _valid_small_decision(operation, raw, user_prompt=None):
+    """Strict compact JSON contracts for bounded decision-only operations."""
     try:
         value = json.loads(raw)
     except (ValueError, TypeError):
@@ -492,6 +518,39 @@ def _valid_small_decision(operation, raw):
                 or not value["material_differences"]
             )
         )
+    if operation == SATIRE_PROVENANCE_AUDIT_OPERATION:
+        provenance = value.get("provenance")
+        aliases = value.get("evidence_aliases", [])
+        valid_provenance = {
+            "DIRECT_SATIRE_PROVENANCE",
+            "SATIRE_ORIGIN_ONLY",
+            "CONFLICTING_PROVENANCE",
+            "NOT_ESTABLISHED",
+        }
+        if provenance not in valid_provenance or not isinstance(aliases, list):
+            return False
+        if any(
+            not isinstance(alias, str) or not alias.strip()
+            for alias in aliases
+        ) or len(set(aliases)) != len(aliases):
+            return False
+        if provenance != "DIRECT_SATIRE_PROVENANCE":
+            return not aliases
+        allowed_aliases = _satire_aliases_from_prompt(user_prompt)
+        return bool(aliases) and set(aliases).issubset(allowed_aliases)
+    if operation == STRUCTURED_MISLEADING_AUDIT_OPERATION:
+        relationship = value.get("relationship")
+        basis_kind = value.get("basis_kind", "NONE")
+        if relationship not in {
+            "MATERIAL_MISDESCRIPTION",
+            "FABRICATED_CORE",
+            "FULLY_SUPPORTED",
+            "INSUFFICIENT_OR_CONFLICTING",
+        }:
+            return False
+        if relationship == "MATERIAL_MISDESCRIPTION":
+            return basis_kind in {"MISSING_CONTEXT", "PARTIAL_TRUTH", "FALSE_CONTEXT"}
+        return basis_kind in {None, "NONE"}
     return False
 
 
@@ -529,8 +588,13 @@ def validate_pilot_response(operation, raw, user_prompt):
     """A valid response must satisfy the exact operation-specific contract."""
     if operation == CLAIM_GATE_OPERATION:
         return _valid_claim_gate(raw)
-    if operation in {EQUIVALENCE_OPERATION, RELEVANCE_OPERATION}:
-        return _valid_small_decision(operation, raw)
+    if operation in {
+        EQUIVALENCE_OPERATION,
+        RELEVANCE_OPERATION,
+        SATIRE_PROVENANCE_AUDIT_OPERATION,
+        STRUCTURED_MISLEADING_AUDIT_OPERATION,
+    }:
+        return _valid_small_decision(operation, raw, user_prompt)
     if operation == PILOT_OPERATION:
         return validate_persisted_evidence_evaluation(raw) is not None
     if operation in {GFC_EVALUATION_OPERATION, TAVILY_EVALUATION_OPERATION}:
@@ -551,6 +615,8 @@ def call_validated_cloudflare_pilot(
         PILOT_OPERATION, ASSESSMENT_OPERATION, CLASSIFICATION_OPERATION,
         EQUIVALENCE_OPERATION, RELEVANCE_OPERATION,
         GFC_EVALUATION_OPERATION, TAVILY_EVALUATION_OPERATION,
+        SATIRE_PROVENANCE_AUDIT_OPERATION,
+        STRUCTURED_MISLEADING_AUDIT_OPERATION,
         CLAIM_GATE_OPERATION,
     }:
         raise CloudflareEvaluationError("INVALID_PILOT_OPERATION")

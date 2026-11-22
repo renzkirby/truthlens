@@ -4,7 +4,8 @@ from django.urls import reverse
 from rest_framework.test import APITestCase
 
 from api.claim_matching import compute_fingerprint
-from api.models import Claim
+from api.models import Claim, VerificationRun
+from api.verification.runs import CURRENT_VERIFICATION_PIPELINE_VERSION
 from api.services import inspect_direct_text_claim_fidelity
 
 
@@ -102,7 +103,7 @@ class TextCacheFidelityTests(APITestCase):
         )
 
     def _cached_fact(self, *, raw_text, stored_text):
-        return Claim.objects.create(
+        claim = Claim.objects.create(
             claim_type=Claim.ClaimType.TEXT,
             context_text=stored_text,
             claim_fingerprint=compute_fingerprint("TEXT", raw_text),
@@ -112,6 +113,12 @@ class TextCacheFidelityTests(APITestCase):
             consensus_score=90,
             source_type="Live Web Search",
         )
+        VerificationRun.objects.create(
+            claim=claim,
+            status=VerificationRun.Status.COMPLETED,
+            pipeline_version=CURRENT_VERIFICATION_PIPELINE_VERSION,
+        )
+        return claim
 
     @patch("api.views.text_fact_check_process.delay")
     def test_lossy_cached_text_is_not_reused(self, enqueue):

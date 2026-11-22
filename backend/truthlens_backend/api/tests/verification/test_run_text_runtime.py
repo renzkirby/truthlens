@@ -325,6 +325,11 @@ class VerificationRunTextRuntimeTests(TestCase):
             ai_sources=["https://example.com/cached"],
             is_ai_generated=True,
         )
+        VerificationRun.objects.create(
+            claim=cached,
+            status=VerificationRun.Status.COMPLETED,
+            pipeline_version=runs.CURRENT_VERIFICATION_PIPELINE_VERSION,
+        )
         self.match.return_value = cached
         return cached
 
@@ -335,7 +340,7 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.assertEqual(run.claim_id, self.claim.id)
         self.assertEqual(
             run.pipeline_version,
-            VerificationRun._meta.get_field("pipeline_version").get_default(),
+            runs.CURRENT_VERIFICATION_PIPELINE_VERSION,
         )
         self.assertIsNone(run.triggered_by)
         self.create_run.assert_called_once_with(self.claim, triggered_by=None)
@@ -996,6 +1001,7 @@ class VerificationRunTextRuntimeTests(TestCase):
         stages = [call.args[1] for call in self.log_stage.call_args_list]
         self.assertIn("gfc_proposition_coverage_check", stages)
         self.assertIn("gfc_continued_to_tavily", stages)
+        self.assertNotIn("gfc_final_evaluation_skipped", stages)
 
     def test_coverage_assessor_receives_all_returned_gfc_claims(self):
         self.gfc_payload["claims"].append({
@@ -1027,7 +1033,8 @@ class VerificationRunTextRuntimeTests(TestCase):
         )
         self.retrieve_tavily.assert_not_called()
 
-    def test_strict_misleading_rating_signal_bypasses_coverage_and_reaches_evaluator(self):
+
+    def test_strict_misleading_rating_signal_requires_tavily_enrichment(self):
         evidence_id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
         policy = {
             "resolution": services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
@@ -1043,10 +1050,11 @@ class VerificationRunTextRuntimeTests(TestCase):
 
         self._assert_terminal(run, VerificationRun.Status.COMPLETED)
         self.relevance.assert_not_called()
-        self.retrieve_tavily.assert_not_called()
+        self.retrieve_tavily.assert_called_once()
         self.evaluate_persisted.assert_called_once()
+        final_call = self.evaluate_persisted.call_args
         self.assertEqual(
-            self.evaluate_persisted.call_args.args[:6],
+            final_call.args[:6],
             (
                 self.cleaned["cleaned_claim"],
                 "Persisted evidence context.",
@@ -1056,16 +1064,73 @@ class VerificationRunTextRuntimeTests(TestCase):
                 (evidence_id,),
             ),
         )
-        bypass_calls = [
-            call
-            for call in self.log_stage.call_args_list
-            if len(call.args) >= 2 and call.args[1] == "gfc_relevance_bypassed"
-        ]
-        self.assertEqual(len(bypass_calls), 1)
         self.assertEqual(
-            bypass_calls[0].kwargs.get("outcome"),
-            "structured_misleading_signal",
+            final_call.kwargs["evidence_groups"],
+            self.filter_dossier_roles.return_value,
         )
+        self.assertEqual(self.save_claim.call_args.args[2], "Live Web Search")
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("gfc_relevance_bypassed", stages)
+        self.assertIn("gfc_final_evaluation_skipped", stages)
+        self.assertIn("gfc_continued_to_tavily", stages)
+        coverage_calls = [
+            call for call in self.log_stage.call_args_list
+            if len(call.args) >= 2 and call.args[1] == "gfc_proposition_coverage_check"
+        ]
+        self.assertEqual(len(coverage_calls), 1)
+        self.assertFalse(coverage_calls[0].kwargs["terminally_sufficient"])
+
+    def test_strict_misleading_enrichment_failure_does_not_keep_gfc_only_verdict(self):
+        evidence_id = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+        policy = {
+            "resolution": services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+            "misleading_evidence_ids": (evidence_id,),
+        }
+        self.retrieve_tavily.side_effect = requests.Timeout("Tavily unavailable")
+
+        with patch(
+            "api.tasks._resolve_official_fact_check_rating_policy",
+            return_value=policy,
+        ):
+            with self.assertRaises(tasks.EvidenceRetrievalUnavailableError):
+                self._execute()
+
+        run = self.claim.verification_runs.get()
+        self._assert_terminal(run, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "evidence_retrieval")
+        self.assertEqual(run.failure_code, "EVIDENCE_RETRIEVAL_FAILED")
+        self.evaluate_persisted.assert_not_called()
+        self.save_claim.assert_not_called()
+        self.claim.refresh_from_db()
+        self.assertIsNone(self.claim.ai_verdict)
+
+    def test_strict_misleading_without_persisted_secondary_evidence_abstains(self):
+        evidence_id = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+        policy = {
+            "resolution": services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+            "misleading_evidence_ids": (evidence_id,),
+        }
+        self.filter_dossier.side_effect = lambda _groups, role: (
+            ["selected evidence"]
+            if role == VerificationEvidence.EvidenceRole.FACT_CHECK
+            else []
+        )
+
+        with patch(
+            "api.tasks._resolve_official_fact_check_rating_policy",
+            return_value=policy,
+        ):
+            run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.ABSTAINED)
+        self.evaluate_persisted.assert_not_called()
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("gfc_final_evaluation_skipped", stages)
+        self.assertIn("structured_misleading_enrichment_unavailable", stages)
 
     def test_gfc_evaluation_failure_continues_to_tavily(self):
         self.evaluate_persisted.side_effect = [
@@ -1076,18 +1141,19 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.fail_run.assert_not_called()
         self.retrieve_tavily.assert_called_once()
 
-    def test_handled_tavily_failure_abstains(self):
+    def test_tavily_retrieval_failure_marks_failed_without_factual_verdict(self):
         self.retrieve_gfc.return_value = {"claims": []}
         self.retrieve_tavily.side_effect = requests.Timeout("Tavily timed out")
-        self._assert_terminal(self._execute(), VerificationRun.Status.ABSTAINED)
+        with self.assertRaises(tasks.EvidenceRetrievalUnavailableError):
+            self._execute()
+        run = self.claim.verification_runs.get()
+        self._assert_terminal(run, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "evidence_retrieval")
+        self.assertEqual(run.failure_code, "EVIDENCE_RETRIEVAL_FAILED")
         self.claim.refresh_from_db()
-        self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
-        self.assertEqual(self.claim.consensus_score, 0)
-        self.assertIn(
-            "insufficient for a decisive verdict",
-            self.claim.score_context,
-        )
-        self.fail_run.assert_not_called()
+        self.assertIsNone(self.claim.ai_verdict)
+        self.assertIsNone(self.claim.ai_summary)
+        self.assertIsNone(self.claim.consensus_score)
 
     def test_fatal_core_exception_fails_with_original_metadata(self):
         error = RuntimeError("Preprocessor unavailable: " + "details " * 30)
@@ -1098,9 +1164,9 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.assertEqual(run.failure_code, "UNHANDLED_EXCEPTION")
         self.assertEqual(run.failure_message, str(error))
         self.claim.refresh_from_db()
-        self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
+        self.assertIsNone(self.claim.ai_verdict)
         self.assertIsNone(self.claim.final_verdict)
-        self.assertEqual(self.claim.ai_summary, "An error occurred during analysis.")
+        self.assertIsNone(self.claim.ai_summary)
         self.retrieve_gfc.assert_not_called()
         self.retrieve_tavily.assert_not_called()
 
@@ -1258,6 +1324,244 @@ class VerificationRunTextRuntimeTests(TestCase):
             ("gemini", "failed"),
             ("groq", "failed"),
         ])
+
+
+    def test_stale_pipeline_second_chance_ai_result_is_not_reused(self):
+        old_claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text=self.claim.context_text,
+            ai_verdict="FACT",
+        )
+        VerificationRun.objects.create(
+            claim=old_claim,
+            status=VerificationRun.Status.COMPLETED,
+            pipeline_version="1.0.0",
+        )
+        self.match.return_value = old_claim
+
+        with patch("api.tasks._reuse_second_chance_ai_analysis") as reuse:
+            run = self._execute()
+
+        reuse.assert_not_called()
+        self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, self.verdict["verdict"])
+
+    def test_required_tavily_retrieval_failure_is_failed_not_unverified(self):
+        self.retrieve_gfc.return_value = {"claims": []}
+        self.retrieve_tavily.side_effect = RuntimeError("Tavily unavailable")
+
+        with self.assertRaises(tasks.EvidenceRetrievalUnavailableError):
+            self._execute()
+        run = self.claim.verification_runs.get()
+
+        self.assertEqual(run.status, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "evidence_retrieval")
+        self.assertEqual(run.failure_code, "EVIDENCE_RETRIEVAL_FAILED")
+        self.claim.refresh_from_db()
+        self.assertIsNone(self.claim.ai_verdict)
+        self.assertIsNone(self.claim.ai_summary)
+        self.save_claim.assert_not_called()
+
+
+class PrimarySourceRecoveryTests(TestCase):
+    def setUp(self):
+        self.claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="Exact statistical claim with 55.2 percent.",
+        )
+        self.run = runs.start_verification_run(
+            runs.create_verification_run(self.claim)
+        )
+        self.initial = {
+            "verdict": "UNVERIFIED",
+            "summary": "The dossier lacks material evidence.",
+            "confidence_score": 49,
+        }
+        self.unknown_group = SimpleNamespace(evidence=(SimpleNamespace(
+            stance=VerificationEvidence.Stance.UNKNOWN,
+        ),))
+        self.support_group = SimpleNamespace(evidence=(SimpleNamespace(
+            stance=VerificationEvidence.Stance.SUPPORTS,
+        ),))
+
+    def test_recovery_is_one_bounded_primary_source_search_then_reevaluation(self):
+        provider = Mock()
+        provider.search_with_payload.return_value = (
+            {"results": [{"url": "https://agency.gov.ph/report"}]},
+            [RawEvidence(
+                provider="TAVILY",
+                url="https://agency.gov.ph/report",
+                content="Official material evidence.",
+                source_type="WEB_SEARCH",
+            )],
+        )
+        recovered = {
+            "verdict": "FACT",
+            "summary": "The recovered primary evidence supports the claim.",
+            "confidence_score": 90,
+        }
+
+        with (
+            patch("api.tasks.TavilyProvider", return_value=provider),
+            patch("api.tasks._persist_tavily_retrieval") as persist_recovery,
+            patch(
+                "api.tasks.load_reasoning_evidence_dossier_for_run",
+                side_effect=[[], [self.unknown_group], [self.support_group]],
+            ),
+            patch(
+                "api.tasks.filter_reasoning_evidence_dossier_by_role",
+                side_effect=lambda groups, _role: groups,
+            ),
+            patch(
+                "api.tasks.filter_reasoning_evidence_dossier_by_roles",
+                side_effect=lambda groups, _roles: groups,
+            ),
+            patch("api.tasks._assess_and_persist_reasoning_evidence") as assess_new,
+            patch(
+                "api.tasks._render_bounded_persisted_evidence_context",
+                return_value="Recovered bounded evidence.",
+            ),
+            patch(
+                "api.tasks.evaluate_claim_with_persisted_evidence",
+                return_value=recovered,
+            ) as evaluator,
+            patch(
+                "api.tasks.calibrate_verdict_confidence",
+                side_effect=lambda result, _groups: result,
+            ),
+            patch(
+                "api.tasks.enforce_decisive_evidence_support",
+                side_effect=lambda result, _groups: result,
+            ),
+            patch("api.tasks._log_stage"),
+        ):
+            result = tasks._attempt_primary_source_recovery(
+                initial_result=self.initial,
+                cleaned_claim=self.claim.context_text,
+                claim_id=self.claim.pk,
+                run=self.run,
+                article_stance="NEUTRAL",
+                official_rating_policy={
+                    "resolution": services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+                    "satire_evidence_ids": (),
+                    "misleading_evidence_ids": (),
+                },
+                gfc_evidence_assessed=False,
+                is_text_claim=True,
+            )
+
+        self.assertEqual(result["verdict"], "FACT")
+        provider.search_with_payload.assert_called_once_with(
+            self.claim.context_text,
+            limit=3,
+            primary_source_recovery=True,
+        )
+        persist_recovery.assert_called_once()
+        assess_new.assert_called_once()
+        evaluator.assert_called_once_with(
+            self.claim.context_text,
+            "Recovered bounded evidence.",
+            "NEUTRAL",
+            evidence_groups=[self.support_group],
+        )
+
+    def test_recovery_does_not_mask_normal_evidence_persistence_failure(self):
+        provider = Mock()
+        with (
+            patch("api.tasks.TavilyProvider", return_value=provider),
+            patch(
+                "api.tasks.load_reasoning_evidence_dossier_for_run",
+                return_value=[],
+            ),
+            patch("api.tasks._log_stage") as log_stage,
+        ):
+            result = tasks._attempt_primary_source_recovery(
+                initial_result=self.initial,
+                cleaned_claim=self.claim.context_text,
+                claim_id=self.claim.pk,
+                run=self.run,
+                article_stance="NEUTRAL",
+                official_rating_policy={
+                    "resolution": services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+                    "satire_evidence_ids": (),
+                    "misleading_evidence_ids": (),
+                },
+                gfc_evidence_assessed=False,
+                is_text_claim=True,
+                normal_tavily_had_results=True,
+            )
+
+        self.assertEqual(result, self.initial)
+        provider.search_with_payload.assert_not_called()
+        self.assertTrue(any(
+            call.kwargs.get("outcome")
+            == "skipped_normal_evidence_persistence_unavailable"
+            for call in log_stage.call_args_list
+        ))
+
+    def test_recovery_fails_closed_before_filtering_malformed_dossier(self):
+        with (
+            patch(
+                "api.tasks.load_reasoning_evidence_dossier_for_run",
+                return_value=["legacy placeholder"],
+            ),
+            patch("api.tasks.filter_reasoning_evidence_dossier_by_roles") as filter_roles,
+            patch("api.tasks.TavilyProvider") as provider_class,
+        ):
+            result = tasks._attempt_primary_source_recovery(
+                initial_result=self.initial,
+                cleaned_claim=self.claim.context_text,
+                claim_id=self.claim.pk,
+                run=self.run,
+                article_stance="NEUTRAL",
+                official_rating_policy={
+                    "resolution": services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+                    "satire_evidence_ids": (),
+                    "misleading_evidence_ids": (),
+                },
+                gfc_evidence_assessed=False,
+                is_text_claim=True,
+            )
+
+        self.assertEqual(result, self.initial)
+        filter_roles.assert_not_called()
+        provider_class.assert_not_called()
+
+    def test_recovery_does_not_run_when_material_evidence_already_exists(self):
+        provider = Mock()
+        with (
+            patch("api.tasks.TavilyProvider", return_value=provider),
+            patch(
+                "api.tasks.load_reasoning_evidence_dossier_for_run",
+                return_value=[self.support_group],
+            ),
+            patch(
+                "api.tasks.filter_reasoning_evidence_dossier_by_role",
+                side_effect=lambda groups, _role: groups,
+            ),
+            patch(
+                "api.tasks.filter_reasoning_evidence_dossier_by_roles",
+                side_effect=lambda groups, _roles: groups,
+            ),
+        ):
+            result = tasks._attempt_primary_source_recovery(
+                initial_result=self.initial,
+                cleaned_claim=self.claim.context_text,
+                claim_id=self.claim.pk,
+                run=self.run,
+                article_stance="NEUTRAL",
+                official_rating_policy={
+                    "resolution": services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+                    "satire_evidence_ids": (),
+                    "misleading_evidence_ids": (),
+                },
+                gfc_evidence_assessed=False,
+                is_text_claim=True,
+            )
+
+        self.assertEqual(result, self.initial)
+        provider.search_with_payload.assert_not_called()
 
 
 class VerificationEvidenceTextRuntimeTests(TestCase):

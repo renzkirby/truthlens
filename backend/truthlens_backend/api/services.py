@@ -33,9 +33,15 @@ from .verification.cloudflare_pilot import (
     plan_lossless_assessment_chunks,
     ASSESSMENT_OPERATION,
     PILOT_OPERATION,
+    SATIRE_PROVENANCE_AUDIT_OPERATION,
+    STRUCTURED_MISLEADING_AUDIT_OPERATION,
 )
 from .verification.provider_audit_metrics import validate_user_facing_evaluation
-from .verification.confidence_policy import has_claim_scoped_misleading_support
+from .verification.confidence_policy import (
+    has_claim_scoped_misleading_support,
+    has_claim_scoped_satire_support,
+    has_usable_contextual_basis,
+)
 from .verification.classification_contract import CLASSIFICATION_OPERATION
 from .verification.provider_hierarchy import (
     hierarchy_enabled,
@@ -2472,15 +2478,222 @@ def _normalize_contextual_basis_metadata(result):
     return normalized
 
 
+def _persisted_evidence_link_ids(evidence_groups):
+    ids = set()
+    for group in evidence_groups or ():
+        for item in getattr(group, "evidence", ()):
+            evidence_id = getattr(item, "evidence_link_id", None)
+            if evidence_id:
+                ids.add(str(evidence_id))
+    return ids
+
+
+def _has_persisted_satire_signal(evidence_groups):
+    """Cheap trigger only; the audit below decides whether provenance is direct."""
+    for group in evidence_groups or ():
+        for item in getattr(group, "evidence", ()):
+            signal_text = " ".join((
+                str(getattr(item, "title", "") or ""),
+                str(getattr(item, "content", "") or ""),
+            )).casefold()
+            if "satir" in signal_text or "parody" in signal_text:
+                return True
+    return False
+
+
+def _satire_provenance_unverified_result():
+    return {
+        "reasoning": (
+            "Persisted evidence raised a material satire/parody provenance question, "
+            "but direct same-proposition provenance could not be resolved reliably."
+        ),
+        "verdict": "UNVERIFIED",
+        "summary": (
+            "The available evidence raises a material question about whether the "
+            "same claim originated as satire or parody, but that provenance could "
+            "not be established reliably enough for a decisive verdict."
+        ),
+        "confidence_score": 0,
+        "score_context": (
+            "A material satire-provenance question remained unresolved after the "
+            "dedicated evidence-bound audit."
+        ),
+        "contextual_basis_kind": "NONE",
+        "contextual_basis_evidence_ids": [],
+    }
+
+
+def _qualified_satire_signal_candidates(evidence_groups):
+    """Return assessed satire/parody evidence aliases without exposing ID choice to LLMs."""
+    groups = tuple(evidence_groups or ())
+    candidates = []
+    seen_ids = set()
+    for group in groups:
+        for item in getattr(group, "evidence", ()):
+            evidence_id = getattr(item, "evidence_link_id", None)
+            if not evidence_id:
+                continue
+            evidence_id = str(evidence_id)
+            if evidence_id in seen_ids:
+                continue
+            signal_text = " ".join((
+                str(getattr(item, "title", "") or ""),
+                str(getattr(item, "content", "") or ""),
+            )).casefold()
+            if "satir" not in signal_text and "parody" not in signal_text:
+                continue
+            probe = {
+                "verdict": "SATIRE",
+                "contextual_basis_kind": "SATIRE_PROVENANCE",
+                "contextual_basis_evidence_ids": [evidence_id],
+            }
+            if not has_usable_contextual_basis(probe, groups, "SATIRE"):
+                continue
+            seen_ids.add(evidence_id)
+            candidates.append({
+                "alias": f"S{len(candidates) + 1}",
+                "evidence_id": evidence_id,
+            })
+    return candidates
+
+
+def _audit_persisted_satire_provenance(
+    original_claim,
+    evidence_context,
+    evaluator_result,
+    evidence_groups=(),
+):
+    """Classify same-proposition satire provenance using compact provider output."""
+    candidates = _qualified_satire_signal_candidates(evidence_groups)
+    if not candidates:
+        return evaluator_result
+
+    alias_to_id = {
+        candidate["alias"]: candidate["evidence_id"]
+        for candidate in candidates
+    }
+    system_instructions = """
+    Role: You are the TruthLens satire-provenance relationship auditor.
+
+    Use ONLY the supplied persisted evidence. Do not use outside knowledge,
+    absurdity, humor, or the presence of the words satire/parody by themselves.
+
+    Classify the provenance relationship for the EXACT submitted proposition:
+    - DIRECT_SATIRE_PROVENANCE: the evidence explicitly establishes that the same
+      submitted proposition/content was published or labeled as satire/parody.
+      For TEXT submissions, an equivalent plain-text restatement may qualify when
+      actor, action, object, material date/time, quantity, attribution, and other
+      truth-changing qualifiers remain the same.
+    - SATIRE_ORIGIN_ONLY: the submitted factual rumor is materially changed,
+      recontextualized, or derived from a different satire/parody item, or the
+      evidence only establishes a related satire source.
+    - CONFLICTING_PROVENANCE: supplied evidence materially conflicts about whether
+      the same proposition is satire versus a factual falsehood.
+    - NOT_ESTABLISHED: direct provenance cannot be established safely.
+
+    Candidate aliases identify only persisted evidence that already passed the
+    existing evidence-quality floor and contains an explicit satire/parody signal.
+    They are NOT proof by themselves. For DIRECT_SATIRE_PROVENANCE, return one or
+    more candidate aliases that directly establish the same proposition. For every
+    other class, evidence_aliases must be an empty list.
+
+    Return JSON containing at least:
+    {
+      "provenance": "DIRECT_SATIRE_PROVENANCE|SATIRE_ORIGIN_ONLY|CONFLICTING_PROVENANCE|NOT_ESTABLISHED",
+      "evidence_aliases": ["S1"]
+    }
+    Harmless additional explanatory fields are allowed.
+    """
+    first_verdict = evaluator_result.get("verdict", "UNVERIFIED")
+
+    def audit_prompt(context):
+        return system_instructions, (
+            f"<claim>{original_claim}</claim>\n\n"
+            f"<first_evaluator_verdict>{first_verdict}</first_evaluator_verdict>\n"
+            f"<satire_signal_aliases>{json.dumps(alias_to_id)}</satire_signal_aliases>\n\n"
+            f"<persisted_evidence>{context}</persisted_evidence>"
+        )
+
+    _, user_data = audit_prompt(evidence_context)
+    try:
+        response_text = call_llm_with_fallback(
+            system_instructions,
+            user_data,
+            operation=SATIRE_PROVENANCE_AUDIT_OPERATION,
+            gemini_timeout_ms=PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
+        )
+        audited = _parse_llm_json(response_text)
+        if not isinstance(audited, dict):
+            raise ValueError("satire audit response was not a JSON object")
+        provenance = audited.get("provenance")
+        aliases = audited.get("evidence_aliases", [])
+        if provenance not in {
+            "DIRECT_SATIRE_PROVENANCE",
+            "SATIRE_ORIGIN_ONLY",
+            "CONFLICTING_PROVENANCE",
+            "NOT_ESTABLISHED",
+        }:
+            raise ValueError("satire audit returned an invalid provenance class")
+        if not isinstance(aliases, list):
+            raise ValueError("satire audit returned invalid evidence aliases")
+
+        if provenance != "DIRECT_SATIRE_PROVENANCE":
+            return evaluator_result
+
+        if (
+            not aliases
+            or len(set(aliases)) != len(aliases)
+            or any(alias not in alias_to_id for alias in aliases)
+        ):
+            raise ValueError(
+                "direct satire provenance was not tied to approved evidence aliases"
+            )
+        evidence_ids = [alias_to_id[alias] for alias in aliases]
+        result = {
+            "reasoning": (
+                "The dedicated provenance audit found that assessed persisted "
+                "evidence directly establishes the same submitted proposition as "
+                "satire or parody."
+            ),
+            "verdict": "SATIRE",
+            "summary": (
+                "Assessed persisted evidence establishes that the same submitted "
+                "claim was published or labeled as satire or parody. The SATIRE "
+                "classification is based on direct provenance, not plausibility."
+            ),
+            "confidence_score": 95,
+            "score_context": (
+                "Direct same-proposition satire provenance is established by "
+                "assessed persisted evidence."
+            ),
+            "contextual_basis_kind": "SATIRE_PROVENANCE",
+            "contextual_basis_evidence_ids": evidence_ids,
+        }
+        if not has_claim_scoped_satire_support(result, evidence_groups):
+            raise ValueError(
+                "direct satire provenance evidence did not meet the usable quality floor"
+            )
+        return result
+    except Exception as exc:
+        logger.warning(
+            "Persisted satire provenance audit unavailable (%s): %s",
+            _provider_error_label(exc),
+            str(exc)[:160],
+        )
+        return _satire_provenance_unverified_result()
+
+
 def _enforce_satire_verdict_eligibility(
     result,
     article_stance,
     official_fact_check_resolution=OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+    persisted_satire_provenance=False,
 ):
-    """Reject SATIRE when neither submitted nor equivalent official provenance exists."""
+    """Reject SATIRE unless direct provenance has been established safely."""
     satire_eligible = (
         article_stance == "SATIRE"
         or official_fact_check_resolution == OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE
+        or persisted_satire_provenance
     )
     if result.get("verdict") == "SATIRE" and not satire_eligible:
         raise ValueError(
@@ -2694,137 +2907,175 @@ def _audit_structured_misleading_signal(
     official_misleading_evidence_ids,
     evidence_groups=(),
 ):
-    """Arbitrate a strict-equivalence ClaimReview Misleading signal.
-
-    The external textual rating is evidence metadata, not a TruthLens verdict.
-    This audit re-reads the same persisted dossier and may preserve FAKE, FACT,
-    or UNVERIFIED when the evidence does not establish claim-scoped material
-    context. It never performs new retrieval.
-    """
+    """Classify the factual relationship behind a strict-equivalent Misleading signal."""
     signal_ids = tuple(
-        value
+        value.strip()
         for value in official_misleading_evidence_ids
         if isinstance(value, str) and value.strip()
     )
     if not signal_ids:
         return evaluator_result
 
+    persisted_ids = _persisted_evidence_link_ids(evidence_groups)
+    if any(value not in persisted_ids for value in signal_ids):
+        logger.warning(
+            "Structured misleading audit unavailable: signal evidence was not persisted."
+        )
+        return _structured_misleading_signal_unverified_result()
+
     system_instructions = """
-    Role: You are the TruthLens structured-rating conflict auditor.
+    Role: You are the TruthLens structured-Misleading relationship auditor.
 
-    Re-evaluate the exact submitted claim using ONLY the supplied persisted
-    evidence. Do not use pre-trained knowledge, external facts, or assumptions.
+    Use ONLY the supplied persisted evidence. Do not use pre-trained knowledge,
+    external facts, or assumptions. A strict-equivalent Google ClaimReview carries
+    the textual rating "Misleading". That rating opens this audit but does NOT
+    determine the TruthLens verdict.
 
-    A structured Google ClaimReview for a strictly equivalent proposition carries
-    the exact textual rating "Misleading". Treat that publisher rating as a strong
-    contextual signal, NOT as an authoritative TruthLens verdict. The first
-    evidence evaluator may agree or disagree with it.
+    Classify the relationship between the exact submitted proposition and evidence:
+    - MATERIAL_MISDESCRIPTION: a substantial genuine factual substrate of the same
+      proposition exists (same material event, program, action, media, quantity,
+      actor/object relationship, or occurrence), but the claim materially changes
+      its nature, legal/status relationship, date, quantity, framing, omission, or
+      context. Example pattern: a real program involving the same land/amount and
+      private parties is described as a sale when the evidence establishes a
+      different land-use or development relationship.
+    - FABRICATED_CORE: the asserted core quotation, action, event, policy, or
+      attribution itself did not occur or was invented. A real person, photograph,
+      location, or related topic is merely incidental. Example pattern: a real
+      politician/photo paired with an invented quotation.
+    - FULLY_SUPPORTED: every material assertion in the submitted proposition is
+      explicitly supported by the persisted evidence.
+    - INSUFFICIENT_OR_CONFLICTING: the evidence cannot safely establish one of the
+      above relationships or materially conflicts.
 
-    VERDICT RULES:
-    - FACT: every material assertion in the submitted claim is explicitly supported.
-    - FAKE: the core proposition is affirmatively contradicted, fabricated, or
-      falsely attributed, and no materially true/contextual structure justifies
-      MISLEADING.
-    - MISLEADING: the submitted claim contains a true or partly true element AND a
-      material omission, qualification, framing choice, or false context changes
-      the truth or ordinary factual impression of that same proposition.
-    - UNVERIFIED: the evidence is insufficient, conflicting, or cannot safely
-      establish one of the other verdicts.
-    - Do not return SATIRE from this audit.
-    - Do not copy the publisher rating merely because it is present.
-    - Do not preserve the first evaluator's verdict merely because it came first.
-    - Preserve entity, event, location, date/time, attribution, and action scope.
-    - A MISLEADING result must use exactly one of MISSING_CONTEXT, PARTIAL_TRUTH,
-      or FALSE_CONTEXT and cite one or more exact Evidence link IDs from the
-      supplied dossier that establish the material relationship.
-    - FACT, FAKE, and UNVERIFIED must use contextual_basis_kind="NONE" and an empty
-      contextual_basis_evidence_ids list.
+    For MATERIAL_MISDESCRIPTION, basis_kind must be exactly one of
+    MISSING_CONTEXT, PARTIAL_TRUTH, or FALSE_CONTEXT. For every other relationship,
+    basis_kind must be NONE.
 
-    Return only a valid JSON object with exactly these fields:
+    Return JSON containing at least:
     {
-        "reasoning": "Claim-scoped evidence explanation",
-        "verdict": "FACT, FAKE, MISLEADING, or UNVERIFIED",
-        "summary": "Concise user-facing factual summary",
-        "confidence_score": <numeric percentage 0 to 100>,
-        "score_context": "Concise explanation of the confidence score",
-        "contextual_basis_kind": "NONE, MISSING_CONTEXT, PARTIAL_TRUTH, or FALSE_CONTEXT",
-        "contextual_basis_evidence_ids": ["Exact Evidence link ID copied from the dossier"]
+      "relationship": "MATERIAL_MISDESCRIPTION|FABRICATED_CORE|FULLY_SUPPORTED|INSUFFICIENT_OR_CONFLICTING",
+      "basis_kind": "NONE|MISSING_CONTEXT|PARTIAL_TRUTH|FALSE_CONTEXT"
     }
+    Optional reasoning/summary fields are allowed but are not required.
     """
-    system_instructions = _with_user_facing_summary_rules(system_instructions)
-
     first_verdict = evaluator_result.get("verdict", "UNVERIFIED")
-
-    def audit_prompt(context):
-        audit_user_data = (
-            f"<claim>{original_claim}</claim>\n\n"
-            f"<first_evaluator_verdict>{first_verdict}</first_evaluator_verdict>\n"
-            f"<structured_misleading_evidence_ids>"
-            f"{json.dumps(signal_ids)}</structured_misleading_evidence_ids>\n\n"
-            f"<persisted_evidence>{context}</persisted_evidence>"
-        )
-        return system_instructions, audit_user_data
-
-    _, user_data = audit_prompt(evidence_context)
-
-    def fallback_user_prompt_builder():
-        return _build_bounded_provider_fallback_user_prompt(
-            evidence_groups,
-            audit_prompt,
-        )
-
-    provider_kwargs = {
-        "operation": "persisted_evidence_evaluation",
-        "gemini_timeout_ms": PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
-    }
-    if groq_bounded_fallback_enabled():
-        provider_kwargs["fallback_user_prompt"] = fallback_user_prompt_builder
+    user_data = (
+        f"<claim>{original_claim}</claim>\n\n"
+        f"<first_evaluator_verdict>{first_verdict}</first_evaluator_verdict>\n"
+        f"<structured_misleading_evidence_ids>"
+        f"{json.dumps(signal_ids)}</structured_misleading_evidence_ids>\n\n"
+        f"<persisted_evidence>{evidence_context}</persisted_evidence>"
+    )
 
     try:
         response_text = call_llm_with_fallback(
             system_instructions,
             user_data,
-            **provider_kwargs,
+            operation=STRUCTURED_MISLEADING_AUDIT_OPERATION,
+            gemini_timeout_ms=PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
         )
         audited = _parse_llm_json(response_text)
-        required_fields = {
-            "reasoning",
-            "verdict",
-            "summary",
-            "confidence_score",
-            "score_context",
-        }
-        if not isinstance(audited, dict) or not required_fields.issubset(audited):
-            raise ValueError(
-                "Structured misleading signal audit returned an invalid result"
-            )
-        if audited.get("verdict") not in {
-            "FACT",
-            "FAKE",
-            "MISLEADING",
-            "UNVERIFIED",
+        if not isinstance(audited, dict):
+            raise ValueError("structured misleading audit response was not a JSON object")
+        relationship = audited.get("relationship")
+        basis_kind = audited.get("basis_kind", "NONE")
+        if relationship not in {
+            "MATERIAL_MISDESCRIPTION",
+            "FABRICATED_CORE",
+            "FULLY_SUPPORTED",
+            "INSUFFICIENT_OR_CONFLICTING",
         }:
-            raise ValueError(
-                "Structured misleading signal audit exceeded its verdict authority"
-            )
-        audited["confidence_score"] = _normalize_verdict_confidence_score(
-            audited["confidence_score"]
+            raise ValueError("structured misleading audit returned invalid relationship")
+
+        optional_reasoning = audited.get("reasoning")
+        optional_summary = audited.get("summary")
+        reasoning = (
+            optional_reasoning.strip()
+            if isinstance(optional_reasoning, str) and optional_reasoning.strip()
+            else None
         )
-        audited = _normalize_contextual_basis_metadata(audited)
-        if audited["verdict"] == "MISLEADING":
-            if (
-                audited["contextual_basis_kind"]
-                not in _MISLEADING_MATERIALITY_BASIS_KINDS
-                or not audited["contextual_basis_evidence_ids"]
+        summary = (
+            optional_summary.strip()
+            if isinstance(optional_summary, str) and optional_summary.strip()
+            else None
+        )
+
+        if relationship == "MATERIAL_MISDESCRIPTION":
+            if basis_kind not in _MISLEADING_MATERIALITY_BASIS_KINDS:
+                raise ValueError("material misdescription lacked a valid basis kind")
+            result = {
+                "reasoning": reasoning or (
+                    "The strict-equivalent fact-check evidence establishes a "
+                    "substantial genuine factual substrate, while the submitted "
+                    "claim materially changes its status, relationship, date, "
+                    "quantity, or context."
+                ),
+                "verdict": "MISLEADING",
+                "summary": summary or (
+                    "The claim is based on a real underlying factual situation, "
+                    "but it materially misdescribes an important relationship, "
+                    "status, date, quantity, or context."
+                ),
+                "confidence_score": 90,
+                "score_context": (
+                    "Strict-equivalent fact-check evidence establishes a material "
+                    "misdescription of a genuine factual substrate."
+                ),
+                "contextual_basis_kind": basis_kind,
+                "contextual_basis_evidence_ids": list(signal_ids),
+            }
+            if not has_usable_contextual_basis(
+                result,
+                evidence_groups,
+                "MISLEADING",
             ):
                 raise ValueError(
-                    "Structured misleading signal audit lacked a valid material basis"
+                    "structured misleading basis did not meet the usable quality floor"
                 )
-        return audited
+            return result
+
+        if relationship == "FABRICATED_CORE":
+            return {
+                "reasoning": reasoning or (
+                    "The persisted evidence establishes that the core asserted "
+                    "quotation, action, event, policy, or attribution itself was "
+                    "fabricated or did not occur as claimed."
+                ),
+                "verdict": "FAKE",
+                "summary": summary or (
+                    "The available evidence establishes that the core asserted "
+                    "event, action, quotation, policy, or attribution was fabricated "
+                    "or did not occur as claimed."
+                ),
+                "confidence_score": 90,
+                "score_context": "Persisted evidence establishes a fabricated core assertion.",
+                "contextual_basis_kind": "NONE",
+                "contextual_basis_evidence_ids": [],
+            }
+
+        if relationship == "FULLY_SUPPORTED":
+            return {
+                "reasoning": reasoning or (
+                    "The persisted evidence supports every material assertion in "
+                    "the submitted proposition."
+                ),
+                "verdict": "FACT",
+                "summary": summary or (
+                    "The available evidence supports the material elements of the claim."
+                ),
+                "confidence_score": 90,
+                "score_context": "Persisted evidence supports the complete proposition.",
+                "contextual_basis_kind": "NONE",
+                "contextual_basis_evidence_ids": [],
+            }
+
+        return _structured_misleading_signal_unverified_result()
     except Exception as exc:
         logger.warning(
-            "Structured misleading signal audit unavailable (%s).",
+            "Structured misleading signal audit unavailable (%s): %s",
             _provider_error_label(exc),
+            str(exc)[:160],
         )
         return _structured_misleading_signal_unverified_result()
 
@@ -2899,10 +3150,28 @@ def evaluate_claim_with_persisted_evidence(
         parsed_result["confidence_score"] = _normalize_verdict_confidence_score(
             parsed_result["confidence_score"]
         )
+
+        persisted_satire_provenance = False
+        if (
+            official_fact_check_resolution == OFFICIAL_FACT_CHECK_RESOLUTION_NONE
+            and article_stance != "SATIRE"
+            and not official_misleading_evidence_ids
+            and parsed_result.get("verdict") in {"FAKE", "UNVERIFIED", "SATIRE"}
+            and _has_persisted_satire_signal(evidence_groups)
+        ):
+            parsed_result = _audit_persisted_satire_provenance(
+                original_claim,
+                evidence_context,
+                parsed_result,
+                evidence_groups,
+            )
+            persisted_satire_provenance = parsed_result.get("verdict") == "SATIRE"
+
         parsed_result = _enforce_satire_verdict_eligibility(
             parsed_result,
             article_stance,
             official_fact_check_resolution,
+            persisted_satire_provenance=persisted_satire_provenance,
         )
         parsed_result = _normalize_contextual_basis_metadata(parsed_result)
 

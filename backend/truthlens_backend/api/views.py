@@ -69,6 +69,7 @@ from .profile_avatar_service import (
 )
 from .claim_matching import compute_fingerprint, find_matching_claim, get_match_result
 from .knowledge_reuse_service import get_published_fact_check_resolution_for_claim
+from .verification.runs import has_current_completed_verification_run
 from .tasks import (
     snippet_fact_check_process,
     url_fact_check_process,
@@ -639,36 +640,38 @@ def _record_authenticated_claim_check(user, claim):
 
 
 def _should_retry_unresolved_cached_claim(matched_claim):
-    """A terminal run with no usable result must not trap future submissions.
+    """Return whether a matched claim needs a fresh automated verification.
 
-    Preserve successful AI or institutional outcomes and prevent duplicate
-    dispatch while an earlier verification is pending/running. A retry creates
-    a new Claim, preserving the failed attempt and its audit/telemetry history.
+    Human/institutional conclusions remain reusable across AI pipeline versions.
+    Pending/running work remains a single in-flight verification. Automated
+    decisive verdicts are reusable only when the latest completed run was
+    produced by the current verification pipeline version.
     """
-    if matched_claim.ai_verdict in {"FACT", "FAKE", "MISLEADING", "SATIRE"}:
-        return False
-
-    # Institutional conclusions override absent/abstaining AI results. Check
-    # authority before lifecycle recovery because a historical institutional
-    # resolution may legitimately exist without an automated VerificationRun.
+    # Institutional conclusions are authoritative independently of automated
+    # pipeline versioning and may legitimately exist without a VerificationRun.
     result = get_match_result(matched_claim)
     if result.get("resolution_source") in {
         "OFFICIAL_FACT_CHECK", "ADJUDICATION",
     } and result.get("verdict"):
         return False
 
-    latest_run = matched_claim.verification_runs.only("status").first()
+    latest_run = matched_claim.verification_runs.only(
+        "status",
+        "pipeline_version",
+    ).first()
+
     # A claim with no lifecycle record is not proof of healthy in-flight work.
-    # This can happen if a broker/worker interruption occurs after Claim
-    # persistence but before the task reaches execute_core_text_pipeline().
-    # Allow a fresh Claim/task so the submission is not trapped forever.
     if latest_run is None:
         return True
+
     if latest_run.status in {
         VerificationRun.Status.PENDING,
         VerificationRun.Status.RUNNING,
     }:
         return False
+
+    if matched_claim.ai_verdict in {"FACT", "FAKE", "MISLEADING", "SATIRE"}:
+        return not has_current_completed_verification_run(matched_claim)
 
     return True
 
@@ -4439,7 +4442,7 @@ def claim_match(request):
             Claim.ClaimabilityStatus.CLAIMABLE,
         ),
     )
-    if matched_claim:
+    if matched_claim and not _should_retry_unresolved_cached_claim(matched_claim):
         match_result = get_match_result(
             matched_claim,
             triggered_by=(authenticated_user),

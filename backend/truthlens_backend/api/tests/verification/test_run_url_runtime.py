@@ -527,7 +527,7 @@ class VerificationRunURLRuntimeTests(TestCase):
 
         self.assertEqual(
             run.pipeline_version,
-            VerificationRun._meta.get_field("pipeline_version").get_default(),
+            runs.CURRENT_VERIFICATION_PIPELINE_VERSION,
         )
 
     def test_repeated_url_attempts_create_distinct_runs(self):
@@ -917,8 +917,10 @@ class VerificationRunURLRuntimeTests(TestCase):
         stages = [call.args[1] for call in self.log_stage.call_args_list]
         self.assertIn("url_gfc_proposition_coverage_check", stages)
         self.assertIn("url_gfc_continued_to_tavily", stages)
+        self.assertNotIn("url_gfc_final_evaluation_skipped", stages)
 
-    def test_strict_misleading_rating_signal_bypasses_coverage_and_reaches_evaluator(self):
+
+    def test_strict_misleading_rating_signal_requires_tavily_enrichment(self):
         evidence_id = "cccccccc-cccc-cccc-cccc-cccccccccccc"
         policy = {
             "resolution": services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
@@ -934,10 +936,11 @@ class VerificationRunURLRuntimeTests(TestCase):
 
         self._assert_terminal(run, VerificationRun.Status.COMPLETED)
         self.relevance.assert_not_called()
-        self.retrieve_tavily.assert_not_called()
+        self.retrieve_tavily.assert_called_once()
         self.evaluate_persisted.assert_called_once()
+        final_call = self.evaluate_persisted.call_args
         self.assertEqual(
-            self.evaluate_persisted.call_args.args[:6],
+            final_call.args[:6],
             (
                 self.cleaned["cleaned_claim"],
                 "Persisted evidence context.",
@@ -947,16 +950,74 @@ class VerificationRunURLRuntimeTests(TestCase):
                 (evidence_id,),
             ),
         )
-        bypass_calls = [
-            call
-            for call in self.log_stage.call_args_list
-            if len(call.args) >= 2 and call.args[1] == "url_gfc_relevance_bypassed"
-        ]
-        self.assertEqual(len(bypass_calls), 1)
         self.assertEqual(
-            bypass_calls[0].kwargs.get("outcome"),
-            "structured_misleading_signal",
+            final_call.kwargs["evidence_groups"],
+            self.filter_dossier_roles.return_value,
         )
+        self.assertEqual(self.save_claim.call_args.args[2], "Live Web Search")
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("url_gfc_relevance_bypassed", stages)
+        self.assertIn("url_gfc_final_evaluation_skipped", stages)
+        self.assertIn("url_gfc_continued_to_tavily", stages)
+        coverage_calls = [
+            call for call in self.log_stage.call_args_list
+            if len(call.args) >= 2 and call.args[1] == "url_gfc_proposition_coverage_check"
+        ]
+        self.assertEqual(len(coverage_calls), 1)
+        self.assertFalse(coverage_calls[0].kwargs["terminally_sufficient"])
+
+    def test_strict_misleading_enrichment_failure_does_not_keep_gfc_only_verdict(self):
+        evidence_id = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+        policy = {
+            "resolution": services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+            "misleading_evidence_ids": (evidence_id,),
+        }
+        self.retrieve_tavily.side_effect = requests.Timeout("Tavily unavailable")
+
+        with patch(
+            "api.tasks._resolve_official_fact_check_rating_policy",
+            return_value=policy,
+        ):
+            with self.assertRaises(tasks.EvidenceRetrievalUnavailableError):
+                self._invoke()
+
+        run = self.claim.verification_runs.get()
+        self._assert_terminal(run, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "evidence_retrieval")
+        self.assertEqual(run.failure_code, "EVIDENCE_RETRIEVAL_FAILED")
+        self.evaluate_persisted.assert_not_called()
+        self.save_claim.assert_not_called()
+        self.claim.refresh_from_db()
+        self.assertIsNone(self.claim.ai_verdict)
+
+    def test_strict_misleading_without_persisted_secondary_evidence_abstains(self):
+        evidence_id = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+        policy = {
+            "resolution": services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+            "misleading_evidence_ids": (evidence_id,),
+        }
+        self.filter_dossier.side_effect = lambda _groups, role: (
+            ["selected evidence"]
+            if role == VerificationEvidence.EvidenceRole.FACT_CHECK
+            else []
+        )
+
+        with patch(
+            "api.tasks._resolve_official_fact_check_rating_policy",
+            return_value=policy,
+        ):
+            self._invoke()
+
+        run = self.claim.verification_runs.get()
+        self._assert_terminal(run, VerificationRun.Status.ABSTAINED)
+        self.evaluate_persisted.assert_not_called()
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("url_gfc_final_evaluation_skipped", stages)
+        self.assertIn("url_structured_misleading_enrichment_unavailable", stages)
 
     def test_gfc_failure_then_tavily_completes_same_run(self):
         observed = []
@@ -1124,22 +1185,32 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.evaluate_persisted.assert_not_called()
         self.load_dossier.assert_not_called()
 
-    def test_tavily_retrieval_failure_displays_the_evaluated_claim(self):
+    def test_tavily_retrieval_failure_preserves_submitted_claim_without_verdict(self):
+        submitted_context = self.claim.context_text
         self.bridge.return_value = {"claims": []}
         self.retrieve_tavily.side_effect = requests.Timeout("Retrieval unavailable")
-        run = self._execute()
-        self.assertEqual(run.status, VerificationRun.Status.ABSTAINED)
+        with self.assertRaises(tasks.EvidenceRetrievalUnavailableError):
+            self._execute()
+        run = self.claim.verification_runs.get()
+        self.assertEqual(run.status, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "evidence_retrieval")
         self.claim.refresh_from_db()
-        self.assertEqual(self.claim.context_text, self.cleaned["cleaned_claim"])
-        self.assertNotEqual(self.claim.context_text, self.cleaned_text)
+        self.assertEqual(self.claim.context_text, submitted_context)
+        self.assertIsNone(self.claim.ai_verdict)
+        self.assertIsNone(self.claim.ai_summary)
 
-    def test_handled_tavily_failure_abstains(self):
+    def test_tavily_retrieval_failure_marks_failed_without_factual_verdict(self):
         self.bridge.return_value = {"claims": []}
         self.retrieve_tavily.side_effect = requests.Timeout("Tavily timed out")
-        self._assert_terminal(self._execute(), VerificationRun.Status.ABSTAINED)
+        with self.assertRaises(tasks.EvidenceRetrievalUnavailableError):
+            self._execute()
+        run = self.claim.verification_runs.get()
+        self._assert_terminal(run, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "evidence_retrieval")
+        self.assertEqual(run.failure_code, "EVIDENCE_RETRIEVAL_FAILED")
         self.claim.refresh_from_db()
-        self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
-        self.fail_run.assert_not_called()
+        self.assertIsNone(self.claim.ai_verdict)
+        self.assertIsNone(self.claim.ai_summary)
 
     def test_unrecovered_failure_records_metadata_and_preserves_exception(self):
         error = RuntimeError("Vault unavailable: " + "details " * 30)
@@ -1316,6 +1387,23 @@ class VerificationRunURLRuntimeTests(TestCase):
             ("gemini", "failed"),
             ("groq", "failed"),
         ])
+
+    def test_required_tavily_retrieval_failure_is_failed_not_unverified(self):
+        self.bridge.side_effect = None
+        self.bridge.return_value = {"claims": []}
+        self.retrieve_tavily.side_effect = RuntimeError("Tavily unavailable")
+
+        with self.assertRaises(tasks.EvidenceRetrievalUnavailableError):
+            self._invoke()
+
+        run = self.claim.verification_runs.get()
+        self.assertEqual(run.status, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "evidence_retrieval")
+        self.assertEqual(run.failure_code, "EVIDENCE_RETRIEVAL_FAILED")
+        self.claim.refresh_from_db()
+        self.assertIsNone(self.claim.ai_verdict)
+        self.assertIsNone(self.claim.ai_summary)
+        self.save_claim.assert_not_called()
 
 
 class VerificationEvidenceURLRuntimeTests(TestCase):

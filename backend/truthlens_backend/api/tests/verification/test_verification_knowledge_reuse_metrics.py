@@ -1,7 +1,7 @@
 import base64
 import json
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from django.contrib.auth.models import User
 from django.db import connection
@@ -21,7 +21,9 @@ from api.models import (
     OfficialFactCheck,
     Organization,
     PublicReachEvent,
+    VerificationRun,
 )
+from api.verification.runs import CURRENT_VERIFICATION_PIPELINE_VERSION
 from api.verification_knowledge_reuse_metrics_service import (
     VerificationKnowledgeReuseMetricsIntegrityError,
     get_organization_knowledge_reuse_metrics,
@@ -357,9 +359,17 @@ class FileCacheKnowledgeReuseTests(KnowledgeReuseMetricsFixture):
         self.assertEqual(response.json(), {
             "claim_id": str(self.source_claim.pk), "cached": True, "match": expected_match,
         })
-        match.assert_called_once_with(
-            self.source_claim, triggered_by=self.actor, record_reuse=True,
-            query_text="Published source proposition",
+        self.assertEqual(
+            match.call_args_list,
+            [
+                call(self.source_claim),
+                call(
+                    self.source_claim,
+                    triggered_by=self.actor,
+                    record_reuse=True,
+                    query_text="Published source proposition",
+                ),
+            ],
         )
         event = KnowledgeReuseEvent.objects.get()
         self.assertEqual(event.reuse_type, "USER_RESPONSE")
@@ -378,6 +388,14 @@ class FileCacheKnowledgeReuseTests(KnowledgeReuseMetricsFixture):
         self.assertIsNone(KnowledgeReuseEvent.objects.get().triggered_by_id)
 
     def test_file_cache_without_publication_does_not_fabricate_event(self):
+        self.target_claim.ai_verdict = "FACT"
+        self.target_claim.ai_summary = "Current automated cache result."
+        self.target_claim.save(update_fields=["ai_verdict", "ai_summary", "last_updated"])
+        VerificationRun.objects.create(
+            claim=self.target_claim,
+            status=VerificationRun.Status.COMPLETED,
+            pipeline_version=CURRENT_VERIFICATION_PIPELINE_VERSION,
+        )
         expected_match = get_match_result(self.target_claim)
         with patch("api.views.find_matching_claim", return_value=self.target_claim):
             response = self.submit()

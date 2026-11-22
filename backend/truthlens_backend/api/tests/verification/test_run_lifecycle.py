@@ -5,6 +5,7 @@ from django.test import TestCase
 
 from api.models import Claim, VerificationRun
 from api.verification.runs import (
+    CURRENT_VERIFICATION_PIPELINE_VERSION,
     InvalidVerificationRunTransition,
     abstain_verification_run,
     cancel_verification_run,
@@ -54,6 +55,13 @@ class VerificationRunLifecycleTests(TestCase):
         )
         self.assertIsNone(run.started_at)
         self.assertIsNone(run.completed_at)
+
+    def test_default_run_uses_current_pipeline_version(self):
+        run = create_verification_run(self.claim)
+        self.assertEqual(
+            run.pipeline_version,
+            CURRENT_VERIFICATION_PIPELINE_VERSION,
+        )
 
     def test_start_transitions_pending_to_running(
         self,

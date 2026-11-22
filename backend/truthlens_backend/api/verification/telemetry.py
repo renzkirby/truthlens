@@ -49,6 +49,8 @@ SAFE_LLM_OPERATION_LABELS = frozenset(
         "gfc_evaluation",
         "tavily_evaluation",
         "persisted_evidence_evaluation",
+        "satire_provenance_audit",
+        "structured_misleading_audit",
         "evidence_assessment",
         "investigation_classification",
     }

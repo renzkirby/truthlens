@@ -527,7 +527,8 @@ class RelatednessPrimarySaveIntegrationTests(RelatednessFixtures, TestCase):
 class RelatednessConcurrencyTests(RelatednessFixtures, TransactionTestCase):
     def test_simultaneous_binding_and_worker_delivery_are_deduplicated(self):
         # This regression intentionally uses PostgreSQL's real row/unique locks.
-        self.assertEqual(connection.vendor, "postgresql")
+        if connection.vendor != "postgresql":
+            self.skipTest("requires PostgreSQL row/unique locking semantics")
         other = Claim.objects.create(claim_type="IMAGE", context_text=self.proposition, ai_verdict="FAKE")
         errors = []
         barrier = threading.Barrier(2)
