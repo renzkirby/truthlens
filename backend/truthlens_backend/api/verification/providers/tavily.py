@@ -9,6 +9,7 @@ from ..contracts import RawEvidence
 
 
 PROVIDER_NAME = "TAVILY"
+PRIMARY_SOURCE_RECOVERY_PROVIDER_RESULTS = 6
 
 # Preserve the existing shared text/URL search preset during adapter staging.
 INCLUDE_DOMAINS = (
@@ -216,7 +217,10 @@ class TavilyProvider:
         if primary_source_recovery:
             # This is the only open-domain mode. Bound provider output before
             # persistence, then admit only clearly institutional primary sources.
-            search_kwargs["max_results"] = limit
+            search_kwargs["max_results"] = max(
+                limit,
+                PRIMARY_SOURCE_RECOVERY_PROVIDER_RESULTS,
+            )
         else:
             # Preserve the existing curated search behavior for every normal run.
             search_kwargs["include_domains"] = list(INCLUDE_DOMAINS)
