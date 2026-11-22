@@ -2489,8 +2489,11 @@ def _has_persisted_satire_signal(evidence_groups):
     """Cheap trigger only; the audit below decides whether provenance is direct."""
     for group in evidence_groups or ():
         for item in getattr(group, "evidence", ()):
-            content = str(getattr(item, "content", "") or "").casefold()
-            if "satir" in content or "parody" in content:
+            signal_text = " ".join((
+                str(getattr(item, "title", "") or ""),
+                str(getattr(item, "content", "") or ""),
+            )).casefold()
+            if "satir" in signal_text or "parody" in signal_text:
                 return True
     return False
 
@@ -2510,17 +2513,23 @@ def _audit_persisted_satire_provenance(
 
     Classify the provenance relationship for the EXACT submitted claim/content:
     - DIRECT_SATIRE_PROVENANCE: the evidence explicitly establishes that the same
-      submitted claim/content was created, published, or labeled as satire/parody.
-    - SATIRE_ORIGIN_ONLY: a false/misleading factual rumor merely originated from,
-      copied, or adapted a satire/parody item; the submitted factual proposition is
-      not itself safely classifiable as satire.
+      submitted proposition/content was the proposition/content published or
+      labeled as satire/parody. For a TEXT submission, an equivalent plain-text
+      restatement of that exact satirical proposition may qualify; byte-identical
+      wording or the original image is not required.
+    - SATIRE_ORIGIN_ONLY: the submitted factual rumor is materially changed,
+      recontextualized, or derived from a different satire/parody item, or the
+      evidence merely mentions a related satire source without establishing that
+      the exact submitted proposition was the satirical proposition.
     - CONFLICTING_PROVENANCE: supplied evidence materially conflicts about whether
       the same submitted claim/content is satire versus a factual falsehood.
     - NOT_ESTABLISHED: direct provenance cannot be established safely.
 
     DIRECT_SATIRE_PROVENANCE requires one or more exact Evidence link IDs from the
-    supplied dossier. Do not invent, transform, or infer IDs. A related parody,
-    satirical source on the same topic, or an origin story alone is insufficient.
+    supplied dossier. Do not invent, transform, or infer IDs. Require proposition
+    identity: same actor, action, object, material date/time, quantity, attribution,
+    and other truth-changing qualifiers. A related parody, a changed derivative,
+    or a satirical source on the same topic is insufficient.
 
     Return ONLY JSON with exactly these fields:
     {
