@@ -45,6 +45,26 @@ GEMINI_ROUTINE_MODEL=<model id>
 GEMINI_REASONING_MODEL=<model id>
 ```
 
+For the defense period, an additional same-provider transient fallback can be
+enabled explicitly:
+
+```
+ENABLE_PROVIDER_RELIABILITY_HARDENING=1
+ENABLE_GEMINI_TRANSIENT_MODEL_FALLBACK=1
+GEMINI_TRANSIENT_FALLBACK_MODEL=gemini-3.6-flash
+```
+
+When enabled, HTTP 500/502/503/504 from the selected primary Gemini model
+triggers one attempt with the configured alternate Gemini model using the same
+full prompt. HTTP 402/404/429 and non-transient contract failures do not trigger
+the alternate model; those continue through the normal cross-provider fallback
+path. If the primary model is circuit-broken after a transient failure, later
+stages in the same verification job may continue on the healthy alternate model.
+If both Gemini models fail, routing continues to Cloudflare and then Groq.
+
+Set `ENABLE_GEMINI_TRANSIENT_MODEL_FALLBACK=0` or leave it unset to keep the
+existing single-Gemini-model behavior.
+
 The legacy `GEMINI_MODEL` variable remains a global override for emergency
 rollback/compatibility. If it is set, it overrides both tiers. Production
 deployments migrating from Gemini 2.5 must therefore remove any stale
@@ -132,8 +152,10 @@ The legacy development-only AI-RQ-2 pilot flags remain supported separately.
 
 Run the focused provider, Cloudflare, verdict-contract, telemetry, and
 relatedness tests before deployment. Confirm the deployed Gemini key can call
-`gemini-3.5-flash-lite`. If `GEMINI_REASONING_MODEL` is explicitly overridden
-to another model, validate that model separately before deployment. After merge,
+`gemini-3.5-flash-lite`. If the transient fallback is enabled, also confirm the
+same deployed key can call `gemini-3.6-flash`. If `GEMINI_REASONING_MODEL` is
+explicitly overridden to another model, validate that model separately before
+deployment. After merge,
 automatic activation occurs on the first
 backend/Celery process start that sees valid Cloudflare credentials, unless the
 kill switch is set to `0`.
