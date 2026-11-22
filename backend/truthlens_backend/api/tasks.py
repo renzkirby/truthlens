@@ -1999,7 +1999,6 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     if (
                         official_rating_policy["resolution"]
                         != OFFICIAL_FACT_CHECK_RESOLUTION_NONE
-                        or official_rating_policy["misleading_evidence_ids"]
                     ):
                         is_relevant = True
                         gfc_terminally_sufficient = True
@@ -2011,11 +2010,25 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             claim_id,
                             "gfc_relevance_bypassed",
                             time.perf_counter(),
-                            outcome=(
-                                "structured_misleading_signal"
-                                if official_rating_policy["misleading_evidence_ids"]
-                                else "official_rating_resolution"
-                            ),
+                            outcome="official_rating_resolution",
+                            resolution=official_rating_policy["resolution"],
+                        )
+                    elif official_rating_policy["misleading_evidence_ids"]:
+                        # A strict-equivalent Misleading rating is a claim-scoped
+                        # context signal, not a complete factual dossier. Google
+                        # Fact Check metadata does not include the full review body,
+                        # so continue to normal web retrieval before final arbitration.
+                        is_relevant = True
+                        gfc_terminally_sufficient = False
+                        gfc_coverage_reason_code = "EXACT_OR_EQUIVALENT_COVERAGE"
+                        coverage_candidate_count = len(reviewed_claims)
+                        coverage_relevant_count = 1
+                        coverage_covered_count = 1
+                        _log_stage(
+                            claim_id,
+                            "gfc_relevance_bypassed",
+                            time.perf_counter(),
+                            outcome="structured_misleading_signal",
                             resolution=official_rating_policy["resolution"],
                         )
                     else:
@@ -2984,7 +2997,6 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                 if (
                     official_rating_policy["resolution"]
                     != OFFICIAL_FACT_CHECK_RESOLUTION_NONE
-                    or official_rating_policy["misleading_evidence_ids"]
                 ):
                     is_relevant = True
                     gfc_terminally_sufficient = True
@@ -2996,11 +3008,23 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         claim_id,
                         "url_gfc_relevance_bypassed",
                         time.perf_counter(),
-                        outcome=(
-                            "structured_misleading_signal"
-                            if official_rating_policy["misleading_evidence_ids"]
-                            else "official_rating_resolution"
-                        ),
+                        outcome="official_rating_resolution",
+                        resolution=official_rating_policy["resolution"],
+                    )
+                elif official_rating_policy["misleading_evidence_ids"]:
+                    # Structured Misleading is a contextual signal only. Enrich
+                    # the persisted dossier before allowing a final verdict.
+                    is_relevant = True
+                    gfc_terminally_sufficient = False
+                    gfc_coverage_reason_code = "EXACT_OR_EQUIVALENT_COVERAGE"
+                    coverage_candidate_count = len(reviewed_claims)
+                    coverage_relevant_count = 1
+                    coverage_covered_count = 1
+                    _log_stage(
+                        claim_id,
+                        "url_gfc_relevance_bypassed",
+                        time.perf_counter(),
+                        outcome="structured_misleading_signal",
                         resolution=official_rating_policy["resolution"],
                     )
                 else:
