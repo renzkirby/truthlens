@@ -527,7 +527,7 @@ class VerificationRunURLRuntimeTests(TestCase):
 
         self.assertEqual(
             run.pipeline_version,
-            VerificationRun._meta.get_field("pipeline_version").get_default(),
+            runs.CURRENT_VERIFICATION_PIPELINE_VERSION,
         )
 
     def test_repeated_url_attempts_create_distinct_runs(self):
@@ -1124,22 +1124,31 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.evaluate_persisted.assert_not_called()
         self.load_dossier.assert_not_called()
 
-    def test_tavily_retrieval_failure_displays_the_evaluated_claim(self):
+    def test_tavily_retrieval_failure_preserves_evaluated_claim_without_verdict(self):
         self.bridge.return_value = {"claims": []}
         self.retrieve_tavily.side_effect = requests.Timeout("Retrieval unavailable")
-        run = self._execute()
-        self.assertEqual(run.status, VerificationRun.Status.ABSTAINED)
+        with self.assertRaises(tasks.EvidenceRetrievalUnavailableError):
+            self._execute()
+        run = self.claim.verification_runs.get()
+        self.assertEqual(run.status, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "evidence_retrieval")
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.context_text, self.cleaned["cleaned_claim"])
         self.assertNotEqual(self.claim.context_text, self.cleaned_text)
+        self.assertIsNone(self.claim.ai_verdict)
 
-    def test_handled_tavily_failure_abstains(self):
+    def test_tavily_retrieval_failure_marks_failed_without_factual_verdict(self):
         self.bridge.return_value = {"claims": []}
         self.retrieve_tavily.side_effect = requests.Timeout("Tavily timed out")
-        self._assert_terminal(self._execute(), VerificationRun.Status.ABSTAINED)
+        with self.assertRaises(tasks.EvidenceRetrievalUnavailableError):
+            self._execute()
+        run = self.claim.verification_runs.get()
+        self._assert_terminal(run, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "evidence_retrieval")
+        self.assertEqual(run.failure_code, "EVIDENCE_RETRIEVAL_FAILED")
         self.claim.refresh_from_db()
-        self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
-        self.fail_run.assert_not_called()
+        self.assertIsNone(self.claim.ai_verdict)
+        self.assertIsNone(self.claim.ai_summary)
 
     def test_unrecovered_failure_records_metadata_and_preserves_exception(self):
         error = RuntimeError("Vault unavailable: " + "details " * 30)
