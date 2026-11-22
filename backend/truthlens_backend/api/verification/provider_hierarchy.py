@@ -6,6 +6,8 @@ from django.conf import settings
 from .cloudflare_pilot import (
     ASSESSMENT_OPERATION,
     PILOT_OPERATION,
+    SATIRE_PROVENANCE_AUDIT_OPERATION,
+    STRUCTURED_MISLEADING_AUDIT_OPERATION,
 )
 from .classification_contract import CLASSIFICATION_OPERATION
 
@@ -24,6 +26,8 @@ STAGE_CONTRACT_OPERATIONS = frozenset({
     "claim_gate",
     "gfc_evaluation",
     "tavily_evaluation",
+    SATIRE_PROVENANCE_AUDIT_OPERATION,
+    STRUCTURED_MISLEADING_AUDIT_OPERATION,
 })
 # These indicate the project/model cannot currently accept this request.
 # Do not repeatedly retry them within a single verification job.
