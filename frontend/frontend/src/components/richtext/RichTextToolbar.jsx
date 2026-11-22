@@ -1,3 +1,4 @@
+import { useEffect, useId, useRef, useState } from "react";
 import {
    Bold,
    Heading2,
@@ -39,23 +40,64 @@ function ToolbarButton({
 }
 
 export default function RichTextToolbar({ editor, profile = "discussion" }) {
-   if (!editor) return null;
-   const rules = getRichTextProfile(profile);
+   const linkDialogId = useId();
+   const linkTitleId = `${linkDialogId}-title`;
+   const linkErrorId = `${linkDialogId}-error`;
+   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+   const [linkValue, setLinkValue] = useState("");
+   const [linkError, setLinkError] = useState("");
+   const linkInputRef = useRef(null);
 
-   const setLink = () => {
-      const previous = editor.getAttributes("link")?.href || "";
-      const entered = window.prompt("Paste a link (https://…)", previous);
-      if (entered === null) return;
-      if (!entered.trim()) {
-         editor.chain().focus().extendMarkRange("link").unsetLink().run();
-         return;
-      }
-      const href = safeRichTextHref(entered.trim());
+   const rules = getRichTextProfile(profile);
+   const linkActive = Boolean(editor?.isActive("link"));
+
+   useEffect(() => {
+      if (!linkDialogOpen) return undefined;
+
+      const frame = window.requestAnimationFrame(() => {
+         linkInputRef.current?.focus();
+         linkInputRef.current?.select();
+      });
+
+      const handleEscape = (event) => {
+         if (event.key !== "Escape") return;
+         setLinkDialogOpen(false);
+         setLinkError("");
+         editor?.commands.focus();
+      };
+
+      document.addEventListener("keydown", handleEscape);
+      return () => {
+         window.cancelAnimationFrame(frame);
+         document.removeEventListener("keydown", handleEscape);
+      };
+   }, [editor, linkDialogOpen]);
+
+   if (!editor) return null;
+
+   const openLinkDialog = () => {
+      setLinkValue(editor.getAttributes("link")?.href || "");
+      setLinkError("");
+      setLinkDialogOpen(true);
+   };
+
+   const closeLinkDialog = () => {
+      setLinkDialogOpen(false);
+      setLinkError("");
+      editor.commands.focus();
+   };
+
+   const applyLink = () => {
+      const href = safeRichTextHref(linkValue.trim());
+
       if (!href) {
-         window.alert("Use a complete http:// or https:// link.");
+         setLinkError("Enter a complete http:// or https:// link.");
          return;
       }
+
       editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
+      setLinkDialogOpen(false);
+      setLinkError("");
    };
 
    return (
@@ -133,14 +175,14 @@ export default function RichTextToolbar({ editor, profile = "discussion" }) {
 
          <ToolbarButton
             label="Add or edit link"
-            active={editor.isActive("link")}
-            onClick={setLink}
+            active={linkActive}
+            onClick={openLinkDialog}
          >
             <Link size={17} strokeWidth={2} />
          </ToolbarButton>
          <ToolbarButton
             label="Remove link"
-            disabled={!editor.isActive("link")}
+            disabled={!linkActive}
             onClick={() => editor.chain().focus().extendMarkRange("link").unsetLink().run()}
          >
             <Unlink size={17} strokeWidth={2} />
@@ -165,6 +207,58 @@ export default function RichTextToolbar({ editor, profile = "discussion" }) {
                </ToolbarButton>
             </>
          )}
+
+         {linkDialogOpen ? (
+            <div
+               className="tl-richtext-link-popover"
+               role="dialog"
+               aria-modal="false"
+               aria-labelledby={linkTitleId}
+            >
+               <div className="tl-richtext-link-popover__content">
+                  <div className="tl-richtext-link-popover__heading">
+                     <strong id={linkTitleId}>{linkActive ? "Edit link" : "Add link"}</strong>
+                     <span>Use a complete http:// or https:// address.</span>
+                  </div>
+                  <label className="tl-richtext-link-popover__field">
+                     <span>URL</span>
+                     <input
+                        ref={linkInputRef}
+                        type="text"
+                        inputMode="url"
+                        autoComplete="url"
+                        value={linkValue}
+                        onChange={(event) => {
+                           setLinkValue(event.target.value);
+                           if (linkError) setLinkError("");
+                        }}
+                        onKeyDown={(event) => {
+                           if (event.key !== "Enter") return;
+                           event.preventDefault();
+                           event.stopPropagation();
+                           applyLink();
+                        }}
+                        aria-invalid={linkError ? "true" : undefined}
+                        aria-describedby={linkError ? linkErrorId : undefined}
+                        placeholder="https://example.com"
+                     />
+                  </label>
+                  {linkError ? (
+                     <p id={linkErrorId} className="tl-richtext-link-popover__error" role="alert">
+                        {linkError}
+                     </p>
+                  ) : null}
+                  <div className="tl-richtext-link-popover__actions">
+                     <button type="button" className="tl-richtext-link-popover__cancel" onClick={closeLinkDialog}>
+                        Cancel
+                     </button>
+                     <button type="button" className="tl-richtext-link-popover__apply" onClick={applyLink}>
+                        {linkActive ? "Update link" : "Add link"}
+                     </button>
+                  </div>
+               </div>
+            </div>
+         ) : null}
       </div>
    );
 }
