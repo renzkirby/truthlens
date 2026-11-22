@@ -173,6 +173,9 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         evidence_id = "12121212-1212-1212-1212-121212121212"
         evidence_groups = [SimpleNamespace(evidence=(SimpleNamespace(
             evidence_link_id=evidence_id,
+            stance="CONTEXT",
+            relevance_score=0.9,
+            directness_score=0.9,
             content=(
                 "VERA Files reviewed the same viral list and reports that the "
                 "original post was explicitly labeled satire by the parody page."
@@ -206,6 +209,9 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         evidence_id = "13131313-1313-1313-1313-131313131313"
         evidence_groups = [SimpleNamespace(evidence=(SimpleNamespace(
             evidence_link_id=evidence_id,
+            stance="CONTEXT",
+            relevance_score=0.9,
+            directness_score=0.9,
             content="The false rumor later circulated from a parody or satire post.",
         ),))]
         audited = {
@@ -234,6 +240,9 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         evidence_id = "14141414-1414-1414-1414-141414141414"
         evidence_groups = [SimpleNamespace(evidence=(SimpleNamespace(
             evidence_link_id=evidence_id,
+            stance="CONTEXT",
+            relevance_score=0.9,
+            directness_score=0.9,
             content="The same viral content was explicitly labeled satire.",
         ),))]
         audited = {
