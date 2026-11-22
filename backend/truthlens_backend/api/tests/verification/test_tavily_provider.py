@@ -300,7 +300,7 @@ class TavilyProviderTests(TestCase):
         )
 
         kwargs = self.client.search.call_args.kwargs
-        self.assertEqual(kwargs["max_results"], 3)
+        self.assertEqual(kwargs["max_results"], 6)
         self.assertNotIn("include_domains", kwargs)
         self.assertEqual(
             [item.url for item in evidence],
