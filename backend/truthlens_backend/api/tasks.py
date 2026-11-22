@@ -92,6 +92,7 @@ from .verification.runs import (
     complete_verification_run,
     create_verification_run,
     fail_verification_run,
+    has_current_completed_verification_run,
     start_verification_run,
 )
 from .verification.telemetry import (
@@ -105,6 +106,10 @@ logger = logging.getLogger(__name__)
 
 class ClaimPersistenceError(RuntimeError):
     """Raised when automated analysis cannot be persisted to a Claim."""
+
+
+class EvidenceRetrievalUnavailableError(RuntimeError):
+    """Required evidence retrieval failed before verification could complete."""
 
 
 def _set_claimability_status(claim_id, status):
@@ -1116,6 +1121,192 @@ def _retrieve_and_ingest_tavily_queries(
     return _merge_tavily_payloads(payloads)
 
 
+PRIMARY_SOURCE_RECOVERY_RESULT_LIMIT = 3
+
+
+def _has_material_support_or_refutation(evidence_groups):
+    return any(
+        item.stance in {
+            VerificationEvidence.Stance.SUPPORTS,
+            VerificationEvidence.Stance.REFUTES,
+        }
+        for group in evidence_groups or ()
+        for item in group.evidence
+    )
+
+
+def _attempt_primary_source_recovery(
+    *,
+    initial_result,
+    cleaned_claim,
+    claim_id,
+    run,
+    article_stance,
+    official_rating_policy,
+    gfc_evidence_assessed,
+    is_text_claim,
+    noneditable_context_fallback=False,
+    required_anchor_tokens=(),
+    assertion_complete=True,
+    stage_prefix="",
+):
+    """Run at most one bounded open-domain recovery for true evidence gaps.
+
+    Recovery is optional: provider failure preserves the already valid UNVERIFIED
+    result. It never runs for conflicting/material evidence and never bypasses
+    persisted assessment or the existing bounded final-evidence renderer.
+    """
+    if (
+        run is None
+        or not isinstance(initial_result, dict)
+        or initial_result.get("verdict") != "UNVERIFIED"
+        or not isinstance(cleaned_claim, str)
+        or not cleaned_claim.strip()
+    ):
+        return initial_result
+
+    evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
+    evaluation_groups = filter_reasoning_evidence_dossier_by_roles(
+        evidence_dossier,
+        (
+            VerificationEvidence.EvidenceRole.FACT_CHECK,
+            VerificationEvidence.EvidenceRole.SECONDARY,
+        ),
+    )
+    if _has_material_support_or_refutation(evaluation_groups):
+        return initial_result
+
+    recovery_started_at = time.perf_counter()
+    recovery_query = " ".join(cleaned_claim.split())[:300]
+    try:
+        provider = TavilyProvider(timeout=DEFAULT_HTTP_TIMEOUT_SEC)
+        payload, raw_evidence_items = provider.search_with_payload(
+            recovery_query,
+            limit=PRIMARY_SOURCE_RECOVERY_RESULT_LIMIT,
+            primary_source_recovery=True,
+        )
+    except Exception as exc:
+        _log_stage(
+            claim_id,
+            f"{stage_prefix}primary_source_recovery_failed",
+            recovery_started_at,
+            error=type(exc).__name__,
+        )
+        logger.warning(
+            "Optional primary-source recovery failed for claim %s: %s",
+            claim_id,
+            exc,
+        )
+        return initial_result
+
+    if not raw_evidence_items:
+        _log_stage(
+            claim_id,
+            f"{stage_prefix}primary_source_recovery",
+            recovery_started_at,
+            outcome="no_admitted_primary_sources",
+            results=0,
+        )
+        return initial_result
+
+    _persist_tavily_retrieval(
+        recovery_query,
+        claim_id,
+        payload,
+        raw_evidence_items,
+        stage_prefix=f"{stage_prefix}recovery_",
+        verification_run=run,
+        retrieval_query_index=3,
+    )
+
+    evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
+    secondary_groups = filter_reasoning_evidence_dossier_by_role(
+        evidence_dossier,
+        VerificationEvidence.EvidenceRole.SECONDARY,
+    )
+    if secondary_groups:
+        _assess_and_persist_reasoning_evidence(
+            cleaned_claim,
+            secondary_groups,
+            claim_id,
+            stage_prefix=f"{stage_prefix}recovery",
+            material_scope_hardening=is_text_claim,
+        )
+
+    evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
+    evaluation_groups = filter_reasoning_evidence_dossier_by_roles(
+        evidence_dossier,
+        (
+            VerificationEvidence.EvidenceRole.FACT_CHECK,
+            VerificationEvidence.EvidenceRole.SECONDARY,
+        ),
+    )
+    if not _has_material_support_or_refutation(evaluation_groups):
+        _log_stage(
+            claim_id,
+            f"{stage_prefix}primary_source_recovery",
+            recovery_started_at,
+            outcome="no_material_evidence",
+            results=len(raw_evidence_items),
+        )
+        return initial_result
+
+    evidence_context = _render_bounded_persisted_evidence_context(
+        evaluation_groups,
+        cleaned_claim,
+        article_stance,
+    )
+    if not evidence_context:
+        return initial_result
+
+    recovered = (
+        _evaluate_persisted_with_official_rating_policy(
+            cleaned_claim,
+            evidence_context,
+            article_stance,
+            official_rating_policy,
+            evidence_groups=evaluation_groups,
+        )
+        if gfc_evidence_assessed
+        else evaluate_claim_with_persisted_evidence(
+            cleaned_claim,
+            evidence_context,
+            article_stance,
+            evidence_groups=evaluation_groups,
+        )
+    )
+    recovered = calibrate_verdict_confidence(recovered, evaluation_groups)
+    if (
+        is_text_claim
+        and not (
+            gfc_evidence_assessed
+            and official_rating_policy["resolution"]
+            == OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT
+            and recovered.get("verdict") == "FAKE"
+        )
+    ):
+        recovered = enforce_decisive_evidence_support(
+            recovered,
+            evaluation_groups,
+        )
+    recovered = _apply_noneditable_fallback_verdict_policy(
+        recovered,
+        evaluation_groups,
+        fallback_active=noneditable_context_fallback,
+        required_anchor_tokens=required_anchor_tokens,
+        assertion_complete=assertion_complete,
+    )
+    _log_stage(
+        claim_id,
+        f"{stage_prefix}primary_source_recovery",
+        recovery_started_at,
+        outcome="reevaluated",
+        results=len(raw_evidence_items),
+        verdict=recovered.get("verdict"),
+    )
+    return recovered
+
+
 def _elapsed_ms(started_at):
     return int((time.perf_counter() - started_at) * 1000)
 
@@ -1457,6 +1648,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
             matched_claim is not None
             and str(matched_claim.id) != str(claim_id)
             and matched_claim.ai_verdict in reusable_ai_verdicts
+            and has_current_completed_verification_run(matched_claim)
         )
         is_image_claim = (
             run_claim is not None and run_claim.claim_type == Claim.ClaimType.IMAGE
@@ -2009,19 +2201,9 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     error=str(e)[:120],
                 )
                 logger.error("Tavily error for claim %s: %s", claim_id, e)
-                _save_claim(
-                    claim_id,
-                    {
-                        "verdict": "UNVERIFIED",
-                        "summary": "Could not retrieve relevant information to verify the claim.",
-                        "confidence_score": 0,
-                    },
-                    "Live Web Search",
-                    cleaned_claim,
-                    [],
-                )
-                outcome = "completed_tavily_fallback_unverified"
-                selected_verdict = "UNVERIFIED"
+                raise EvidenceRetrievalUnavailableError(
+                    "Required Tavily evidence retrieval failed."
+                ) from e
             else:
                 tavily_results = tavily_response.get("results", [])
                 _log_stage(
@@ -2174,6 +2356,21 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             ),
                         }
 
+                if run is not None:
+                    ai_verdict = _attempt_primary_source_recovery(
+                        initial_result=ai_verdict,
+                        cleaned_claim=cleaned_claim,
+                        claim_id=claim_id,
+                        run=run,
+                        article_stance=article_stance,
+                        official_rating_policy=official_rating_policy,
+                        gfc_evidence_assessed=gfc_evidence_assessed,
+                        is_text_claim=is_text_claim,
+                        noneditable_context_fallback=noneditable_context_fallback,
+                        required_anchor_tokens=noneditable_fallback_anchor_tokens,
+                        assertion_complete=noneditable_fallback_assertion_complete,
+                    )
+
                 if evaluator_invoked:
                     _log_stage(
                         claim_id,
@@ -2245,24 +2442,12 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
             )
             raise
 
-        # This catches other catastrophic errors.
+        # This catches other catastrophic errors. Lifecycle status, not a
+        # synthetic factual verdict, represents an incomplete verification.
         except Exception as e:
             pipeline_error = e
             outcome = "fatal_error"
             logger.error("Core Fact Check Fatal Error for claim %s: %s", claim_id, e)
-            try:
-                claim = Claim.objects.get(id=claim_id)
-                claim.ai_verdict = "UNVERIFIED"
-                claim.ai_summary = "An error occurred during analysis."
-                claim.save(
-                    update_fields=[
-                        "ai_verdict",
-                        "ai_summary",
-                        "last_updated",
-                    ]
-                )
-            except Claim.DoesNotExist:
-                pass
         finally:
             _log_stage(
                 claim_id,
@@ -2305,6 +2490,13 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             run,
                             failure_stage="final_evaluator",
                             failure_code="LLM_UNAVAILABLE",
+                            failure_message=str(pipeline_error),
+                        )
+                    elif isinstance(pipeline_error, EvidenceRetrievalUnavailableError):
+                        fail_verification_run(
+                            run,
+                            failure_stage="evidence_retrieval",
+                            failure_code="EVIDENCE_RETRIEVAL_FAILED",
                             failure_message=str(pipeline_error),
                         )
                     else:
@@ -2973,19 +3165,9 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                 error=str(e)[:120],
             )
             logger.error("Tavily search error for claim %s: %s", claim_id, e)
-            _save_claim(
-                claim_id,
-                {
-                    "verdict": "UNVERIFIED",
-                    "summary": "Could not retrieve relevant information to verify the claim.",
-                    "confidence_score": 0,
-                },
-                "Live Web Search",
-                cleaned_claim,
-                [],
-            )
-            outcome = "completed_tavily_fallback_unverified"
-            selected_verdict = "UNVERIFIED"
+            raise EvidenceRetrievalUnavailableError(
+                "Required Tavily evidence retrieval failed."
+            ) from e
         else:
             tavily_results = search_response.get("results", [])
             _log_stage(
@@ -3146,6 +3328,22 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         ),
                     }
 
+            if run is not None:
+                ai_verdict = _attempt_primary_source_recovery(
+                    initial_result=ai_verdict,
+                    cleaned_claim=cleaned_claim,
+                    claim_id=claim_id,
+                    run=run,
+                    article_stance=article_stance,
+                    official_rating_policy=official_rating_policy,
+                    gfc_evidence_assessed=gfc_evidence_assessed,
+                    is_text_claim=False,
+                    noneditable_context_fallback=noneditable_context_fallback,
+                    required_anchor_tokens=noneditable_fallback_anchor_tokens,
+                    assertion_complete=noneditable_fallback_assertion_complete,
+                    stage_prefix="url_",
+                )
+
             if evaluator_invoked:
                 _log_stage(
                     claim_id,
@@ -3225,6 +3423,13 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                             run,
                             failure_stage="final_evaluator",
                             failure_code="LLM_UNAVAILABLE",
+                            failure_message=str(pipeline_error),
+                        )
+                    elif isinstance(pipeline_error, EvidenceRetrievalUnavailableError):
+                        fail_verification_run(
+                            run,
+                            failure_stage="evidence_retrieval",
+                            failure_code="EVIDENCE_RETRIEVAL_FAILED",
                             failure_message=str(pipeline_error),
                         )
                     else:
