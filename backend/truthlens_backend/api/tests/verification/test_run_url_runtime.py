@@ -1317,6 +1317,23 @@ class VerificationRunURLRuntimeTests(TestCase):
             ("groq", "failed"),
         ])
 
+    def test_required_tavily_retrieval_failure_is_failed_not_unverified(self):
+        self.bridge.side_effect = None
+        self.bridge.return_value = {"claims": []}
+        self.retrieve_tavily.side_effect = RuntimeError("Tavily unavailable")
+
+        with self.assertRaises(tasks.EvidenceRetrievalUnavailableError):
+            self._invoke()
+
+        run = self.claim.verification_runs.get()
+        self.assertEqual(run.status, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "evidence_retrieval")
+        self.assertEqual(run.failure_code, "EVIDENCE_RETRIEVAL_FAILED")
+        self.claim.refresh_from_db()
+        self.assertIsNone(self.claim.ai_verdict)
+        self.assertIsNone(self.claim.ai_summary)
+        self.save_claim.assert_not_called()
+
 
 class VerificationEvidenceURLRuntimeTests(TestCase):
     def setUp(self):
