@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
    Bold,
    Heading2,
@@ -40,6 +40,9 @@ function ToolbarButton({
 }
 
 export default function RichTextToolbar({ editor, profile = "discussion" }) {
+   const linkDialogId = useId();
+   const linkTitleId = `${linkDialogId}-title`;
+   const linkErrorId = `${linkDialogId}-error`;
    const [linkDialogOpen, setLinkDialogOpen] = useState(false);
    const [linkValue, setLinkValue] = useState("");
    const [linkError, setLinkError] = useState("");
@@ -211,18 +214,18 @@ export default function RichTextToolbar({ editor, profile = "discussion" }) {
                className="tl-richtext-link-popover"
                role="dialog"
                aria-modal="false"
-               aria-labelledby="tl-richtext-link-title"
+               aria-labelledby={linkTitleId}
             >
                <form onSubmit={applyLink}>
                   <div className="tl-richtext-link-popover__heading">
-                     <strong id="tl-richtext-link-title">{linkActive ? "Edit link" : "Add link"}</strong>
+                     <strong id={linkTitleId}>{linkActive ? "Edit link" : "Add link"}</strong>
                      <span>Use a complete http:// or https:// address.</span>
                   </div>
                   <label className="tl-richtext-link-popover__field">
                      <span>URL</span>
                      <input
                         ref={linkInputRef}
-                        type="url"
+                        type="text"
                         inputMode="url"
                         autoComplete="url"
                         value={linkValue}
@@ -231,12 +234,12 @@ export default function RichTextToolbar({ editor, profile = "discussion" }) {
                            if (linkError) setLinkError("");
                         }}
                         aria-invalid={linkError ? "true" : undefined}
-                        aria-describedby={linkError ? "tl-richtext-link-error" : undefined}
+                        aria-describedby={linkError ? linkErrorId : undefined}
                         placeholder="https://example.com"
                      />
                   </label>
                   {linkError ? (
-                     <p id="tl-richtext-link-error" className="tl-richtext-link-popover__error" role="alert">
+                     <p id={linkErrorId} className="tl-richtext-link-popover__error" role="alert">
                         {linkError}
                      </p>
                   ) : null}
