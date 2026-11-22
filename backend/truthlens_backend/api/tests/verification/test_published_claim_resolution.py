@@ -47,6 +47,7 @@ from api.models import (
     VerificationRun,
 )
 from api.services import LLMProviderUnavailableError
+from api.verification.runs import CURRENT_VERIFICATION_PIPELINE_VERSION
 from api.public_publication_query_service import (
     get_public_partner_fact_check_detail as get_public_fact_check_detail,
 )
@@ -1821,7 +1822,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         tasks.url_fact_check_process.run(self.target.url_link, self.target.pk)
 
     def cached_ai_claim(self, *, verdict="MISLEADING"):
-        return Claim.objects.create(
+        cached = Claim.objects.create(
             claim_type=Claim.ClaimType.TEXT,
             ai_verdict=verdict,
             ai_summary="Cached AI analysis summary.",
@@ -1833,6 +1834,12 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
             is_ai_generated=False,
             score_context="Cached score context",
         )
+        VerificationRun.objects.create(
+            claim=cached,
+            status=VerificationRun.Status.COMPLETED,
+            pipeline_version=CURRENT_VERIFICATION_PIPELINE_VERSION,
+        )
+        return cached
 
     def assert_exact_bypass(self):
         for mocked in (
