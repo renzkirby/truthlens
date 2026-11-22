@@ -87,7 +87,7 @@
   box-shadow: var(--tl-shadow-md);
 }
 
-.tl-richtext-link-popover form {
+.tl-richtext-link-popover__content {
   display: grid;
   gap: 10px;
 }
