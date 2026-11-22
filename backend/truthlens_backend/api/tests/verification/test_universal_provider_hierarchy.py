@@ -231,13 +231,14 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
         with (
             patch.dict(
                 "os.environ",
-                {
-                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
-                    "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "1",
-                },
+                {"ENABLE_UNIVERSAL_LLM_HIERARCHY": "1"},
             ),
             patch("api.services.gemini_client", gemini),
             patch("api.services.groq_client", groq),
+            patch(
+                "api.services.call_validated_cloudflare_pilot",
+                side_effect=RuntimeError("simulated Cloudflare outage"),
+            ),
         ):
             result = call_llm_with_fallback(
                 "Instructions",
