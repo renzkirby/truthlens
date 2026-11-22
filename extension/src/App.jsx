@@ -11,6 +11,7 @@ import TextVerify from "./pages/TextVerify";
 import DetectDeepfake from "./pages/DetectDeepfake";
 import { AUTH_STORAGE_KEYS, getAuthSession } from "./modules/auth.js";
 import { state } from "./modules/state.js";
+import { diagnosticDurationMs, diagnosticNowMs, logStartupTiming } from "./modules/startupDiagnostics.js";
 
 const GUEST_SCANS_STORAGE_KEY = "guest_scans";
 const GUEST_SCANS_CAP = 3;
@@ -105,6 +106,8 @@ function App() {
    };
 
    useEffect(() => {
+      logStartupTiming("popup_app_effect_started", { context: "popup" });
+
       if (typeof chrome === "undefined" || !chrome.storage?.local) {
          return;
       }
@@ -134,24 +137,52 @@ function App() {
          });
       };
 
-      const requestAuthContext = () =>
-         new Promise((resolve) => {
+      const requestAuthContext = () => {
+         const startedAt = diagnosticNowMs();
+         logStartupTiming("popup_auth_context_request_started", { context: "popup" });
+
+         return new Promise((resolve) => {
             if (typeof chrome === "undefined" || !chrome.runtime?.sendMessage) {
+               logStartupTiming("popup_auth_context_request_finished", {
+                  context: "popup",
+                  durationMs: Number(diagnosticDurationMs(startedAt).toFixed(2)),
+                  outcome: "runtime_unavailable",
+               });
                resolve(null);
                return;
             }
 
             chrome.runtime.sendMessage({ type: "GET_AUTH_CONTEXT" }, (response) => {
                if (chrome.runtime.lastError) {
+                  logStartupTiming("popup_auth_context_request_finished", {
+                     context: "popup",
+                     durationMs: Number(diagnosticDurationMs(startedAt).toFixed(2)),
+                     outcome: "runtime_error",
+                  });
                   resolve(null);
                   return;
                }
+
+               logStartupTiming("popup_auth_context_request_finished", {
+                  context: "popup",
+                  durationMs: Number(diagnosticDurationMs(startedAt).toFixed(2)),
+                  outcome: response?.accepted ? "accepted" : "rejected",
+               });
                resolve(response || null);
             });
          });
+      };
 
       const hydratePopupSession = async () => {
+         const hydrateStartedAt = diagnosticNowMs();
+         const authStartedAt = diagnosticNowMs();
+         logStartupTiming("popup_auth_storage_restore_started", { context: "popup" });
          const session = await getAuthSession();
+         logStartupTiming("popup_auth_storage_restore_finished", {
+            context: "popup",
+            durationMs: Number(diagnosticDurationMs(authStartedAt).toFixed(2)),
+            hasAccessToken: Boolean(session?.accessToken),
+         });
          if (isDisposed) {
             return;
          }
@@ -179,6 +210,11 @@ function App() {
                }
 
                setGuestSyncStatus(normalizeGuestSyncStatus(result?.[GUEST_SCAN_SYNC_STATUS_STORAGE_KEY]));
+               logStartupTiming("popup_session_hydration_finished", {
+                  context: "popup",
+                  durationMs: Number(diagnosticDurationMs(hydrateStartedAt).toFixed(2)),
+                  mode: "authenticated",
+               });
             });
             return;
          }
@@ -191,6 +227,11 @@ function App() {
                return;
             }
             setGhostScans(normalizeGuestScans(result?.[GUEST_SCANS_STORAGE_KEY]));
+            logStartupTiming("popup_session_hydration_finished", {
+               context: "popup",
+               durationMs: Number(diagnosticDurationMs(hydrateStartedAt).toFixed(2)),
+               mode: "guest",
+            });
          });
       };
 
