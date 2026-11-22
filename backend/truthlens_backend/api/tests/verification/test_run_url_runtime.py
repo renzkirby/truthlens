@@ -917,6 +917,7 @@ class VerificationRunURLRuntimeTests(TestCase):
         stages = [call.args[1] for call in self.log_stage.call_args_list]
         self.assertIn("url_gfc_proposition_coverage_check", stages)
         self.assertIn("url_gfc_continued_to_tavily", stages)
+        self.assertNotIn("url_gfc_final_evaluation_skipped", stages)
 
 
     def test_strict_misleading_rating_signal_requires_tavily_enrichment(self):
@@ -936,10 +937,10 @@ class VerificationRunURLRuntimeTests(TestCase):
         self._assert_terminal(run, VerificationRun.Status.COMPLETED)
         self.relevance.assert_not_called()
         self.retrieve_tavily.assert_called_once()
-        self.assertEqual(self.evaluate_persisted.call_count, 2)
-        first_call, second_call = self.evaluate_persisted.call_args_list
+        self.evaluate_persisted.assert_called_once()
+        final_call = self.evaluate_persisted.call_args
         self.assertEqual(
-            first_call.args[:6],
+            final_call.args[:6],
             (
                 self.cleaned["cleaned_claim"],
                 "Persisted evidence context.",
@@ -950,23 +951,13 @@ class VerificationRunURLRuntimeTests(TestCase):
             ),
         )
         self.assertEqual(
-            second_call.args[:6],
-            (
-                self.cleaned["cleaned_claim"],
-                "Persisted evidence context.",
-                "NEUTRAL",
-                services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
-                (),
-                (evidence_id,),
-            ),
-        )
-        self.assertEqual(
-            second_call.kwargs["evidence_groups"],
+            final_call.kwargs["evidence_groups"],
             self.filter_dossier_roles.return_value,
         )
         self.assertEqual(self.save_claim.call_args.args[2], "Live Web Search")
         stages = [call.args[1] for call in self.log_stage.call_args_list]
         self.assertIn("url_gfc_relevance_bypassed", stages)
+        self.assertIn("url_gfc_final_evaluation_skipped", stages)
         self.assertIn("url_gfc_continued_to_tavily", stages)
         coverage_calls = [
             call for call in self.log_stage.call_args_list
@@ -974,6 +965,59 @@ class VerificationRunURLRuntimeTests(TestCase):
         ]
         self.assertEqual(len(coverage_calls), 1)
         self.assertFalse(coverage_calls[0].kwargs["terminally_sufficient"])
+
+    def test_strict_misleading_enrichment_failure_does_not_keep_gfc_only_verdict(self):
+        evidence_id = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+        policy = {
+            "resolution": services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+            "misleading_evidence_ids": (evidence_id,),
+        }
+        self.retrieve_tavily.side_effect = requests.Timeout("Tavily unavailable")
+
+        with patch(
+            "api.tasks._resolve_official_fact_check_rating_policy",
+            return_value=policy,
+        ):
+            with self.assertRaises(tasks.EvidenceRetrievalUnavailableError):
+                self._invoke()
+
+        run = self.claim.verification_runs.get()
+        self._assert_terminal(run, VerificationRun.Status.FAILED)
+        self.assertEqual(run.failure_stage, "evidence_retrieval")
+        self.assertEqual(run.failure_code, "EVIDENCE_RETRIEVAL_FAILED")
+        self.evaluate_persisted.assert_not_called()
+        self.save_claim.assert_not_called()
+        self.claim.refresh_from_db()
+        self.assertIsNone(self.claim.ai_verdict)
+
+    def test_strict_misleading_without_persisted_secondary_evidence_abstains(self):
+        evidence_id = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+        policy = {
+            "resolution": services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+            "misleading_evidence_ids": (evidence_id,),
+        }
+        self.filter_dossier.side_effect = lambda _groups, role: (
+            ["selected evidence"]
+            if role == VerificationEvidence.EvidenceRole.FACT_CHECK
+            else []
+        )
+
+        with patch(
+            "api.tasks._resolve_official_fact_check_rating_policy",
+            return_value=policy,
+        ):
+            self._invoke()
+
+        run = self.claim.verification_runs.get()
+        self._assert_terminal(run, VerificationRun.Status.ABSTAINED)
+        self.evaluate_persisted.assert_not_called()
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("url_gfc_final_evaluation_skipped", stages)
+        self.assertIn("url_structured_misleading_enrichment_unavailable", stages)
 
     def test_gfc_failure_then_tavily_completes_same_run(self):
         observed = []

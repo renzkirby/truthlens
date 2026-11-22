@@ -112,6 +112,19 @@ class EvidenceRetrievalUnavailableError(RuntimeError):
     """Required evidence retrieval failed before verification could complete."""
 
 
+def _requires_structured_misleading_enrichment(
+    official_rating_policy,
+    *,
+    gfc_terminally_sufficient,
+):
+    """Defer only strict structured-Misleading signals that require web context."""
+    return bool(
+        isinstance(official_rating_policy, dict)
+        and official_rating_policy.get("misleading_evidence_ids")
+        and not gfc_terminally_sufficient
+    )
+
+
 def _set_claimability_status(claim_id, status):
     """Persist input claimability without mutating verdict or evidence state."""
     if status not in Claim.ClaimabilityStatus.values:
@@ -2062,8 +2075,19 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 )
                 logger.error("GFC error for claim %s: %s", claim_id, e)
 
+            requires_structured_misleading_enrichment = (
+                _requires_structured_misleading_enrichment(
+                    official_rating_policy,
+                    gfc_terminally_sufficient=gfc_terminally_sufficient,
+                )
+            )
+
             if gfc_claims and is_relevant:
                 gfc_eval_started_at = time.perf_counter()
+                gfc_evaluation_deferred = bool(
+                    run is not None
+                    and requires_structured_misleading_enrichment
+                )
                 if run is None:
                     ai_verdict = evaluate_image_claim_with_gfc(
                         cleaned_claim,
@@ -2108,7 +2132,15 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         fact_check_groups, cleaned_claim, article_stance
                     )
                     has_persisted_evidence = bool(evidence_context)
-                    if has_persisted_evidence:
+                    if gfc_evaluation_deferred:
+                        _log_stage(
+                            claim_id,
+                            "gfc_final_evaluation_skipped",
+                            gfc_eval_started_at,
+                            reason="structured_misleading_requires_enrichment",
+                            terminally_sufficient=gfc_terminally_sufficient,
+                        )
+                    elif has_persisted_evidence:
                         try:
                             ai_verdict = _evaluate_persisted_with_official_rating_policy(
                                 cleaned_claim,
@@ -2164,7 +2196,17 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             verification_run_id=run.pk,
                         )
 
-                if has_persisted_evidence:
+                if gfc_evaluation_deferred:
+                    _log_stage(
+                        claim_id,
+                        "gfc_continued_to_tavily",
+                        gfc_eval_started_at,
+                        gfc_verdict=None,
+                        terminally_sufficient=gfc_terminally_sufficient,
+                        reason_code=gfc_coverage_reason_code,
+                        evaluation="deferred_for_structured_misleading_enrichment",
+                    )
+                elif has_persisted_evidence:
                     _log_stage(
                         claim_id,
                         "gfc_llm_evaluation",
@@ -2335,9 +2377,22 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         if gfc_evidence_assessed
                         else secondary_groups
                     )
-                    evidence_context = _render_bounded_persisted_evidence_context(
-                        evaluation_groups, cleaned_claim, article_stance
+                    structured_misleading_enrichment_missing = bool(
+                        requires_structured_misleading_enrichment
+                        and not secondary_groups
                     )
+                    if structured_misleading_enrichment_missing:
+                        _log_stage(
+                            claim_id,
+                            "structured_misleading_enrichment_unavailable",
+                            tavily_eval_started_at,
+                            outcome="no_persisted_secondary_evidence",
+                        )
+                        evidence_context = ""
+                    else:
+                        evidence_context = _render_bounded_persisted_evidence_context(
+                            evaluation_groups, cleaned_claim, article_stance
+                        )
                     if evidence_context:
                         evaluator_invoked = True
                         ai_verdict = (
@@ -3054,9 +3109,20 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
             _log_stage(claim_id, "url_gfc_failed", gfc_started_at, error=str(e)[:120])
             logger.error("GFC error for claim %s: %s", claim_id, e)
 
+        requires_structured_misleading_enrichment = (
+            _requires_structured_misleading_enrichment(
+                official_rating_policy,
+                gfc_terminally_sufficient=gfc_terminally_sufficient,
+            )
+        )
+
         if gfc_claims and is_relevant:
             gfc_eval_started_at = time.perf_counter()
             evaluation_completed = False
+            gfc_evaluation_deferred = bool(
+                run is not None
+                and requires_structured_misleading_enrichment
+            )
             if run is None:
                 try:
                     ai_verdict = evaluate_url_claim_with_gfc(
@@ -3105,7 +3171,15 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                 evidence_context = _render_bounded_persisted_evidence_context(
                     fact_check_groups, cleaned_claim, article_stance
                 )
-                if evidence_context:
+                if gfc_evaluation_deferred:
+                    _log_stage(
+                        claim_id,
+                        "url_gfc_final_evaluation_skipped",
+                        gfc_eval_started_at,
+                        reason="structured_misleading_requires_enrichment",
+                        terminally_sufficient=gfc_terminally_sufficient,
+                    )
+                elif evidence_context:
                     try:
                         ai_verdict = _evaluate_persisted_with_official_rating_policy(
                             cleaned_claim,
@@ -3150,7 +3224,17 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         verification_run_id=run.pk,
                     )
 
-            if evaluation_completed:
+            if gfc_evaluation_deferred:
+                _log_stage(
+                    claim_id,
+                    "url_gfc_continued_to_tavily",
+                    gfc_eval_started_at,
+                    gfc_verdict=None,
+                    terminally_sufficient=gfc_terminally_sufficient,
+                    reason_code=gfc_coverage_reason_code,
+                    evaluation="deferred_for_structured_misleading_enrichment",
+                )
+            elif evaluation_completed:
                 _log_stage(
                     claim_id,
                     "url_gfc_llm_evaluation",
@@ -3341,9 +3425,22 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     if gfc_evidence_assessed
                     else secondary_groups
                 )
-                evidence_context = _render_bounded_persisted_evidence_context(
-                    evaluation_groups, cleaned_claim, article_stance
+                structured_misleading_enrichment_missing = bool(
+                    requires_structured_misleading_enrichment
+                    and not secondary_groups
                 )
+                if structured_misleading_enrichment_missing:
+                    _log_stage(
+                        claim_id,
+                        "url_structured_misleading_enrichment_unavailable",
+                        tavily_eval_started_at,
+                        outcome="no_persisted_secondary_evidence",
+                    )
+                    evidence_context = ""
+                else:
+                    evidence_context = _render_bounded_persisted_evidence_context(
+                        evaluation_groups, cleaned_claim, article_stance
+                    )
                 if evidence_context:
                     evaluator_invoked = True
                     ai_verdict = (
