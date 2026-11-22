@@ -58,6 +58,12 @@ function PublicSiteFooter() {
 
                      <Link to="/register">Create an account</Link>
                   </div>
+
+                  <div className="public-site-footer__nav-group">
+                     <h3>Policies</h3>
+
+                     <Link to="/community-guidelines">Community Guidelines</Link>
+                  </div>
                </div>
             </div>
 
