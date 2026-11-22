@@ -154,7 +154,7 @@ class UnresolvedCachedSubmissionRetryTests(APITestCase):
             text,
             VerificationRun.Status.COMPLETED,
             ai_verdict="FACT",
-            pipeline_version="1.0.0",
+            pipeline_version="1.1.0",
         )
 
         with patch("api.views.text_fact_check_process.delay") as enqueue:
@@ -167,7 +167,7 @@ class UnresolvedCachedSubmissionRetryTests(APITestCase):
         self.assertNotEqual(response.json()["claim_id"], str(old.pk))
         enqueue.assert_called_once()
         previous.refresh_from_db()
-        self.assertEqual(previous.pipeline_version, "1.0.0")
+        self.assertEqual(previous.pipeline_version, "1.1.0")
 
     def test_extension_precheck_does_not_return_stale_ai_result(self):
         text = "An old automated result must not bypass the current pipeline."
