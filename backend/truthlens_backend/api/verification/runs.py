@@ -5,6 +5,9 @@ from ..models import Claim, VerificationRun
 from ..notification_service import dispatch_after_commit, notify_verification_finished
 
 
+CURRENT_VERIFICATION_PIPELINE_VERSION = "1.1.0"
+
+
 class InvalidVerificationRunTransition(
     ValueError
 ):
@@ -28,13 +31,26 @@ def create_verification_run(
         "claim": claim,
         "triggered_by": triggered_by,
         "status": VerificationRun.Status.PENDING,
+        "pipeline_version": (
+            pipeline_version or CURRENT_VERIFICATION_PIPELINE_VERSION
+        ),
     }
-
-    if pipeline_version is not None:
-        values["pipeline_version"] = pipeline_version
 
     return VerificationRun.objects.create(
         **values
+    )
+
+
+def has_current_completed_verification_run(claim: Claim) -> bool:
+    """Return whether the latest run is a completed result from current code."""
+    latest_run = claim.verification_runs.only(
+        "status",
+        "pipeline_version",
+    ).first()
+    return bool(
+        latest_run is not None
+        and latest_run.status == VerificationRun.Status.COMPLETED
+        and latest_run.pipeline_version == CURRENT_VERIFICATION_PIPELINE_VERSION
     )
 
 
