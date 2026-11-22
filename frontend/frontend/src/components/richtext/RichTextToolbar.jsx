@@ -87,8 +87,7 @@ export default function RichTextToolbar({ editor, profile = "discussion" }) {
       editor.commands.focus();
    };
 
-   const applyLink = (event) => {
-      event.preventDefault();
+   const applyLink = () => {
       const href = safeRichTextHref(linkValue.trim());
 
       if (!href) {
@@ -216,7 +215,7 @@ export default function RichTextToolbar({ editor, profile = "discussion" }) {
                aria-modal="false"
                aria-labelledby={linkTitleId}
             >
-               <form onSubmit={applyLink}>
+               <div className="tl-richtext-link-popover__content">
                   <div className="tl-richtext-link-popover__heading">
                      <strong id={linkTitleId}>{linkActive ? "Edit link" : "Add link"}</strong>
                      <span>Use a complete http:// or https:// address.</span>
@@ -233,6 +232,12 @@ export default function RichTextToolbar({ editor, profile = "discussion" }) {
                            setLinkValue(event.target.value);
                            if (linkError) setLinkError("");
                         }}
+                        onKeyDown={(event) => {
+                           if (event.key !== "Enter") return;
+                           event.preventDefault();
+                           event.stopPropagation();
+                           applyLink();
+                        }}
                         aria-invalid={linkError ? "true" : undefined}
                         aria-describedby={linkError ? linkErrorId : undefined}
                         placeholder="https://example.com"
@@ -247,11 +252,11 @@ export default function RichTextToolbar({ editor, profile = "discussion" }) {
                      <button type="button" className="tl-richtext-link-popover__cancel" onClick={closeLinkDialog}>
                         Cancel
                      </button>
-                     <button type="submit" className="tl-richtext-link-popover__apply">
+                     <button type="button" className="tl-richtext-link-popover__apply" onClick={applyLink}>
                         {linkActive ? "Update link" : "Add link"}
                      </button>
                   </div>
-               </form>
+               </div>
             </div>
          ) : null}
       </div>
