@@ -1406,6 +1406,68 @@ class PrimarySourceRecoveryTests(TestCase):
             evidence_groups=[self.support_group],
         )
 
+    def test_recovery_does_not_mask_normal_evidence_persistence_failure(self):
+        provider = Mock()
+        with (
+            patch("api.tasks.TavilyProvider", return_value=provider),
+            patch(
+                "api.tasks.load_reasoning_evidence_dossier_for_run",
+                return_value=[],
+            ),
+            patch("api.tasks._log_stage") as log_stage,
+        ):
+            result = tasks._attempt_primary_source_recovery(
+                initial_result=self.initial,
+                cleaned_claim=self.claim.context_text,
+                claim_id=self.claim.pk,
+                run=self.run,
+                article_stance="NEUTRAL",
+                official_rating_policy={
+                    "resolution": services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+                    "satire_evidence_ids": (),
+                    "misleading_evidence_ids": (),
+                },
+                gfc_evidence_assessed=False,
+                is_text_claim=True,
+                normal_tavily_had_results=True,
+            )
+
+        self.assertEqual(result, self.initial)
+        provider.search_with_payload.assert_not_called()
+        self.assertTrue(any(
+            call.kwargs.get("outcome")
+            == "skipped_normal_evidence_persistence_unavailable"
+            for call in log_stage.call_args_list
+        ))
+
+    def test_recovery_fails_closed_before_filtering_malformed_dossier(self):
+        with (
+            patch(
+                "api.tasks.load_reasoning_evidence_dossier_for_run",
+                return_value=["legacy placeholder"],
+            ),
+            patch("api.tasks.filter_reasoning_evidence_dossier_by_roles") as filter_roles,
+            patch("api.tasks.TavilyProvider") as provider_class,
+        ):
+            result = tasks._attempt_primary_source_recovery(
+                initial_result=self.initial,
+                cleaned_claim=self.claim.context_text,
+                claim_id=self.claim.pk,
+                run=self.run,
+                article_stance="NEUTRAL",
+                official_rating_policy={
+                    "resolution": services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+                    "satire_evidence_ids": (),
+                    "misleading_evidence_ids": (),
+                },
+                gfc_evidence_assessed=False,
+                is_text_claim=True,
+            )
+
+        self.assertEqual(result, self.initial)
+        filter_roles.assert_not_called()
+        provider_class.assert_not_called()
+
     def test_recovery_does_not_run_when_material_evidence_already_exists(self):
         provider = Mock()
         with (
