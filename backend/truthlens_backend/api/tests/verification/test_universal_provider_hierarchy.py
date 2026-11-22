@@ -206,6 +206,49 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
             "structured_misleading_audit", json.dumps(fabricated), "Evidence",
         ))
 
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_invalid_gemini_compact_audit_falls_through_to_valid_groq(self):
+        prompt = (
+            '<satire_signal_aliases>{"S1":"evidence-id"}</satire_signal_aliases>'
+        )
+        valid = json.dumps({
+            "provenance": "DIRECT_SATIRE_PROVENANCE",
+            "evidence_aliases": ["S1"],
+        })
+        gemini = Mock()
+        gemini.models.generate_content.return_value = SimpleNamespace(
+            text=json.dumps({
+                "provenance": "DIRECT_SATIRE_PROVENANCE",
+                "evidence_aliases": ["S99"],
+            }),
+        )
+        groq = Mock()
+        groq.with_options.return_value.chat.completions.create.return_value = (
+            SimpleNamespace(choices=[SimpleNamespace(
+                message=SimpleNamespace(content=valid)
+            )])
+        )
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
+                    "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "1",
+                },
+            ),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+        ):
+            result = call_llm_with_fallback(
+                "Instructions",
+                prompt,
+                operation="satire_provenance_audit",
+            )
+
+        self.assertEqual(result, valid)
+        gemini.models.generate_content.assert_called_once()
+        groq.with_options.return_value.chat.completions.create.assert_called_once()
+
     def test_new_decision_stages_use_strict_contract_when_hierarchy_enabled(self):
         for operation in (
             "claim_equivalence",
