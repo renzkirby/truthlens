@@ -6,6 +6,7 @@ from rest_framework.test import APITestCase
 
 from api.claim_matching import compute_fingerprint
 from api.models import Claim, VerificationRun
+from api.verification.runs import CURRENT_VERIFICATION_PIPELINE_VERSION
 
 
 class UnresolvedCachedSubmissionRetryTests(APITestCase):
@@ -22,6 +23,7 @@ class UnresolvedCachedSubmissionRetryTests(APITestCase):
         status,
         ai_verdict=None,
         claimability_status=Claim.ClaimabilityStatus.CLAIMABLE,
+        pipeline_version=CURRENT_VERIFICATION_PIPELINE_VERSION,
     ):
         fields = {
             "claim_type": claim_type,
@@ -39,6 +41,7 @@ class UnresolvedCachedSubmissionRetryTests(APITestCase):
         previous = VerificationRun.objects.create(
             claim=old,
             status=status,
+            pipeline_version=pipeline_version,
             failure_stage=("final_evaluator" if status == "FAILED" else None),
             failure_code=("LLM_UNAVAILABLE" if status == "FAILED" else None),
         )
@@ -143,6 +146,28 @@ class UnresolvedCachedSubmissionRetryTests(APITestCase):
         self.assertEqual(response.json()["claim_id"], str(old.pk))
         self.assertEqual(response.json()["match"]["verdict"], "FACT")
         enqueue.assert_not_called()
+
+    def test_stale_pipeline_ai_cache_is_reverified(self):
+        text = "A decisive AI result from the previous verification pipeline."
+        old, previous = self._old_claim(
+            Claim.ClaimType.TEXT,
+            text,
+            VerificationRun.Status.COMPLETED,
+            ai_verdict="FACT",
+            pipeline_version="1.0.0",
+        )
+
+        with patch("api.views.text_fact_check_process.delay") as enqueue:
+            response = self.client.post(
+                reverse("verify_text"), {"text": text}, format="json"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["cached"])
+        self.assertNotEqual(response.json()["claim_id"], str(old.pk))
+        enqueue.assert_called_once()
+        previous.refresh_from_db()
+        self.assertEqual(previous.pipeline_version, "1.0.0")
 
     def test_legacy_decisive_cache_cannot_bypass_current_claim_gate(self):
         text = "Joel stole 800 million pesos"
