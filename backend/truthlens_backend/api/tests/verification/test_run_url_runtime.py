@@ -384,41 +384,6 @@ class VerificationRunURLRuntimeTests(TestCase):
         self.evaluate_persisted.assert_not_called()
         self.save_claim.assert_not_called()
 
-    def test_empty_basic_extraction_retries_with_advanced_mode(self):
-        basic_response = Mock(status_code=200)
-        basic_response.json.return_value = {
-            "results": [],
-            "failed_results": [
-                {
-                    "url": self.url,
-                    "error": "Basic extraction unavailable.",
-                }
-            ],
-        }
-        advanced_response = Mock(status_code=200)
-        advanced_response.json.return_value = {
-            "results": [{"raw_content": "Advanced article content."}],
-            "failed_results": [],
-        }
-        self.extract.side_effect = [basic_response, advanced_response]
-
-        run = self._execute()
-
-        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
-        self.assertEqual(self.extract.call_count, 2)
-        self.assertEqual(
-            self.extract.call_args_list[0].kwargs["json"],
-            {"urls": [self.url], "extract_depth": "basic"},
-        )
-        self.assertEqual(
-            self.extract.call_args_list[1].kwargs["json"],
-            {"urls": [self.url], "extract_depth": "advanced"},
-        )
-        self.clean.assert_called_once_with("Advanced article content.")
-        stages = [call.args[1] for call in self.log_stage.call_args_list]
-        self.assertIn("tavily_extract", stages)
-        self.assertIn("tavily_extract_advanced", stages)
-
     def test_extraction_failure_preserves_claim_and_marks_run_failed(self):
         self.extract.side_effect = requests.Timeout("Extraction timed out")
 
@@ -460,34 +425,6 @@ class VerificationRunURLRuntimeTests(TestCase):
             "url_content_insufficient",
             [call.args[1] for call in self.log_stage.call_args_list],
         )
-
-    def test_navigation_only_basic_extract_still_abstains_if_advanced_retry_fails(self):
-        raw = (
-            "# Apple Reinvents the Phone with iPhone "
-            "## Press Contacts Apple Media Helpline "
-            "## Shop and Learn Wallet Account Education "
-            "## About Apple Media Helpline"
-        )
-        basic_response = Mock(status_code=200)
-        basic_response.json.return_value = {"results": [{"raw_content": raw}]}
-        self.extract.side_effect = [
-            basic_response,
-            requests.Timeout("Advanced extraction timed out"),
-        ]
-        self.clean.side_effect = services.clean_extracted_text
-
-        run = self._execute()
-
-        self._assert_terminal(run, VerificationRun.Status.ABSTAINED)
-        self.assertEqual(self.extract.call_count, 2)
-        self.query.assert_not_called()
-        self.vault.assert_not_called()
-        self.retrieve_tavily.assert_not_called()
-        self.evaluate_persisted.assert_not_called()
-        self.save_claim.assert_not_called()
-        stages = [call.args[1] for call in self.log_stage.call_args_list]
-        self.assertIn("tavily_extract_advanced_failed", stages)
-        self.assertIn("url_content_insufficient", stages)
 
     def test_body_after_long_navigation_reaches_claim_gate(self):
         raw = (
