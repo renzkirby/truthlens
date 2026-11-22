@@ -2456,38 +2456,85 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
         return
     url = safe_url
 
-    # Step 1 — Extract and clean text from URL
+    # Step 1 — Extract and clean text from URL. Start with the lower-cost
+    # basic extractor, then retry once with advanced extraction only when the
+    # first pass returns no usable article content.
     url_extract_started_at = time.perf_counter()
     try:
         response = requests.post(
             "https://api.tavily.com/extract",
             headers={"Authorization": f"Bearer {os.environ.get('TAVILY_API_KEY')}"},
-            json={"urls": [url]},
+            json={"urls": [url], "extract_depth": "basic"},
             timeout=TAVILY_EXTRACT_TIMEOUT_SEC,
         )
         tavily_data = response.json()
+        basic_results = tavily_data.get("results")
+        basic_result = (
+            basic_results[0]
+            if isinstance(basic_results, list)
+            and basic_results
+            and isinstance(basic_results[0], dict)
+            else {}
+        )
+        raw_text = basic_result.get("raw_content") or ""
+        cleaned_text = clean_extracted_text(raw_text) if raw_text else ""
         _log_stage(
             claim_id,
             "tavily_extract",
             url_extract_started_at,
             status_code=response.status_code,
-            has_results=bool(tavily_data.get("results")),
+            has_results=bool(basic_results),
         )
 
-        if not tavily_data.get("results"):
-            outcome = "url_extract_empty_failed"
-            if run is not None:
-                fail_verification_run(
-                    run,
-                    failure_stage="url_extraction",
-                    failure_code="URL_EXTRACTION_EMPTY",
-                    failure_message="No extractable article content was returned.",
-                )
-            _log_stage(claim_id, "url_task_total", pipeline_started_at, outcome=outcome)
-            return
+        if not cleaned_text.strip():
+            advanced_started_at = time.perf_counter()
+            advanced_response = requests.post(
+                "https://api.tavily.com/extract",
+                headers={"Authorization": f"Bearer {os.environ.get('TAVILY_API_KEY')}"},
+                json={"urls": [url], "extract_depth": "advanced"},
+                timeout=TAVILY_EXTRACT_TIMEOUT_SEC,
+            )
+            advanced_data = advanced_response.json()
+            advanced_results = advanced_data.get("results")
+            advanced_result = (
+                advanced_results[0]
+                if isinstance(advanced_results, list)
+                and advanced_results
+                and isinstance(advanced_results[0], dict)
+                else {}
+            )
+            advanced_raw_text = advanced_result.get("raw_content") or ""
+            advanced_cleaned_text = (
+                clean_extracted_text(advanced_raw_text)
+                if advanced_raw_text
+                else ""
+            )
+            _log_stage(
+                claim_id,
+                "tavily_extract_advanced",
+                advanced_started_at,
+                status_code=advanced_response.status_code,
+                has_results=bool(advanced_results),
+            )
 
-        raw_text = tavily_data["results"][0]["raw_content"]
-        cleaned_text = clean_extracted_text(raw_text)
+            if advanced_cleaned_text.strip():
+                cleaned_text = advanced_cleaned_text
+            elif not basic_results and not advanced_results:
+                outcome = "url_extract_empty_failed"
+                if run is not None:
+                    fail_verification_run(
+                        run,
+                        failure_stage="url_extraction",
+                        failure_code="URL_EXTRACTION_EMPTY",
+                        failure_message="No extractable article content was returned.",
+                    )
+                _log_stage(
+                    claim_id,
+                    "url_task_total",
+                    pipeline_started_at,
+                    outcome=outcome,
+                )
+                return
 
     except Exception as e:
         logger.error("URL extraction error for claim %s: %s", claim_id, e)
