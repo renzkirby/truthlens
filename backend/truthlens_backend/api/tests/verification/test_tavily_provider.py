@@ -313,6 +313,31 @@ class TavilyProviderTests(TestCase):
         self.assertEqual(len(returned["results"]), 3)
         self.assertEqual(len(payload["results"]), 6)
 
+    def test_primary_source_recovery_rejects_commercial_government_lookalikes(self):
+        payload = {
+            "results": [
+                {"url": "https://example.gov.com/report", "content": "Lookalike."},
+                {"url": "https://fake.go.net/data", "content": "Lookalike."},
+                {"url": "https://agency.gov.ph/report", "content": "Official."},
+                {"url": "https://ministry.go.jp/report", "content": "Official."},
+            ],
+        }
+        self.client.search.return_value = payload
+
+        _, evidence = self.provider.search_with_payload(
+            "exact factual claim",
+            limit=3,
+            primary_source_recovery=True,
+        )
+
+        self.assertEqual(
+            [item.url for item in evidence],
+            [
+                "https://agency.gov.ph/report",
+                "https://ministry.go.jp/report",
+            ],
+        )
+
     def test_query_is_stripped_without_truncation(self):
         query = "claim " * 100
         self.provider.search(" \n" + query + "\t ")
