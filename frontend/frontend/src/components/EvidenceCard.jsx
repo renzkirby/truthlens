@@ -163,7 +163,7 @@ export default function EvidenceCard({
                      ? EVIDENCE_ASSESSMENT_OPTIONS.find((option) => option.value === editingVerdict)?.desc
                      : "Choose the conclusion this evidence supports about the claim. This is your interpretation, not an official TruthLens verdict."}
                </p>
-               <div>
+               <div className="evidence-card-edit-actions">
                   <button type="button" className="is-primary" disabled={!editingVerdict} onClick={() => onEdit(evidence.id, editingRich, editingText, editingVerdict)}>Save</button>
                   <button type="button" onClick={() => { setEditingId(null); setEditingText(""); setEditingRich(null); setEditingVerdict(""); }}>Cancel</button>
                </div>
