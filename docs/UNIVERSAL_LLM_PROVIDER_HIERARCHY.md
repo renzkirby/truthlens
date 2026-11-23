@@ -125,13 +125,19 @@ job-scoped degradation behavior prevents repeatedly calling a failed provider
 within one verification execution.
 
 When reliability hardening is enabled, the final persisted-evidence evaluation
-may retry Groq once after an HTTP 429 response. The retry is allowed only when
-Groq supplies its documented `retry-after` header and the requested delay,
-including a small scheduling margin, remains within the 15-second interactive
-ceiling. The same final-evaluation prompt is retried once; a second 429, a
-missing or invalid header, or a longer delay does not trigger another Groq
-rate-limit wait. Existing downstream provider-recovery behavior remains
-unchanged, and other Groq operations retain their existing no-retry behavior.
+may retry Groq after an HTTP 429 response using the provider's documented
+`retry-after` header. Because Groq enforces a rolling TPM window, TruthLens may
+perform at most two rate-limit retries while capping their combined wait at
+30 seconds. Each retry reuses the same final-evaluation prompt; missing,
+invalid, or over-budget retry guidance stops further Groq rate-limit waits.
+Existing downstream provider-recovery behavior remains unchanged, and other
+Groq operations retain their existing no-retry behavior.
+
+Reliability hardening also applies a 20-second Gemini request timeout to
+ClaimGate, including the transient alternate Gemini model. This prevents an
+otherwise valid verification from spending an unbounded interval in claim
+extraction before the remaining provider hierarchy can run. Explicit caller
+timeouts still take precedence.
 
 Gemini HTTP 402 (billing), 404 (model/project unavailable), and 429 (quota/rate
 limit) failures are job-blocking for the selected Gemini model. After one such
