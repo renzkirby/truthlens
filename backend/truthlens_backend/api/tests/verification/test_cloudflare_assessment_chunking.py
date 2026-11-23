@@ -68,6 +68,8 @@ class CloudflareAssessmentChunkingTests(SimpleTestCase):
             # credential-aware universal auto-activation so developer machine
             # Cloudflare credentials cannot bypass the legacy flag assertions.
             "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
+            "ENABLE_PROVIDER_RELIABILITY_HARDENING": "0",
+            "ENABLE_GEMINI_TRANSIENT_MODEL_FALLBACK": "0",
             "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "1",
             "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
             "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT": "1",
@@ -350,6 +352,7 @@ class AssessmentReliabilityHardeningTests(SimpleTestCase):
             "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
             "ENABLE_GROQ_BOUNDED_FALLBACK": "1",
             "ENABLE_GEMINI_TRANSIENT_CIRCUIT_BREAKER": "1",
+            "ENABLE_GEMINI_TRANSIENT_MODEL_FALLBACK": "0",
             # Prove the reliability master switch, not the legacy dev flag,
             # promotes Cloudflare assessment chunking in universal routing.
             "CLOUDFLARE_PILOT_ASSESSMENT_CHUNKING": "0",
