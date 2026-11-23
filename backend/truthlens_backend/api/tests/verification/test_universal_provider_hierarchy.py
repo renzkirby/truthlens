@@ -1114,6 +1114,203 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
         self.assertEqual(calls[1].kwargs["messages"][1]["content"], "BOUNDED PROMPT")
 
     @override_settings(APP_ENV="production", DEBUG=False)
+    def test_final_groq_429_retries_once_after_retry_after_header(self):
+        payload = json.dumps({
+            "reasoning": "Grounded in evidence.",
+            "verdict": "UNVERIFIED",
+            "summary": "The evidence remains inconclusive.",
+            "confidence_score": 45,
+            "score_context": "Evidence is insufficient for a decisive verdict.",
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        })
+
+        class ProviderError(RuntimeError):
+            pass
+
+        gemini_503 = ProviderError("service unavailable")
+        gemini_503.code = 503
+        groq_429 = ProviderError("rate limited")
+        groq_429.status_code = 429
+        groq_429.response = SimpleNamespace(headers={"retry-after": "11.5"})
+
+        gemini = Mock()
+        gemini.models.generate_content.side_effect = gemini_503
+        cloudflare = Mock(side_effect=RuntimeError("cloudflare unavailable"))
+        groq = Mock()
+        groq.with_options.return_value.chat.completions.create.side_effect = [
+            groq_429,
+            SimpleNamespace(choices=[SimpleNamespace(
+                message=SimpleNamespace(content=payload)
+            )]),
+        ]
+
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+                    "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                },
+            ),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.call_validated_cloudflare_pilot", cloudflare),
+            patch("api.services.time.sleep") as sleep,
+        ):
+            with llm_provider_scope():
+                result = call_llm_with_fallback(
+                    "Instructions",
+                    "BOUNDED PROMPT",
+                    operation="persisted_evidence_evaluation",
+                    fallback_user_prompt="SMALLER PROMPT",
+                )
+
+        self.assertEqual(result, payload)
+        self.assertEqual(
+            groq.with_options.return_value.chat.completions.create.call_count,
+            2,
+        )
+        sleep.assert_called_once_with(11.75)
+        calls = groq.with_options.return_value.chat.completions.create.call_args_list
+        self.assertEqual(
+            calls[0].kwargs["messages"][1]["content"],
+            calls[1].kwargs["messages"][1]["content"],
+        )
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_final_groq_429_retries_only_once_then_fails_closed(self):
+        class ProviderError(RuntimeError):
+            pass
+
+        gemini_503 = ProviderError("service unavailable")
+        gemini_503.code = 503
+        first_429 = ProviderError("rate limited")
+        first_429.status_code = 429
+        first_429.response = SimpleNamespace(headers={"retry-after": "2"})
+        second_429 = ProviderError("still rate limited")
+        second_429.status_code = 429
+        second_429.response = SimpleNamespace(headers={"retry-after": "2"})
+
+        gemini = Mock()
+        gemini.models.generate_content.side_effect = gemini_503
+        cloudflare = Mock(side_effect=RuntimeError("cloudflare unavailable"))
+        groq = Mock()
+        groq.with_options.return_value.chat.completions.create.side_effect = [
+            first_429,
+            second_429,
+        ]
+
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+                    "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                },
+            ),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.call_validated_cloudflare_pilot", cloudflare),
+            patch("api.services.time.sleep") as sleep,
+        ):
+            with llm_provider_scope():
+                with self.assertRaises(LLMProviderUnavailableError):
+                    call_llm_with_fallback(
+                        "Instructions",
+                        "FINAL PROMPT",
+                        operation="persisted_evidence_evaluation",
+                    )
+
+        self.assertEqual(
+            groq.with_options.return_value.chat.completions.create.call_count,
+            2,
+        )
+        sleep.assert_called_once_with(2.25)
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_final_groq_429_with_excessive_retry_after_fails_without_waiting(self):
+        class ProviderError(RuntimeError):
+            pass
+
+        gemini_503 = ProviderError("service unavailable")
+        gemini_503.code = 503
+        groq_429 = ProviderError("rate limited")
+        groq_429.status_code = 429
+        groq_429.response = SimpleNamespace(headers={"retry-after": "60"})
+
+        gemini = Mock()
+        gemini.models.generate_content.side_effect = gemini_503
+        cloudflare = Mock(side_effect=RuntimeError("cloudflare unavailable"))
+        groq = Mock()
+        groq.with_options.return_value.chat.completions.create.side_effect = groq_429
+
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+                    "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                },
+            ),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.call_validated_cloudflare_pilot", cloudflare),
+            patch("api.services.time.sleep") as sleep,
+        ):
+            with llm_provider_scope():
+                with self.assertRaises(LLMProviderUnavailableError):
+                    call_llm_with_fallback(
+                        "Instructions",
+                        "FINAL PROMPT",
+                        operation="persisted_evidence_evaluation",
+                    )
+
+        groq.with_options.return_value.chat.completions.create.assert_called_once()
+        sleep.assert_not_called()
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_non_final_groq_429_is_not_retried(self):
+        class ProviderError(RuntimeError):
+            pass
+
+        gemini_503 = ProviderError("service unavailable")
+        gemini_503.code = 503
+        groq_429 = ProviderError("rate limited")
+        groq_429.status_code = 429
+        groq_429.response = SimpleNamespace(headers={"retry-after": "2"})
+
+        gemini = Mock()
+        gemini.models.generate_content.side_effect = gemini_503
+        cloudflare = Mock(side_effect=RuntimeError("cloudflare unavailable"))
+        groq = Mock()
+        groq.with_options.return_value.chat.completions.create.side_effect = groq_429
+
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+                    "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                },
+            ),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.call_validated_cloudflare_pilot", cloudflare),
+            patch("api.services.time.sleep") as sleep,
+        ):
+            with llm_provider_scope():
+                with self.assertRaises(LLMProviderUnavailableError):
+                    call_llm_with_fallback(
+                        "Instructions",
+                        "CLAIM GATE PROMPT",
+                        operation="claim_gate",
+                    )
+
+        groq.with_options.return_value.chat.completions.create.assert_called_once()
+        sleep.assert_not_called()
+
+    @override_settings(APP_ENV="production", DEBUG=False)
     def test_cloudflare_413_does_not_poison_later_stage_in_same_scope(self):
         payload = json.dumps({
             "cleaned_claim": "An announcement occurred.",
