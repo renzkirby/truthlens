@@ -97,14 +97,16 @@ DEFAULT_GROQ_VISION_MODEL = "qwen/qwen3.8-27b"
 # Bound 413 recovery fan-out: four original evidence items per chunk, at most
 # six sequential Groq chunk attempts (24 items) for one assessment stage.
 GROQ_ASSESSMENT_MAX_CHUNKS = 6
-# Honor Groq's documented Retry-After header only for the final verdict stage,
-# and keep the synchronous recovery delay bounded for interactive verification.
-GROQ_RATE_LIMIT_RETRY_MAX_SECONDS = 15.0
+# Honor Groq's documented Retry-After header only for the final verdict stage.
+# A rolling TPM window may require more than one short wait, so permit at most
+# two retries while bounding their combined synchronous delay.
+GROQ_RATE_LIMIT_RETRY_MAX_ATTEMPTS = 2
+GROQ_RATE_LIMIT_RETRY_TOTAL_SECONDS = 30.0
 GROQ_RATE_LIMIT_RETRY_SAFETY_SECONDS = 0.25
 
-# Bound verdict-sensitive Gemini stages so an overridden slower reasoning model
-# cannot consume the entire interactive verification window before fallbacks run.
-# With the current Flash-Lite default these are defensive ceilings.
+# Bound latency-sensitive Gemini stages so an alternate transient model cannot
+# consume the entire interactive verification window before fallbacks run.
+CLAIM_GATE_GEMINI_TIMEOUT_MS = 20_000
 CLAIM_EQUIVALENCE_GEMINI_TIMEOUT_MS = 20_000
 PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS = 30_000
 
@@ -479,9 +481,11 @@ def _is_groq_request_too_large(error):
     return _provider_status_code(error) == 413
 
 
-def _groq_rate_limit_retry_delay(error):
-    """Return one bounded Retry-After delay for a Groq HTTP 429 response."""
+def _groq_rate_limit_retry_delay(error, *, remaining_budget):
+    """Return a provider-directed 429 delay within the remaining wait budget."""
     if _provider_status_code(error) != 429:
+        return None
+    if not isinstance(remaining_budget, (int, float)) or remaining_budget <= 0:
         return None
 
     response = getattr(error, "response", None)
@@ -497,12 +501,12 @@ def _groq_rate_limit_retry_delay(error):
 
     if not math.isfinite(retry_after) or retry_after < 0:
         return None
-
-    if retry_after > GROQ_RATE_LIMIT_RETRY_MAX_SECONDS:
+    if retry_after > remaining_budget:
         return None
+
     return min(
         retry_after + GROQ_RATE_LIMIT_RETRY_SAFETY_SECONDS,
-        GROQ_RATE_LIMIT_RETRY_MAX_SECONDS,
+        remaining_budget,
     )
 
 
@@ -656,6 +660,15 @@ def call_llm_with_fallback(
 
     gemini_model = _gemini_model_for_operation(operation)
     gemini_fallback_model = _gemini_transient_fallback_model()
+    effective_gemini_timeout_ms = gemini_timeout_ms
+    if (
+        effective_gemini_timeout_ms is None
+        and hierarchy_active
+        and reliability_hardening_enabled()
+        and operation == "claim_gate"
+    ):
+        effective_gemini_timeout_ms = CLAIM_GATE_GEMINI_TIMEOUT_MS
+
     last_gemini_error = None
     primary_gemini_error = None
 
@@ -668,12 +681,12 @@ def call_llm_with_fallback(
             }
             try:
                 if (
-                    isinstance(gemini_timeout_ms, int)
-                    and not isinstance(gemini_timeout_ms, bool)
-                    and gemini_timeout_ms > 0
+                    isinstance(effective_gemini_timeout_ms, int)
+                    and not isinstance(effective_gemini_timeout_ms, bool)
+                    and effective_gemini_timeout_ms > 0
                 ):
                     gemini_config["http_options"] = types.HttpOptions(
-                        timeout=gemini_timeout_ms
+                        timeout=effective_gemini_timeout_ms
                     )
                 request_config = types.GenerateContentConfig(**gemini_config)
             except Exception as gemini_err:
@@ -1121,25 +1134,40 @@ def call_llm_with_fallback(
         )
         content, groq_err = _try_groq_assessment_chunks()
 
-    groq_rate_limit_delay = None
-    if (
+    groq_rate_limit_retries = 0
+    groq_rate_limit_waited = 0.0
+    while (
         groq_err is not None
         and hierarchy_active
         and reliability_hardening_enabled()
         and operation == PILOT_OPERATION
+        and groq_rate_limit_retries < GROQ_RATE_LIMIT_RETRY_MAX_ATTEMPTS
     ):
-        groq_rate_limit_delay = _groq_rate_limit_retry_delay(groq_err)
+        remaining_budget = (
+            GROQ_RATE_LIMIT_RETRY_TOTAL_SECONDS - groq_rate_limit_waited
+        )
+        groq_rate_limit_delay = _groq_rate_limit_retry_delay(
+            groq_err,
+            remaining_budget=remaining_budget,
+        )
+        if groq_rate_limit_delay is None:
+            break
 
-    if groq_rate_limit_delay is not None:
+        groq_rate_limit_retries += 1
         logger.warning(
-            "Groq final evaluation rate-limited; retrying once after %.2fs.",
+            "Groq final evaluation rate-limited; retrying %s/%s after %.2fs "
+            "(cumulative wait %.2fs).",
+            groq_rate_limit_retries,
+            GROQ_RATE_LIMIT_RETRY_MAX_ATTEMPTS,
             groq_rate_limit_delay,
+            groq_rate_limit_waited + groq_rate_limit_delay,
         )
         time.sleep(groq_rate_limit_delay)
+        groq_rate_limit_waited += groq_rate_limit_delay
         content, groq_err = _try_groq_once(
             groq_retry_prompt,
             variant=groq_retry_variant,
-            retry_number=groq_retry_number + 1,
+            retry_number=groq_retry_number + groq_rate_limit_retries,
         )
 
     if groq_err is not None:
