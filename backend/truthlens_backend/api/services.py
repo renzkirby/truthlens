@@ -498,10 +498,12 @@ def _groq_rate_limit_retry_delay(error):
     if not math.isfinite(retry_after) or retry_after < 0:
         return None
 
-    bounded_delay = retry_after + GROQ_RATE_LIMIT_RETRY_SAFETY_SECONDS
-    if bounded_delay > GROQ_RATE_LIMIT_RETRY_MAX_SECONDS:
+    if retry_after > GROQ_RATE_LIMIT_RETRY_MAX_SECONDS:
         return None
-    return bounded_delay
+    return min(
+        retry_after + GROQ_RATE_LIMIT_RETRY_SAFETY_SECONDS,
+        GROQ_RATE_LIMIT_RETRY_MAX_SECONDS,
+    )
 
 
 def _cloudflare_failure_degrades_job(error):
