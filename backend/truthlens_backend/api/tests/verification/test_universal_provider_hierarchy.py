@@ -908,6 +908,7 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
                 {
                     "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
                     "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                    "ENABLE_GEMINI_TRANSIENT_MODEL_FALLBACK": "0",
                 },
             ),
             patch("api.services.gemini_client", gemini),
@@ -967,6 +968,7 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
                 {
                     "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
                     "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                    "ENABLE_GEMINI_TRANSIENT_MODEL_FALLBACK": "0",
                 },
             ),
             patch("api.services.gemini_client", gemini),
@@ -1343,6 +1345,7 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
                 {
                     "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
                     "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                    "ENABLE_GEMINI_TRANSIENT_MODEL_FALLBACK": "0",
                 },
             ),
             patch("api.services.gemini_client", gemini),
