@@ -129,8 +129,9 @@ may retry Groq once after an HTTP 429 response. The retry is allowed only when
 Groq supplies its documented `retry-after` header and the requested delay,
 including a small scheduling margin, remains within the 15-second interactive
 ceiling. The same final-evaluation prompt is retried once; a second 429, a
-missing or invalid header, or a longer delay fails closed without another wait.
-Other Groq operations retain their existing no-retry behavior.
+missing or invalid header, or a longer delay does not trigger another Groq
+rate-limit wait. Existing downstream provider-recovery behavior remains
+unchanged, and other Groq operations retain their existing no-retry behavior.
 
 Gemini HTTP 402 (billing), 404 (model/project unavailable), and 429 (quota/rate
 limit) failures are job-blocking for the selected Gemini model. After one such
