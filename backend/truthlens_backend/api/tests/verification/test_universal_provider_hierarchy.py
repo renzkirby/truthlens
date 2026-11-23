@@ -1128,14 +1128,14 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
         class ProviderError(RuntimeError):
             pass
 
-        gemini_503 = ProviderError("service unavailable")
-        gemini_503.code = 503
+        gemini_429 = ProviderError("quota unavailable")
+        gemini_429.code = 429
         groq_429 = ProviderError("rate limited")
         groq_429.status_code = 429
         groq_429.response = SimpleNamespace(headers={"retry-after": "11.5"})
 
         gemini = Mock()
-        gemini.models.generate_content.side_effect = gemini_503
+        gemini.models.generate_content.side_effect = gemini_429
         cloudflare = Mock(side_effect=RuntimeError("cloudflare unavailable"))
         groq = Mock()
         groq.with_options.return_value.chat.completions.create.side_effect = [
@@ -1183,8 +1183,8 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
         class ProviderError(RuntimeError):
             pass
 
-        gemini_503 = ProviderError("service unavailable")
-        gemini_503.code = 503
+        gemini_429 = ProviderError("quota unavailable")
+        gemini_429.code = 429
         first_429 = ProviderError("rate limited")
         first_429.status_code = 429
         first_429.response = SimpleNamespace(headers={"retry-after": "2"})
@@ -1193,7 +1193,7 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
         second_429.response = SimpleNamespace(headers={"retry-after": "2"})
 
         gemini = Mock()
-        gemini.models.generate_content.side_effect = gemini_503
+        gemini.models.generate_content.side_effect = gemini_429
         cloudflare = Mock(side_effect=RuntimeError("cloudflare unavailable"))
         groq = Mock()
         groq.with_options.return_value.chat.completions.create.side_effect = [
@@ -1233,14 +1233,14 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
         class ProviderError(RuntimeError):
             pass
 
-        gemini_503 = ProviderError("service unavailable")
-        gemini_503.code = 503
+        gemini_429 = ProviderError("quota unavailable")
+        gemini_429.code = 429
         groq_429 = ProviderError("rate limited")
         groq_429.status_code = 429
         groq_429.response = SimpleNamespace(headers={"retry-after": "60"})
 
         gemini = Mock()
-        gemini.models.generate_content.side_effect = gemini_503
+        gemini.models.generate_content.side_effect = gemini_429
         cloudflare = Mock(side_effect=RuntimeError("cloudflare unavailable"))
         groq = Mock()
         groq.with_options.return_value.chat.completions.create.side_effect = groq_429
@@ -1274,14 +1274,14 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
         class ProviderError(RuntimeError):
             pass
 
-        gemini_503 = ProviderError("service unavailable")
-        gemini_503.code = 503
+        gemini_429 = ProviderError("quota unavailable")
+        gemini_429.code = 429
         groq_429 = ProviderError("rate limited")
         groq_429.status_code = 429
         groq_429.response = SimpleNamespace(headers={"retry-after": "2"})
 
         gemini = Mock()
-        gemini.models.generate_content.side_effect = gemini_503
+        gemini.models.generate_content.side_effect = gemini_429
         cloudflare = Mock(side_effect=RuntimeError("cloudflare unavailable"))
         groq = Mock()
         groq.with_options.return_value.chat.completions.create.side_effect = groq_429
