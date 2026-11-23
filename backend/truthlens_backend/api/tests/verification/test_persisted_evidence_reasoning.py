@@ -31,7 +31,13 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
             "--- EVIDENCE ITEM 1 ---\n"
             "Content:\nPersisted rating: False"
         )
-        with patch(
+        with patch.dict(
+            "os.environ",
+            {
+                "ENABLE_PROVIDER_RELIABILITY_HARDENING": "0",
+                "ENABLE_GROQ_BOUNDED_FALLBACK": "0",
+            },
+        ), patch(
             "api.services.call_llm_with_fallback",
             return_value=json.dumps(self.result),
         ) as call_llm:
