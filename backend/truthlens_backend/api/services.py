@@ -97,6 +97,10 @@ DEFAULT_GROQ_VISION_MODEL = "qwen/qwen3.8-27b"
 # Bound 413 recovery fan-out: four original evidence items per chunk, at most
 # six sequential Groq chunk attempts (24 items) for one assessment stage.
 GROQ_ASSESSMENT_MAX_CHUNKS = 6
+# Honor Groq's documented Retry-After header only for the final verdict stage,
+# and keep the synchronous recovery delay bounded for interactive verification.
+GROQ_RATE_LIMIT_RETRY_MAX_SECONDS = 15.0
+GROQ_RATE_LIMIT_RETRY_SAFETY_SECONDS = 0.25
 
 # Bound verdict-sensitive Gemini stages so an overridden slower reasoning model
 # cannot consume the entire interactive verification window before fallbacks run.
@@ -473,6 +477,31 @@ def _is_transient_gemini_server_error(error):
 
 def _is_groq_request_too_large(error):
     return _provider_status_code(error) == 413
+
+
+def _groq_rate_limit_retry_delay(error):
+    """Return one bounded Retry-After delay for a Groq HTTP 429 response."""
+    if _provider_status_code(error) != 429:
+        return None
+
+    response = getattr(error, "response", None)
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        return None
+
+    try:
+        raw_retry_after = headers.get("retry-after")
+        retry_after = float(raw_retry_after)
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+    if not math.isfinite(retry_after) or retry_after < 0:
+        return None
+
+    bounded_delay = retry_after + GROQ_RATE_LIMIT_RETRY_SAFETY_SECONDS
+    if bounded_delay > GROQ_RATE_LIMIT_RETRY_MAX_SECONDS:
+        return None
+    return bounded_delay
 
 
 def _cloudflare_failure_degrades_job(error):
@@ -1051,9 +1080,12 @@ def call_llm_with_fallback(
             return None, ValueError("INVALID_PILOT_FALLBACK_JSON")
         return combined, None
 
+    groq_retry_prompt = groq_user_prompt
+    groq_retry_variant = groq_request_variant
+    groq_retry_number = 0
     content, groq_err = _try_groq_once(
-        groq_user_prompt,
-        variant=groq_request_variant,
+        groq_retry_prompt,
+        variant=groq_retry_variant,
     )
 
     if (
@@ -1066,10 +1098,13 @@ def call_llm_with_fallback(
             "Groq rejected the full request as too large; retrying once with "
             "the deterministic bounded fallback dossier."
         )
+        groq_retry_prompt = resolved_fallback_user_prompt
+        groq_retry_variant = "BOUNDED"
+        groq_retry_number = 1
         content, groq_err = _try_groq_once(
-            resolved_fallback_user_prompt,
-            variant="BOUNDED",
-            retry_number=1,
+            groq_retry_prompt,
+            variant=groq_retry_variant,
+            retry_number=groq_retry_number,
         )
 
     if (
@@ -1083,6 +1118,27 @@ def call_llm_with_fallback(
             "retrying with bounded lossless keyed chunks."
         )
         content, groq_err = _try_groq_assessment_chunks()
+
+    groq_rate_limit_delay = None
+    if (
+        groq_err is not None
+        and hierarchy_active
+        and reliability_hardening_enabled()
+        and operation == PILOT_OPERATION
+    ):
+        groq_rate_limit_delay = _groq_rate_limit_retry_delay(groq_err)
+
+    if groq_rate_limit_delay is not None:
+        logger.warning(
+            "Groq final evaluation rate-limited; retrying once after %.2fs.",
+            groq_rate_limit_delay,
+        )
+        time.sleep(groq_rate_limit_delay)
+        content, groq_err = _try_groq_once(
+            groq_retry_prompt,
+            variant=groq_retry_variant,
+            retry_number=groq_retry_number + 1,
+        )
 
     if groq_err is not None:
         logger.error(
