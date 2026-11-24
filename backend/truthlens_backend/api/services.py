@@ -259,6 +259,42 @@ def _with_user_facing_summary_rules(system_instructions):
     return f"{system_instructions.rstrip()}\n\n{_AI_SUMMARY_RULES.strip()}\n"
 
 
+_FAKE_MISLEADING_PRECEDENCE_RULES = """
+FAKE VS MISLEADING PRECEDENCE:
+- Do not choose MISLEADING merely because a real person, event, image, video,
+  quotation, statistic, document, or topic exists somewhere in the evidence.
+- Choose MISLEADING only when the supplied evidence establishes BOTH:
+  (1) a substantial genuine factual component of the same submitted proposition
+  or content; and
+  (2) a material distortion of that genuine component through missing context,
+  false context, selective presentation, materially wrong time/location context,
+  or a materially changed interpretation.
+- The genuine component and the distortion must concern the same submitted
+  proposition or content and must both be established by the supplied evidence.
+  Do not infer either one from topic overlap, plausibility, or outside knowledge.
+- Direct contradiction does not automatically require FAKE when the contradiction
+  specifically arises from a material contextual distortion of genuine underlying
+  content. In that situation, use MISLEADING only when the two-part requirement
+  above is established.
+- Choose FAKE when the material asserted core itself is fabricated, did not occur,
+  is falsely attributed without a genuine corresponding statement/action, or has
+  no substantial genuine factual substrate corresponding to the submitted
+  assertion.
+- A real surrounding event, person, photo, video, or topic does not convert a
+  separate invented quotation, action, event, attribution, or other fabricated
+  core assertion into MISLEADING.
+- If the evidence does not establish the FAKE-versus-MISLEADING relationship
+  clearly enough, choose UNVERIFIED rather than guessing.
+"""
+
+
+def _with_fake_misleading_precedence_rules(system_instructions):
+    return (
+        f"{system_instructions.rstrip()}\n\n"
+        f"{_FAKE_MISLEADING_PRECEDENCE_RULES.strip()}\n"
+    )
+
+
 # Keep routine and reasoning model seams separate even though the defense-period
 # defaults currently use the same low-latency free-tier model. Operators can
 # still override GEMINI_REASONING_MODEL independently after validation.
@@ -2322,6 +2358,9 @@ def evaluate_image_claim_with_gfc(
             "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
         }
         """
+    system_instructions = _with_fake_misleading_precedence_rules(
+        system_instructions
+    )
     system_instructions = _with_user_facing_summary_rules(system_instructions)
 
     user_data = (
@@ -2414,6 +2453,9 @@ def evaluate_image_claim_with_tavily(
         "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
     }
     """
+    system_instructions = _with_fake_misleading_precedence_rules(
+        system_instructions
+    )
     system_instructions = _with_user_facing_summary_rules(system_instructions)
 
     user_data = (
@@ -2550,6 +2592,9 @@ def build_persisted_evidence_prompt(
         "contextual_basis_evidence_ids": ["Exact Evidence link ID copied from the dossier"]
     }
     """
+    system_instructions = _with_fake_misleading_precedence_rules(
+        system_instructions
+    )
     system_instructions = _with_user_facing_summary_rules(system_instructions)
 
     official_satire_ids_text = ",".join(official_satire_evidence_ids)
@@ -3524,6 +3569,9 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRA
         "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
     }
     """
+    system_instructions = _with_fake_misleading_precedence_rules(
+        system_instructions
+    )
     system_instructions = _with_user_facing_summary_rules(system_instructions)
 
     user_data = (
@@ -3609,6 +3657,9 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
         "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
     }
     """
+    system_instructions = _with_fake_misleading_precedence_rules(
+        system_instructions
+    )
     system_instructions = _with_user_facing_summary_rules(system_instructions)
 
     user_data = (
