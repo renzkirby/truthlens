@@ -106,7 +106,8 @@ GROQ_RATE_LIMIT_RETRY_SAFETY_SECONDS = 0.25
 
 # Bound latency-sensitive Gemini stages so an alternate transient model cannot
 # consume the entire interactive verification window before fallbacks run.
-CLAIM_GATE_GEMINI_TIMEOUT_MS = 20_000
+# Explicit caller timeouts still take precedence.
+RELIABILITY_DEFAULT_GEMINI_TIMEOUT_MS = 20_000
 CLAIM_EQUIVALENCE_GEMINI_TIMEOUT_MS = 20_000
 PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS = 30_000
 
@@ -665,9 +666,9 @@ def call_llm_with_fallback(
         effective_gemini_timeout_ms is None
         and hierarchy_active
         and reliability_hardening_enabled()
-        and operation == "claim_gate"
+        and operation is not None
     ):
-        effective_gemini_timeout_ms = CLAIM_GATE_GEMINI_TIMEOUT_MS
+        effective_gemini_timeout_ms = RELIABILITY_DEFAULT_GEMINI_TIMEOUT_MS
 
     last_gemini_error = None
     primary_gemini_error = None
