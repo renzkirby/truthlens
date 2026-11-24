@@ -3318,6 +3318,185 @@ def _bounded_structured_misleading_context(
     return json.dumps(selected, ensure_ascii=False)
 
 
+
+_FALSE_CONTEXT_AUDIT_CLAIM_PATTERNS = (
+    r"\bedited\b",
+    r"\bspliced\b",
+    r"\bclipped\b",
+    r"\bcropped\b",
+    r"\brecaptioned\b",
+    r"\bre-captioned\b",
+    r"\bout[- ]of[- ]context\b",
+    r"\bmisleadingly edited\b",
+)
+
+
+def _claim_needs_fake_false_context_audit(original_claim):
+    """Open a narrow FAKE-vs-MISLEADING audit for explicit manipulation claims.
+
+    These lexical cues never determine the verdict. They only authorize a compact
+    second-stage relationship check when the first evaluator returned FAKE for a
+    proposition that itself explicitly concerns edited/recontextualized material.
+    """
+    if not isinstance(original_claim, str) or not original_claim.strip():
+        return False
+    normalized = original_claim.casefold()
+    return any(
+        re.search(pattern, normalized)
+        for pattern in _FALSE_CONTEXT_AUDIT_CLAIM_PATTERNS
+    )
+
+
+def _fake_false_context_unverified_result():
+    return {
+        "reasoning": (
+            "The persisted evidence contradicts the submitted claim, but the "
+            "available relationship audit could not safely distinguish a fabricated "
+            "core from genuine material presented in a materially false context."
+        ),
+        "verdict": "UNVERIFIED",
+        "summary": (
+            "The evidence contradicts the claim, but does not establish clearly "
+            "enough whether the core assertion was fabricated or genuine material "
+            "was materially recontextualized."
+        ),
+        "confidence_score": 0,
+        "score_context": (
+            "FAKE-versus-MISLEADING relationship could not be resolved safely."
+        ),
+        "contextual_basis_kind": "NONE",
+        "contextual_basis_evidence_ids": [],
+    }
+
+
+def _audit_fake_false_context_signal(
+    original_claim,
+    evaluator_result,
+    evidence_groups=(),
+):
+    """Resolve FAKE vs FALSE_CONTEXT only for explicit manipulated-media claims."""
+    compact_context = _bounded_structured_misleading_context(
+        (),
+        evidence_groups,
+    )
+    if not compact_context or compact_context == "[]":
+        return _fake_false_context_unverified_result()
+
+    system_instructions = """
+    Role: You are the TruthLens FAKE-vs-MISLEADING false-context auditor.
+
+    Use ONLY the supplied assessed persisted evidence. Do not use pre-trained
+    knowledge, external facts, source-title labels alone, or assumptions.
+
+    The first evaluator returned FAKE. The submitted proposition itself explicitly
+    concerns edited, spliced, clipped, cropped, re-captioned, or otherwise
+    recontextualized material. Determine only the factual relationship:
+
+    - MATERIAL_MISDESCRIPTION: the underlying quoted words, media, event, exchange,
+      or other material is genuine and materially connected to the submitted claim,
+      but editing, omission, clipping, chronology, captioning, attribution context,
+      or presentation changes its ordinary factual meaning. This maps to MISLEADING
+      with basis_kind=FALSE_CONTEXT or PARTIAL_TRUTH.
+    - FABRICATED_CORE: the asserted core quotation, admission, action, event, or
+      attribution itself did not occur and the genuine surrounding person/photo/
+      topic is merely incidental. This remains FAKE.
+    - INSUFFICIENT_OR_CONFLICTING: the assessed evidence cannot safely distinguish
+      those relationships.
+
+    A genuine video/photo/person by itself is NOT enough for MATERIAL_MISDESCRIPTION.
+    The evidence must establish that genuine material from the same submitted
+    proposition was transformed or stripped of material context in a way that
+    changes the claim's meaning.
+
+    Return JSON containing exactly:
+    {
+      "relationship": "MATERIAL_MISDESCRIPTION|FABRICATED_CORE|INSUFFICIENT_OR_CONFLICTING",
+      "basis_kind": "NONE|PARTIAL_TRUTH|FALSE_CONTEXT",
+      "basis_evidence_ids": ["exact persisted evidence link ID"]
+    }
+    """
+    user_data = (
+        f"<claim>{original_claim}</claim>\n\n"
+        f"<first_evaluator_verdict>{evaluator_result.get('verdict', 'FAKE')}"
+        f"</first_evaluator_verdict>\n\n"
+        f"<assessed_candidates>{compact_context}</assessed_candidates>"
+    )
+
+    try:
+        response_text = call_llm_with_fallback(
+            system_instructions,
+            user_data,
+            operation=STRUCTURED_MISLEADING_AUDIT_OPERATION,
+            gemini_timeout_ms=PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
+        )
+        audited = _parse_llm_json(response_text)
+        if not isinstance(audited, dict):
+            raise ValueError("false-context audit response was not a JSON object")
+        relationship = audited.get("relationship")
+        basis_kind = audited.get("basis_kind", "NONE")
+        basis_ids = [
+            str(value).strip()
+            for value in audited.get("basis_evidence_ids", [])
+            if isinstance(value, str) and value.strip()
+        ]
+        if relationship not in {
+            "MATERIAL_MISDESCRIPTION",
+            "FABRICATED_CORE",
+            "INSUFFICIENT_OR_CONFLICTING",
+        }:
+            raise ValueError("false-context audit returned invalid relationship")
+
+        if relationship == "MATERIAL_MISDESCRIPTION":
+            if basis_kind not in {"PARTIAL_TRUTH", "FALSE_CONTEXT"} or not basis_ids:
+                raise ValueError("false-context audit lacked a valid contextual basis")
+            persisted_ids = _persisted_evidence_link_ids(evidence_groups)
+            if any(value not in persisted_ids for value in basis_ids):
+                raise ValueError("false-context audit cited non-persisted evidence")
+            result = {
+                "reasoning": (
+                    "Assessed persisted evidence establishes genuine underlying "
+                    "material from the submitted proposition, but the editing or "
+                    "presentation materially changes its factual meaning."
+                ),
+                "verdict": "MISLEADING",
+                "summary": (
+                    "The claim uses genuine underlying material, but editing or "
+                    "missing context materially changes what that material conveys."
+                ),
+                "confidence_score": 90,
+                "score_context": (
+                    "Assessed claim-scoped evidence establishes genuine material "
+                    "presented in a materially false context."
+                ),
+                "contextual_basis_kind": basis_kind,
+                "contextual_basis_evidence_ids": basis_ids,
+            }
+            if not has_usable_contextual_basis(
+                result,
+                evidence_groups,
+                "MISLEADING",
+            ):
+                raise ValueError(
+                    "false-context basis did not meet the usable quality floor"
+                )
+            return result
+
+        if relationship == "FABRICATED_CORE":
+            result = dict(evaluator_result)
+            result["verdict"] = "FAKE"
+            result["contextual_basis_kind"] = "NONE"
+            result["contextual_basis_evidence_ids"] = []
+            return result
+
+        return _fake_false_context_unverified_result()
+    except Exception as exc:
+        logger.warning(
+            "FAKE false-context audit unavailable (%s).",
+            _provider_error_label(exc),
+        )
+        return _fake_false_context_unverified_result()
+
+
 def _structured_misleading_signal_unverified_result():
     return {
         "reasoning": (
@@ -3642,22 +3821,22 @@ def evaluate_claim_with_persisted_evidence(
             )
             if deterministic_misleading is not None:
                 return deterministic_misleading
-            if (
-                parsed_result.get("verdict") == "MISLEADING"
-                and parsed_result.get("contextual_basis_kind")
-                != "SATIRE_ORIGIN_OF_MISINFORMATION"
-            ):
-                return _audit_misleading_materiality(
-                    original_claim,
-                    evidence_context,
-                    parsed_result,
-                    evidence_groups,
-                )
             return _audit_structured_misleading_signal(
                 original_claim,
                 evidence_context,
                 parsed_result,
                 structured_misleading_ids,
+                evidence_groups,
+            )
+
+        if (
+            parsed_result.get("verdict") == "FAKE"
+            and official_fact_check_resolution == OFFICIAL_FACT_CHECK_RESOLUTION_NONE
+            and _claim_needs_fake_false_context_audit(original_claim)
+        ):
+            return _audit_fake_false_context_signal(
+                original_claim,
+                parsed_result,
                 evidence_groups,
             )
 
