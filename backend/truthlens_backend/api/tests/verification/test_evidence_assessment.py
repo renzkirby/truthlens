@@ -462,7 +462,7 @@ class EvidenceAssessmentTests(SimpleTestCase):
             "Preserve role direction",
             "Do not collapse distinct actions into one another",
             "does NOT support",
-            "CONTEX",
+            "These are CONTEXT",
         ):
             with self.subTest(required_rule=required_rule):
                 self.assertIn(required_rule, system_instructions)
