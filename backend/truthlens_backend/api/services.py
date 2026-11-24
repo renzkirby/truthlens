@@ -2739,8 +2739,28 @@ def _qualified_satire_signal_candidates(evidence_groups):
             candidates.append({
                 "alias": f"S{len(candidates) + 1}",
                 "evidence_id": evidence_id,
+                "title": str(getattr(item, "title", "") or "")[:240],
+                "content": str(getattr(item, "content", "") or "")[:700],
+                "stance": str(getattr(item, "stance", "") or ""),
+                "relevance_score": getattr(item, "relevance_score", None),
+                "directness_score": getattr(item, "directness_score", None),
             })
     return candidates
+
+
+def _render_satire_provenance_candidates(candidates):
+    """Render only qualified satire-signal evidence for the provenance audit."""
+    rows = []
+    for candidate in candidates:
+        rows.append({
+            "alias": candidate["alias"],
+            "title": candidate.get("title", ""),
+            "content": candidate.get("content", ""),
+            "stance": candidate.get("stance", ""),
+            "relevance_score": candidate.get("relevance_score"),
+            "directness_score": candidate.get("directness_score"),
+        })
+    return json.dumps(rows, ensure_ascii=False)
 
 
 def _audit_persisted_satire_provenance(
@@ -2758,6 +2778,7 @@ def _audit_persisted_satire_provenance(
         candidate["alias"]: candidate["evidence_id"]
         for candidate in candidates
     }
+    candidate_context = _render_satire_provenance_candidates(candidates)
     system_instructions = """
     Role: You are the TruthLens satire-provenance relationship auditor.
 
@@ -2792,14 +2813,18 @@ def _audit_persisted_satire_provenance(
     """
     first_verdict = evaluator_result.get("verdict", "UNVERIFIED")
 
-    def audit_prompt(context):
+    def audit_prompt(_context):
         return system_instructions, (
             f"<claim>{original_claim}</claim>\n\n"
             f"<first_evaluator_verdict>{first_verdict}</first_evaluator_verdict>\n"
             f"<satire_signal_aliases>{json.dumps(alias_to_id)}</satire_signal_aliases>\n\n"
-            f"<persisted_evidence>{context}</persisted_evidence>"
+            f"<satire_candidate_evidence>{candidate_context}</satire_candidate_evidence>"
         )
 
+    # The main evaluator has already consumed the complete dossier. This
+    # provenance-only audit receives only assessed evidence that passed the
+    # existing quality floor and contains an explicit satire/parody signal.
+    # That reduces provider load without weakening same-proposition eligibility.
     _, user_data = audit_prompt(evidence_context)
     try:
         response_text = call_llm_with_fallback(
