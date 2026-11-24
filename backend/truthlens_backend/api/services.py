@@ -2601,11 +2601,13 @@ def build_persisted_evidence_prompt(
     - If the exact submitted proposition is not sufficiently established, return
       UNVERIFIED rather than using broader context to manufacture a misleading
       relationship.
-    - Preserve entity, predicate/action/relationship, subject/object roles,
-      event, location, and time scope. Evidence about a separate event, action,
-      relationship, role direction, or time period must not be used as support or
-      contradiction unless the supplied passage explicitly connects it to the
-      submitted proposition.
+    - Preserve entity, event, location, and time scope. Evidence about a separate
+      event or time period must not be used as the explanation for the claim unless
+      the supplied evidence explicitly connects them.
+    - Also preserve predicate/action/relationship identity and subject/object roles.
+      Evidence about a separate action, relationship, or reversed role direction
+      must not be used as support or contradiction unless the supplied passage
+      explicitly connects it to the submitted proposition.
     - Evidence stance labels are assessment metadata, not proof. Re-check the
       supplied passage itself before relying on SUPPORTS or REFUTES. If the passage
       describes a different action/relation involving the same actor and topic,
@@ -3562,16 +3564,30 @@ def _audit_structured_misleading_signal(
 
     Classify the relationship between the exact submitted proposition and evidence:
     - MATERIAL_MISDESCRIPTION: a substantial genuine factual substrate of the same
-      proposition exists (same material event, program, action, media, quantity,
-      actor/object relationship, or occurrence), but the claim materially changes
-      its nature, legal/status relationship, date, quantity, framing, omission, or
-      context. Example pattern: a real program involving the same land/amount and
-      private parties is described as a sale when the evidence establishes a
-      different land-use or development relationship.
+      submitted content or proposition exists (same material event, program,
+      remarks, statement, media, quantity, actor/object relationship, or occurrence),
+      but the claim materially changes its nature, legal/status relationship, date,
+      quantity, meaning, framing, omission, or context. The genuine substrate need
+      not itself literally perform the overstated action if the evidence establishes
+      that the submitted claim is a materially distorted paraphrase, interpretation,
+      caption, or characterization of that genuine material.
+      Example patterns:
+      * a real program involving the same land/amount and private parties is
+        described as a sale when the evidence establishes a different land-use or
+        development relationship;
+      * genuine remarks about an investigation or process are materially
+        misrepresented as the speaker calling for the investigation itself to stop.
     - FABRICATED_CORE: the asserted core quotation, action, event, policy, or
-      attribution itself did not occur or was invented. A real person, photograph,
-      location, or related topic is merely incidental. Example pattern: a real
-      politician/photo paired with an invented quotation.
+      attribution itself did not occur or was invented, AND the evidence does not
+      establish a substantial genuine same-content/source substrate that was
+      materially distorted into the submitted assertion. A real person, photograph,
+      location, or merely related topic is incidental. Example pattern: a real
+      politician/photo paired with a quotation that was wholly invented rather than
+      a distorted paraphrase of genuine remarks.
+    - When distinguishing the two, ask whether the false assertion was created by
+      materially changing the meaning of genuine same-source/content material. If
+      yes, choose MATERIAL_MISDESCRIPTION. If the asserted words/action were simply
+      invented without such a genuine substrate, choose FABRICATED_CORE.
     - FULLY_SUPPORTED: every material assertion in the submitted proposition is
       explicitly supported by the persisted evidence.
     - INSUFFICIENT_OR_CONFLICTING: the evidence cannot safely establish one of the
