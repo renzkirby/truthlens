@@ -3125,6 +3125,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                 claims=len(gfc_claims),
             )
 
+            rating_policy_logged = False
             if gfc_claims and run is not None:
                 evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
                 precheck_fact_check_groups = (
@@ -3141,12 +3142,16 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                             precheck_fact_check_groups,
                         )
                     )
-                    _log_stage(
-                        claim_id,
-                        "url_gfc_official_rating_resolution",
-                        official_rating_started_at,
-                        resolution=official_rating_policy["resolution"],
-                    )
+                    if _official_rating_policy_has_signal(
+                        official_rating_policy
+                    ):
+                        _log_stage(
+                            claim_id,
+                            "url_gfc_official_rating_resolution",
+                            official_rating_started_at,
+                            resolution=official_rating_policy["resolution"],
+                        )
+                        rating_policy_logged = True
 
             if gfc_claims:
                 coverage_started_at = time.perf_counter()
@@ -3155,6 +3160,32 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     for claim_data in gfc_claims[:5]
                     if isinstance(claim_data, dict)
                 ]
+                coverage = None
+                if not _official_rating_policy_has_signal(
+                    official_rating_policy
+                ):
+                    coverage = assess_fact_check_proposition_coverage(
+                        cleaned_claim,
+                        reviewed_claims,
+                    )
+                    if precheck_fact_check_groups:
+                        official_rating_started_at = time.perf_counter()
+                        official_rating_policy = (
+                            _resolve_official_fact_check_rating_policy(
+                                cleaned_claim,
+                                precheck_fact_check_groups,
+                                coverage=coverage,
+                            )
+                        )
+                        if not rating_policy_logged:
+                            _log_stage(
+                                claim_id,
+                                "url_gfc_official_rating_resolution",
+                                official_rating_started_at,
+                                resolution=official_rating_policy["resolution"],
+                            )
+                            rating_policy_logged = True
+
                 if (
                     official_rating_policy["resolution"]
                     != OFFICIAL_FACT_CHECK_RESOLUTION_NONE
@@ -3162,9 +3193,21 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     is_relevant = True
                     gfc_terminally_sufficient = True
                     gfc_coverage_reason_code = "EXACT_OR_EQUIVALENT_COVERAGE"
-                    coverage_candidate_count = len(reviewed_claims)
-                    coverage_relevant_count = 1
-                    coverage_covered_count = 1
+                    coverage_candidate_count = (
+                        coverage["candidate_count"]
+                        if coverage is not None
+                        else len(reviewed_claims)
+                    )
+                    coverage_relevant_count = (
+                        coverage["relevant_candidate_count"]
+                        if coverage is not None
+                        else 1
+                    )
+                    coverage_covered_count = (
+                        coverage["covered_candidate_count"]
+                        if coverage is not None
+                        else 1
+                    )
                     _log_stage(
                         claim_id,
                         "url_gfc_relevance_bypassed",
@@ -3173,14 +3216,26 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         resolution=official_rating_policy["resolution"],
                     )
                 elif official_rating_policy["misleading_evidence_ids"]:
-                    # Structured Misleading is a contextual signal only. Enrich
-                    # the persisted dossier before allowing a final verdict.
+                    # A proposition-covering structured Misleading rating is a
+                    # context signal only. Enrich before final arbitration.
                     is_relevant = True
                     gfc_terminally_sufficient = False
                     gfc_coverage_reason_code = "EXACT_OR_EQUIVALENT_COVERAGE"
-                    coverage_candidate_count = len(reviewed_claims)
-                    coverage_relevant_count = 1
-                    coverage_covered_count = 1
+                    coverage_candidate_count = (
+                        coverage["candidate_count"]
+                        if coverage is not None
+                        else len(reviewed_claims)
+                    )
+                    coverage_relevant_count = (
+                        coverage["relevant_candidate_count"]
+                        if coverage is not None
+                        else 1
+                    )
+                    coverage_covered_count = (
+                        coverage["covered_candidate_count"]
+                        if coverage is not None
+                        else 1
+                    )
                     _log_stage(
                         claim_id,
                         "url_gfc_relevance_bypassed",
@@ -3189,10 +3244,11 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         resolution=official_rating_policy["resolution"],
                     )
                 else:
-                    coverage = assess_fact_check_proposition_coverage(
-                        cleaned_claim,
-                        reviewed_claims,
-                    )
+                    if coverage is None:
+                        coverage = assess_fact_check_proposition_coverage(
+                            cleaned_claim,
+                            reviewed_claims,
+                        )
                     is_relevant = coverage["relevant_candidate_count"] > 0
                     gfc_terminally_sufficient = coverage["terminally_sufficient"]
                     gfc_coverage_reason_code = coverage["reason_code"]
