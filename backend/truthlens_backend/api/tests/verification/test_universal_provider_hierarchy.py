@@ -1206,10 +1206,10 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
         gemini_429.code = 429
         first_429 = ProviderError("rate limited")
         first_429.status_code = 429
-        first_429.response = SimpleNamespace(headers={"retry-after": "14.75"})
+        first_429.response = SimpleNamespace(headers={"retry-after": "6.75"})
         second_429 = ProviderError("rolling window still limited")
         second_429.status_code = 429
-        second_429.response = SimpleNamespace(headers={"retry-after": "8.5875"})
+        second_429.response = SimpleNamespace(headers={"retry-after": "2.5"})
 
         gemini = Mock()
         gemini.models.generate_content.side_effect = gemini_429
@@ -1251,7 +1251,7 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
         )
         self.assertEqual(
             [call.args[0] for call in sleep.call_args_list],
-            [15.0, 8.8375],
+            [7.0, 2.75],
         )
         calls = groq.with_options.return_value.chat.completions.create.call_args_list
         self.assertEqual(
@@ -1310,27 +1310,21 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
         )
 
     @override_settings(APP_ENV="production", DEBUG=False)
-    def test_final_groq_429_respects_cumulative_wait_budget(self):
+    def test_final_groq_429_skips_long_single_wait(self):
         class ProviderError(RuntimeError):
             pass
 
         gemini_429 = ProviderError("quota unavailable")
         gemini_429.code = 429
-        first_429 = ProviderError("rate limited")
-        first_429.status_code = 429
-        first_429.response = SimpleNamespace(headers={"retry-after": "20"})
-        second_429 = ProviderError("still rate limited")
-        second_429.status_code = 429
-        second_429.response = SimpleNamespace(headers={"retry-after": "10"})
+        groq_429 = ProviderError("rate limited")
+        groq_429.status_code = 429
+        groq_429.response = SimpleNamespace(headers={"retry-after": "20"})
 
         gemini = Mock()
         gemini.models.generate_content.side_effect = gemini_429
         cloudflare = Mock(side_effect=RuntimeError("cloudflare unavailable"))
         groq = Mock()
-        groq.with_options.return_value.chat.completions.create.side_effect = [
-            first_429,
-            second_429,
-        ]
+        groq.with_options.return_value.chat.completions.create.side_effect = groq_429
 
         with (
             patch.dict(
@@ -1353,11 +1347,8 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
                         operation="persisted_evidence_evaluation",
                     )
 
-        self.assertEqual(
-            groq.with_options.return_value.chat.completions.create.call_count,
-            2,
-        )
-        sleep.assert_called_once_with(20.25)
+        groq.with_options.return_value.chat.completions.create.assert_called_once()
+        sleep.assert_not_called()
 
     @override_settings(APP_ENV="production", DEBUG=False)
     def test_final_groq_429_with_excessive_retry_after_fails_without_waiting(self):
