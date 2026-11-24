@@ -1825,11 +1825,21 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
 
             if is_text_claim:
                 fidelity_started_at = time.perf_counter()
-                fidelity_outcome, fidelity_reason = inspect_direct_text_claim_fidelity(
+                fidelity_result = inspect_direct_text_claim_fidelity(
                     raw_text,
                     cleaned_claim,
                     return_reason=True,
                 )
+                if (
+                    isinstance(fidelity_result, tuple)
+                    and len(fidelity_result) == 2
+                ):
+                    fidelity_outcome, fidelity_reason = fidelity_result
+                else:
+                    # Preserve compatibility with older test/integration seams
+                    # that mock the historical PASS/FAIL/SKIP string contract.
+                    fidelity_outcome = fidelity_result
+                    fidelity_reason = "LEGACY_STATUS_ONLY"
                 _log_stage(
                     claim_id,
                     "claim_fidelity_guard",
