@@ -102,6 +102,10 @@ GROQ_ASSESSMENT_MAX_CHUNKS = 6
 # two retries while bounding their combined synchronous delay.
 GROQ_RATE_LIMIT_RETRY_MAX_ATTEMPTS = 2
 GROQ_RATE_LIMIT_RETRY_TOTAL_SECONDS = 30.0
+# Long synchronous waits are poor recovery candidates for an interactive
+# verification job. Short rolling-window resets may still recover; longer waits
+# fail closed immediately so another user request is not held for a doomed retry.
+GROQ_RATE_LIMIT_RETRY_MAX_SINGLE_DELAY_SECONDS = 10.0
 GROQ_RATE_LIMIT_RETRY_SAFETY_SECONDS = 0.25
 
 # Bound latency-sensitive Gemini stages so an alternate transient model cannot
@@ -265,8 +269,15 @@ FAKE VS MISLEADING PRECEDENCE:
   same submitted proposition/content and a material distortion of that component
   through false or missing context. Mere topic/person/media overlap is
   insufficient.
+- Authentic media or remarks that are materially re-dated, re-captioned,
+  selectively clipped, or presented as referring to a different event/action may
+  qualify as MISLEADING only when the supplied evidence establishes both the
+  authentic underlying material and the truth-changing context change.
 - FAKE applies when the material asserted core is fabricated, did not occur, or
   is falsely attributed. Direct contradiction does not override the rule above.
+  Do not choose FAKE merely because a fact-check source says a post is false when
+  the supplied evidence instead establishes a genuine underlying item whose
+  context or meaning was materially changed.
 - If the distinction is not established from supplied evidence, use UNVERIFIED.
 """
 
@@ -521,13 +532,14 @@ def _groq_rate_limit_retry_delay(error, *, remaining_budget):
 
     if not math.isfinite(retry_after) or retry_after < 0:
         return None
-    if retry_after > remaining_budget:
+
+    requested_delay = retry_after + GROQ_RATE_LIMIT_RETRY_SAFETY_SECONDS
+    if requested_delay > remaining_budget:
+        return None
+    if requested_delay > GROQ_RATE_LIMIT_RETRY_MAX_SINGLE_DELAY_SECONDS:
         return None
 
-    return min(
-        retry_after + GROQ_RATE_LIMIT_RETRY_SAFETY_SECONDS,
-        remaining_budget,
-    )
+    return requested_delay
 
 
 def _cloudflare_failure_degrades_job(error):
