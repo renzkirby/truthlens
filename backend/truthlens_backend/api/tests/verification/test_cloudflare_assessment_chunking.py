@@ -68,6 +68,7 @@ class CloudflareAssessmentChunkingTests(SimpleTestCase):
             # credential-aware universal auto-activation so developer machine
             # Cloudflare credentials cannot bypass the legacy flag assertions.
             "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
+            "ENABLE_PROVIDER_RELIABILITY_HARDENING": "0",
             "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "1",
             "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
             "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT": "1",
