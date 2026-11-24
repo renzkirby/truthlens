@@ -148,6 +148,17 @@ one combined final evaluation. Terminally sufficient GFC paths keep their
 existing early-evaluation behavior. This reduces redundant provider calls
 without changing retrieval, evidence eligibility, or verdict policy.
 
+All primary verdict evaluators share the same FAKE-versus-MISLEADING
+precedence rules. A genuine person, event, image, video, quotation, statistic,
+document, or topic is not enough by itself to justify MISLEADING. MISLEADING
+requires persisted evidence to establish both a substantial genuine component
+of the same submitted proposition/content and a material contextual distortion
+of that component. Fabricated-core claims remain FAKE, while unresolved
+FAKE-versus-MISLEADING relationships abstain to UNVERIFIED rather than guessing.
+The existing misleading-materiality audit remains the second-stage safeguard
+for proposed MISLEADING verdicts; no new provider call is added for ordinary
+FAKE results.
+
 Gemini HTTP 402 (billing), 404 (model/project unavailable), and 429 (quota/rate
 limit) failures are job-blocking for the selected Gemini model. After one such
 failure, the same verification job stops repeating requests to that model and
