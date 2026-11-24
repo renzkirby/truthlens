@@ -133,11 +133,20 @@ invalid, or over-budget retry guidance stops further Groq rate-limit waits.
 Existing downstream provider-recovery behavior remains unchanged, and other
 Groq operations retain their existing no-retry behavior.
 
-Reliability hardening also applies a 20-second Gemini request timeout to
-ClaimGate, including the transient alternate Gemini model. This prevents an
-otherwise valid verification from spending an unbounded interval in claim
-extraction before the remaining provider hierarchy can run. Explicit caller
-timeouts still take precedence.
+Reliability hardening also applies a default 20-second Gemini request timeout
+to routed verification operations, including the transient alternate Gemini
+model, unless the caller already supplies an explicit timeout. This prevents a
+single Gemini stage from consuming an unbounded interval before the remaining
+provider hierarchy can run. Verdict-sensitive callers that intentionally use
+their own timeout keep that explicit value.
+
+When Google Fact Check results are relevant but not proposition-covering enough
+to terminate verification, TruthLens defers the standalone GFC evidence
+assessment and GFC-only verdict evaluation. After Tavily enrichment, the
+persisted FACT_CHECK and SECONDARY evidence are assessed together and sent to
+one combined final evaluation. Terminally sufficient GFC paths keep their
+existing early-evaluation behavior. This reduces redundant provider calls
+without changing retrieval, evidence eligibility, or verdict policy.
 
 Gemini HTTP 402 (billing), 404 (model/project unavailable), and 429 (quota/rate
 limit) failures are job-blocking for the selected Gemini model. After one such
