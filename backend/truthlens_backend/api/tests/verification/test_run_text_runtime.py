@@ -1047,6 +1047,61 @@ class VerificationRunTextRuntimeTests(TestCase):
         self.retrieve_tavily.assert_not_called()
 
 
+    def test_semantic_misleading_signal_from_shared_coverage_defers_gfc(self):
+        evidence_id = "abababab-abab-abab-abab-abababababab"
+        empty_policy = {
+            "resolution": services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+            "misleading_evidence_ids": (),
+        }
+        misleading_policy = {
+            "resolution": services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+            "misleading_evidence_ids": (evidence_id,),
+        }
+        reviewed_claim = self.cleaned["cleaned_claim"]
+        self.relevance.return_value = {
+            "candidate_count": 1,
+            "relevant_candidate_count": 1,
+            "covered_candidate_count": 1,
+            "terminally_sufficient": True,
+            "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
+            "candidates": [{
+                "candidate_index": 0,
+                "relationship": "EQUIVALENT_OR_COVERS",
+                "reasoning": "Same proposition.",
+                "material_differences": [],
+                "reviewed_claim": reviewed_claim,
+            }],
+        }
+
+        with patch(
+            "api.tasks._resolve_official_fact_check_rating_policy",
+            side_effect=[empty_policy, misleading_policy],
+        ) as resolver:
+            run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        self.relevance.assert_called_once()
+        self.retrieve_tavily.assert_called_once()
+        self.assertEqual(resolver.call_count, 2)
+        self.assertIsNone(resolver.call_args_list[0].kwargs.get("coverage"))
+        self.assertEqual(
+            resolver.call_args_list[1].kwargs["coverage"],
+            self.relevance.return_value,
+        )
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("gfc_final_evaluation_skipped", stages)
+        skipped = next(
+            call for call in self.log_stage.call_args_list
+            if len(call.args) >= 2
+            and call.args[1] == "gfc_final_evaluation_skipped"
+        )
+        self.assertEqual(
+            skipped.kwargs["reason"],
+            "structured_misleading_requires_enrichment",
+        )
+
     def test_strict_misleading_rating_signal_requires_tavily_enrichment(self):
         evidence_id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
         policy = {
