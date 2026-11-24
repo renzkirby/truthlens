@@ -76,6 +76,26 @@ class DirectTextClaimFidelityTests(APITestCase):
             "FAIL",
         )
 
+    def test_reason_code_identifies_missing_numeric_anchor(self):
+        status, reason = inspect_direct_text_claim_fidelity(
+            "The city approved the 2024 budget.",
+            "The city approved the budget.",
+            return_reason=True,
+        )
+
+        self.assertEqual(status, "FAIL")
+        self.assertEqual(reason, "MISSING_NUMERIC_ANCHOR")
+
+    def test_reason_code_identifies_changed_negation(self):
+        status, reason = inspect_direct_text_claim_fidelity(
+            "The senator did not resign.",
+            "The senator resigned.",
+            return_reason=True,
+        )
+
+        self.assertEqual(status, "FAIL")
+        self.assertEqual(reason, "NEGATION_CHANGED")
+
     def test_long_or_multi_sentence_text_is_skipped_not_blocked(self):
         self.assertEqual(
             inspect_direct_text_claim_fidelity(
