@@ -106,6 +106,9 @@ GROQ_RATE_LIMIT_RETRY_TOTAL_SECONDS = 30.0
 # verification job. Short rolling-window resets may still recover; longer waits
 # fail closed immediately so another user request is not held for a doomed retry.
 GROQ_RATE_LIMIT_RETRY_MAX_SINGLE_DELAY_SECONDS = 10.0
+# The essential final evaluator may honor one slightly longer provider-directed
+# rolling-window reset. Supplemental semantic audits never receive this allowance.
+GROQ_ESSENTIAL_RETRY_MAX_SINGLE_DELAY_SECONDS = 15.0
 GROQ_RATE_LIMIT_RETRY_SAFETY_SECONDS = 0.25
 
 # Bound latency-sensitive Gemini stages so an alternate transient model cannot
@@ -307,6 +310,7 @@ _gemini_transient_degraded_models = ContextVar(
     default=None,
 )
 _cloudflare_pilot_degraded = ContextVar("cloudflare_pilot_degraded", default=None)
+_groq_job_rate_limited = ContextVar("groq_job_rate_limited", default=None)
 
 
 @contextmanager
@@ -315,9 +319,11 @@ def llm_provider_scope():
     token = _gemini_degraded_models.set(frozenset())
     transient_token = _gemini_transient_degraded_models.set(frozenset())
     cloudflare_token = _cloudflare_pilot_degraded.set(False)
+    groq_token = _groq_job_rate_limited.set(False)
     try:
         yield
     finally:
+        _groq_job_rate_limited.reset(groq_token)
         _cloudflare_pilot_degraded.reset(cloudflare_token)
         _gemini_transient_degraded_models.reset(transient_token)
         _gemini_degraded_models.reset(token)
@@ -512,7 +518,12 @@ def _is_groq_request_too_large(error):
     return _provider_status_code(error) == 413
 
 
-def _groq_rate_limit_retry_delay(error, *, remaining_budget):
+def _groq_rate_limit_retry_delay(
+    error,
+    *,
+    remaining_budget,
+    max_single_delay=GROQ_RATE_LIMIT_RETRY_MAX_SINGLE_DELAY_SECONDS,
+):
     """Return a provider-directed 429 delay within the remaining wait budget."""
     if _provider_status_code(error) != 429:
         return None
@@ -536,7 +547,7 @@ def _groq_rate_limit_retry_delay(error, *, remaining_budget):
     requested_delay = retry_after + GROQ_RATE_LIMIT_RETRY_SAFETY_SECONDS
     if requested_delay > remaining_budget:
         return None
-    if requested_delay > GROQ_RATE_LIMIT_RETRY_MAX_SINGLE_DELAY_SECONDS:
+    if requested_delay > max_single_delay:
         return None
 
     return requested_delay
@@ -1045,6 +1056,11 @@ def call_llm_with_fallback(
             ):
                 raise ValueError("INVALID_PILOT_FALLBACK_JSON")
         except Exception as groq_error:
+            if (
+                _provider_status_code(groq_error) == 429
+                and _groq_job_rate_limited.get() is not None
+            ):
+                _groq_job_rate_limited.set(True)
             _log_llm_provider_call(
                 operation,
                 "groq",
@@ -1063,6 +1079,8 @@ def call_llm_with_fallback(
             )
             return None, groq_error
 
+        if _groq_job_rate_limited.get() is not None:
+            _groq_job_rate_limited.set(False)
         _log_llm_provider_call(
             operation,
             "groq",
@@ -1130,6 +1148,14 @@ def call_llm_with_fallback(
     groq_retry_prompt = groq_user_prompt
     groq_retry_variant = groq_request_variant
     groq_retry_number = 0
+    supplemental_audit = operation in {
+        SATIRE_PROVENANCE_AUDIT_OPERATION,
+        STRUCTURED_MISLEADING_AUDIT_OPERATION,
+    }
+    if supplemental_audit and _groq_job_rate_limited.get() is True:
+        raise LLMProviderUnavailableError(
+            "Groq is already rate-limited for this verification job."
+        )
     content, groq_err = _try_groq_once(
         groq_retry_prompt,
         variant=groq_retry_variant,
@@ -1178,9 +1204,15 @@ def call_llm_with_fallback(
         remaining_budget = (
             GROQ_RATE_LIMIT_RETRY_TOTAL_SECONDS - groq_rate_limit_waited
         )
+        max_single_delay = (
+            GROQ_ESSENTIAL_RETRY_MAX_SINGLE_DELAY_SECONDS
+            if groq_rate_limit_retries == 0
+            else GROQ_RATE_LIMIT_RETRY_MAX_SINGLE_DELAY_SECONDS
+        )
         groq_rate_limit_delay = _groq_rate_limit_retry_delay(
             groq_err,
             remaining_budget=remaining_budget,
+            max_single_delay=max_single_delay,
         )
         if groq_rate_limit_delay is None:
             break
@@ -3145,6 +3177,137 @@ def _audit_misleading_materiality(
         return _misleading_materiality_unverified_result()
 
 
+
+def _deterministic_satire_provenance_result(
+    evaluator_result,
+    evidence_groups,
+    candidates,
+):
+    """Return a validated SATIRE result only when persisted basis IDs already prove it."""
+    if (
+        evaluator_result.get("verdict") != "SATIRE"
+        or evaluator_result.get("contextual_basis_kind") != "SATIRE_PROVENANCE"
+    ):
+        return None
+    basis_ids = {
+        str(value)
+        for value in evaluator_result.get("contextual_basis_evidence_ids", [])
+        if value
+    }
+    candidate_ids = {
+        str(candidate["evidence_id"])
+        for candidate in candidates
+        if candidate.get("evidence_id")
+    }
+    if not basis_ids or not basis_ids.issubset(candidate_ids):
+        return None
+    if not has_claim_scoped_satire_support(evaluator_result, evidence_groups):
+        return None
+    return evaluator_result
+
+
+def _deterministic_structured_misleading_result(
+    evaluator_result,
+    signal_ids,
+    evidence_groups,
+):
+    """Reuse a strong claim-scoped MISLEADING result instead of re-auditing it."""
+    if (
+        evaluator_result.get("verdict") != "MISLEADING"
+        or evaluator_result.get("contextual_basis_kind")
+        not in _MISLEADING_MATERIALITY_BASIS_KINDS
+    ):
+        return None
+    basis_ids = {
+        str(value)
+        for value in evaluator_result.get("contextual_basis_evidence_ids", [])
+        if value
+    }
+    if not basis_ids.intersection({str(value) for value in signal_ids}):
+        return None
+    if not has_claim_scoped_misleading_support(
+        evaluator_result,
+        evidence_groups,
+    ):
+        return None
+    result = dict(evaluator_result)
+    result["confidence_score"] = min(
+        _normalize_verdict_confidence_score(result.get("confidence_score", 0)),
+        85,
+    )
+    result["score_context"] = (
+        "A strict-equivalent Misleading fact-check signal and assessed claim-scoped "
+        "support/refutation evidence establish the contextual verdict; final "
+        f"confidence is {result['confidence_score']:g}%."
+    )
+    return result
+
+
+def _bounded_structured_misleading_context(
+    signal_ids,
+    evidence_groups,
+    *,
+    max_items=6,
+    max_chars=900,
+):
+    """Render only the strongest assessed evidence needed for the relationship audit."""
+    signal_ids = {str(value) for value in signal_ids}
+    candidates = []
+    seen = set()
+    for group in evidence_groups or ():
+        for item in getattr(group, "evidence", ()):
+            evidence_id = getattr(item, "evidence_link_id", None)
+            if not evidence_id:
+                continue
+            evidence_id = str(evidence_id)
+            if evidence_id in seen:
+                continue
+            seen.add(evidence_id)
+            stance = str(getattr(item, "stance", "") or "")
+            relevance = getattr(item, "relevance_score", 0) or 0
+            directness = getattr(item, "directness_score", 0) or 0
+            try:
+                quality = (float(relevance) + float(directness)) / 2
+            except (TypeError, ValueError):
+                quality = 0.0
+            priority = (
+                0 if evidence_id in signal_ids
+                else 1 if stance == "SUPPORTS"
+                else 2 if stance == "REFUTES"
+                else 3 if stance == "CONTEXT"
+                else 4
+            )
+            candidates.append((
+                priority,
+                -quality,
+                {
+                    "evidence_id": evidence_id,
+                    "title": str(getattr(item, "title", "") or "")[:240],
+                    "content": str(getattr(item, "content", "") or "")[:max_chars],
+                    "stance": stance,
+                    "relevance_score": relevance,
+                    "directness_score": directness,
+                    "structured_misleading_signal": evidence_id in signal_ids,
+                },
+            ))
+
+    candidates.sort(key=lambda row: (row[0], row[1], row[2]["evidence_id"]))
+    selected = [row[2] for row in candidates[:max_items]]
+    selected_ids = {row["evidence_id"] for row in selected}
+
+    # Every strict-equivalent structured signal must remain visible to the audit.
+    for row in candidates:
+        item = row[2]
+        if (
+            item["structured_misleading_signal"]
+            and item["evidence_id"] not in selected_ids
+        ):
+            selected.append(item)
+            selected_ids.add(item["evidence_id"])
+
+    return json.dumps(selected, ensure_ascii=False)
+
+
 def _structured_misleading_signal_unverified_result():
     return {
         "reasoning": (
@@ -3227,12 +3390,17 @@ def _audit_structured_misleading_signal(
     Optional reasoning/summary fields are allowed but are not required.
     """
     first_verdict = evaluator_result.get("verdict", "UNVERIFIED")
+    compact_context = _bounded_structured_misleading_context(
+        signal_ids,
+        evidence_groups,
+    )
     user_data = (
         f"<claim>{original_claim}</claim>\n\n"
         f"<first_evaluator_verdict>{first_verdict}</first_evaluator_verdict>\n"
         f"<structured_misleading_evidence_ids>"
         f"{json.dumps(signal_ids)}</structured_misleading_evidence_ids>\n\n"
-        f"<persisted_evidence>{evidence_context}</persisted_evidence>"
+        f"<structured_misleading_candidates>"
+        f"{compact_context}</structured_misleading_candidates>"
     )
 
     try:
@@ -3426,12 +3594,21 @@ def evaluate_claim_with_persisted_evidence(
             and parsed_result.get("verdict") in {"FAKE", "UNVERIFIED", "SATIRE"}
             and _has_persisted_satire_signal(evidence_groups)
         ):
-            parsed_result = _audit_persisted_satire_provenance(
-                original_claim,
-                evidence_context,
+            satire_candidates = _qualified_satire_signal_candidates(evidence_groups)
+            deterministic_satire = _deterministic_satire_provenance_result(
                 parsed_result,
                 evidence_groups,
+                satire_candidates,
             )
+            if deterministic_satire is not None:
+                parsed_result = deterministic_satire
+            else:
+                parsed_result = _audit_persisted_satire_provenance(
+                    original_claim,
+                    evidence_context,
+                    parsed_result,
+                    evidence_groups,
+                )
             persisted_satire_provenance = parsed_result.get("verdict") == "SATIRE"
 
         parsed_result = _enforce_satire_verdict_eligibility(
@@ -3448,6 +3625,13 @@ def evaluate_claim_with_persisted_evidence(
             if isinstance(value, str) and value.strip()
         )
         if structured_misleading_ids:
+            deterministic_misleading = _deterministic_structured_misleading_result(
+                parsed_result,
+                structured_misleading_ids,
+                evidence_groups,
+            )
+            if deterministic_misleading is not None:
+                return deterministic_misleading
             if (
                 parsed_result.get("verdict") == "MISLEADING"
                 and parsed_result.get("contextual_basis_kind")
