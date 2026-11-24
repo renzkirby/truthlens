@@ -69,8 +69,11 @@ class VerdictConfidencePromptAnchorTests(SimpleTestCase):
         required_rules = (
             "substantial genuine component of the",
             "Mere topic/person/media overlap is",
+            "Authentic media or remarks that are materially re-dated",
+            "truth-changing context change",
             "material asserted core is fabricated",
             "Direct contradiction does not override",
+            "Do not choose FAKE merely because a fact-check source says",
             "If the distinction is not established from supplied evidence",
         )
         for rule in required_rules:
