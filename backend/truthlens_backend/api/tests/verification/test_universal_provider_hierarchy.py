@@ -1388,6 +1388,56 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
         sleep.assert_called_once_with(11.65)
 
     @override_settings(APP_ENV="production", DEBUG=False)
+    def test_extended_final_groq_reset_gets_only_one_retry(self):
+        class ProviderError(RuntimeError):
+            pass
+
+        gemini_429 = ProviderError("quota unavailable")
+        gemini_429.code = 429
+        first_429 = ProviderError("rate limited")
+        first_429.status_code = 429
+        first_429.response = SimpleNamespace(headers={"retry-after": "11.4"})
+        second_429 = ProviderError("still rate limited")
+        second_429.status_code = 429
+        second_429.response = SimpleNamespace(headers={"retry-after": "2"})
+
+        gemini = Mock()
+        gemini.models.generate_content.side_effect = gemini_429
+        cloudflare = Mock(side_effect=RuntimeError("cloudflare unavailable"))
+        groq = Mock()
+        groq.with_options.return_value.chat.completions.create.side_effect = [
+            first_429,
+            second_429,
+        ]
+
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+                    "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                },
+            ),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.call_validated_cloudflare_pilot", cloudflare),
+            patch("api.services.time.sleep") as sleep,
+        ):
+            with llm_provider_scope():
+                with self.assertRaises(LLMProviderUnavailableError):
+                    call_llm_with_fallback(
+                        "Instructions",
+                        "FINAL PROMPT",
+                        operation="persisted_evidence_evaluation",
+                    )
+
+        self.assertEqual(
+            groq.with_options.return_value.chat.completions.create.call_count,
+            2,
+        )
+        sleep.assert_called_once_with(11.65)
+
+    @override_settings(APP_ENV="production", DEBUG=False)
     def test_final_groq_429_skips_long_single_wait(self):
         class ProviderError(RuntimeError):
             pass
