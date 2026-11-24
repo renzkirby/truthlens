@@ -46,6 +46,26 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
             "Reserve FAKE for a core proposition that is wholly fabricated",
             normalized_system,
         )
+    def test_persisted_prompt_rechecks_predicate_and_role_entailment(self):
+        system, _user = services.build_persisted_evidence_prompt(
+            "An official called for an investigation to stop.",
+            "Persisted evidence.",
+            "NEUTRAL",
+        )
+
+        normalized = " ".join(system.split())
+        for required_rule in (
+            "predicate/action/relationship",
+            "subject/object roles",
+            "Evidence stance labels are assessment metadata, not proof",
+            "different action/relation involving the same actor and topic",
+            "recusing or inhibiting oneself from an investigation does not mean calling for the investigation itself to stop",
+            "reviewing or considering a sale does not mean approving the sale",
+            "discussing resignation does not mean resigning",
+        ):
+            with self.subTest(required_rule=required_rule):
+                self.assertIn(required_rule, normalized)
+
     def test_supplied_persisted_context_is_sent_without_provider_structure(self):
         evidence_context = (
             "=== SOURCE IDENTITY GROUP 1 ===\n"
