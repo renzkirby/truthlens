@@ -1194,6 +1194,7 @@ def call_llm_with_fallback(
 
     groq_rate_limit_retries = 0
     groq_rate_limit_waited = 0.0
+    groq_used_extended_single_wait = False
     while (
         groq_err is not None
         and hierarchy_active
@@ -1217,6 +1218,13 @@ def call_llm_with_fallback(
         if groq_rate_limit_delay is None:
             break
 
+        if (
+            groq_rate_limit_retries == 0
+            and groq_rate_limit_delay
+            > GROQ_RATE_LIMIT_RETRY_MAX_SINGLE_DELAY_SECONDS
+        ):
+            groq_used_extended_single_wait = True
+
         groq_rate_limit_retries += 1
         logger.warning(
             "Groq final evaluation rate-limited; retrying %s/%s after %.2fs "
@@ -1233,6 +1241,8 @@ def call_llm_with_fallback(
             variant=groq_retry_variant,
             retry_number=groq_retry_number + groq_rate_limit_retries,
         )
+        if groq_used_extended_single_wait and groq_err is not None:
+            break
 
     if groq_err is not None:
         logger.error(
