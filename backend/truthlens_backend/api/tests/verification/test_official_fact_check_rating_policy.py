@@ -1,12 +1,10 @@
 from types import SimpleNamespace
-from unittest.mock import patch
 
 from django.test import SimpleTestCase
 
 from api import tasks
 from api.models import VerificationEvidence
 from api.services import (
-    LLMProviderUnavailableError,
     OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT,
     OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
     OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
@@ -31,6 +29,44 @@ def _groups(*records):
             ),
         ))
     return [SimpleNamespace(evidence=tuple(items))]
+
+
+def _coverage(*records):
+    rows = []
+    for index, (reviewed_claim, relationship) in enumerate(records):
+        rows.append({
+            "candidate_index": index,
+            "relationship": relationship,
+            "reasoning": "Deterministic test relationship.",
+            "material_differences": (
+                [] if relationship == "EQUIVALENT_OR_COVERS"
+                else ["Material difference."]
+            ),
+            "reviewed_claim": reviewed_claim,
+        })
+    covered = sum(
+        row["relationship"] == "EQUIVALENT_OR_COVERS"
+        for row in rows
+    )
+    relevant = sum(
+        row["relationship"] in {
+            "EQUIVALENT_OR_COVERS",
+            "PARTIAL_OR_RELATED",
+        }
+        for row in rows
+    )
+    return {
+        "candidate_count": len(rows),
+        "relevant_candidate_count": relevant,
+        "covered_candidate_count": covered,
+        "terminally_sufficient": covered > 0,
+        "reason_code": (
+            "EXACT_OR_EQUIVALENT_COVERAGE"
+            if covered
+            else "RELATED_BUT_INCOMPLETE"
+        ),
+        "candidates": rows,
+    }
 
 
 class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
@@ -129,369 +165,212 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
         self.assertEqual(parsed["rating_kind"], "SATIRE")
 
     def test_false_only_does_not_activate_special_resolution(self):
-        with patch("api.tasks.assess_claim_equivalence") as equivalence:
-            result = tasks._resolve_official_fact_check_rating_policy(
-                "Same claim.",
-                _groups(("Same claim.", "False")),
-            )
-
-        self.assertEqual(
-            result["resolution"],
-            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+        result = tasks._resolve_official_fact_check_rating_policy(
+            "Same claim.",
+            _groups(("Same claim.", "False")),
         )
+
+        self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_NONE)
         self.assertEqual(result["satire_evidence_ids"], ())
         self.assertEqual(result["misleading_evidence_ids"], ())
-        equivalence.assert_not_called()
 
-    def test_exact_misleading_rating_becomes_context_signal_without_llm_call(self):
-        with patch("api.tasks.assess_claim_equivalence") as equivalence:
-            result = tasks._resolve_official_fact_check_rating_policy(
-                "Same claim.",
-                _groups(("Same claim.", "Misleading")),
-            )
-
-        self.assertEqual(
-            result["resolution"],
-            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+    def test_exact_misleading_rating_becomes_context_signal_without_coverage(self):
+        result = tasks._resolve_official_fact_check_rating_policy(
+            "Same claim.",
+            _groups(("Same claim.", "Misleading")),
         )
+
+        self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_NONE)
         self.assertEqual(result["satire_evidence_ids"], ())
         self.assertEqual(result["misleading_evidence_ids"], ("evidence-1",))
-        equivalence.assert_not_called()
 
-    def test_exact_equivalent_satire_rating_authorizes_satire_without_llm_call(self):
-        with patch("api.tasks.assess_claim_equivalence") as equivalence:
-            result = tasks._resolve_official_fact_check_rating_policy(
-                "Same claim.",
-                _groups(("Same claim.", "Satire")),
-            )
-
-        self.assertEqual(
-            result["resolution"],
-            OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
+    def test_exact_equivalent_satire_rating_authorizes_satire_without_coverage(self):
+        result = tasks._resolve_official_fact_check_rating_policy(
+            "Same claim.",
+            _groups(("Same claim.", "Satire")),
         )
+
+        self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE)
         self.assertEqual(result["satire_evidence_ids"], ("evidence-1",))
-        equivalence.assert_not_called()
-
-    def test_observed_satire_labels_authorize_satire_consensus(self):
-        for rating in (
-            "Originated as Satire",
-            "Labeled Satire",
-            "Satirist",
-            "Parody News",
-        ):
-            with self.subTest(rating=rating):
-                with patch("api.tasks.assess_claim_equivalence") as equivalence:
-                    result = tasks._resolve_official_fact_check_rating_policy(
-                        "Same claim.",
-                        _groups(("Same claim.", rating)),
-                    )
-
-                self.assertEqual(
-                    result["resolution"],
-                    OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
-                )
-                equivalence.assert_not_called()
 
     def test_multiple_observed_satire_labels_still_resolve_to_satire(self):
-        with patch("api.tasks.assess_claim_equivalence") as equivalence:
-            result = tasks._resolve_official_fact_check_rating_policy(
-                "Same claim.",
-                _groups(
-                    ("Same claim.", "Originated as Satire"),
-                    ("Same claim.", "Parody News"),
-                    ("Same claim.", "Satirist"),
-                ),
-            )
-
-        self.assertEqual(
-            result["resolution"],
-            OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
+        result = tasks._resolve_official_fact_check_rating_policy(
+            "Same claim.",
+            _groups(
+                ("Same claim.", "Originated as Satire"),
+                ("Same claim.", "Parody News"),
+                ("Same claim.", "Satirist"),
+            ),
         )
+
+        self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE)
         self.assertEqual(
             result["satire_evidence_ids"],
             ("evidence-1", "evidence-2", "evidence-3"),
         )
-        equivalence.assert_not_called()
 
     def test_equivalent_satire_and_false_ratings_resolve_to_fake_conflict(self):
-        with patch("api.tasks.assess_claim_equivalence") as equivalence:
-            result = tasks._resolve_official_fact_check_rating_policy(
-                "Same claim.",
-                _groups(
-                    ("Same claim.", "Satire"),
-                    ("Same claim.", "False"),
-                ),
-            )
+        result = tasks._resolve_official_fact_check_rating_policy(
+            "Same claim.",
+            _groups(
+                ("Same claim.", "Satire"),
+                ("Same claim.", "False"),
+            ),
+        )
 
         self.assertEqual(
             result["resolution"],
             OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT,
         )
         self.assertEqual(result["satire_evidence_ids"], ("evidence-1",))
-        equivalence.assert_not_called()
 
     def test_equivalent_unknown_rating_defers_to_normal_evaluator(self):
-        with patch("api.tasks.assess_claim_equivalence") as equivalence:
-            result = tasks._resolve_official_fact_check_rating_policy(
-                "Same claim.",
-                _groups(
-                    ("Same claim.", "Satire"),
-                    ("Same claim.", "Mostly False"),
-                ),
-            )
-
-        self.assertEqual(
-            result["resolution"],
-            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+        result = tasks._resolve_official_fact_check_rating_policy(
+            "Same claim.",
+            _groups(
+                ("Same claim.", "Satire"),
+                ("Same claim.", "Mostly False"),
+            ),
         )
+
+        self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_NONE)
         self.assertEqual(result["satire_evidence_ids"], ())
-        equivalence.assert_not_called()
-
-    def test_trump_shape_satire_plus_descriptive_unknown_defers_to_normal_evaluator(self):
-        descriptive_rating = (
-            "There is no evidence Donald Trump made any such post on his "
-            "Truth Social account. It was initially posted by a satire account."
-        )
-        with patch("api.tasks.assess_claim_equivalence") as equivalence:
-            result = tasks._resolve_official_fact_check_rating_policy(
-                "Same claim.",
-                _groups(
-                    ("Same claim.", "Originated as Satire"),
-                    ("Same claim.", descriptive_rating),
-                ),
-            )
-
-        self.assertEqual(
-            result["resolution"],
-            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
-        )
-        self.assertEqual(result["satire_evidence_ids"], ())
-        equivalence.assert_not_called()
 
     def test_related_non_equivalent_satire_does_not_authorize_satire(self):
-        with patch(
-            "api.tasks.assess_claim_equivalence",
-            return_value={
-                "equivalent": False,
-                "reasoning": "Materially different proposition.",
-                "material_differences": ["Different action."],
-            },
-        ) as equivalence:
-            result = tasks._resolve_official_fact_check_rating_policy(
-                "Submitted factual claim.",
-                _groups(("Related parody post.", "Satire")),
-            )
-
-        self.assertEqual(
-            result["resolution"],
-            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+        reviewed = "Related parody post."
+        result = tasks._resolve_official_fact_check_rating_policy(
+            "Submitted factual claim.",
+            _groups((reviewed, "Satire")),
+            coverage=_coverage((reviewed, "PARTIAL_OR_RELATED")),
         )
+
+        self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_NONE)
         self.assertEqual(result["satire_evidence_ids"], ())
-        equivalence.assert_called_once()
 
-    def test_non_equivalent_unknown_rating_does_not_block_equivalent_satire(self):
-        def equivalence(incoming_claim, reviewed_claim):
-            if reviewed_claim == "Equivalent satire wording.":
-                return {
-                    "equivalent": True,
-                    "reasoning": "Same proposition.",
-                    "material_differences": [],
-                }
-            return {
-                "equivalent": False,
-                "reasoning": "Different proposition.",
-                "material_differences": ["Different event."],
-            }
-
-        with patch(
-            "api.tasks.assess_claim_equivalence",
-            side_effect=equivalence,
-        ):
-            result = tasks._resolve_official_fact_check_rating_policy(
-                "Submitted factual claim.",
-                _groups(
-                    ("Equivalent satire wording.", "Satire"),
-                    ("Different contextual claim.", "Mostly False"),
-                ),
-            )
-
-        self.assertEqual(
-            result["resolution"],
-            OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
+    def test_semantic_coverage_can_authorize_satire_without_second_match_call(self):
+        reviewed = "The railway agreement was signed by Mayor X."
+        result = tasks._resolve_official_fact_check_rating_policy(
+            "Mayor X signed the railway agreement.",
+            _groups((reviewed, "Satire")),
+            coverage=_coverage((reviewed, "EQUIVALENT_OR_COVERS")),
         )
-        self.assertEqual(result["satire_evidence_ids"], ("evidence-1",))
 
-    def test_semantically_equivalent_misleading_rating_becomes_context_signal(self):
-        with patch(
-            "api.tasks.assess_claim_equivalence",
-            return_value={
-                "equivalent": True,
-                "reasoning": "Same complete proposition.",
-                "material_differences": [],
-            },
-        ):
-            result = tasks._resolve_official_fact_check_rating_policy(
-                "Mayor X signed the railway agreement.",
-                _groups((
-                    "The railway agreement was signed by Mayor X.",
-                    "Misleading",
-                )),
-            )
+        self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE)
 
-        self.assertEqual(
-            result["resolution"],
-            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+    def test_semantic_coverage_can_activate_misleading_context_signal(self):
+        reviewed = (
+            "Erwin Tulfo said stop meddling with flood-control projects; "
+            "posts falsely framed the clip as calling to end the probe."
         )
+        result = tasks._resolve_official_fact_check_rating_policy(
+            (
+                "In a viral July 2026 clip, Senator Erwin Tulfo called for "
+                "the flood-control corruption investigation to be stopped."
+            ),
+            _groups((reviewed, "Misleading")),
+            coverage=_coverage((reviewed, "EQUIVALENT_OR_COVERS")),
+        )
+
+        self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_NONE)
         self.assertEqual(result["satire_evidence_ids"], ())
         self.assertEqual(result["misleading_evidence_ids"], ("evidence-1",))
 
-    def test_non_equivalent_misleading_rating_does_not_activate_signal(self):
-        with patch(
-            "api.tasks.assess_claim_equivalence",
-            return_value={
-                "equivalent": False,
-                "reasoning": "The date and medium materially differ.",
-                "material_differences": ["Different date and medium."],
-            },
-        ) as equivalence:
-            result = tasks._resolve_official_fact_check_rating_policy(
-                (
-                    "A July 2026 video showed Senator Erwin Tulfo calling for "
-                    "the flood-control corruption investigation to be stopped."
-                ),
-                _groups((
-                    (
-                        "Erwin Tulfo said stop meddling with the flood control "
-                        "issue and end the investigation."
-                    ),
-                    "Misleading",
-                )),
-            )
-
-        self.assertEqual(
-            result["resolution"],
-            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+    def test_partial_or_related_misleading_rating_does_not_activate_signal(self):
+        reviewed = (
+            "Erwin Tulfo discussed politicians meddling with flood-control projects."
         )
-        self.assertEqual(result["satire_evidence_ids"], ())
+        result = tasks._resolve_official_fact_check_rating_policy(
+            (
+                "In a viral July 2026 clip, Senator Erwin Tulfo called for "
+                "the flood-control corruption investigation to be stopped."
+            ),
+            _groups((reviewed, "Misleading")),
+            coverage=_coverage((reviewed, "PARTIAL_OR_RELATED")),
+        )
+
+        self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_NONE)
         self.assertEqual(result["misleading_evidence_ids"], ())
-        equivalence.assert_called_once()
+
+    def test_undetermined_semantic_match_fails_closed(self):
+        reviewed = "Potentially equivalent claim."
+        result = tasks._resolve_official_fact_check_rating_policy(
+            "Submitted factual claim.",
+            _groups((reviewed, "Misleading")),
+            coverage=_coverage((reviewed, "UNDETERMINED")),
+        )
+
+        self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_NONE)
+        self.assertEqual(result["misleading_evidence_ids"], ())
+
+    def test_non_equivalent_unknown_rating_does_not_block_equivalent_satire(self):
+        satire_claim = "Equivalent satire wording."
+        other_claim = "Different contextual claim."
+        result = tasks._resolve_official_fact_check_rating_policy(
+            "Submitted factual claim.",
+            _groups(
+                (satire_claim, "Satire"),
+                (other_claim, "Mostly False"),
+            ),
+            coverage=_coverage(
+                (satire_claim, "EQUIVALENT_OR_COVERS"),
+                (other_claim, "DIFFERENT"),
+            ),
+        )
+
+        self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE)
+        self.assertEqual(result["satire_evidence_ids"], ("evidence-1",))
 
     def test_equivalent_misleading_and_false_ratings_disable_context_signal(self):
-        with patch("api.tasks.assess_claim_equivalence") as equivalence:
-            result = tasks._resolve_official_fact_check_rating_policy(
-                "Same claim.",
-                _groups(
-                    ("Same claim.", "Misleading"),
-                    ("Same claim.", "False"),
-                ),
-            )
-
-        self.assertEqual(
-            result["resolution"],
-            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+        result = tasks._resolve_official_fact_check_rating_policy(
+            "Same claim.",
+            _groups(
+                ("Same claim.", "Misleading"),
+                ("Same claim.", "False"),
+            ),
         )
-        self.assertEqual(result["satire_evidence_ids"], ())
+
+        self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_NONE)
         self.assertEqual(result["misleading_evidence_ids"], ())
-        equivalence.assert_not_called()
 
     def test_equivalent_misleading_and_unknown_ratings_disable_context_signal(self):
-        with patch("api.tasks.assess_claim_equivalence") as equivalence:
-            result = tasks._resolve_official_fact_check_rating_policy(
-                "Same claim.",
-                _groups(
-                    ("Same claim.", "Misleading"),
-                    ("Same claim.", "Mostly False"),
-                ),
-            )
-
-        self.assertEqual(
-            result["resolution"],
-            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+        result = tasks._resolve_official_fact_check_rating_policy(
+            "Same claim.",
+            _groups(
+                ("Same claim.", "Misleading"),
+                ("Same claim.", "Mostly False"),
+            ),
         )
-        self.assertEqual(result["satire_evidence_ids"], ())
+
+        self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_NONE)
         self.assertEqual(result["misleading_evidence_ids"], ())
-        equivalence.assert_not_called()
 
     def test_equivalent_misleading_and_satire_ratings_disable_both_signals(self):
-        with patch("api.tasks.assess_claim_equivalence") as equivalence:
-            result = tasks._resolve_official_fact_check_rating_policy(
-                "Same claim.",
-                _groups(
-                    ("Same claim.", "Misleading"),
-                    ("Same claim.", "Satire"),
-                ),
-            )
-
-        self.assertEqual(
-            result["resolution"],
-            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+        result = tasks._resolve_official_fact_check_rating_policy(
+            "Same claim.",
+            _groups(
+                ("Same claim.", "Misleading"),
+                ("Same claim.", "Satire"),
+            ),
         )
+
+        self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_NONE)
         self.assertEqual(result["satire_evidence_ids"], ())
         self.assertEqual(result["misleading_evidence_ids"], ())
-        equivalence.assert_not_called()
-
-    def test_semantically_equivalent_satire_rating_authorizes_satire(self):
-        with patch(
-            "api.tasks.assess_claim_equivalence",
-            return_value={
-                "equivalent": True,
-                "reasoning": "Same complete proposition.",
-                "material_differences": [],
-            },
-        ):
-            result = tasks._resolve_official_fact_check_rating_policy(
-                "Mayor X signed the railway agreement.",
-                _groups(("The railway agreement was signed by Mayor X.", "Satire")),
-            )
-
-        self.assertEqual(
-            result["resolution"],
-            OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
-        )
-
-    def test_unresolved_equivalence_fails_closed_without_blocking_verification(self):
-        with patch(
-            "api.tasks.assess_claim_equivalence",
-            side_effect=LLMProviderUnavailableError("provider unavailable"),
-        ):
-            result = tasks._resolve_official_fact_check_rating_policy(
-                "Submitted factual claim.",
-                _groups(("Potentially equivalent claim.", "Satire")),
-            )
-
-        self.assertEqual(
-            result["resolution"],
-            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
-        )
-        self.assertEqual(result["satire_evidence_ids"], ())
 
     def test_non_equivalent_false_rating_does_not_block_equivalent_satire(self):
-        def equivalence(incoming_claim, reviewed_claim):
-            if reviewed_claim == "Equivalent satire wording.":
-                return {
-                    "equivalent": True,
-                    "reasoning": "Same proposition.",
-                    "material_differences": [],
-                }
-            return {
-                "equivalent": False,
-                "reasoning": "Different proposition.",
-                "material_differences": ["Different event."],
-            }
-
-        with patch(
-            "api.tasks.assess_claim_equivalence",
-            side_effect=equivalence,
-        ):
-            result = tasks._resolve_official_fact_check_rating_policy(
-                "Submitted factual claim.",
-                _groups(
-                    ("Equivalent satire wording.", "Satire"),
-                    ("Different false claim.", "False"),
-                ),
-            )
-
-        self.assertEqual(
-            result["resolution"],
-            OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
+        satire_claim = "Equivalent satire wording."
+        false_claim = "Different false claim."
+        result = tasks._resolve_official_fact_check_rating_policy(
+            "Submitted factual claim.",
+            _groups(
+                (satire_claim, "Satire"),
+                (false_claim, "False"),
+            ),
+            coverage=_coverage(
+                (satire_claim, "EQUIVALENT_OR_COVERS"),
+                (false_claim, "DIFFERENT"),
+            ),
         )
+
+        self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE)
+        self.assertEqual(result["satire_evidence_ids"], ("evidence-1",))
