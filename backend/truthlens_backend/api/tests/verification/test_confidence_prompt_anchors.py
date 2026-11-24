@@ -67,11 +67,11 @@ class VerdictConfidencePromptAnchorTests(SimpleTestCase):
     def test_fake_misleading_precedence_has_overfilter_and_abstention_guards(self):
         source = SERVICES_PATH.read_text(encoding="utf-8")
         required_rules = (
-            "Do not choose MISLEADING merely because a real person",
-            "a substantial genuine factual component of the same submitted proposition",
-            "must both be established by the supplied evidence",
-            "does not convert a separate invented quotation",
-            "choose UNVERIFIED rather than guessing",
+            "substantial genuine component of the",
+            "Mere topic/person/media overlap is",
+            "material asserted core is fabricated",
+            "Direct contradiction does not override",
+            "If the distinction is not established from supplied evidence",
         )
         for rule in required_rules:
             with self.subTest(rule=rule):
