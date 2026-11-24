@@ -451,6 +451,47 @@ class EvidenceAssessmentTests(SimpleTestCase):
             system_instructions,
         )
 
+    def test_material_scope_hardening_requires_predicate_and_role_entailment(self):
+        _, call_llm = self._assess(enforce_material_scope=True)
+        system_instructions = call_llm.call_args.args[0]
+
+        for required_rule in (
+            "predicate/action/relationship",
+            "subject/object roles",
+            "Match the CLAIMED ACTION OR RELATIONSHIP",
+            "Preserve role direction",
+            "Do not collapse distinct actions into one another",
+            "does NOT support",
+            "These are CONTEXT",
+        ):
+            with self.subTest(required_rule=required_rule):
+                self.assertIn(required_rule, system_instructions)
+
+        self.assertIn(
+            "recuse/inhibit himself from an investigation",
+            system_instructions,
+        )
+        self.assertIn(
+            "called for the investigation to be stopped",
+            system_instructions,
+        )
+        self.assertIn(
+            "reviewed or considered a sale",
+            system_instructions,
+        )
+        self.assertIn(
+            "approved the sale",
+            system_instructions,
+        )
+        self.assertIn(
+            "discussed or considered resignation",
+            system_instructions,
+        )
+        self.assertIn(
+            "the official resigned",
+            system_instructions,
+        )
+
     def test_material_scope_hardening_va40_historical_rows_are_context(self):
         self.claim_text = (
             "The WHO World Malaria Report 2025 estimated approximately "

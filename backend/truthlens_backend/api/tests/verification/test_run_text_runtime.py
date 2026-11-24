@@ -38,7 +38,7 @@ class VerificationRunTextRuntimeTests(TestCase):
         ))
         self.claim = Claim.objects.create(
             claim_type=Claim.ClaimType.TEXT,
-            context_text="Raw submitted claim.",
+            context_text="Example public claim.",
         )
         self.evidence_count = VerificationEvidence.objects.count()
         self.cleaned = {
@@ -234,6 +234,47 @@ class VerificationRunTextRuntimeTests(TestCase):
             self.assertIsNone(run.failure_stage)
             self.assertIsNone(run.failure_code)
             self.assertIsNone(run.failure_message)
+
+    def test_direct_text_fidelity_mismatch_preserves_submitted_proposition(self):
+        submitted = "The city approved the 2024 budget."
+        self.claim.context_text = submitted
+        self.claim.save(update_fields=["context_text"])
+        self.cleaned = {
+            "cleaned_claim": "The city approved the budget.",
+            "search_query": "city approved budget",
+            "search_queries": ["city approved budget"],
+            "article_stance": "NEUTRAL",
+        }
+        self.clean.return_value = self.cleaned
+
+        run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        self.vault.assert_called_once_with(
+            submitted,
+            target_claim=self.claim,
+        )
+        self.assertEqual(
+            self.assess_evidence.call_args.args[0],
+            submitted,
+        )
+        self.assertEqual(
+            self.evaluate_persisted.call_args.args[0],
+            submitted,
+        )
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.context_text, submitted)
+
+        fidelity_calls = [
+            call for call in self.log_stage.call_args_list
+            if call.args[1] == "claim_fidelity_guard"
+        ]
+        self.assertEqual(len(fidelity_calls), 1)
+        self.assertEqual(fidelity_calls[0].kwargs["outcome"], "fail")
+        self.assertEqual(
+            fidelity_calls[0].kwargs["reason_code"],
+            "MISSING_NUMERIC_ANCHOR",
+        )
 
     def test_provider_scope_isolated_across_jobs_and_failure_exit(self):
         for failed_job in (False, True):
@@ -987,8 +1028,13 @@ class VerificationRunTextRuntimeTests(TestCase):
 
         self._assert_terminal(run, VerificationRun.Status.COMPLETED)
         self.retrieve_tavily.assert_called_once()
-        self.assertEqual(self.evaluate_persisted.call_count, 2)
+        self.evaluate_persisted.assert_called_once()
         self.filter_dossier_roles.assert_called()
+        self.assess_evidence.assert_called_once()
+        self.assertEqual(
+            self.assess_evidence.call_args.args[1],
+            self.filter_dossier_roles.return_value,
+        )
         self.assertEqual(self.save_claim.call_args.args[2], "Live Web Search")
         self.claim.refresh_from_db()
         self.assertEqual(
@@ -1001,7 +1047,15 @@ class VerificationRunTextRuntimeTests(TestCase):
         stages = [call.args[1] for call in self.log_stage.call_args_list]
         self.assertIn("gfc_proposition_coverage_check", stages)
         self.assertIn("gfc_continued_to_tavily", stages)
-        self.assertNotIn("gfc_final_evaluation_skipped", stages)
+        self.assertIn("gfc_final_evaluation_skipped", stages)
+        skipped = next(
+            call for call in self.log_stage.call_args_list
+            if len(call.args) >= 2 and call.args[1] == "gfc_final_evaluation_skipped"
+        )
+        self.assertEqual(
+            skipped.kwargs["reason"],
+            "nonterminal_gfc_requires_enrichment",
+        )
 
     def test_coverage_assessor_receives_all_returned_gfc_claims(self):
         self.gfc_payload["claims"].append({
@@ -1033,6 +1087,61 @@ class VerificationRunTextRuntimeTests(TestCase):
         )
         self.retrieve_tavily.assert_not_called()
 
+
+    def test_semantic_misleading_signal_from_shared_coverage_defers_gfc(self):
+        evidence_id = "abababab-abab-abab-abab-abababababab"
+        empty_policy = {
+            "resolution": services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+            "misleading_evidence_ids": (),
+        }
+        misleading_policy = {
+            "resolution": services.OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+            "misleading_evidence_ids": (evidence_id,),
+        }
+        reviewed_claim = self.cleaned["cleaned_claim"]
+        self.relevance.return_value = {
+            "candidate_count": 1,
+            "relevant_candidate_count": 1,
+            "covered_candidate_count": 1,
+            "terminally_sufficient": True,
+            "reason_code": "EXACT_OR_EQUIVALENT_COVERAGE",
+            "candidates": [{
+                "candidate_index": 0,
+                "relationship": "EQUIVALENT_OR_COVERS",
+                "reasoning": "Same proposition.",
+                "material_differences": [],
+                "reviewed_claim": reviewed_claim,
+            }],
+        }
+
+        with patch(
+            "api.tasks._resolve_official_fact_check_rating_policy",
+            side_effect=[empty_policy, misleading_policy],
+        ) as resolver:
+            run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        self.relevance.assert_called_once()
+        self.retrieve_tavily.assert_called_once()
+        self.assertEqual(resolver.call_count, 2)
+        self.assertIsNone(resolver.call_args_list[0].kwargs.get("coverage"))
+        self.assertEqual(
+            resolver.call_args_list[1].kwargs["coverage"],
+            self.relevance.return_value,
+        )
+        stages = [call.args[1] for call in self.log_stage.call_args_list]
+        self.assertIn("gfc_final_evaluation_skipped", stages)
+        skipped = next(
+            call for call in self.log_stage.call_args_list
+            if len(call.args) >= 2
+            and call.args[1] == "gfc_final_evaluation_skipped"
+        )
+        self.assertEqual(
+            skipped.kwargs["reason"],
+            "structured_misleading_requires_enrichment",
+        )
 
     def test_strict_misleading_rating_signal_requires_tavily_enrichment(self):
         evidence_id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
@@ -1566,7 +1675,7 @@ class PrimarySourceRecoveryTests(TestCase):
 
 class VerificationEvidenceTextRuntimeTests(TestCase):
     def setUp(self):
-        self.claim = Claim.objects.create(context_text="Raw submitted claim.")
+        self.claim = Claim.objects.create(context_text="Example public claim.")
         self.cleaned = {
             "cleaned_claim": "Example public claim.",
             "search_query": "example public claim",

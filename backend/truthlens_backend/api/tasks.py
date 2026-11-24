@@ -22,7 +22,6 @@ from .services import (
     OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT,
     OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
     OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
-    assess_claim_equivalence,
     assess_fact_check_proposition_coverage,
     extract_persisted_fact_check_claim_rating,
     llm_provider_scope,
@@ -112,6 +111,17 @@ class EvidenceRetrievalUnavailableError(RuntimeError):
     """Required evidence retrieval failed before verification could complete."""
 
 
+def _official_rating_policy_has_signal(official_rating_policy):
+    return bool(
+        isinstance(official_rating_policy, dict)
+        and (
+            official_rating_policy.get("resolution")
+            != OFFICIAL_FACT_CHECK_RESOLUTION_NONE
+            or official_rating_policy.get("misleading_evidence_ids")
+        )
+    )
+
+
 def _requires_structured_misleading_enrichment(
     official_rating_policy,
     *,
@@ -186,33 +196,22 @@ def _normalized_claim_identity(value):
     return " ".join(value.split()).casefold()
 
 
-def _claims_are_equivalent_for_official_rating(incoming_claim, reviewed_claim):
-    if _normalized_claim_identity(incoming_claim) == _normalized_claim_identity(
-        reviewed_claim
-    ):
-        return True
-    try:
-        return assess_claim_equivalence(
-            incoming_claim,
-            reviewed_claim,
-        ).get("equivalent") is True
-    except LLMProviderUnavailableError:
-        return None
-    except Exception as exc:
-        logger.warning(
-            "Official fact-check rating equivalence could not be established: %s",
-            type(exc).__name__,
-        )
-        return None
+def _resolve_official_fact_check_rating_policy(
+    claim_text,
+    evidence_groups,
+    *,
+    coverage=None,
+):
+    """Resolve high-precision ClaimReview rating signals from one match decision.
 
+    Exact normalized claim text is deterministic. Semantic equivalence is taken
+    only from the proposition-coverage classifier that already controls whether
+    GFC may terminate verification. This avoids two independent LLM match
+    decisions disagreeing about the same reviewed claim.
 
-def _resolve_official_fact_check_rating_policy(claim_text, evidence_groups):
-    """Resolve high-precision structured ClaimReview rating signals.
-
-    SATIRE remains the only deterministic single-rating resolution. Exact
-    "Misleading" is a contextual signal only and may activate a second
-    evidence-bound arbitration stage after strict proposition equivalence.
-    Related or conflicting reviews never control the verdict.
+    SATIRE remains the only deterministic single-rating resolution. Misleading
+    remains a contextual signal that opens evidence-bound arbitration; it never
+    directly sets the TruthLens verdict.
     """
     empty_policy = {
         "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
@@ -243,24 +242,42 @@ def _resolve_official_fact_check_rating_policy(claim_text, evidence_groups):
             })
 
     # FALSE remains ordinary evidence unless paired with equivalent SATIRE.
-    # Unknown publisher labels remain ordinary evidence. Avoid equivalence work
-    # unless a high-precision SATIRE or exact Misleading signal is present.
+    # Unknown publisher labels remain ordinary evidence.
     if not any(
         record["rating_kind"] in {"SATIRE", "MISLEADING"}
         for record in records
     ):
         return empty_policy
 
-    equivalence_cache = {}
+    coverage_relationships = {}
+    if isinstance(coverage, dict):
+        for row in coverage.get("candidates", ()):
+            if not isinstance(row, dict):
+                continue
+            reviewed_claim = _normalized_claim_identity(row.get("reviewed_claim"))
+            relationship = row.get("relationship")
+            if reviewed_claim and relationship in {
+                "EQUIVALENT_OR_COVERS",
+                "PARTIAL_OR_RELATED",
+                "DIFFERENT",
+                "UNDETERMINED",
+            }:
+                coverage_relationships[reviewed_claim] = relationship
+
+    submitted_identity = _normalized_claim_identity(claim_text)
 
     def equivalent(reviewed_claim):
         identity = _normalized_claim_identity(reviewed_claim)
-        if identity not in equivalence_cache:
-            equivalence_cache[identity] = _claims_are_equivalent_for_official_rating(
-                claim_text,
-                reviewed_claim,
-            )
-        return equivalence_cache[identity]
+        if not identity:
+            return False
+        if identity == submitted_identity:
+            return True
+        relationship = coverage_relationships.get(identity)
+        if relationship == "EQUIVALENT_OR_COVERS":
+            return True
+        if relationship == "UNDETERMINED":
+            return None
+        return False
 
     equivalent_signal_records = []
     for record in records:
@@ -275,9 +292,9 @@ def _resolve_official_fact_check_rating_policy(claim_text, evidence_groups):
     if not equivalent_signal_records:
         return empty_policy
 
-    # Once a supported rating is strictly equivalent, inspect other reviews of
-    # the same proposition. Equivalent unknown/conflicting ratings prevent a
-    # publisher label from becoming an automated control signal.
+    # Once a supported rating is equivalent, inspect other reviews of the same
+    # proposition. Equivalent unknown/conflicting ratings prevent a publisher
+    # label from becoming an automated control signal.
     equivalent_records = list(equivalent_signal_records)
     signal_ids = {
         record["evidence_link_id"] for record in equivalent_signal_records
@@ -322,9 +339,9 @@ def _resolve_official_fact_check_rating_policy(claim_text, evidence_groups):
             }
         return empty_policy
 
-    # Exact "Misleading" is not a deterministic verdict. It is eligible only
-    # when every equivalent recognized review agrees on that exact rating and
-    # no equivalent unknown/False review introduces ambiguity.
+    # Misleading is never a deterministic verdict. It becomes a contextual
+    # signal only when every equivalent recognized review agrees on that exact
+    # rating and no equivalent unknown/False review introduces ambiguity.
     if equivalent_misleading and equivalent_kinds == {"MISLEADING"}:
         return {
             "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
@@ -1808,21 +1825,52 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
 
             if is_text_claim:
                 fidelity_started_at = time.perf_counter()
-                fidelity_outcome = inspect_direct_text_claim_fidelity(
+                fidelity_result = inspect_direct_text_claim_fidelity(
                     raw_text,
                     cleaned_claim,
+                    return_reason=True,
                 )
+                if (
+                    isinstance(fidelity_result, tuple)
+                    and len(fidelity_result) == 2
+                ):
+                    fidelity_outcome, fidelity_reason = fidelity_result
+                else:
+                    # Preserve compatibility with older test/integration seams
+                    # that mock the historical PASS/FAIL/SKIP string contract.
+                    fidelity_outcome = fidelity_result
+                    fidelity_reason = "LEGACY_STATUS_ONLY"
                 _log_stage(
                     claim_id,
                     "claim_fidelity_guard",
                     fidelity_started_at,
                     outcome=fidelity_outcome.lower(),
+                    reason_code=fidelity_reason,
                 )
-                if fidelity_outcome == "FAIL":
-                    raise ClaimGateError(
-                        "ClaimGate analysis could not preserve material direct-text "
-                        "claim details reliably."
-                    )
+
+                # Direct TEXT submissions are already the user's explicit
+                # proposition. ClaimGate remains responsible for claimability and
+                # retrieval-query generation, but its paraphrase must never become
+                # a different truth target. This also turns a fidelity mismatch
+                # into a safe recovery instead of rejecting a valid explicit claim.
+                submitted_claim = " ".join(raw_text.split())
+                if submitted_claim:
+                    cleaned_claim = submitted_claim
+
+                if fidelity_outcome == "FAIL" and submitted_claim:
+                    # Put the source-bounded proposition first so a lossy or
+                    # hallucinatory ClaimGate query cannot become the only
+                    # retrieval route. Keep the remaining generated alternatives
+                    # only as secondary retrieval aids.
+                    source_query = submitted_claim[:200]
+                    search_queries = [
+                        source_query,
+                        *[
+                            query for query in search_queries
+                            if query.casefold() != source_query.casefold()
+                        ],
+                    ][:3]
+                    search_query = search_queries[0]
 
             _set_claimability_status(
                 claim_id,
@@ -1979,6 +2027,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     claims=len(gfc_claims),
                 )
 
+                rating_policy_logged = False
                 if gfc_claims and run is not None:
                     evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
                     precheck_fact_check_groups = (
@@ -1995,12 +2044,16 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                                 precheck_fact_check_groups,
                             )
                         )
-                        _log_stage(
-                            claim_id,
-                            "gfc_official_rating_resolution",
-                            official_rating_started_at,
-                            resolution=official_rating_policy["resolution"],
-                        )
+                        if _official_rating_policy_has_signal(
+                            official_rating_policy
+                        ):
+                            _log_stage(
+                                claim_id,
+                                "gfc_official_rating_resolution",
+                                official_rating_started_at,
+                                resolution=official_rating_policy["resolution"],
+                            )
+                            rating_policy_logged = True
 
                 if gfc_claims:
                     coverage_started_at = time.perf_counter()
@@ -2009,6 +2062,32 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         for claim_data in gfc_claims[:5]
                         if isinstance(claim_data, dict)
                     ]
+                    coverage = None
+                    if not _official_rating_policy_has_signal(
+                        official_rating_policy
+                    ):
+                        coverage = assess_fact_check_proposition_coverage(
+                            cleaned_claim,
+                            reviewed_claims,
+                        )
+                        if precheck_fact_check_groups:
+                            official_rating_started_at = time.perf_counter()
+                            official_rating_policy = (
+                                _resolve_official_fact_check_rating_policy(
+                                    cleaned_claim,
+                                    precheck_fact_check_groups,
+                                    coverage=coverage,
+                                )
+                            )
+                            if not rating_policy_logged:
+                                _log_stage(
+                                    claim_id,
+                                    "gfc_official_rating_resolution",
+                                    official_rating_started_at,
+                                    resolution=official_rating_policy["resolution"],
+                                )
+                                rating_policy_logged = True
+
                     if (
                         official_rating_policy["resolution"]
                         != OFFICIAL_FACT_CHECK_RESOLUTION_NONE
@@ -2016,9 +2095,21 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         is_relevant = True
                         gfc_terminally_sufficient = True
                         gfc_coverage_reason_code = "EXACT_OR_EQUIVALENT_COVERAGE"
-                        coverage_candidate_count = len(reviewed_claims)
-                        coverage_relevant_count = 1
-                        coverage_covered_count = 1
+                        coverage_candidate_count = (
+                            coverage["candidate_count"]
+                            if coverage is not None
+                            else len(reviewed_claims)
+                        )
+                        coverage_relevant_count = (
+                            coverage["relevant_candidate_count"]
+                            if coverage is not None
+                            else 1
+                        )
+                        coverage_covered_count = (
+                            coverage["covered_candidate_count"]
+                            if coverage is not None
+                            else 1
+                        )
                         _log_stage(
                             claim_id,
                             "gfc_relevance_bypassed",
@@ -2027,16 +2118,27 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             resolution=official_rating_policy["resolution"],
                         )
                     elif official_rating_policy["misleading_evidence_ids"]:
-                        # A strict-equivalent Misleading rating is a claim-scoped
-                        # context signal, not a complete factual dossier. Google
-                        # Fact Check metadata does not include the full review body,
-                        # so continue to normal web retrieval before final arbitration.
+                        # A proposition-covering structured Misleading rating is
+                        # a claim-scoped context signal, not a final verdict.
+                        # Continue to web enrichment and evidence-bound arbitration.
                         is_relevant = True
                         gfc_terminally_sufficient = False
                         gfc_coverage_reason_code = "EXACT_OR_EQUIVALENT_COVERAGE"
-                        coverage_candidate_count = len(reviewed_claims)
-                        coverage_relevant_count = 1
-                        coverage_covered_count = 1
+                        coverage_candidate_count = (
+                            coverage["candidate_count"]
+                            if coverage is not None
+                            else len(reviewed_claims)
+                        )
+                        coverage_relevant_count = (
+                            coverage["relevant_candidate_count"]
+                            if coverage is not None
+                            else 1
+                        )
+                        coverage_covered_count = (
+                            coverage["covered_candidate_count"]
+                            if coverage is not None
+                            else 1
+                        )
                         _log_stage(
                             claim_id,
                             "gfc_relevance_bypassed",
@@ -2045,10 +2147,11 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             resolution=official_rating_policy["resolution"],
                         )
                     else:
-                        coverage = assess_fact_check_proposition_coverage(
-                            cleaned_claim,
-                            reviewed_claims,
-                        )
+                        if coverage is None:
+                            coverage = assess_fact_check_proposition_coverage(
+                                cleaned_claim,
+                                reviewed_claims,
+                            )
                         is_relevant = coverage["relevant_candidate_count"] > 0
                         gfc_terminally_sufficient = coverage["terminally_sufficient"]
                         gfc_coverage_reason_code = coverage["reason_code"]
@@ -2086,7 +2189,10 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 gfc_eval_started_at = time.perf_counter()
                 gfc_evaluation_deferred = bool(
                     run is not None
-                    and requires_structured_misleading_enrichment
+                    and (
+                        requires_structured_misleading_enrichment
+                        or not gfc_terminally_sufficient
+                    )
                 )
                 if run is None:
                     ai_verdict = evaluate_image_claim_with_gfc(
@@ -2110,7 +2216,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             evidence_dossier,
                             VerificationEvidence.EvidenceRole.FACT_CHECK,
                         )
-                    if fact_check_groups:
+                    if fact_check_groups and not gfc_evaluation_deferred:
                         _assess_and_persist_reasoning_evidence(
                             cleaned_claim,
                             fact_check_groups,
@@ -2137,7 +2243,11 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             claim_id,
                             "gfc_final_evaluation_skipped",
                             gfc_eval_started_at,
-                            reason="structured_misleading_requires_enrichment",
+                            reason=(
+                                "structured_misleading_requires_enrichment"
+                                if requires_structured_misleading_enrichment
+                                else "nonterminal_gfc_requires_enrichment"
+                            ),
                             terminally_sufficient=gfc_terminally_sufficient,
                         )
                     elif has_persisted_evidence:
@@ -2204,7 +2314,11 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         gfc_verdict=None,
                         terminally_sufficient=gfc_terminally_sufficient,
                         reason_code=gfc_coverage_reason_code,
-                        evaluation="deferred_for_structured_misleading_enrichment",
+                        evaluation=(
+                            "deferred_for_structured_misleading_enrichment"
+                            if requires_structured_misleading_enrichment
+                            else "deferred_for_nonterminal_gfc_enrichment"
+                        ),
                     )
                 elif has_persisted_evidence:
                     _log_stage(
@@ -2349,10 +2463,27 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         evidence_dossier,
                         VerificationEvidence.EvidenceRole.SECONDARY,
                     )
-                    if secondary_groups:
+                    include_deferred_gfc = bool(
+                        secondary_groups
+                        and gfc_claims
+                        and is_relevant
+                        and not gfc_evidence_assessed
+                    )
+                    assessment_groups = (
+                        filter_reasoning_evidence_dossier_by_roles(
+                            evidence_dossier,
+                            (
+                                VerificationEvidence.EvidenceRole.FACT_CHECK,
+                                VerificationEvidence.EvidenceRole.SECONDARY,
+                            ),
+                        )
+                        if include_deferred_gfc
+                        else secondary_groups
+                    )
+                    if assessment_groups:
                         _assess_and_persist_reasoning_evidence(
                             cleaned_claim,
-                            secondary_groups,
+                            assessment_groups,
                             claim_id,
                             stage_prefix="tavily",
                             **(
@@ -2366,6 +2497,12 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             evidence_dossier,
                             VerificationEvidence.EvidenceRole.SECONDARY,
                         )
+                        if include_deferred_gfc:
+                            fact_check_groups = filter_reasoning_evidence_dossier_by_role(
+                                evidence_dossier,
+                                VerificationEvidence.EvidenceRole.FACT_CHECK,
+                            )
+                            gfc_evidence_assessed = bool(fact_check_groups)
                     evaluation_groups = (
                         filter_reasoning_evidence_dossier_by_roles(
                             evidence_dossier,
@@ -3019,6 +3156,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                 claims=len(gfc_claims),
             )
 
+            rating_policy_logged = False
             if gfc_claims and run is not None:
                 evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
                 precheck_fact_check_groups = (
@@ -3035,12 +3173,16 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                             precheck_fact_check_groups,
                         )
                     )
-                    _log_stage(
-                        claim_id,
-                        "url_gfc_official_rating_resolution",
-                        official_rating_started_at,
-                        resolution=official_rating_policy["resolution"],
-                    )
+                    if _official_rating_policy_has_signal(
+                        official_rating_policy
+                    ):
+                        _log_stage(
+                            claim_id,
+                            "url_gfc_official_rating_resolution",
+                            official_rating_started_at,
+                            resolution=official_rating_policy["resolution"],
+                        )
+                        rating_policy_logged = True
 
             if gfc_claims:
                 coverage_started_at = time.perf_counter()
@@ -3049,6 +3191,32 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     for claim_data in gfc_claims[:5]
                     if isinstance(claim_data, dict)
                 ]
+                coverage = None
+                if not _official_rating_policy_has_signal(
+                    official_rating_policy
+                ):
+                    coverage = assess_fact_check_proposition_coverage(
+                        cleaned_claim,
+                        reviewed_claims,
+                    )
+                    if precheck_fact_check_groups:
+                        official_rating_started_at = time.perf_counter()
+                        official_rating_policy = (
+                            _resolve_official_fact_check_rating_policy(
+                                cleaned_claim,
+                                precheck_fact_check_groups,
+                                coverage=coverage,
+                            )
+                        )
+                        if not rating_policy_logged:
+                            _log_stage(
+                                claim_id,
+                                "url_gfc_official_rating_resolution",
+                                official_rating_started_at,
+                                resolution=official_rating_policy["resolution"],
+                            )
+                            rating_policy_logged = True
+
                 if (
                     official_rating_policy["resolution"]
                     != OFFICIAL_FACT_CHECK_RESOLUTION_NONE
@@ -3056,9 +3224,21 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     is_relevant = True
                     gfc_terminally_sufficient = True
                     gfc_coverage_reason_code = "EXACT_OR_EQUIVALENT_COVERAGE"
-                    coverage_candidate_count = len(reviewed_claims)
-                    coverage_relevant_count = 1
-                    coverage_covered_count = 1
+                    coverage_candidate_count = (
+                        coverage["candidate_count"]
+                        if coverage is not None
+                        else len(reviewed_claims)
+                    )
+                    coverage_relevant_count = (
+                        coverage["relevant_candidate_count"]
+                        if coverage is not None
+                        else 1
+                    )
+                    coverage_covered_count = (
+                        coverage["covered_candidate_count"]
+                        if coverage is not None
+                        else 1
+                    )
                     _log_stage(
                         claim_id,
                         "url_gfc_relevance_bypassed",
@@ -3067,14 +3247,26 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         resolution=official_rating_policy["resolution"],
                     )
                 elif official_rating_policy["misleading_evidence_ids"]:
-                    # Structured Misleading is a contextual signal only. Enrich
-                    # the persisted dossier before allowing a final verdict.
+                    # A proposition-covering structured Misleading rating is a
+                    # context signal only. Enrich before final arbitration.
                     is_relevant = True
                     gfc_terminally_sufficient = False
                     gfc_coverage_reason_code = "EXACT_OR_EQUIVALENT_COVERAGE"
-                    coverage_candidate_count = len(reviewed_claims)
-                    coverage_relevant_count = 1
-                    coverage_covered_count = 1
+                    coverage_candidate_count = (
+                        coverage["candidate_count"]
+                        if coverage is not None
+                        else len(reviewed_claims)
+                    )
+                    coverage_relevant_count = (
+                        coverage["relevant_candidate_count"]
+                        if coverage is not None
+                        else 1
+                    )
+                    coverage_covered_count = (
+                        coverage["covered_candidate_count"]
+                        if coverage is not None
+                        else 1
+                    )
                     _log_stage(
                         claim_id,
                         "url_gfc_relevance_bypassed",
@@ -3083,10 +3275,11 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         resolution=official_rating_policy["resolution"],
                     )
                 else:
-                    coverage = assess_fact_check_proposition_coverage(
-                        cleaned_claim,
-                        reviewed_claims,
-                    )
+                    if coverage is None:
+                        coverage = assess_fact_check_proposition_coverage(
+                            cleaned_claim,
+                            reviewed_claims,
+                        )
                     is_relevant = coverage["relevant_candidate_count"] > 0
                     gfc_terminally_sufficient = coverage["terminally_sufficient"]
                     gfc_coverage_reason_code = coverage["reason_code"]
@@ -3121,7 +3314,10 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
             evaluation_completed = False
             gfc_evaluation_deferred = bool(
                 run is not None
-                and requires_structured_misleading_enrichment
+                and (
+                    requires_structured_misleading_enrichment
+                    or not gfc_terminally_sufficient
+                )
             )
             if run is None:
                 try:
@@ -3155,7 +3351,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         evidence_dossier,
                         VerificationEvidence.EvidenceRole.FACT_CHECK,
                     )
-                if fact_check_groups:
+                if fact_check_groups and not gfc_evaluation_deferred:
                     _assess_and_persist_reasoning_evidence(
                         cleaned_claim,
                         fact_check_groups,
@@ -3176,7 +3372,11 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         claim_id,
                         "url_gfc_final_evaluation_skipped",
                         gfc_eval_started_at,
-                        reason="structured_misleading_requires_enrichment",
+                        reason=(
+                            "structured_misleading_requires_enrichment"
+                            if requires_structured_misleading_enrichment
+                            else "nonterminal_gfc_requires_enrichment"
+                        ),
                         terminally_sufficient=gfc_terminally_sufficient,
                     )
                 elif evidence_context:
@@ -3232,7 +3432,11 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     gfc_verdict=None,
                     terminally_sufficient=gfc_terminally_sufficient,
                     reason_code=gfc_coverage_reason_code,
-                    evaluation="deferred_for_structured_misleading_enrichment",
+                    evaluation=(
+                        "deferred_for_structured_misleading_enrichment"
+                        if requires_structured_misleading_enrichment
+                        else "deferred_for_nonterminal_gfc_enrichment"
+                    ),
                 )
             elif evaluation_completed:
                 _log_stage(
@@ -3402,10 +3606,27 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     evidence_dossier,
                     VerificationEvidence.EvidenceRole.SECONDARY,
                 )
-                if secondary_groups:
+                include_deferred_gfc = bool(
+                    secondary_groups
+                    and gfc_claims
+                    and is_relevant
+                    and not gfc_evidence_assessed
+                )
+                assessment_groups = (
+                    filter_reasoning_evidence_dossier_by_roles(
+                        evidence_dossier,
+                        (
+                            VerificationEvidence.EvidenceRole.FACT_CHECK,
+                            VerificationEvidence.EvidenceRole.SECONDARY,
+                        ),
+                    )
+                    if include_deferred_gfc
+                    else secondary_groups
+                )
+                if assessment_groups:
                     _assess_and_persist_reasoning_evidence(
                         cleaned_claim,
-                        secondary_groups,
+                        assessment_groups,
                         claim_id,
                         stage_prefix="url_tavily",
                     )
@@ -3414,6 +3635,12 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         evidence_dossier,
                         VerificationEvidence.EvidenceRole.SECONDARY,
                     )
+                    if include_deferred_gfc:
+                        fact_check_groups = filter_reasoning_evidence_dossier_by_role(
+                            evidence_dossier,
+                            VerificationEvidence.EvidenceRole.FACT_CHECK,
+                        )
+                        gfc_evidence_assessed = bool(fact_check_groups)
                 evaluation_groups = (
                     filter_reasoning_evidence_dossier_by_roles(
                         evidence_dossier,

@@ -97,10 +97,24 @@ DEFAULT_GROQ_VISION_MODEL = "qwen/qwen3.8-27b"
 # Bound 413 recovery fan-out: four original evidence items per chunk, at most
 # six sequential Groq chunk attempts (24 items) for one assessment stage.
 GROQ_ASSESSMENT_MAX_CHUNKS = 6
+# Honor Groq's documented Retry-After header only for the final verdict stage.
+# A rolling TPM window may require more than one short wait, so permit at most
+# two retries while bounding their combined synchronous delay.
+GROQ_RATE_LIMIT_RETRY_MAX_ATTEMPTS = 2
+GROQ_RATE_LIMIT_RETRY_TOTAL_SECONDS = 30.0
+# Long synchronous waits are poor recovery candidates for an interactive
+# verification job. Short rolling-window resets may still recover; longer waits
+# fail closed immediately so another user request is not held for a doomed retry.
+GROQ_RATE_LIMIT_RETRY_MAX_SINGLE_DELAY_SECONDS = 10.0
+# The essential final evaluator may honor one slightly longer provider-directed
+# rolling-window reset. Supplemental semantic audits never receive this allowance.
+GROQ_ESSENTIAL_RETRY_MAX_SINGLE_DELAY_SECONDS = 15.0
+GROQ_RATE_LIMIT_RETRY_SAFETY_SECONDS = 0.25
 
-# Bound verdict-sensitive Gemini stages so an overridden slower reasoning model
-# cannot consume the entire interactive verification window before fallbacks run.
-# With the current Flash-Lite default these are defensive ceilings.
+# Bound latency-sensitive Gemini stages so an alternate transient model cannot
+# consume the entire interactive verification window before fallbacks run.
+# Explicit caller timeouts still take precedence.
+RELIABILITY_DEFAULT_GEMINI_TIMEOUT_MS = 20_000
 CLAIM_EQUIVALENCE_GEMINI_TIMEOUT_MS = 20_000
 PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS = 30_000
 
@@ -252,6 +266,32 @@ def _with_user_facing_summary_rules(system_instructions):
     return f"{system_instructions.rstrip()}\n\n{_AI_SUMMARY_RULES.strip()}\n"
 
 
+_FAKE_MISLEADING_PRECEDENCE_RULES = """
+FAKE VS MISLEADING PRECEDENCE:
+- MISLEADING requires evidence of both a substantial genuine component of the
+  same submitted proposition/content and a material distortion of that component
+  through false or missing context. Mere topic/person/media overlap is
+  insufficient.
+- Authentic media or remarks that are materially re-dated, re-captioned,
+  selectively clipped, or presented as referring to a different event/action may
+  qualify as MISLEADING only when the supplied evidence establishes both the
+  authentic underlying material and the truth-changing context change.
+- FAKE applies when the material asserted core is fabricated, did not occur, or
+  is falsely attributed. Direct contradiction does not override the rule above.
+  Do not choose FAKE merely because a fact-check source says a post is false when
+  the supplied evidence instead establishes a genuine underlying item whose
+  context or meaning was materially changed.
+- If the distinction is not established from supplied evidence, use UNVERIFIED.
+"""
+
+
+def _with_fake_misleading_precedence_rules(system_instructions):
+    return (
+        f"{system_instructions.rstrip()}\n\n"
+        f"{_FAKE_MISLEADING_PRECEDENCE_RULES.strip()}\n"
+    )
+
+
 # Keep routine and reasoning model seams separate even though the defense-period
 # defaults currently use the same low-latency free-tier model. Operators can
 # still override GEMINI_REASONING_MODEL independently after validation.
@@ -270,6 +310,7 @@ _gemini_transient_degraded_models = ContextVar(
     default=None,
 )
 _cloudflare_pilot_degraded = ContextVar("cloudflare_pilot_degraded", default=None)
+_groq_job_rate_limited = ContextVar("groq_job_rate_limited", default=None)
 
 
 @contextmanager
@@ -278,9 +319,11 @@ def llm_provider_scope():
     token = _gemini_degraded_models.set(frozenset())
     transient_token = _gemini_transient_degraded_models.set(frozenset())
     cloudflare_token = _cloudflare_pilot_degraded.set(False)
+    groq_token = _groq_job_rate_limited.set(False)
     try:
         yield
     finally:
+        _groq_job_rate_limited.reset(groq_token)
         _cloudflare_pilot_degraded.reset(cloudflare_token)
         _gemini_transient_degraded_models.reset(transient_token)
         _gemini_degraded_models.reset(token)
@@ -475,6 +518,41 @@ def _is_groq_request_too_large(error):
     return _provider_status_code(error) == 413
 
 
+def _groq_rate_limit_retry_delay(
+    error,
+    *,
+    remaining_budget,
+    max_single_delay=GROQ_RATE_LIMIT_RETRY_MAX_SINGLE_DELAY_SECONDS,
+):
+    """Return a provider-directed 429 delay within the remaining wait budget."""
+    if _provider_status_code(error) != 429:
+        return None
+    if not isinstance(remaining_budget, (int, float)) or remaining_budget <= 0:
+        return None
+
+    response = getattr(error, "response", None)
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        return None
+
+    try:
+        raw_retry_after = headers.get("retry-after")
+        retry_after = float(raw_retry_after)
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+    if not math.isfinite(retry_after) or retry_after < 0:
+        return None
+
+    requested_delay = retry_after + GROQ_RATE_LIMIT_RETRY_SAFETY_SECONDS
+    if requested_delay > remaining_budget:
+        return None
+    if requested_delay > max_single_delay:
+        return None
+
+    return requested_delay
+
+
 def _cloudflare_failure_degrades_job(error):
     """Only provider-scoped failures should trip the per-job Cloudflare breaker."""
     code = sanitized_cloudflare_error_code(error)
@@ -625,6 +703,15 @@ def call_llm_with_fallback(
 
     gemini_model = _gemini_model_for_operation(operation)
     gemini_fallback_model = _gemini_transient_fallback_model()
+    effective_gemini_timeout_ms = gemini_timeout_ms
+    if (
+        effective_gemini_timeout_ms is None
+        and hierarchy_active
+        and reliability_hardening_enabled()
+        and operation is not None
+    ):
+        effective_gemini_timeout_ms = RELIABILITY_DEFAULT_GEMINI_TIMEOUT_MS
+
     last_gemini_error = None
     primary_gemini_error = None
 
@@ -637,12 +724,12 @@ def call_llm_with_fallback(
             }
             try:
                 if (
-                    isinstance(gemini_timeout_ms, int)
-                    and not isinstance(gemini_timeout_ms, bool)
-                    and gemini_timeout_ms > 0
+                    isinstance(effective_gemini_timeout_ms, int)
+                    and not isinstance(effective_gemini_timeout_ms, bool)
+                    and effective_gemini_timeout_ms > 0
                 ):
                     gemini_config["http_options"] = types.HttpOptions(
-                        timeout=gemini_timeout_ms
+                        timeout=effective_gemini_timeout_ms
                     )
                 request_config = types.GenerateContentConfig(**gemini_config)
             except Exception as gemini_err:
@@ -969,6 +1056,11 @@ def call_llm_with_fallback(
             ):
                 raise ValueError("INVALID_PILOT_FALLBACK_JSON")
         except Exception as groq_error:
+            if (
+                _provider_status_code(groq_error) == 429
+                and _groq_job_rate_limited.get() is not None
+            ):
+                _groq_job_rate_limited.set(True)
             _log_llm_provider_call(
                 operation,
                 "groq",
@@ -987,6 +1079,8 @@ def call_llm_with_fallback(
             )
             return None, groq_error
 
+        if _groq_job_rate_limited.get() is not None:
+            _groq_job_rate_limited.set(False)
         _log_llm_provider_call(
             operation,
             "groq",
@@ -1051,9 +1145,20 @@ def call_llm_with_fallback(
             return None, ValueError("INVALID_PILOT_FALLBACK_JSON")
         return combined, None
 
+    groq_retry_prompt = groq_user_prompt
+    groq_retry_variant = groq_request_variant
+    groq_retry_number = 0
+    supplemental_audit = operation in {
+        SATIRE_PROVENANCE_AUDIT_OPERATION,
+        STRUCTURED_MISLEADING_AUDIT_OPERATION,
+    }
+    if supplemental_audit and _groq_job_rate_limited.get() is True:
+        raise LLMProviderUnavailableError(
+            "Groq is already rate-limited for this verification job."
+        )
     content, groq_err = _try_groq_once(
-        groq_user_prompt,
-        variant=groq_request_variant,
+        groq_retry_prompt,
+        variant=groq_retry_variant,
     )
 
     if (
@@ -1066,10 +1171,13 @@ def call_llm_with_fallback(
             "Groq rejected the full request as too large; retrying once with "
             "the deterministic bounded fallback dossier."
         )
+        groq_retry_prompt = resolved_fallback_user_prompt
+        groq_retry_variant = "BOUNDED"
+        groq_retry_number = 1
         content, groq_err = _try_groq_once(
-            resolved_fallback_user_prompt,
-            variant="BOUNDED",
-            retry_number=1,
+            groq_retry_prompt,
+            variant=groq_retry_variant,
+            retry_number=groq_retry_number,
         )
 
     if (
@@ -1083,6 +1191,58 @@ def call_llm_with_fallback(
             "retrying with bounded lossless keyed chunks."
         )
         content, groq_err = _try_groq_assessment_chunks()
+
+    groq_rate_limit_retries = 0
+    groq_rate_limit_waited = 0.0
+    groq_used_extended_single_wait = False
+    while (
+        groq_err is not None
+        and hierarchy_active
+        and reliability_hardening_enabled()
+        and operation == PILOT_OPERATION
+        and groq_rate_limit_retries < GROQ_RATE_LIMIT_RETRY_MAX_ATTEMPTS
+    ):
+        remaining_budget = (
+            GROQ_RATE_LIMIT_RETRY_TOTAL_SECONDS - groq_rate_limit_waited
+        )
+        max_single_delay = (
+            GROQ_ESSENTIAL_RETRY_MAX_SINGLE_DELAY_SECONDS
+            if groq_rate_limit_retries == 0
+            else GROQ_RATE_LIMIT_RETRY_MAX_SINGLE_DELAY_SECONDS
+        )
+        groq_rate_limit_delay = _groq_rate_limit_retry_delay(
+            groq_err,
+            remaining_budget=remaining_budget,
+            max_single_delay=max_single_delay,
+        )
+        if groq_rate_limit_delay is None:
+            break
+
+        if (
+            groq_rate_limit_retries == 0
+            and groq_rate_limit_delay
+            > GROQ_RATE_LIMIT_RETRY_MAX_SINGLE_DELAY_SECONDS
+        ):
+            groq_used_extended_single_wait = True
+
+        groq_rate_limit_retries += 1
+        logger.warning(
+            "Groq final evaluation rate-limited; retrying %s/%s after %.2fs "
+            "(cumulative wait %.2fs).",
+            groq_rate_limit_retries,
+            GROQ_RATE_LIMIT_RETRY_MAX_ATTEMPTS,
+            groq_rate_limit_delay,
+            groq_rate_limit_waited + groq_rate_limit_delay,
+        )
+        time.sleep(groq_rate_limit_delay)
+        groq_rate_limit_waited += groq_rate_limit_delay
+        content, groq_err = _try_groq_once(
+            groq_retry_prompt,
+            variant=groq_retry_variant,
+            retry_number=groq_retry_number + groq_rate_limit_retries,
+        )
+        if groq_used_extended_single_wait and groq_err is not None:
+            break
 
     if groq_err is not None:
         logger.error(
@@ -1484,16 +1644,24 @@ def _direct_text_comparison_anchors(value):
     return anchors
 
 
-def inspect_direct_text_claim_fidelity(raw_text, cleaned_claim):
-    """Return PASS/FAIL/SKIP for a narrow direct-TEXT material-fidelity check.
+def inspect_direct_text_claim_fidelity(
+    raw_text,
+    cleaned_claim,
+    *,
+    return_reason=False,
+):
+    """Return a narrow direct-TEXT material-fidelity result.
 
-    The guard deliberately avoids semantic/entity equivalence. It is limited to
-    short, single-sentence text where deterministic numeric, comparison,
-    percentage, and polarity anchors can be compared without guessing. Long or
-    multi-sentence content is left to the existing ClaimGate contract.
+    By default this preserves the historical PASS/FAIL/SKIP contract. Callers
+    may request a deterministic reason code for telemetry. The guard deliberately
+    avoids semantic/entity equivalence and checks only anchors that can be
+    compared without interpretation.
     """
+    def result(status, reason):
+        return (status, reason) if return_reason else status
+
     if not isinstance(raw_text, str) or not raw_text.strip():
-        return "SKIP"
+        return result("SKIP", "EMPTY_RAW_TEXT")
 
     raw_text = raw_text.strip()
     if (
@@ -1501,25 +1669,25 @@ def inspect_direct_text_claim_fidelity(raw_text, cleaned_claim):
         or "\n" in raw_text
         or "\r" in raw_text
     ):
-        return "SKIP"
+        return result("SKIP", "COMPLEX_OR_LONG_TEXT")
 
     # Ignore decimal points when conservatively counting sentence punctuation.
     sentence_probe = re.sub(r"(?<=\d)\.(?=\d)", "", raw_text)
     if sum(sentence_probe.count(mark) for mark in ".!?") > 1:
-        return "SKIP"
+        return result("SKIP", "MULTI_SENTENCE_TEXT")
 
     if not isinstance(cleaned_claim, str) or not cleaned_claim.strip():
-        return "FAIL"
+        return result("FAIL", "MISSING_CLEANED_CLAIM")
     cleaned_claim = cleaned_claim.strip()
     if cleaned_claim in {"OUT_OF_SCOPE", "INSUFFICIENT_CONTEXT"}:
-        return "SKIP"
+        return result("SKIP", "CLAIMABILITY_SENTINEL")
 
     raw_numbers = _direct_text_numeric_anchors(raw_text)
     cleaned_numbers = _direct_text_numeric_anchors(cleaned_claim)
     remaining_numbers = list(cleaned_numbers)
     for anchor in raw_numbers:
         if anchor not in remaining_numbers:
-            return "FAIL"
+            return result("FAIL", "MISSING_NUMERIC_ANCHOR")
         remaining_numbers.remove(anchor)
 
     # A newly introduced four-digit year is especially high-risk because it can
@@ -1535,24 +1703,24 @@ def inspect_direct_text_claim_fidelity(raw_text, cleaned_claim):
         if token.isdigit() and len(token) == 4 and 1900 <= int(token) <= 2100
     }
     if not cleaned_years.issubset(raw_years):
-        return "FAIL"
+        return result("FAIL", "INTRODUCED_YEAR")
 
     if _direct_text_comparison_anchors(raw_text) != _direct_text_comparison_anchors(
         cleaned_claim
     ):
-        return "FAIL"
+        return result("FAIL", "COMPARATOR_CHANGED")
 
     if _direct_text_has_material_negation(
         raw_text
     ) != _direct_text_has_material_negation(cleaned_claim):
-        return "FAIL"
+        return result("FAIL", "NEGATION_CHANGED")
 
     if bool(_DIRECT_TEXT_PERCENT_RE.search(raw_text)) != bool(
         _DIRECT_TEXT_PERCENT_RE.search(cleaned_claim)
     ):
-        return "FAIL"
+        return result("FAIL", "PERCENT_SEMANTICS_CHANGED")
 
-    return "PASS"
+    return result("PASS", "ANCHORS_PRESERVED")
 
 
 def _source_bounded_tokens(value):
@@ -2110,6 +2278,8 @@ Never output a factual verdict."""
             raise ValueError("Missing GFC proposition coverage candidate")
 
         normalized_rows = [by_index[index] for index in range(len(candidates))]
+        for index, row in enumerate(normalized_rows):
+            row["reviewed_claim"] = candidates[index]
         if any(
             row["relationship"] == "EQUIVALENT_OR_COVERS"
             for row in normalized_rows
@@ -2235,6 +2405,9 @@ def evaluate_image_claim_with_gfc(
             "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
         }
         """
+    system_instructions = _with_fake_misleading_precedence_rules(
+        system_instructions
+    )
     system_instructions = _with_user_facing_summary_rules(system_instructions)
 
     user_data = (
@@ -2327,6 +2500,9 @@ def evaluate_image_claim_with_tavily(
         "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
     }
     """
+    system_instructions = _with_fake_misleading_precedence_rules(
+        system_instructions
+    )
     system_instructions = _with_user_facing_summary_rules(system_instructions)
 
     user_data = (
@@ -2428,6 +2604,18 @@ def build_persisted_evidence_prompt(
     - Preserve entity, event, location, and time scope. Evidence about a separate
       event or time period must not be used as the explanation for the claim unless
       the supplied evidence explicitly connects them.
+    - Also preserve predicate/action/relationship identity and subject/object roles.
+      Evidence about a separate action, relationship, or reversed role direction
+      must not be used as support or contradiction unless the supplied passage
+      explicitly connects it to the submitted proposition.
+    - Evidence stance labels are assessment metadata, not proof. Re-check the
+      supplied passage itself before relying on SUPPORTS or REFUTES. If the passage
+      describes a different action/relation involving the same actor and topic,
+      treat that item as context for final reasoning rather than as support.
+    - Do not collapse related actions into entailment. For example, recusing or
+      inhibiting oneself from an investigation does not mean calling for the
+      investigation itself to stop; reviewing or considering a sale does not mean
+      approving the sale; discussing resignation does not mean resigning.
     - SATIRE requires verified provenance for the same submitted claim or content.
       Direct submitted-source provenance is represented by <stance>SATIRE</stance>.
       Equivalent structured official fact-check provenance is represented by
@@ -2479,6 +2667,9 @@ def build_persisted_evidence_prompt(
         "contextual_basis_evidence_ids": ["Exact Evidence link ID copied from the dossier"]
     }
     """
+    system_instructions = _with_fake_misleading_precedence_rules(
+        system_instructions
+    )
     system_instructions = _with_user_facing_summary_rules(system_instructions)
 
     official_satire_ids_text = ",".join(official_satire_evidence_ids)
@@ -2600,6 +2791,32 @@ def _satire_provenance_unverified_result():
     }
 
 
+def _bounded_satire_signal_excerpt(value, *, max_chars=700):
+    """Keep compact context around the first explicit satire/parody signal."""
+    text = str(value or "")
+    if len(text) <= max_chars:
+        return text
+    lowered = text.casefold()
+    positions = [
+        position
+        for token in ("satir", "parody")
+        if (position := lowered.find(token)) >= 0
+    ]
+    if not positions:
+        return text[:max_chars]
+    center = min(positions)
+    half = max_chars // 2
+    start = max(0, center - half)
+    end = min(len(text), start + max_chars)
+    start = max(0, end - max_chars)
+    excerpt = text[start:end]
+    if start:
+        excerpt = "…" + excerpt[1:]
+    if end < len(text):
+        excerpt = excerpt[:-1] + "…"
+    return excerpt
+
+
 def _qualified_satire_signal_candidates(evidence_groups):
     """Return assessed satire/parody evidence aliases without exposing ID choice to LLMs."""
     groups = tuple(evidence_groups or ())
@@ -2630,8 +2847,30 @@ def _qualified_satire_signal_candidates(evidence_groups):
             candidates.append({
                 "alias": f"S{len(candidates) + 1}",
                 "evidence_id": evidence_id,
+                "title": str(getattr(item, "title", "") or "")[:240],
+                "content": _bounded_satire_signal_excerpt(
+                    getattr(item, "content", ""),
+                ),
+                "stance": str(getattr(item, "stance", "") or ""),
+                "relevance_score": getattr(item, "relevance_score", None),
+                "directness_score": getattr(item, "directness_score", None),
             })
     return candidates
+
+
+def _render_satire_provenance_candidates(candidates):
+    """Render only qualified satire-signal evidence for the provenance audit."""
+    rows = []
+    for candidate in candidates:
+        rows.append({
+            "alias": candidate["alias"],
+            "title": candidate.get("title", ""),
+            "content": candidate.get("content", ""),
+            "stance": candidate.get("stance", ""),
+            "relevance_score": candidate.get("relevance_score"),
+            "directness_score": candidate.get("directness_score"),
+        })
+    return json.dumps(rows, ensure_ascii=False)
 
 
 def _audit_persisted_satire_provenance(
@@ -2649,6 +2888,7 @@ def _audit_persisted_satire_provenance(
         candidate["alias"]: candidate["evidence_id"]
         for candidate in candidates
     }
+    candidate_context = _render_satire_provenance_candidates(candidates)
     system_instructions = """
     Role: You are the TruthLens satire-provenance relationship auditor.
 
@@ -2683,14 +2923,18 @@ def _audit_persisted_satire_provenance(
     """
     first_verdict = evaluator_result.get("verdict", "UNVERIFIED")
 
-    def audit_prompt(context):
+    def audit_prompt(_context):
         return system_instructions, (
             f"<claim>{original_claim}</claim>\n\n"
             f"<first_evaluator_verdict>{first_verdict}</first_evaluator_verdict>\n"
             f"<satire_signal_aliases>{json.dumps(alias_to_id)}</satire_signal_aliases>\n\n"
-            f"<persisted_evidence>{context}</persisted_evidence>"
+            f"<satire_candidate_evidence>{candidate_context}</satire_candidate_evidence>"
         )
 
+    # The main evaluator has already consumed the complete dossier. This
+    # provenance-only audit receives only assessed evidence that passed the
+    # existing quality floor and contains an explicit satire/parody signal.
+    # That reduces provider load without weakening same-proposition eligibility.
     _, user_data = audit_prompt(evidence_context)
     try:
         response_text = call_llm_with_fallback(
@@ -2955,6 +3199,316 @@ def _audit_misleading_materiality(
         return _misleading_materiality_unverified_result()
 
 
+
+def _deterministic_satire_provenance_result(
+    evaluator_result,
+    evidence_groups,
+    candidates,
+):
+    """Return a validated SATIRE result only when persisted basis IDs already prove it."""
+    if (
+        evaluator_result.get("verdict") != "SATIRE"
+        or evaluator_result.get("contextual_basis_kind") != "SATIRE_PROVENANCE"
+    ):
+        return None
+    basis_ids = {
+        str(value)
+        for value in evaluator_result.get("contextual_basis_evidence_ids", [])
+        if value
+    }
+    candidate_ids = {
+        str(candidate["evidence_id"])
+        for candidate in candidates
+        if candidate.get("evidence_id")
+    }
+    if not basis_ids or not basis_ids.issubset(candidate_ids):
+        return None
+    if not has_claim_scoped_satire_support(evaluator_result, evidence_groups):
+        return None
+    return evaluator_result
+
+
+def _deterministic_structured_misleading_result(
+    evaluator_result,
+    signal_ids,
+    evidence_groups,
+):
+    """Reuse a strong claim-scoped MISLEADING result instead of re-auditing it."""
+    if (
+        evaluator_result.get("verdict") != "MISLEADING"
+        or evaluator_result.get("contextual_basis_kind")
+        not in _MISLEADING_MATERIALITY_BASIS_KINDS
+    ):
+        return None
+    basis_ids = {
+        str(value)
+        for value in evaluator_result.get("contextual_basis_evidence_ids", [])
+        if value
+    }
+    if not basis_ids.intersection({str(value) for value in signal_ids}):
+        return None
+    if not has_claim_scoped_misleading_support(
+        evaluator_result,
+        evidence_groups,
+    ):
+        return None
+    result = dict(evaluator_result)
+    result["confidence_score"] = min(
+        _normalize_verdict_confidence_score(result.get("confidence_score", 0)),
+        85,
+    )
+    result["score_context"] = (
+        "A strict-equivalent Misleading fact-check signal and assessed claim-scoped "
+        "support/refutation evidence establish the contextual verdict; final "
+        f"confidence is {result['confidence_score']:g}%."
+    )
+    return result
+
+
+def _bounded_structured_misleading_context(
+    signal_ids,
+    evidence_groups,
+    *,
+    max_items=6,
+    max_chars=900,
+):
+    """Render only the strongest assessed evidence needed for the relationship audit."""
+    signal_ids = {str(value) for value in signal_ids}
+    candidates = []
+    seen = set()
+    for group in evidence_groups or ():
+        for item in getattr(group, "evidence", ()):
+            evidence_id = getattr(item, "evidence_link_id", None)
+            if not evidence_id:
+                continue
+            evidence_id = str(evidence_id)
+            if evidence_id in seen:
+                continue
+            seen.add(evidence_id)
+            stance = str(getattr(item, "stance", "") or "")
+            relevance = getattr(item, "relevance_score", 0) or 0
+            directness = getattr(item, "directness_score", 0) or 0
+            try:
+                quality = (float(relevance) + float(directness)) / 2
+            except (TypeError, ValueError):
+                quality = 0.0
+            priority = (
+                0 if evidence_id in signal_ids
+                else 1 if stance == "SUPPORTS"
+                else 2 if stance == "REFUTES"
+                else 3 if stance == "CONTEXT"
+                else 4
+            )
+            candidates.append((
+                priority,
+                -quality,
+                {
+                    "evidence_id": evidence_id,
+                    "title": str(getattr(item, "title", "") or "")[:240],
+                    "content": str(getattr(item, "content", "") or "")[:max_chars],
+                    "stance": stance,
+                    "relevance_score": relevance,
+                    "directness_score": directness,
+                    "structured_misleading_signal": evidence_id in signal_ids,
+                },
+            ))
+
+    candidates.sort(key=lambda row: (row[0], row[1], row[2]["evidence_id"]))
+    selected = [row[2] for row in candidates[:max_items]]
+    selected_ids = {row["evidence_id"] for row in selected}
+
+    # Every strict-equivalent structured signal must remain visible to the audit.
+    for row in candidates:
+        item = row[2]
+        if (
+            item["structured_misleading_signal"]
+            and item["evidence_id"] not in selected_ids
+        ):
+            selected.append(item)
+            selected_ids.add(item["evidence_id"])
+
+    return json.dumps(selected, ensure_ascii=False)
+
+
+
+_FALSE_CONTEXT_AUDIT_CLAIM_PATTERNS = (
+    r"\bedited\b",
+    r"\bspliced\b",
+    r"\bclipped\b",
+    r"\bcropped\b",
+    r"\brecaptioned\b",
+    r"\bre-captioned\b",
+    r"\bout[- ]of[- ]context\b",
+    r"\bmisleadingly edited\b",
+)
+
+
+def _claim_needs_fake_false_context_audit(original_claim):
+    """Open a narrow FAKE-vs-MISLEADING audit for explicit manipulation claims.
+
+    These lexical cues never determine the verdict. They only authorize a compact
+    second-stage relationship check when the first evaluator returned FAKE for a
+    proposition that itself explicitly concerns edited/recontextualized material.
+    """
+    if not isinstance(original_claim, str) or not original_claim.strip():
+        return False
+    normalized = original_claim.casefold()
+    return any(
+        re.search(pattern, normalized)
+        for pattern in _FALSE_CONTEXT_AUDIT_CLAIM_PATTERNS
+    )
+
+
+def _fake_false_context_unverified_result():
+    return {
+        "reasoning": (
+            "The persisted evidence contradicts the submitted claim, but the "
+            "available relationship audit could not safely distinguish a fabricated "
+            "core from genuine material presented in a materially false context."
+        ),
+        "verdict": "UNVERIFIED",
+        "summary": (
+            "The evidence contradicts the claim, but does not establish clearly "
+            "enough whether the core assertion was fabricated or genuine material "
+            "was materially recontextualized."
+        ),
+        "confidence_score": 0,
+        "score_context": (
+            "FAKE-versus-MISLEADING relationship could not be resolved safely."
+        ),
+        "contextual_basis_kind": "NONE",
+        "contextual_basis_evidence_ids": [],
+    }
+
+
+def _audit_fake_false_context_signal(
+    original_claim,
+    evaluator_result,
+    evidence_groups=(),
+):
+    """Resolve FAKE vs FALSE_CONTEXT only for explicit manipulated-media claims."""
+    compact_context = _bounded_structured_misleading_context(
+        (),
+        evidence_groups,
+    )
+    if not compact_context or compact_context == "[]":
+        return _fake_false_context_unverified_result()
+
+    system_instructions = """
+    Role: You are the TruthLens FAKE-vs-MISLEADING false-context auditor.
+
+    Use ONLY the supplied assessed persisted evidence. Do not use pre-trained
+    knowledge, external facts, source-title labels alone, or assumptions.
+
+    The first evaluator returned FAKE. The submitted proposition itself explicitly
+    concerns edited, spliced, clipped, cropped, re-captioned, or otherwise
+    recontextualized material. Determine only the factual relationship:
+
+    - MATERIAL_MISDESCRIPTION: the underlying quoted words, media, event, exchange,
+      or other material is genuine and materially connected to the submitted claim,
+      but editing, omission, clipping, chronology, captioning, attribution context,
+      or presentation changes its ordinary factual meaning. This maps to MISLEADING
+      with basis_kind=FALSE_CONTEXT or PARTIAL_TRUTH.
+    - FABRICATED_CORE: the asserted core quotation, admission, action, event, or
+      attribution itself did not occur and the genuine surrounding person/photo/
+      topic is merely incidental. This remains FAKE.
+    - INSUFFICIENT_OR_CONFLICTING: the assessed evidence cannot safely distinguish
+      those relationships.
+
+    A genuine video/photo/person by itself is NOT enough for MATERIAL_MISDESCRIPTION.
+    The evidence must establish that genuine material from the same submitted
+    proposition was transformed or stripped of material context in a way that
+    changes the claim's meaning.
+
+    Return JSON containing exactly:
+    {
+      "relationship": "MATERIAL_MISDESCRIPTION|FABRICATED_CORE|INSUFFICIENT_OR_CONFLICTING",
+      "basis_kind": "NONE|PARTIAL_TRUTH|FALSE_CONTEXT",
+      "basis_evidence_ids": ["exact persisted evidence link ID"]
+    }
+    """
+    user_data = (
+        f"<claim>{original_claim}</claim>\n\n"
+        f"<first_evaluator_verdict>{evaluator_result.get('verdict', 'FAKE')}"
+        f"</first_evaluator_verdict>\n\n"
+        f"<assessed_candidates>{compact_context}</assessed_candidates>"
+    )
+
+    try:
+        response_text = call_llm_with_fallback(
+            system_instructions,
+            user_data,
+            operation=STRUCTURED_MISLEADING_AUDIT_OPERATION,
+            gemini_timeout_ms=PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
+        )
+        audited = _parse_llm_json(response_text)
+        if not isinstance(audited, dict):
+            raise ValueError("false-context audit response was not a JSON object")
+        relationship = audited.get("relationship")
+        basis_kind = audited.get("basis_kind", "NONE")
+        basis_ids = [
+            str(value).strip()
+            for value in audited.get("basis_evidence_ids", [])
+            if isinstance(value, str) and value.strip()
+        ]
+        if relationship not in {
+            "MATERIAL_MISDESCRIPTION",
+            "FABRICATED_CORE",
+            "INSUFFICIENT_OR_CONFLICTING",
+        }:
+            raise ValueError("false-context audit returned invalid relationship")
+
+        if relationship == "MATERIAL_MISDESCRIPTION":
+            if basis_kind not in {"PARTIAL_TRUTH", "FALSE_CONTEXT"} or not basis_ids:
+                raise ValueError("false-context audit lacked a valid contextual basis")
+            persisted_ids = _persisted_evidence_link_ids(evidence_groups)
+            if any(value not in persisted_ids for value in basis_ids):
+                raise ValueError("false-context audit cited non-persisted evidence")
+            result = {
+                "reasoning": (
+                    "Assessed persisted evidence establishes genuine underlying "
+                    "material from the submitted proposition, but the editing or "
+                    "presentation materially changes its factual meaning."
+                ),
+                "verdict": "MISLEADING",
+                "summary": (
+                    "The claim uses genuine underlying material, but editing or "
+                    "missing context materially changes what that material conveys."
+                ),
+                "confidence_score": 90,
+                "score_context": (
+                    "Assessed claim-scoped evidence establishes genuine material "
+                    "presented in a materially false context."
+                ),
+                "contextual_basis_kind": basis_kind,
+                "contextual_basis_evidence_ids": basis_ids,
+            }
+            if not has_usable_contextual_basis(
+                result,
+                evidence_groups,
+                "MISLEADING",
+            ):
+                raise ValueError(
+                    "false-context basis did not meet the usable quality floor"
+                )
+            return result
+
+        if relationship == "FABRICATED_CORE":
+            result = dict(evaluator_result)
+            result["verdict"] = "FAKE"
+            result["contextual_basis_kind"] = "NONE"
+            result["contextual_basis_evidence_ids"] = []
+            return result
+
+        return _fake_false_context_unverified_result()
+    except Exception as exc:
+        logger.warning(
+            "FAKE false-context audit unavailable (%s).",
+            _provider_error_label(exc),
+        )
+        return _fake_false_context_unverified_result()
+
+
 def _structured_misleading_signal_unverified_result():
     return {
         "reasoning": (
@@ -3010,16 +3564,30 @@ def _audit_structured_misleading_signal(
 
     Classify the relationship between the exact submitted proposition and evidence:
     - MATERIAL_MISDESCRIPTION: a substantial genuine factual substrate of the same
-      proposition exists (same material event, program, action, media, quantity,
-      actor/object relationship, or occurrence), but the claim materially changes
-      its nature, legal/status relationship, date, quantity, framing, omission, or
-      context. Example pattern: a real program involving the same land/amount and
-      private parties is described as a sale when the evidence establishes a
-      different land-use or development relationship.
+      submitted content or proposition exists (same material event, program,
+      remarks, statement, media, quantity, actor/object relationship, or occurrence),
+      but the claim materially changes its nature, legal/status relationship, date,
+      quantity, meaning, framing, omission, or context. The genuine substrate need
+      not itself literally perform the overstated action if the evidence establishes
+      that the submitted claim is a materially distorted paraphrase, interpretation,
+      caption, or characterization of that genuine material.
+      Example patterns:
+      * a real program involving the same land/amount and private parties is
+        described as a sale when the evidence establishes a different land-use or
+        development relationship;
+      * genuine remarks about an investigation or process are materially
+        misrepresented as the speaker calling for the investigation itself to stop.
     - FABRICATED_CORE: the asserted core quotation, action, event, policy, or
-      attribution itself did not occur or was invented. A real person, photograph,
-      location, or related topic is merely incidental. Example pattern: a real
-      politician/photo paired with an invented quotation.
+      attribution itself did not occur or was invented, AND the evidence does not
+      establish a substantial genuine same-content/source substrate that was
+      materially distorted into the submitted assertion. A real person, photograph,
+      location, or merely related topic is incidental. Example pattern: a real
+      politician/photo paired with a quotation that was wholly invented rather than
+      a distorted paraphrase of genuine remarks.
+    - When distinguishing the two, ask whether the false assertion was created by
+      materially changing the meaning of genuine same-source/content material. If
+      yes, choose MATERIAL_MISDESCRIPTION. If the asserted words/action were simply
+      invented without such a genuine substrate, choose FABRICATED_CORE.
     - FULLY_SUPPORTED: every material assertion in the submitted proposition is
       explicitly supported by the persisted evidence.
     - INSUFFICIENT_OR_CONFLICTING: the evidence cannot safely establish one of the
@@ -3037,12 +3605,17 @@ def _audit_structured_misleading_signal(
     Optional reasoning/summary fields are allowed but are not required.
     """
     first_verdict = evaluator_result.get("verdict", "UNVERIFIED")
+    compact_context = _bounded_structured_misleading_context(
+        signal_ids,
+        evidence_groups,
+    )
     user_data = (
         f"<claim>{original_claim}</claim>\n\n"
         f"<first_evaluator_verdict>{first_verdict}</first_evaluator_verdict>\n"
         f"<structured_misleading_evidence_ids>"
         f"{json.dumps(signal_ids)}</structured_misleading_evidence_ids>\n\n"
-        f"<persisted_evidence>{evidence_context}</persisted_evidence>"
+        f"<structured_misleading_candidates>"
+        f"{compact_context}</structured_misleading_candidates>"
     )
 
     try:
@@ -3236,12 +3809,21 @@ def evaluate_claim_with_persisted_evidence(
             and parsed_result.get("verdict") in {"FAKE", "UNVERIFIED", "SATIRE"}
             and _has_persisted_satire_signal(evidence_groups)
         ):
-            parsed_result = _audit_persisted_satire_provenance(
-                original_claim,
-                evidence_context,
+            satire_candidates = _qualified_satire_signal_candidates(evidence_groups)
+            deterministic_satire = _deterministic_satire_provenance_result(
                 parsed_result,
                 evidence_groups,
+                satire_candidates,
             )
+            if deterministic_satire is not None:
+                parsed_result = deterministic_satire
+            else:
+                parsed_result = _audit_persisted_satire_provenance(
+                    original_claim,
+                    evidence_context,
+                    parsed_result,
+                    evidence_groups,
+                )
             persisted_satire_provenance = parsed_result.get("verdict") == "SATIRE"
 
         parsed_result = _enforce_satire_verdict_eligibility(
@@ -3258,22 +3840,29 @@ def evaluate_claim_with_persisted_evidence(
             if isinstance(value, str) and value.strip()
         )
         if structured_misleading_ids:
-            if (
-                parsed_result.get("verdict") == "MISLEADING"
-                and parsed_result.get("contextual_basis_kind")
-                != "SATIRE_ORIGIN_OF_MISINFORMATION"
-            ):
-                return _audit_misleading_materiality(
-                    original_claim,
-                    evidence_context,
-                    parsed_result,
-                    evidence_groups,
-                )
+            deterministic_misleading = _deterministic_structured_misleading_result(
+                parsed_result,
+                structured_misleading_ids,
+                evidence_groups,
+            )
+            if deterministic_misleading is not None:
+                return deterministic_misleading
             return _audit_structured_misleading_signal(
                 original_claim,
                 evidence_context,
                 parsed_result,
                 structured_misleading_ids,
+                evidence_groups,
+            )
+
+        if (
+            parsed_result.get("verdict") == "FAKE"
+            and official_fact_check_resolution == OFFICIAL_FACT_CHECK_RESOLUTION_NONE
+            and _claim_needs_fake_false_context_audit(original_claim)
+        ):
+            return _audit_fake_false_context_signal(
+                original_claim,
+                parsed_result,
                 evidence_groups,
             )
 
@@ -3453,6 +4042,9 @@ def evaluate_url_claim_with_gfc(extracted_text, gfc_data, article_stance="NEUTRA
         "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
     }
     """
+    system_instructions = _with_fake_misleading_precedence_rules(
+        system_instructions
+    )
     system_instructions = _with_user_facing_summary_rules(system_instructions)
 
     user_data = (
@@ -3538,6 +4130,9 @@ def evaluate_url_claim_with_tavily(extracted_text, context, article_stance="NEUT
         "score_context": "A strict 10-15 word one-liner explaining WHY you gave this specific confidence score."
     }
     """
+    system_instructions = _with_fake_misleading_precedence_rules(
+        system_instructions
+    )
     system_instructions = _with_user_facing_summary_rules(system_instructions)
 
     user_data = (

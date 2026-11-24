@@ -56,3 +56,40 @@ class VerdictConfidencePromptAnchorTests(SimpleTestCase):
             ),
             5,
         )
+
+    def test_all_primary_verdict_prompts_apply_fake_misleading_precedence(self):
+        source = self._verdict_prompt_source()
+        self.assertEqual(
+            source.count("_with_fake_misleading_precedence_rules("),
+            5,
+        )
+
+    def test_fake_misleading_precedence_has_overfilter_and_abstention_guards(self):
+        source = SERVICES_PATH.read_text(encoding="utf-8")
+        required_rules = (
+            "substantial genuine component of the",
+            "Mere topic/person/media overlap is",
+            "Authentic media or remarks that are materially re-dated",
+            "truth-changing context change",
+            "material asserted core is fabricated",
+            "Direct contradiction does not override",
+            "Do not choose FAKE merely because a fact-check source says",
+            "If the distinction is not established from supplied evidence",
+        )
+        for rule in required_rules:
+            with self.subTest(rule=rule):
+                self.assertIn(rule, source)
+
+    def test_materiality_audit_does_not_receive_fake_misleading_precedence_block(self):
+        source = SERVICES_PATH.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        audit_source = next(
+            ast.get_source_segment(source, node) or ""
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == "_audit_misleading_materiality"
+        )
+        self.assertNotIn(
+            "_with_fake_misleading_precedence_rules(",
+            audit_source,
+        )

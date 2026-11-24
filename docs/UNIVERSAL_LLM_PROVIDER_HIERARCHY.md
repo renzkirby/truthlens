@@ -124,6 +124,77 @@ Cloudflare is attempted at most once for a routed operation. Existing
 job-scoped degradation behavior prevents repeatedly calling a failed provider
 within one verification execution.
 
+When reliability hardening is enabled, the final persisted-evidence evaluation
+may retry Groq after an HTTP 429 response using the provider's documented
+`retry-after` header. Because Groq enforces a rolling TPM window, TruthLens may
+perform at most two rate-limit retries while capping their combined wait at
+30 seconds. Each retry reuses the same final-evaluation prompt; missing,
+invalid, or over-budget retry guidance stops further Groq rate-limit waits.
+Existing downstream provider-recovery behavior remains unchanged, and other
+Groq operations retain their existing no-retry behavior.
+
+Reliability hardening also applies a default 20-second Gemini request timeout
+to routed verification operations, including the transient alternate Gemini
+model, unless the caller already supplies an explicit timeout. This prevents a
+single Gemini stage from consuming an unbounded interval before the remaining
+provider hierarchy can run. Verdict-sensitive callers that intentionally use
+their own timeout keep that explicit value.
+
+When Google Fact Check results are relevant but not proposition-covering enough
+to terminate verification, TruthLens defers the standalone GFC evidence
+assessment and GFC-only verdict evaluation. After Tavily enrichment, the
+persisted FACT_CHECK and SECONDARY evidence are assessed together and sent to
+one combined final evaluation. Terminally sufficient GFC paths keep their
+existing early-evaluation behavior. This reduces redundant provider calls
+without changing retrieval, evidence eligibility, or verdict policy.
+
+All primary verdict evaluators share the same FAKE-versus-MISLEADING
+precedence rules. A genuine person, event, image, video, quotation, statistic,
+document, or topic is not enough by itself to justify MISLEADING. MISLEADING
+requires persisted evidence to establish both a substantial genuine component
+of the same submitted proposition/content and a material contextual distortion
+of that component. Fabricated-core claims remain FAKE, while unresolved
+FAKE-versus-MISLEADING relationships abstain to UNVERIFIED rather than guessing.
+The existing misleading-materiality audit remains the second-stage safeguard
+for proposed MISLEADING verdicts. Ordinary FAKE results do not add a provider
+call; only a narrow explicit edited/spliced/clipped/recontextualized-media claim
+may open the compact FAKE-versus-MISLEADING false-context audit. Structured
+Misleading signals use the compact relationship auditor when deterministic
+claim-scoped reuse is not sufficient.
+
+Structured Google ClaimReview ratings and GFC terminal-coverage decisions now
+share one proposition-matching judgment. Exact normalized claim matches remain
+deterministic. For semantic matches, the structured-rating policy consumes the
+already-computed proposition-coverage rows instead of issuing a second
+claim-equivalence LLM call. An equivalent structured `Misleading` rating still
+does not set the verdict: it only requires Tavily enrichment and opens the
+existing evidence-bound relationship audit. PARTIAL_OR_RELATED, DIFFERENT, and
+UNDETERMINED coverage cannot activate that signal.
+
+
+Direct TEXT submissions now keep the user's normalized submitted wording as the
+authoritative verification proposition after ClaimGate has established
+claimability. ClaimGate still generates retrieval queries, but its paraphrase is
+not allowed to replace the truth target. The deterministic fidelity guard logs a
+bounded reason code; when it detects a dropped/introduced material numeric,
+temporal, comparison, polarity, or percentage anchor, the original proposition
+is also placed first in retrieval rather than failing the verification.
+
+The SATIRE provenance audit keeps the same fail-closed same-proposition policy,
+but it no longer resends the complete persisted dossier after the primary
+evaluation. It receives only already-qualified, assessed satire/parody signal
+candidates with bounded excerpts. Keyword presence remains only a trigger; it
+does not authorize SATIRE.
+
+Groq final-evaluation 429 recovery honors short provider-directed
+`retry-after` windows. Standard waits remain capped at 10 seconds, while the
+first 429 from the essential persisted final evaluator may use one extended
+provider-directed recovery wait up to 15 seconds. That extended path gets only
+one retry; a second 429 fails closed rather than chaining another long wait.
+Supplemental contextual audits do not receive the extended wait and may skip a
+known-doomed Groq fallback after an earlier job-scoped Groq rate limit. The
+cumulative retry cap and maximum retry count remain in force.
+
 Gemini HTTP 402 (billing), 404 (model/project unavailable), and 429 (quota/rate
 limit) failures are job-blocking for the selected Gemini model. After one such
 failure, the same verification job stops repeating requests to that model and

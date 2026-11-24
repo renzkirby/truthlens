@@ -518,7 +518,7 @@ class TavilyParallelRetrievalTests(SimpleTestCase):
 class TavilyTextRuntimeIngestionTests(TestCase):
     def setUp(self):
         self.claim = Claim.objects.create(
-            claim_type=Claim.ClaimType.TEXT, context_text="Raw submitted claim.",
+            claim_type=Claim.ClaimType.TEXT, context_text="Example public claim.",
         )
         self.cleaned = {
             "cleaned_claim": "Example public claim.",
