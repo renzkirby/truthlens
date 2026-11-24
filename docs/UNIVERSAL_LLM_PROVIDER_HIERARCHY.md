@@ -159,6 +159,15 @@ The existing misleading-materiality audit remains the second-stage safeguard
 for proposed MISLEADING verdicts; no new provider call is added for ordinary
 FAKE results.
 
+Structured Google ClaimReview ratings and GFC terminal-coverage decisions now
+share one proposition-matching judgment. Exact normalized claim matches remain
+deterministic. For semantic matches, the structured-rating policy consumes the
+already-computed proposition-coverage rows instead of issuing a second
+claim-equivalence LLM call. An equivalent structured `Misleading` rating still
+does not set the verdict: it only requires Tavily enrichment and opens the
+existing evidence-bound relationship audit. PARTIAL_OR_RELATED, DIFFERENT, and
+UNDETERMINED coverage cannot activate that signal.
+
 Gemini HTTP 402 (billing), 404 (model/project unavailable), and 429 (quota/rate
 limit) failures are job-blocking for the selected Gemini model. After one such
 failure, the same verification job stops repeating requests to that model and
