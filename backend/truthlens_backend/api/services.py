@@ -2721,6 +2721,32 @@ def _satire_provenance_unverified_result():
     }
 
 
+def _bounded_satire_signal_excerpt(value, *, max_chars=700):
+    """Keep compact context around the first explicit satire/parody signal."""
+    text = str(value or "")
+    if len(text) <= max_chars:
+        return text
+    lowered = text.casefold()
+    positions = [
+        position
+        for token in ("satir", "parody")
+        if (position := lowered.find(token)) >= 0
+    ]
+    if not positions:
+        return text[:max_chars]
+    center = min(positions)
+    half = max_chars // 2
+    start = max(0, center - half)
+    end = min(len(text), start + max_chars)
+    start = max(0, end - max_chars)
+    excerpt = text[start:end]
+    if start:
+        excerpt = "…" + excerpt[1:]
+    if end < len(text):
+        excerpt = excerpt[:-1] + "…"
+    return excerpt
+
+
 def _qualified_satire_signal_candidates(evidence_groups):
     """Return assessed satire/parody evidence aliases without exposing ID choice to LLMs."""
     groups = tuple(evidence_groups or ())
@@ -2752,7 +2778,9 @@ def _qualified_satire_signal_candidates(evidence_groups):
                 "alias": f"S{len(candidates) + 1}",
                 "evidence_id": evidence_id,
                 "title": str(getattr(item, "title", "") or "")[:240],
-                "content": str(getattr(item, "content", "") or "")[:700],
+                "content": _bounded_satire_signal_excerpt(
+                    getattr(item, "content", ""),
+                ),
                 "stance": str(getattr(item, "stance", "") or ""),
                 "relevance_score": getattr(item, "relevance_score", None),
                 "directness_score": getattr(item, "directness_score", None),
