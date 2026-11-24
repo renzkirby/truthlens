@@ -621,6 +621,152 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         )
 
 
+    def test_structured_misleading_reuses_strong_claim_scoped_result_without_second_llm(self):
+        signal_id = "12121212-1212-1212-1212-121212121212"
+        support_id = "34343434-3434-3434-3434-343434343434"
+        initial = {
+            **self.result,
+            "verdict": "MISLEADING",
+            "reasoning": "A genuine statement was materially recontextualized.",
+            "summary": "The underlying material is genuine but the framing changes its meaning.",
+            "confidence_score": 96,
+            "contextual_basis_kind": "FALSE_CONTEXT",
+            "contextual_basis_evidence_ids": [signal_id],
+        }
+        evidence_groups = [SimpleNamespace(evidence=(
+            SimpleNamespace(
+                evidence_link_id=signal_id,
+                stance="REFUTES",
+                relevance_score=0.95,
+                directness_score=0.95,
+            ),
+            SimpleNamespace(
+                evidence_link_id=support_id,
+                stance="SUPPORTS",
+                relevance_score=0.9,
+                directness_score=0.9,
+            ),
+        ))]
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            return_value=json.dumps(initial),
+        ) as call_llm:
+            result = evaluate_claim_with_persisted_evidence(
+                "A genuine statement was presented in a materially false context.",
+                f"Evidence link ID: {signal_id}\nRating: Misleading.",
+                official_misleading_evidence_ids=[signal_id],
+                evidence_groups=evidence_groups,
+            )
+
+        self.assertEqual(call_llm.call_count, 1)
+        self.assertEqual(result["verdict"], "MISLEADING")
+        self.assertEqual(result["confidence_score"], 85)
+        self.assertEqual(result["contextual_basis_kind"], "FALSE_CONTEXT")
+        self.assertEqual(result["contextual_basis_evidence_ids"], [signal_id])
+        self.assertIn("strict-equivalent Misleading fact-check signal", result["score_context"])
+
+    def test_structured_misleading_audit_uses_compact_candidate_context(self):
+        signal_id = "56565656-5656-5656-5656-565656565656"
+        initial = {
+            **self.result,
+            "verdict": "FAKE",
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        }
+        audited = {
+            "relationship": "MATERIAL_MISDESCRIPTION",
+            "basis_kind": "FALSE_CONTEXT",
+        }
+        evidence_groups = [SimpleNamespace(evidence=(
+            SimpleNamespace(
+                evidence_link_id=signal_id,
+                title="Official fact check",
+                content="Rating: Misleading. Genuine video, false event framing.",
+                stance="REFUTES",
+                relevance_score=0.98,
+                directness_score=0.98,
+            ),
+            SimpleNamespace(
+                evidence_link_id="78787878-7878-7878-7878-787878787878",
+                title="Supporting report",
+                content="The underlying video is genuine.",
+                stance="SUPPORTS",
+                relevance_score=0.9,
+                directness_score=0.9,
+            ),
+        ))]
+        full_context = "FULL DOSSIER SHOULD NOT BE SENT " + ("x" * 12000)
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            side_effect=[json.dumps(initial), json.dumps(audited)],
+        ) as call_llm:
+            result = evaluate_claim_with_persisted_evidence(
+                "A genuine video was presented as showing a different event.",
+                full_context,
+                official_misleading_evidence_ids=[signal_id],
+                evidence_groups=evidence_groups,
+            )
+
+        self.assertEqual(result["verdict"], "MISLEADING")
+        second_prompt = call_llm.call_args_list[1].args[1]
+        self.assertIn("<structured_misleading_candidates>", second_prompt)
+        self.assertIn(signal_id, second_prompt)
+        self.assertIn("The underlying video is genuine.", second_prompt)
+        self.assertNotIn("FULL DOSSIER SHOULD NOT BE SENT", second_prompt)
+        self.assertNotIn("<persisted_evidence>", second_prompt)
+
+    def test_validated_satire_result_skips_second_provenance_llm(self):
+        evidence_id = "90909090-9090-9090-9090-909090909090"
+        initial = {
+            **self.result,
+            "verdict": "SATIRE",
+            "reasoning": "Persisted evidence establishes direct satire provenance.",
+            "summary": "The same proposition was published as satire.",
+            "confidence_score": 94,
+            "contextual_basis_kind": "SATIRE_PROVENANCE",
+            "contextual_basis_evidence_ids": [evidence_id],
+        }
+        candidate = {
+            "alias": "S1",
+            "evidence_id": evidence_id,
+            "title": "Satire article",
+            "content": "This exact proposition was published as satire.",
+            "stance": "CONTEXT",
+            "relevance_score": 0.95,
+            "directness_score": 0.95,
+        }
+
+        with (
+            patch(
+                "api.services.call_llm_with_fallback",
+                return_value=json.dumps(initial),
+            ) as call_llm,
+            patch(
+                "api.services._has_persisted_satire_signal",
+                return_value=True,
+            ),
+            patch(
+                "api.services._qualified_satire_signal_candidates",
+                return_value=[candidate],
+            ),
+            patch(
+                "api.services.has_claim_scoped_satire_support",
+                return_value=True,
+            ),
+        ):
+            result = evaluate_claim_with_persisted_evidence(
+                "The exact satire proposition.",
+                "Persisted satire evidence.",
+                evidence_groups=("assessed-group",),
+            )
+
+        self.assertEqual(call_llm.call_count, 1)
+        self.assertEqual(result["verdict"], "SATIRE")
+        self.assertEqual(result["contextual_basis_kind"], "SATIRE_PROVENANCE")
+        self.assertEqual(result["contextual_basis_evidence_ids"], [evidence_id])
+
     def test_structured_misleading_signal_can_preserve_fake(self):
         evidence_id = "88888888-8888-8888-8888-888888888888"
         initial = {
