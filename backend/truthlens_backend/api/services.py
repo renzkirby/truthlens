@@ -2216,6 +2216,8 @@ Never output a factual verdict."""
             raise ValueError("Missing GFC proposition coverage candidate")
 
         normalized_rows = [by_index[index] for index in range(len(candidates))]
+        for index, row in enumerate(normalized_rows):
+            row["reviewed_claim"] = candidates[index]
         if any(
             row["relationship"] == "EQUIVALENT_OR_COVERS"
             for row in normalized_rows
