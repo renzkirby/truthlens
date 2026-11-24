@@ -2601,9 +2601,19 @@ def build_persisted_evidence_prompt(
     - If the exact submitted proposition is not sufficiently established, return
       UNVERIFIED rather than using broader context to manufacture a misleading
       relationship.
-    - Preserve entity, event, location, and time scope. Evidence about a separate
-      event or time period must not be used as the explanation for the claim unless
-      the supplied evidence explicitly connects them.
+    - Preserve entity, predicate/action/relationship, subject/object roles,
+      event, location, and time scope. Evidence about a separate event, action,
+      relationship, role direction, or time period must not be used as support or
+      contradiction unless the supplied passage explicitly connects it to the
+      submitted proposition.
+    - Evidence stance labels are assessment metadata, not proof. Re-check the
+      supplied passage itself before relying on SUPPORTS or REFUTES. If the passage
+      describes a different action/relation involving the same actor and topic,
+      treat that item as context for final reasoning rather than as support.
+    - Do not collapse related actions into entailment. For example, recusing or
+      inhibiting oneself from an investigation does not mean calling for the
+      investigation itself to stop; reviewing or considering a sale does not mean
+      approving the sale; discussing resignation does not mean resigning.
     - SATIRE requires verified provenance for the same submitted claim or content.
       Direct submitted-source provenance is represented by <stance>SATIRE</stance>.
       Equivalent structured official fact-check provenance is represented by
