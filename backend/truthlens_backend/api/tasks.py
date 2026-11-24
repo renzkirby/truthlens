@@ -1825,21 +1825,42 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
 
             if is_text_claim:
                 fidelity_started_at = time.perf_counter()
-                fidelity_outcome = inspect_direct_text_claim_fidelity(
+                fidelity_outcome, fidelity_reason = inspect_direct_text_claim_fidelity(
                     raw_text,
                     cleaned_claim,
+                    return_reason=True,
                 )
                 _log_stage(
                     claim_id,
                     "claim_fidelity_guard",
                     fidelity_started_at,
                     outcome=fidelity_outcome.lower(),
+                    reason_code=fidelity_reason,
                 )
-                if fidelity_outcome == "FAIL":
-                    raise ClaimGateError(
-                        "ClaimGate analysis could not preserve material direct-text "
-                        "claim details reliably."
-                    )
+
+                # Direct TEXT submissions are already the user's explicit
+                # proposition. ClaimGate remains responsible for claimability and
+                # retrieval-query generation, but its paraphrase must never become
+                # a different truth target. This also turns a fidelity mismatch
+                # into a safe recovery instead of rejecting a valid explicit claim.
+                submitted_claim = " ".join(raw_text.split())
+                if submitted_claim:
+                    cleaned_claim = submitted_claim
+
+                if fidelity_outcome == "FAIL" and submitted_claim:
+                    # Put the source-bounded proposition first so a lossy or
+                    # hallucinatory ClaimGate query cannot become the only
+                    # retrieval route. Keep the remaining generated alternatives
+                    # only as secondary retrieval aids.
+                    source_query = submitted_claim[:200]
+                    search_queries = [
+                        source_query,
+                        *[
+                            query for query in search_queries
+                            if query.casefold() != source_query.casefold()
+                        ],
+                    ][:3]
+                    search_query = search_queries[0]
 
             _set_claimability_status(
                 claim_id,
