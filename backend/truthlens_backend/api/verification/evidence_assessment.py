@@ -111,10 +111,11 @@ MATERIAL SCOPE MATCHING:
 - SUPPORTS or REFUTES only when the evidence addresses the same material
   proposition, or when the passage itself explicitly establishes how a differing
   scope relates to that proposition.
-- Treat actor/entity, predicate/action/relationship, subject/object roles,
-  event, time period or date, location when material, metric or measurement
-  baseline, denominator, unit, and numeric comparison boundary as part of the
-  proposition's material scope.
+- Treat actor/entity, event/action, time period or date, location when material,
+  metric or measurement baseline, denominator, unit, and numeric comparison
+  boundary as part of the proposition's material scope.
+- Treat predicate/action/relationship identity and subject/object roles as equally
+  material parts of the proposition's scope.
 - Match the CLAIMED ACTION OR RELATIONSHIP, not merely the same actor and topic.
   A passage about the same person, agency, investigation, project, policy, or
   controversy is not SUPPORTS unless it establishes the action/relation asserted
@@ -130,9 +131,11 @@ MATERIAL SCOPE MATCHING:
     "the official resigned."
   These are CONTEXT unless the passage itself explicitly connects the described
   action to the exact claimed action.
-- A different actor, predicate/action, event, year/date, baseline, denominator,
-  unit, or numeric threshold is not a contradiction merely because another value
-  differs.
+- A different actor, event, year/date, baseline, denominator, unit, or numeric
+  threshold is not a contradiction merely because another value differs.
+- A different predicate/action/relationship or reversed subject/object role is
+  likewise not support or contradiction merely because the surrounding topic
+  overlaps.
 - If the passage is relevant background but does not establish the same material
   scope, classify it as CONTEXT rather than forcing SUPPORTS or REFUTES.
 - If the scope relationship cannot responsibly be established from the passage
