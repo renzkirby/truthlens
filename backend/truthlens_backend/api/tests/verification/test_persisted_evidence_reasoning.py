@@ -839,7 +839,7 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         self.assertEqual(result["contextual_basis_evidence_ids"], [])
         self.assertIn("conflicting contextual signal", result["summary"])
 
-    def test_structured_misleading_signal_keeps_existing_materiality_audit_for_misleading(self):
+    def test_structured_misleading_signal_reaudits_initial_misleading_with_relationship_audit(self):
         evidence_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
         initial = {
             **self.result,
@@ -851,9 +851,8 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
             "contextual_basis_evidence_ids": [evidence_id],
         }
         audited = {
-            **initial,
-            "confidence_score": 87,
-            "score_context": "Material false context is established by the persisted evidence.",
+            "relationship": "MATERIAL_MISDESCRIPTION",
+            "basis_kind": "FALSE_CONTEXT",
         }
 
         with patch(
@@ -864,13 +863,136 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
                 "A genuine item was presented in a materially false context.",
                 f"Evidence link ID: {evidence_id}\nPersisted evidence.",
                 official_misleading_evidence_ids=[evidence_id],
+                evidence_groups=[SimpleNamespace(evidence=(SimpleNamespace(
+                    evidence_link_id=evidence_id,
+                    title="Official fact check",
+                    content="A real underlying program was materially misdescribed.",
+                    stance="REFUTES",
+                    relevance_score=0.95,
+                    directness_score=0.95,
+                ),))],
             )
 
         self.assertEqual(result["verdict"], "MISLEADING")
         self.assertEqual(call_llm.call_count, 2)
         second_system = call_llm.call_args_list[1].args[0]
-        self.assertIn("misleading-materiality auditor", second_system)
-        self.assertNotIn("structured-rating conflict auditor", second_system)
+        self.assertIn("structured-Misleading relationship auditor", second_system)
+        self.assertEqual(
+            call_llm.call_args_list[1].kwargs["operation"],
+            "structured_misleading_audit",
+        )
+
+    def test_explicit_edited_video_fake_is_reaudited_to_misleading_false_context(self):
+        evidence_id = "abababab-abab-abab-abab-abababababab"
+        initial = {
+            **self.result,
+            "verdict": "FAKE",
+            "reasoning": "The claimed admission is contradicted.",
+            "summary": "The evidence contradicts the claimed admission.",
+            "confidence_score": 92,
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        }
+        audited = {
+            "relationship": "MATERIAL_MISDESCRIPTION",
+            "basis_kind": "FALSE_CONTEXT",
+            "basis_evidence_ids": [evidence_id],
+        }
+        evidence_groups = [SimpleNamespace(evidence=(SimpleNamespace(
+            evidence_link_id=evidence_id,
+            title="Spliced video misrepresents statement",
+            content=(
+                "The video uses genuine remarks from the same exchange, but it was "
+                "spliced and omitted the speaker's full explanation, changing the "
+                "meaning of the statement."
+            ),
+            stance="REFUTES",
+            relevance_score=0.98,
+            directness_score=0.98,
+        ),))]
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            side_effect=[json.dumps(initial), json.dumps(audited)],
+        ) as call_llm:
+            result = evaluate_claim_with_persisted_evidence(
+                (
+                    "In an edited July 2026 video, the prosecutor admitted that "
+                    "the records request was merely a fishing expedition."
+                ),
+                "Persisted assessed evidence.",
+                evidence_groups=evidence_groups,
+            )
+
+        self.assertEqual(call_llm.call_count, 2)
+        self.assertEqual(
+            call_llm.call_args_list[1].kwargs["operation"],
+            "structured_misleading_audit",
+        )
+        self.assertEqual(result["verdict"], "MISLEADING")
+        self.assertEqual(result["contextual_basis_kind"], "FALSE_CONTEXT")
+        self.assertEqual(result["contextual_basis_evidence_ids"], [evidence_id])
+        self.assertIn("genuine underlying material", result["summary"])
+
+    def test_explicit_edited_media_can_still_remain_fake_when_core_is_fabricated(self):
+        evidence_id = "cdcdcdcd-cdcd-cdcd-cdcd-cdcdcdcdcdcd"
+        initial = {
+            **self.result,
+            "verdict": "FAKE",
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        }
+        audited = {
+            "relationship": "FABRICATED_CORE",
+            "basis_kind": "NONE",
+            "basis_evidence_ids": [],
+        }
+        evidence_groups = [SimpleNamespace(evidence=(SimpleNamespace(
+            evidence_link_id=evidence_id,
+            title="Fabricated quote placed on edited image",
+            content=(
+                "The photograph is genuine, but the attributed quotation was "
+                "invented and was never stated by the person shown."
+            ),
+            stance="REFUTES",
+            relevance_score=0.97,
+            directness_score=0.97,
+        ),))]
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            side_effect=[json.dumps(initial), json.dumps(audited)],
+        ):
+            result = evaluate_claim_with_persisted_evidence(
+                "An edited image shows the senator admitting to the fabricated quote.",
+                "Persisted assessed evidence.",
+                evidence_groups=evidence_groups,
+            )
+
+        self.assertEqual(result["verdict"], "FAKE")
+        self.assertEqual(result["contextual_basis_kind"], "NONE")
+        self.assertEqual(result["contextual_basis_evidence_ids"], [])
+
+    def test_plain_fake_claim_without_manipulation_cue_does_not_open_false_context_audit(self):
+        initial = {
+            **self.result,
+            "verdict": "FAKE",
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        }
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            return_value=json.dumps(initial),
+        ) as call_llm:
+            result = evaluate_claim_with_persisted_evidence(
+                "The senator invented a nonexistent policy.",
+                "Persisted assessed evidence.",
+                evidence_groups=(),
+            )
+
+        self.assertEqual(call_llm.call_count, 1)
+        self.assertEqual(result["verdict"], "FAKE")
 
     def test_materiality_audit_provider_failure_preserves_strong_claim_scoped_misleading(self):
         evidence_id = "55555555-5555-5555-5555-555555555555"
