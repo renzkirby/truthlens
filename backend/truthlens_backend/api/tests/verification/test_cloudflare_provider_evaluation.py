@@ -52,7 +52,7 @@ class CloudflareEvaluationAdapterTests(SimpleTestCase):
         )
         self.assertEqual(kwargs["timeout"], (5, 45))
         self.assertEqual(kwargs["json"]["response_format"], {"type": "json_object"})
-        self.assertEqual(kwargs["json"]["model"], "@cf/google/gemma-4-26b-a4b-it")
+        self.assertEqual(kwargs["json"]["model"], "@cf/meta/llama-3.3-70b-instruct-fp8-fast")
         self.assertEqual(kwargs["json"]["max_tokens"], 1024)
         self.assertEqual(kwargs["headers"]["Authorization"], f"Bearer {TOKEN}")
 
@@ -218,7 +218,7 @@ class CloudflareEvaluationAdapterTests(SimpleTestCase):
             with self.subTest(args=args.keys()), self.assertRaises(CloudflareEvaluationError):
                 generate_evaluation_json(
                     "system", args.get("user_prompt", "user"),
-                    model=args.get("model", "@cf/google/gemma-4-26b-a4b-it"),
+                    model=args.get("model", "@cf/meta/llama-3.3-70b-instruct-fp8-fast"),
                     account_id=ACCOUNT, api_token=TOKEN, http_post=post,
                 )
         post.assert_not_called()
