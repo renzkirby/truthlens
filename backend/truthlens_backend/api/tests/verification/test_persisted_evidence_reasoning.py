@@ -55,7 +55,7 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
 
         normalized = " ".join(system.split())
         for required_rule in (
-            "predicate/action/relationship",
+            "predicate/action/relationship identity",
             "subject/object roles",
             "Evidence stance labels are assessment metadata, not proof",
             "different action/relation involving the same actor and topic",
@@ -638,6 +638,19 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         self.assertEqual(
             call_llm.call_args_list[1].kwargs["operation"],
             "structured_misleading_audit",
+        )
+        audit_system = " ".join(call_llm.call_args_list[1].args[0].split())
+        self.assertIn(
+            "distorted paraphrase, interpretation, caption, or characterization",
+            audit_system,
+        )
+        self.assertIn(
+            "genuine remarks about an investigation or process are materially misrepresented",
+            audit_system,
+        )
+        self.assertIn(
+            "quotation that was wholly invented rather than a distorted paraphrase of genuine remarks",
+            audit_system,
         )
 
 
