@@ -184,7 +184,8 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
             relevance_score=0.9,
             directness_score=0.9,
             content=(
-                "VERA Files reviewed the same viral list and reports that the "
+                ("Background context. " * 60)
+                + "VERA Files reviewed the same viral list and reports that the "
                 "original post was explicitly labeled satire by the parody page."
             ),
         ),))]
