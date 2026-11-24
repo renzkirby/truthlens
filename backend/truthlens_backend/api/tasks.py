@@ -22,7 +22,6 @@ from .services import (
     OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT,
     OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
     OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE,
-    assess_claim_equivalence,
     assess_fact_check_proposition_coverage,
     extract_persisted_fact_check_claim_rating,
     llm_provider_scope,
@@ -186,33 +185,22 @@ def _normalized_claim_identity(value):
     return " ".join(value.split()).casefold()
 
 
-def _claims_are_equivalent_for_official_rating(incoming_claim, reviewed_claim):
-    if _normalized_claim_identity(incoming_claim) == _normalized_claim_identity(
-        reviewed_claim
-    ):
-        return True
-    try:
-        return assess_claim_equivalence(
-            incoming_claim,
-            reviewed_claim,
-        ).get("equivalent") is True
-    except LLMProviderUnavailableError:
-        return None
-    except Exception as exc:
-        logger.warning(
-            "Official fact-check rating equivalence could not be established: %s",
-            type(exc).__name__,
-        )
-        return None
+def _resolve_official_fact_check_rating_policy(
+    claim_text,
+    evidence_groups,
+    *,
+    coverage=None,
+):
+    """Resolve high-precision ClaimReview rating signals from one match decision.
 
+    Exact normalized claim text is deterministic. Semantic equivalence is taken
+    only from the proposition-coverage classifier that already controls whether
+    GFC may terminate verification. This avoids two independent LLM match
+    decisions disagreeing about the same reviewed claim.
 
-def _resolve_official_fact_check_rating_policy(claim_text, evidence_groups):
-    """Resolve high-precision structured ClaimReview rating signals.
-
-    SATIRE remains the only deterministic single-rating resolution. Exact
-    "Misleading" is a contextual signal only and may activate a second
-    evidence-bound arbitration stage after strict proposition equivalence.
-    Related or conflicting reviews never control the verdict.
+    SATIRE remains the only deterministic single-rating resolution. Misleading
+    remains a contextual signal that opens evidence-bound arbitration; it never
+    directly sets the TruthLens verdict.
     """
     empty_policy = {
         "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
@@ -243,24 +231,42 @@ def _resolve_official_fact_check_rating_policy(claim_text, evidence_groups):
             })
 
     # FALSE remains ordinary evidence unless paired with equivalent SATIRE.
-    # Unknown publisher labels remain ordinary evidence. Avoid equivalence work
-    # unless a high-precision SATIRE or exact Misleading signal is present.
+    # Unknown publisher labels remain ordinary evidence.
     if not any(
         record["rating_kind"] in {"SATIRE", "MISLEADING"}
         for record in records
     ):
         return empty_policy
 
-    equivalence_cache = {}
+    coverage_relationships = {}
+    if isinstance(coverage, dict):
+        for row in coverage.get("candidates", ()):
+            if not isinstance(row, dict):
+                continue
+            reviewed_claim = _normalized_claim_identity(row.get("reviewed_claim"))
+            relationship = row.get("relationship")
+            if reviewed_claim and relationship in {
+                "EQUIVALENT_OR_COVERS",
+                "PARTIAL_OR_RELATED",
+                "DIFFERENT",
+                "UNDETERMINED",
+            }:
+                coverage_relationships[reviewed_claim] = relationship
+
+    submitted_identity = _normalized_claim_identity(claim_text)
 
     def equivalent(reviewed_claim):
         identity = _normalized_claim_identity(reviewed_claim)
-        if identity not in equivalence_cache:
-            equivalence_cache[identity] = _claims_are_equivalent_for_official_rating(
-                claim_text,
-                reviewed_claim,
-            )
-        return equivalence_cache[identity]
+        if not identity:
+            return False
+        if identity == submitted_identity:
+            return True
+        relationship = coverage_relationships.get(identity)
+        if relationship == "EQUIVALENT_OR_COVERS":
+            return True
+        if relationship == "UNDETERMINED":
+            return None
+        return False
 
     equivalent_signal_records = []
     for record in records:
@@ -275,9 +281,9 @@ def _resolve_official_fact_check_rating_policy(claim_text, evidence_groups):
     if not equivalent_signal_records:
         return empty_policy
 
-    # Once a supported rating is strictly equivalent, inspect other reviews of
-    # the same proposition. Equivalent unknown/conflicting ratings prevent a
-    # publisher label from becoming an automated control signal.
+    # Once a supported rating is equivalent, inspect other reviews of the same
+    # proposition. Equivalent unknown/conflicting ratings prevent a publisher
+    # label from becoming an automated control signal.
     equivalent_records = list(equivalent_signal_records)
     signal_ids = {
         record["evidence_link_id"] for record in equivalent_signal_records
@@ -322,9 +328,9 @@ def _resolve_official_fact_check_rating_policy(claim_text, evidence_groups):
             }
         return empty_policy
 
-    # Exact "Misleading" is not a deterministic verdict. It is eligible only
-    # when every equivalent recognized review agrees on that exact rating and
-    # no equivalent unknown/False review introduces ambiguity.
+    # Misleading is never a deterministic verdict. It becomes a contextual
+    # signal only when every equivalent recognized review agrees on that exact
+    # rating and no equivalent unknown/False review introduces ambiguity.
     if equivalent_misleading and equivalent_kinds == {"MISLEADING"}:
         return {
             "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
