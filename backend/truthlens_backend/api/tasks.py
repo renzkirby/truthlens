@@ -2360,10 +2360,27 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         evidence_dossier,
                         VerificationEvidence.EvidenceRole.SECONDARY,
                     )
-                    if secondary_groups:
+                    include_deferred_gfc = bool(
+                        secondary_groups
+                        and gfc_claims
+                        and is_relevant
+                        and not gfc_evidence_assessed
+                    )
+                    assessment_groups = (
+                        filter_reasoning_evidence_dossier_by_roles(
+                            evidence_dossier,
+                            (
+                                VerificationEvidence.EvidenceRole.FACT_CHECK,
+                                VerificationEvidence.EvidenceRole.SECONDARY,
+                            ),
+                        )
+                        if include_deferred_gfc
+                        else secondary_groups
+                    )
+                    if assessment_groups:
                         _assess_and_persist_reasoning_evidence(
                             cleaned_claim,
-                            secondary_groups,
+                            assessment_groups,
                             claim_id,
                             stage_prefix="tavily",
                             **(
@@ -2377,6 +2394,12 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             evidence_dossier,
                             VerificationEvidence.EvidenceRole.SECONDARY,
                         )
+                        if include_deferred_gfc:
+                            fact_check_groups = filter_reasoning_evidence_dossier_by_role(
+                                evidence_dossier,
+                                VerificationEvidence.EvidenceRole.FACT_CHECK,
+                            )
+                            gfc_evidence_assessed = bool(fact_check_groups)
                     evaluation_groups = (
                         filter_reasoning_evidence_dossier_by_roles(
                             evidence_dossier,
@@ -3424,10 +3447,27 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     evidence_dossier,
                     VerificationEvidence.EvidenceRole.SECONDARY,
                 )
-                if secondary_groups:
+                include_deferred_gfc = bool(
+                    secondary_groups
+                    and gfc_claims
+                    and is_relevant
+                    and not gfc_evidence_assessed
+                )
+                assessment_groups = (
+                    filter_reasoning_evidence_dossier_by_roles(
+                        evidence_dossier,
+                        (
+                            VerificationEvidence.EvidenceRole.FACT_CHECK,
+                            VerificationEvidence.EvidenceRole.SECONDARY,
+                        ),
+                    )
+                    if include_deferred_gfc
+                    else secondary_groups
+                )
+                if assessment_groups:
                     _assess_and_persist_reasoning_evidence(
                         cleaned_claim,
-                        secondary_groups,
+                        assessment_groups,
                         claim_id,
                         stage_prefix="url_tavily",
                     )
@@ -3436,6 +3476,12 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         evidence_dossier,
                         VerificationEvidence.EvidenceRole.SECONDARY,
                     )
+                    if include_deferred_gfc:
+                        fact_check_groups = filter_reasoning_evidence_dossier_by_role(
+                            evidence_dossier,
+                            VerificationEvidence.EvidenceRole.FACT_CHECK,
+                        )
+                        gfc_evidence_assessed = bool(fact_check_groups)
                 evaluation_groups = (
                     filter_reasoning_evidence_dossier_by_roles(
                         evidence_dossier,
