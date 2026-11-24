@@ -111,6 +111,17 @@ class EvidenceRetrievalUnavailableError(RuntimeError):
     """Required evidence retrieval failed before verification could complete."""
 
 
+def _official_rating_policy_has_signal(official_rating_policy):
+    return bool(
+        isinstance(official_rating_policy, dict)
+        and (
+            official_rating_policy.get("resolution")
+            != OFFICIAL_FACT_CHECK_RESOLUTION_NONE
+            or official_rating_policy.get("misleading_evidence_ids")
+        )
+    )
+
+
 def _requires_structured_misleading_enrichment(
     official_rating_policy,
     *,
