@@ -111,11 +111,28 @@ MATERIAL SCOPE MATCHING:
 - SUPPORTS or REFUTES only when the evidence addresses the same material
   proposition, or when the passage itself explicitly establishes how a differing
   scope relates to that proposition.
-- Treat actor/entity, event/action, time period or date, location when material,
-  metric or measurement baseline, denominator, unit, and numeric comparison
-  boundary as part of the proposition's material scope.
-- A different actor, event, year/date, baseline, denominator, unit, or numeric
-  threshold is not a contradiction merely because another value differs.
+- Treat actor/entity, predicate/action/relationship, subject/object roles,
+  event, time period or date, location when material, metric or measurement
+  baseline, denominator, unit, and numeric comparison boundary as part of the
+  proposition's material scope.
+- Match the CLAIMED ACTION OR RELATIONSHIP, not merely the same actor and topic.
+  A passage about the same person, agency, investigation, project, policy, or
+  controversy is not SUPPORTS unless it establishes the action/relation asserted
+  by the claim or explicitly establishes an entailment to it.
+- Preserve role direction. Evidence that actor A acted on object B does not
+  establish that B acted on A, or that A acted on a different object.
+- Do not collapse distinct actions into one another. For example:
+  * "A senator will recuse/inhibit himself from an investigation" does NOT
+    support "the senator called for the investigation to be stopped."
+  * "An agency reviewed or considered a sale" does NOT support "the agency
+    approved the sale."
+  * "An official discussed or considered resignation" does NOT support
+    "the official resigned."
+  These are CONTEXT unless the passage itself explicitly connects the described
+  action to the exact claimed action.
+- A different actor, predicate/action, event, year/date, baseline, denominator,
+  unit, or numeric threshold is not a contradiction merely because another value
+  differs.
 - If the passage is relevant background but does not establish the same material
   scope, classify it as CONTEXT rather than forcing SUPPORTS or REFUTES.
 - If the scope relationship cannot responsibly be established from the passage
