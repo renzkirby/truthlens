@@ -48,6 +48,14 @@ class GoogleFactCheckPropositionCoverageTests(SimpleTestCase):
             provider.call_args.kwargs["operation"],
             "gfc_proposition_coverage",
         )
+        self.assertEqual(
+            result["candidates"][0]["reviewed_claim"],
+            "Person A was investigated while holding office.",
+        )
+        self.assertEqual(
+            result["candidates"][1]["reviewed_claim"],
+            "Person A resigned from office on Monday.",
+        )
         system_prompt, user_prompt = provider.call_args.args
         self.assertIn("actor/subject", system_prompt)
         self.assertIn("predicate/action", system_prompt)
