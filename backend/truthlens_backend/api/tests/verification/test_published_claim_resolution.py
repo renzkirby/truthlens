@@ -2239,7 +2239,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.target.claim_type = Claim.ClaimType.TEXT
         self.target.save(update_fields=["claim_type"])
 
-        tasks.execute_core_text_pipeline("Submitted text", self.target.pk)
+        tasks.execute_core_text_pipeline(self.cleaned["cleaned_claim"], self.target.pk)
 
         self.assert_exact_bypass()
 
@@ -2673,7 +2673,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.target.claim_type = Claim.ClaimType.TEXT
         self.target.save(update_fields=["claim_type"])
 
-        tasks.execute_core_text_pipeline("Submitted text", self.target.pk)
+        tasks.execute_core_text_pipeline(self.cleaned["cleaned_claim"], self.target.pk)
 
         self.assert_equivalent_bypass()
         self.target.refresh_from_db()
@@ -2834,7 +2834,7 @@ class PublishedClaimPipelineTests(PublicationResolutionFixture):
         self.target.claim_type = Claim.ClaimType.TEXT
         self.target.save(update_fields=["claim_type"])
         with patch("api.tasks._record_related_published_claim") as recorder:
-            tasks.execute_core_text_pipeline("Submitted text", self.target.pk)
+            tasks.execute_core_text_pipeline(self.cleaned["cleaned_claim"], self.target.pk)
         recorder.assert_not_called()
         self.assert_ai_path(self.persisted_eval)
         self.llm.assert_not_called()
