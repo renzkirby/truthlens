@@ -38,7 +38,7 @@ class VerificationRunTextRuntimeTests(TestCase):
         ))
         self.claim = Claim.objects.create(
             claim_type=Claim.ClaimType.TEXT,
-            context_text="Raw submitted claim.",
+            context_text="Example public claim.",
         )
         self.evidence_count = VerificationEvidence.objects.count()
         self.cleaned = {
@@ -234,6 +234,47 @@ class VerificationRunTextRuntimeTests(TestCase):
             self.assertIsNone(run.failure_stage)
             self.assertIsNone(run.failure_code)
             self.assertIsNone(run.failure_message)
+
+    def test_direct_text_fidelity_mismatch_preserves_submitted_proposition(self):
+        submitted = "The city approved the 2024 budget."
+        self.claim.context_text = submitted
+        self.claim.save(update_fields=["context_text"])
+        self.cleaned = {
+            "cleaned_claim": "The city approved the budget.",
+            "search_query": "city approved budget",
+            "search_queries": ["city approved budget"],
+            "article_stance": "NEUTRAL",
+        }
+        self.clean.return_value = self.cleaned
+
+        run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        self.vault.assert_called_once_with(
+            submitted,
+            target_claim=self.claim,
+        )
+        self.assertEqual(
+            self.assess_evidence.call_args.args[0],
+            submitted,
+        )
+        self.assertEqual(
+            self.evaluate_persisted.call_args.args[0],
+            submitted,
+        )
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.context_text, submitted)
+
+        fidelity_calls = [
+            call for call in self.log_stage.call_args_list
+            if call.args[1] == "claim_fidelity_guard"
+        ]
+        self.assertEqual(len(fidelity_calls), 1)
+        self.assertEqual(fidelity_calls[0].kwargs["outcome"], "fail")
+        self.assertEqual(
+            fidelity_calls[0].kwargs["reason_code"],
+            "MISSING_NUMERIC_ANCHOR",
+        )
 
     def test_provider_scope_isolated_across_jobs_and_failure_exit(self):
         for failed_job in (False, True):
@@ -1634,7 +1675,7 @@ class PrimarySourceRecoveryTests(TestCase):
 
 class VerificationEvidenceTextRuntimeTests(TestCase):
     def setUp(self):
-        self.claim = Claim.objects.create(context_text="Raw submitted claim.")
+        self.claim = Claim.objects.create(context_text="Example public claim.")
         self.cleaned = {
             "cleaned_claim": "Example public claim.",
             "search_query": "example public claim",
