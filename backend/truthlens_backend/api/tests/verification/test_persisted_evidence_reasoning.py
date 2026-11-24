@@ -835,6 +835,27 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         self.assertEqual(result["contextual_basis_kind"], "NONE")
         self.assertEqual(result["contextual_basis_evidence_ids"], [])
 
+    def test_plain_fake_does_not_add_contextual_reclassification_call(self):
+        fabricated = {
+            **self.result,
+            "verdict": "FAKE",
+            "reasoning": "The attributed quotation was fabricated.",
+            "summary": "The evidence shows the attributed quotation was invented.",
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        }
+        with patch(
+            "api.services.call_llm_with_fallback",
+            return_value=json.dumps(fabricated),
+        ) as call_llm:
+            result = evaluate_claim_with_persisted_evidence(
+                "A politician said an invented quotation.",
+                "Persisted evidence explicitly states that the quotation was fabricated.",
+            )
+
+        self.assertEqual(result["verdict"], "FAKE")
+        self.assertEqual(call_llm.call_count, 1)
+
     def test_prompt_contains_source_identity_and_anti_double_counting_guidance(self):
         with patch(
             "api.services.call_llm_with_fallback",
@@ -857,6 +878,11 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         self.assertIn("official_fact_check_resolution is SATIRE", system_prompt)
         self.assertIn("FAKE_CONFLICT", system_prompt)
         self.assertIn("Failure to corroborate a claim alone is not sufficient", system_prompt)
+        self.assertIn("FAKE VS MISLEADING PRECEDENCE", system_prompt)
+        self.assertIn("Do not choose MISLEADING merely because a real person", system_prompt)
+        self.assertIn("must both be established by the supplied evidence", system_prompt)
+        self.assertIn("does not convert a separate invented quotation", system_prompt)
+        self.assertIn("choose UNVERIFIED rather than guessing", system_prompt)
         self.assertIn("Preserve entity, event, location, and time scope", system_prompt)
         self.assertIn("Materiality is claim-scoped", system_prompt)
         self.assertIn("Do NOT widen the claim", system_prompt)
