@@ -1590,16 +1590,24 @@ def _direct_text_comparison_anchors(value):
     return anchors
 
 
-def inspect_direct_text_claim_fidelity(raw_text, cleaned_claim):
-    """Return PASS/FAIL/SKIP for a narrow direct-TEXT material-fidelity check.
+def inspect_direct_text_claim_fidelity(
+    raw_text,
+    cleaned_claim,
+    *,
+    return_reason=False,
+):
+    """Return a narrow direct-TEXT material-fidelity result.
 
-    The guard deliberately avoids semantic/entity equivalence. It is limited to
-    short, single-sentence text where deterministic numeric, comparison,
-    percentage, and polarity anchors can be compared without guessing. Long or
-    multi-sentence content is left to the existing ClaimGate contract.
+    By default this preserves the historical PASS/FAIL/SKIP contract. Callers
+    may request a deterministic reason code for telemetry. The guard deliberately
+    avoids semantic/entity equivalence and checks only anchors that can be
+    compared without interpretation.
     """
+    def result(status, reason):
+        return (status, reason) if return_reason else status
+
     if not isinstance(raw_text, str) or not raw_text.strip():
-        return "SKIP"
+        return result("SKIP", "EMPTY_RAW_TEXT")
 
     raw_text = raw_text.strip()
     if (
@@ -1607,25 +1615,25 @@ def inspect_direct_text_claim_fidelity(raw_text, cleaned_claim):
         or "\n" in raw_text
         or "\r" in raw_text
     ):
-        return "SKIP"
+        return result("SKIP", "COMPLEX_OR_LONG_TEXT")
 
     # Ignore decimal points when conservatively counting sentence punctuation.
     sentence_probe = re.sub(r"(?<=\d)\.(?=\d)", "", raw_text)
     if sum(sentence_probe.count(mark) for mark in ".!?") > 1:
-        return "SKIP"
+        return result("SKIP", "MULTI_SENTENCE_TEXT")
 
     if not isinstance(cleaned_claim, str) or not cleaned_claim.strip():
-        return "FAIL"
+        return result("FAIL", "MISSING_CLEANED_CLAIM")
     cleaned_claim = cleaned_claim.strip()
     if cleaned_claim in {"OUT_OF_SCOPE", "INSUFFICIENT_CONTEXT"}:
-        return "SKIP"
+        return result("SKIP", "CLAIMABILITY_SENTINEL")
 
     raw_numbers = _direct_text_numeric_anchors(raw_text)
     cleaned_numbers = _direct_text_numeric_anchors(cleaned_claim)
     remaining_numbers = list(cleaned_numbers)
     for anchor in raw_numbers:
         if anchor not in remaining_numbers:
-            return "FAIL"
+            return result("FAIL", "MISSING_NUMERIC_ANCHOR")
         remaining_numbers.remove(anchor)
 
     # A newly introduced four-digit year is especially high-risk because it can
@@ -1641,24 +1649,24 @@ def inspect_direct_text_claim_fidelity(raw_text, cleaned_claim):
         if token.isdigit() and len(token) == 4 and 1900 <= int(token) <= 2100
     }
     if not cleaned_years.issubset(raw_years):
-        return "FAIL"
+        return result("FAIL", "INTRODUCED_YEAR")
 
     if _direct_text_comparison_anchors(raw_text) != _direct_text_comparison_anchors(
         cleaned_claim
     ):
-        return "FAIL"
+        return result("FAIL", "COMPARATOR_CHANGED")
 
     if _direct_text_has_material_negation(
         raw_text
     ) != _direct_text_has_material_negation(cleaned_claim):
-        return "FAIL"
+        return result("FAIL", "NEGATION_CHANGED")
 
     if bool(_DIRECT_TEXT_PERCENT_RE.search(raw_text)) != bool(
         _DIRECT_TEXT_PERCENT_RE.search(cleaned_claim)
     ):
-        return "FAIL"
+        return result("FAIL", "PERCENT_SEMANTICS_CHANGED")
 
-    return "PASS"
+    return result("PASS", "ANCHORS_PRESERVED")
 
 
 def _source_bounded_tokens(value):
