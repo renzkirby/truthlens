@@ -261,30 +261,13 @@ def _with_user_facing_summary_rules(system_instructions):
 
 _FAKE_MISLEADING_PRECEDENCE_RULES = """
 FAKE VS MISLEADING PRECEDENCE:
-- Do not choose MISLEADING merely because a real person, event, image, video,
-  quotation, statistic, document, or topic exists somewhere in the evidence.
-- Choose MISLEADING only when the supplied evidence establishes BOTH:
-  (1) a substantial genuine factual component of the same submitted proposition
-  or content; and
-  (2) a material distortion of that genuine component through missing context,
-  false context, selective presentation, materially wrong time/location context,
-  or a materially changed interpretation.
-- The genuine component and the distortion must concern the same submitted
-  proposition or content and must both be established by the supplied evidence.
-  Do not infer either one from topic overlap, plausibility, or outside knowledge.
-- Direct contradiction does not automatically require FAKE when the contradiction
-  specifically arises from a material contextual distortion of genuine underlying
-  content. In that situation, use MISLEADING only when the two-part requirement
-  above is established.
-- Choose FAKE when the material asserted core itself is fabricated, did not occur,
-  is falsely attributed without a genuine corresponding statement/action, or has
-  no substantial genuine factual substrate corresponding to the submitted
-  assertion.
-- A real surrounding event, person, photo, video, or topic does not convert a
-  separate invented quotation, action, event, attribution, or other fabricated
-  core assertion into MISLEADING.
-- If the evidence does not establish the FAKE-versus-MISLEADING relationship
-  clearly enough, choose UNVERIFIED rather than guessing.
+- MISLEADING requires evidence of both a substantial genuine component of the
+  same submitted proposition/content and a material distortion of that component
+  through false or missing context. Mere topic/person/media overlap is
+  insufficient.
+- FAKE applies when the material asserted core is fabricated, did not occur, or
+  is falsely attributed. Direct contradiction does not override the rule above.
+- If the distinction is not established from supplied evidence, use UNVERIFIED.
 """
 
 
