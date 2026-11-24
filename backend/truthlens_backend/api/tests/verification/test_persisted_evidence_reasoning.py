@@ -200,7 +200,11 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         ) as call_llm:
             result = evaluate_claim_with_persisted_evidence(
                 "The government released an official banned-games list.",
-                f"Evidence link ID: {evidence_id}\nThe same viral list was labeled satire.",
+                (
+                    f"Evidence link ID: {evidence_id}\n"
+                    "The same viral list was labeled satire. "
+                    "UNRELATED_FULL_DOSSIER_MARKER"
+                ),
                 evidence_groups=evidence_groups,
             )
 
@@ -212,6 +216,10 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
             call_llm.call_args_list[1].kwargs["operation"],
             "satire_provenance_audit",
         )
+        audit_prompt = call_llm.call_args_list[1].args[1]
+        self.assertIn("<satire_candidate_evidence>", audit_prompt)
+        self.assertIn("explicitly labeled satire", audit_prompt)
+        self.assertNotIn("UNRELATED_FULL_DOSSIER_MARKER", audit_prompt)
 
 
     def test_satire_origin_only_does_not_override_fake(self):
