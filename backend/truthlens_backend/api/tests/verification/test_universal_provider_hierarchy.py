@@ -688,6 +688,41 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
         groq.with_options.return_value.chat.completions.create.assert_not_called()
 
     @override_settings(APP_ENV="production", DEBUG=False)
+    def test_explicit_gemini_timeout_overrides_reliability_default(self):
+        gemini = Mock()
+        gemini.models.generate_content.return_value = SimpleNamespace(
+            text='{"candidates":[]}'
+        )
+        cloudflare = Mock()
+        groq = Mock()
+
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+                    "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                },
+            ),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.call_validated_cloudflare_pilot", cloudflare),
+        ):
+            with llm_provider_scope():
+                result = call_llm_with_fallback(
+                    "Instructions",
+                    "Coverage prompt",
+                    operation="gfc_proposition_coverage",
+                    gemini_timeout_ms=12_345,
+                )
+
+        self.assertEqual(result, '{"candidates":[]}')
+        config = gemini.models.generate_content.call_args.kwargs["config"]
+        self.assertEqual(config.http_options.timeout, 12_345)
+        cloudflare.assert_not_called()
+        groq.with_options.return_value.chat.completions.create.assert_not_called()
+
+    @override_settings(APP_ENV="production", DEBUG=False)
     def test_transient_gemini_503_uses_3_6_before_cross_provider_fallback(self):
         payload = json.dumps({
             "cleaned_claim": "An announcement occurred.",
