@@ -25,6 +25,27 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
             "contextual_basis_evidence_ids": [],
         }
 
+    def test_persisted_prompt_makes_misleading_precedence_explicit(self):
+        system, _user = services.build_persisted_evidence_prompt(
+            "A multi-part claim.",
+            "Persisted evidence.",
+            "NEUTRAL",
+        )
+
+        normalized_system = " ".join(system.split())
+        self.assertIn("VERDICT PRECEDENCE (MANDATORY)", normalized_system)
+        self.assertIn(
+            "choose MISLEADING with contextual_basis_kind=PARTIAL_TRUTH",
+            normalized_system,
+        )
+        self.assertIn(
+            "choose MISLEADING with contextual_basis_kind=FALSE_CONTEXT rather than FAKE",
+            normalized_system,
+        )
+        self.assertIn(
+            "Reserve FAKE for a core proposition that is wholly fabricated",
+            normalized_system,
+        )
     def test_supplied_persisted_context_is_sent_without_provider_structure(self):
         evidence_context = (
             "=== SOURCE IDENTITY GROUP 1 ===\n"

@@ -67,6 +67,7 @@ SAFE_PROVIDER_MODEL_IDS = {
         "openai/gpt-oss-120b",
     }),
     "cloudflare": frozenset({
+        "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
         "@cf/google/gemma-4-26b-a4b-it",
     }),
 }

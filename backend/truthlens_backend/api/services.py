@@ -2529,6 +2529,22 @@ def build_persisted_evidence_prompt(
     - FAKE requires affirmative contradiction, fabrication, or false attribution.
       Failure to corroborate a claim alone is not sufficient for FAKE.
     - MISLEADING applies to partial truth, omitted material context, or false context.
+    - VERDICT PRECEDENCE (MANDATORY): before choosing FAKE, check whether the
+      evidence explicitly supports any material part of the submitted claim, or
+      establishes that the disputed media/content is genuine but presented with
+      the wrong event, date, location, attribution context, or other material
+      framing. If so, and another material part or context is false, choose
+      MISLEADING rather than FAKE.
+    - For a multi-part claim, if at least one material assertion is supported and
+      at least one other material assertion is contradicted, choose MISLEADING
+      with contextual_basis_kind=PARTIAL_TRUTH. Do not collapse the whole claim
+      to FAKE merely because one material clause is false.
+    - If genuine media, a genuine quote, or a genuine event is placed in the
+      wrong date, location, event, or other materially false context, choose
+      MISLEADING with contextual_basis_kind=FALSE_CONTEXT rather than FAKE.
+    - Reserve FAKE for a core proposition that is wholly fabricated, affirmatively
+      contradicted as a whole, or falsely attributed without a materially true
+      component that would require MISLEADING under the rules above.
     - Materiality is claim-scoped: omitted or corrective context is material only
       when it changes the truth, ordinary meaning, or factual impression of an
       assertion the submitted claim actually states or necessarily entails.
