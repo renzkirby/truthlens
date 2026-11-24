@@ -2086,7 +2086,10 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 gfc_eval_started_at = time.perf_counter()
                 gfc_evaluation_deferred = bool(
                     run is not None
-                    and requires_structured_misleading_enrichment
+                    and (
+                        requires_structured_misleading_enrichment
+                        or not gfc_terminally_sufficient
+                    )
                 )
                 if run is None:
                     ai_verdict = evaluate_image_claim_with_gfc(
@@ -2110,7 +2113,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             evidence_dossier,
                             VerificationEvidence.EvidenceRole.FACT_CHECK,
                         )
-                    if fact_check_groups:
+                    if fact_check_groups and not gfc_evaluation_deferred:
                         _assess_and_persist_reasoning_evidence(
                             cleaned_claim,
                             fact_check_groups,
@@ -2137,7 +2140,11 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             claim_id,
                             "gfc_final_evaluation_skipped",
                             gfc_eval_started_at,
-                            reason="structured_misleading_requires_enrichment",
+                            reason=(
+                                "structured_misleading_requires_enrichment"
+                                if requires_structured_misleading_enrichment
+                                else "nonterminal_gfc_requires_enrichment"
+                            ),
                             terminally_sufficient=gfc_terminally_sufficient,
                         )
                     elif has_persisted_evidence:
@@ -2204,7 +2211,11 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         gfc_verdict=None,
                         terminally_sufficient=gfc_terminally_sufficient,
                         reason_code=gfc_coverage_reason_code,
-                        evaluation="deferred_for_structured_misleading_enrichment",
+                        evaluation=(
+                            "deferred_for_structured_misleading_enrichment"
+                            if requires_structured_misleading_enrichment
+                            else "deferred_for_nonterminal_gfc_enrichment"
+                        ),
                     )
                 elif has_persisted_evidence:
                     _log_stage(
@@ -3121,7 +3132,10 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
             evaluation_completed = False
             gfc_evaluation_deferred = bool(
                 run is not None
-                and requires_structured_misleading_enrichment
+                and (
+                    requires_structured_misleading_enrichment
+                    or not gfc_terminally_sufficient
+                )
             )
             if run is None:
                 try:
@@ -3155,7 +3169,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         evidence_dossier,
                         VerificationEvidence.EvidenceRole.FACT_CHECK,
                     )
-                if fact_check_groups:
+                if fact_check_groups and not gfc_evaluation_deferred:
                     _assess_and_persist_reasoning_evidence(
                         cleaned_claim,
                         fact_check_groups,
@@ -3176,7 +3190,11 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         claim_id,
                         "url_gfc_final_evaluation_skipped",
                         gfc_eval_started_at,
-                        reason="structured_misleading_requires_enrichment",
+                        reason=(
+                            "structured_misleading_requires_enrichment"
+                            if requires_structured_misleading_enrichment
+                            else "nonterminal_gfc_requires_enrichment"
+                        ),
                         terminally_sufficient=gfc_terminally_sufficient,
                     )
                 elif evidence_context:
@@ -3232,7 +3250,11 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     gfc_verdict=None,
                     terminally_sufficient=gfc_terminally_sufficient,
                     reason_code=gfc_coverage_reason_code,
-                    evaluation="deferred_for_structured_misleading_enrichment",
+                    evaluation=(
+                        "deferred_for_structured_misleading_enrichment"
+                        if requires_structured_misleading_enrichment
+                        else "deferred_for_nonterminal_gfc_enrichment"
+                    ),
                 )
             elif evaluation_completed:
                 _log_stage(
