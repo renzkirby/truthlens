@@ -168,6 +168,27 @@ does not set the verdict: it only requires Tavily enrichment and opens the
 existing evidence-bound relationship audit. PARTIAL_OR_RELATED, DIFFERENT, and
 UNDETERMINED coverage cannot activate that signal.
 
+
+Direct TEXT submissions now keep the user's normalized submitted wording as the
+authoritative verification proposition after ClaimGate has established
+claimability. ClaimGate still generates retrieval queries, but its paraphrase is
+not allowed to replace the truth target. The deterministic fidelity guard logs a
+bounded reason code; when it detects a dropped/introduced material numeric,
+temporal, comparison, polarity, or percentage anchor, the original proposition
+is also placed first in retrieval rather than failing the verification.
+
+The SATIRE provenance audit keeps the same fail-closed same-proposition policy,
+but it no longer resends the complete persisted dossier after the primary
+evaluation. It receives only already-qualified, assessed satire/parody signal
+candidates with bounded excerpts. Keyword presence remains only a trigger; it
+does not authorize SATIRE.
+
+Groq final-evaluation 429 recovery still honors short provider-directed
+`retry-after` windows, but one synchronous wait is capped at 10 seconds. Longer
+provider-directed waits fail closed immediately instead of holding an
+interactive verification for a low-value delayed retry. The cumulative retry
+cap and maximum retry count remain in force.
+
 Gemini HTTP 402 (billing), 404 (model/project unavailable), and 429 (quota/rate
 limit) failures are job-blocking for the selected Gemini model. After one such
 failure, the same verification job stops repeating requests to that model and
