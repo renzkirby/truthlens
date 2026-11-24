@@ -911,13 +911,27 @@ class VerificationRunURLRuntimeTests(TestCase):
 
         self._assert_terminal(run, VerificationRun.Status.COMPLETED)
         self.retrieve_tavily.assert_called_once()
-        self.assertEqual(self.evaluate_persisted.call_count, 2)
+        self.evaluate_persisted.assert_called_once()
         self.filter_dossier_roles.assert_called()
+        self.assess_evidence.assert_called_once()
+        self.assertEqual(
+            self.assess_evidence.call_args.args[1],
+            self.filter_dossier_roles.return_value,
+        )
         self.assertEqual(self.save_claim.call_args.args[2], "Live Web Search")
         stages = [call.args[1] for call in self.log_stage.call_args_list]
         self.assertIn("url_gfc_proposition_coverage_check", stages)
         self.assertIn("url_gfc_continued_to_tavily", stages)
-        self.assertNotIn("url_gfc_final_evaluation_skipped", stages)
+        self.assertIn("url_gfc_final_evaluation_skipped", stages)
+        skipped = next(
+            call for call in self.log_stage.call_args_list
+            if len(call.args) >= 2
+            and call.args[1] == "url_gfc_final_evaluation_skipped"
+        )
+        self.assertEqual(
+            skipped.kwargs["reason"],
+            "nonterminal_gfc_requires_enrichment",
+        )
 
 
     def test_strict_misleading_rating_signal_requires_tavily_enrichment(self):
