@@ -156,8 +156,11 @@ of the same submitted proposition/content and a material contextual distortion
 of that component. Fabricated-core claims remain FAKE, while unresolved
 FAKE-versus-MISLEADING relationships abstain to UNVERIFIED rather than guessing.
 The existing misleading-materiality audit remains the second-stage safeguard
-for proposed MISLEADING verdicts; no new provider call is added for ordinary
-FAKE results.
+for proposed MISLEADING verdicts. Ordinary FAKE results do not add a provider
+call; only a narrow explicit edited/spliced/clipped/recontextualized-media claim
+may open the compact FAKE-versus-MISLEADING false-context audit. Structured
+Misleading signals use the compact relationship auditor when deterministic
+claim-scoped reuse is not sufficient.
 
 Structured Google ClaimReview ratings and GFC terminal-coverage decisions now
 share one proposition-matching judgment. Exact normalized claim matches remain
@@ -183,11 +186,14 @@ evaluation. It receives only already-qualified, assessed satire/parody signal
 candidates with bounded excerpts. Keyword presence remains only a trigger; it
 does not authorize SATIRE.
 
-Groq final-evaluation 429 recovery still honors short provider-directed
-`retry-after` windows, but one synchronous wait is capped at 10 seconds. Longer
-provider-directed waits fail closed immediately instead of holding an
-interactive verification for a low-value delayed retry. The cumulative retry
-cap and maximum retry count remain in force.
+Groq final-evaluation 429 recovery honors short provider-directed
+`retry-after` windows. Standard waits remain capped at 10 seconds, while the
+first 429 from the essential persisted final evaluator may use one extended
+provider-directed recovery wait up to 15 seconds. That extended path gets only
+one retry; a second 429 fails closed rather than chaining another long wait.
+Supplemental contextual audits do not receive the extended wait and may skip a
+known-doomed Groq fallback after an earlier job-scoped Groq rate limit. The
+cumulative retry cap and maximum retry count remain in force.
 
 Gemini HTTP 402 (billing), 404 (model/project unavailable), and 429 (quota/rate
 limit) failures are job-blocking for the selected Gemini model. After one such
