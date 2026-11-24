@@ -3,7 +3,7 @@
 TruthLens can route supported runtime AI operations through the following order:
 
 1. Gemini
-2. Cloudflare Workers AI / Gemma
+2. Cloudflare Workers AI / Llama 3.3 70B FP8 Fast
 3. Groq
 
 The policy is **credential-aware and automatic**. After this code is deployed,
@@ -21,7 +21,7 @@ CLOUDFLARE_ACCOUNT_ID=<account id>
 CLOUDFLARE_API_TOKEN=<API token>
 ```
 
-Gemini and Groq continue to use their existing provider credentials.
+Gemini and Groq continue to use their existing provider credentials. The current Cloudflare fallback model is `@cf/meta/llama-3.3-70b-instruct-fp8-fast`, selected for its fast variant and documented Workers AI JSON Mode support.
 
 Gemini model selection keeps separate routine and reasoning override seams.
 For the defense-period synchronous verification path, both tiers default to
