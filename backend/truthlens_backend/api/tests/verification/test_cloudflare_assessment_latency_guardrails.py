@@ -70,6 +70,7 @@ class CloudflareAssessmentLatencyRoutingTests(SimpleTestCase):
             # These tests exercise the legacy development pilot. Keep local
             # Cloudflare credentials from auto-enabling universal routing.
             "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
+            "ENABLE_PROVIDER_RELIABILITY_HARDENING": "0",
             "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
             "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT": "1",
             "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0",

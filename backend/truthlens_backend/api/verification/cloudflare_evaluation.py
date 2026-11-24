@@ -5,7 +5,7 @@ import re
 import requests
 
 
-DEFAULT_MODEL = "@cf/google/gemma-4-26b-a4b-it"
+DEFAULT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 MAX_INPUT_CHARS = 28000
 DEFAULT_HTTP_TIMEOUT = (5, 45)
 ACCOUNT_ID_PATTERN = re.compile(r"^[a-fA-F0-9]{32}$")

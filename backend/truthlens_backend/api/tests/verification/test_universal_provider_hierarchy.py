@@ -28,6 +28,25 @@ from api.verification.provider_hierarchy import (
 
 
 class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
+    def setUp(self):
+        self.enterContext(patch.dict(
+            "os.environ",
+            {
+                # Tests opt into reliability behavior explicitly. Keep local
+                # production-style .env flags from changing default assertions.
+                "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
+                "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0",
+                "ENABLE_PROVIDER_RELIABILITY_HARDENING": "0",
+                # These subfeatures default on when the reliability master is
+                # enabled unless explicitly disabled. Keep that policy stable
+                # while model fallback remains separately opt-in.
+                "ENABLE_GROQ_BOUNDED_FALLBACK": "1",
+                "ENABLE_GEMINI_TRANSIENT_CIRCUIT_BREAKER": "1",
+                "ENABLE_GEMINI_TRANSIENT_MODEL_FALLBACK": "0",
+            },
+            clear=False,
+        ))
+
     def test_reliability_master_switch_controls_narrow_subfeatures(self):
         with patch.dict(
             "os.environ",

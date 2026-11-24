@@ -171,7 +171,7 @@ def validate_response(raw, claim_text, representation):
 
 
 def classify_relatedness(claim_text, representation):
-    """Bounded relatedness operation with optional Gemini -> Gemma -> Groq routing."""
+    """Bounded relatedness operation with optional Gemini -> Cloudflare Llama -> Groq routing."""
     from .. import services
     from .cloudflare_evaluation import generate_evaluation_json
     from .provider_hierarchy import universal_hierarchy_enabled
