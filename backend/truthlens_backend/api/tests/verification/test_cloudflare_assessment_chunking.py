@@ -351,6 +351,10 @@ class AssessmentReliabilityHardeningTests(SimpleTestCase):
             "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
             "ENABLE_GROQ_BOUNDED_FALLBACK": "1",
             "ENABLE_GEMINI_TRANSIENT_CIRCUIT_BREAKER": "1",
+            # These tests isolate Groq/Cloudflare hardening. The separate
+            # Gemini 3.6 model-fallback policy is covered in the universal
+            # hierarchy suite and must not inherit a developer .env opt-in.
+            "ENABLE_GEMINI_TRANSIENT_MODEL_FALLBACK": "0",
             # Prove the reliability master switch, not the legacy dev flag,
             # promotes Cloudflare assessment chunking in universal routing.
             "CLOUDFLARE_PILOT_ASSESSMENT_CHUNKING": "0",
