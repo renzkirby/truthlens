@@ -6,7 +6,6 @@ import logging
 import time
 import requests
 import base64
-from numbers import Number
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.utils import timezone
@@ -654,9 +653,7 @@ TAVILY_EXTRACT_TIMEOUT_SEC = _float_env("TAVILY_EXTRACT_TIMEOUT_SEC", 20.0)
 # validation proves that reducing redundant assessment metadata does not change
 # user-facing verdict quality.
 EVIDENCE_ASSESSMENT_BUDGET_FLAG = "ENABLE_ADAPTIVE_EVIDENCE_ASSESSMENT_BUDGET"
-EVIDENCE_ASSESSMENT_INITIAL_ITEMS = 4
 EVIDENCE_ASSESSMENT_MAX_ITEMS = 8
-EVIDENCE_ASSESSMENT_EARLY_STOP_SCORE = 0.80
 
 
 def _apply_noneditable_fallback_verdict_policy(
@@ -1467,29 +1464,6 @@ def _budgeted_secondary_assessment_plan(eligible_groups):
     return selected, len(selected) < total_items
 
 
-def _assessment_wave_is_strongly_decisive(assessments):
-    """Allow early stop only for unanimous, direct first-wave evidence."""
-    if len(assessments) != EVIDENCE_ASSESSMENT_INITIAL_ITEMS:
-        return False
-
-    stances = {assessment.stance for assessment in assessments}
-    if stances not in (
-        {VerificationEvidence.Stance.SUPPORTS},
-        {VerificationEvidence.Stance.REFUTES},
-    ):
-        return False
-
-    return all(
-        isinstance(assessment.relevance_score, Number)
-        and not isinstance(assessment.relevance_score, bool)
-        and isinstance(assessment.directness_score, Number)
-        and not isinstance(assessment.directness_score, bool)
-        and assessment.relevance_score >= EVIDENCE_ASSESSMENT_EARLY_STOP_SCORE
-        and assessment.directness_score >= EVIDENCE_ASSESSMENT_EARLY_STOP_SCORE
-        for assessment in assessments
-    )
-
-
 def _assess_and_persist_reasoning_evidence(
     claim_text,
     evidence_groups,
@@ -1509,80 +1483,35 @@ def _assess_and_persist_reasoning_evidence(
     if not eligible_items:
         return
 
-    adaptive_budget = bool(
-        _adaptive_evidence_assessment_budget_enabled()
-        and len(eligible_items) > EVIDENCE_ASSESSMENT_INITIAL_ITEMS
-        and len(eligible_groups) <= EVIDENCE_ASSESSMENT_MAX_ITEMS
-        and all(
-            item.evidence_role == VerificationEvidence.EvidenceRole.SECONDARY
-            for _identity_id, items in eligible_groups
-            for item in items
-        )
-    )
-    assessment_pairs = [
+    all_assessment_pairs = [
         (identity_id, item)
         for identity_id, items in eligible_groups
         for item in items
     ]
+    assessment_pairs = all_assessment_pairs
+    adaptive_budget = False
     deferred_items = 0
-    if adaptive_budget:
-        assessment_pairs, _budget_reduced = _budgeted_secondary_assessment_plan(
+
+    if _adaptive_evidence_assessment_budget_enabled():
+        planned_pairs, budget_reduced = _budgeted_secondary_assessment_plan(
             eligible_groups,
         )
-        deferred_items = len(eligible_items) - len(assessment_pairs)
+        if budget_reduced:
+            assessment_pairs = planned_pairs
+            adaptive_budget = True
+            deferred_items = len(eligible_items) - len(assessment_pairs)
 
     assessment_started_at = time.perf_counter()
-    assessed_pairs = []
-    assessments = []
-    assessment_waves = 0
+    assessment_waves = 1
     early_stopped = False
 
     try:
-        if adaptive_budget:
-            first_wave = assessment_pairs[:EVIDENCE_ASSESSMENT_INITIAL_ITEMS]
-            first_items = [item for _identity_id, item in first_wave]
-            first_assessments = assess_reasoning_evidence_batch_against_claim(
-                claim_text,
-                first_items,
-                enforce_material_scope=material_scope_hardening,
-            )
-            assessed_pairs.extend(first_wave)
-            assessments.extend(first_assessments)
-            assessment_waves = 1
-
-            remaining = assessment_pairs[EVIDENCE_ASSESSMENT_INITIAL_ITEMS:]
-            if remaining:
-                first_identity_ids = {
-                    identity_id for identity_id, _item in first_wave
-                }
-                remaining_has_new_identity = any(
-                    identity_id not in first_identity_ids
-                    for identity_id, _item in remaining
-                )
-                if (
-                    not remaining_has_new_identity
-                    and _assessment_wave_is_strongly_decisive(first_assessments)
-                ):
-                    early_stopped = True
-                    deferred_items += len(remaining)
-                else:
-                    second_items = [item for _identity_id, item in remaining]
-                    second_assessments = assess_reasoning_evidence_batch_against_claim(
-                        claim_text,
-                        second_items,
-                        enforce_material_scope=material_scope_hardening,
-                    )
-                    assessed_pairs.extend(remaining)
-                    assessments.extend(second_assessments)
-                    assessment_waves = 2
-        else:
-            assessments = assess_reasoning_evidence_batch_against_claim(
-                claim_text,
-                eligible_items,
-                enforce_material_scope=material_scope_hardening,
-            )
-            assessed_pairs = assessment_pairs
-            assessment_waves = 1
+        assessed_items = [item for _identity_id, item in assessment_pairs]
+        assessments = assess_reasoning_evidence_batch_against_claim(
+            claim_text,
+            assessed_items,
+            enforce_material_scope=material_scope_hardening,
+        )
     except Exception as exc:
         _log_stage(
             claim_id,
@@ -1603,7 +1532,6 @@ def _assess_and_persist_reasoning_evidence(
         )
         return
 
-    assessed_items = [item for _identity_id, item in assessed_pairs]
     _log_stage(
         claim_id,
         f"{stage_prefix}_evidence_assessment_batch",
