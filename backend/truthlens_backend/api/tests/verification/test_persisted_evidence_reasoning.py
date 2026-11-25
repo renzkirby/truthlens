@@ -1046,6 +1046,39 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         self.assertEqual(call_llm.call_count, 1)
         self.assertEqual(result["verdict"], "FAKE")
 
+    def test_plain_explicit_refutation_without_uncertainty_does_not_add_audit(self):
+        evidence_id = "05050505-0505-0505-0505-050505050505"
+        initial = {
+            **self.result,
+            "verdict": "FAKE",
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        }
+        evidence_groups = [SimpleNamespace(evidence=(SimpleNamespace(
+            evidence_link_id=evidence_id,
+            title="Official record directly contradicts the claim",
+            content=(
+                "The awarding body explicitly states the person did not receive "
+                "the award and is not listed among the recipients."
+            ),
+            stance="REFUTES",
+            relevance_score=0.98,
+            directness_score=0.98,
+        ),))]
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            return_value=json.dumps(initial),
+        ) as call_llm:
+            result = evaluate_claim_with_persisted_evidence(
+                "The person received the award.",
+                "Persisted assessed evidence.",
+                evidence_groups=evidence_groups,
+            )
+
+        self.assertEqual(result["verdict"], "FAKE")
+        self.assertEqual(call_llm.call_count, 1)
+
     def test_fake_nonconfirmation_is_reaudited_to_unverified(self):
         evidence_id = "10101010-1010-1010-1010-101010101010"
         initial = {
