@@ -176,18 +176,19 @@ def cloudflare_assessment_chunking_enabled():
 
 
 def cloudflare_assessment_concurrency_enabled():
-    """Enable bounded chunk concurrency only for explicit hardened rollouts.
+    """Use bounded chunk concurrency by default under reliability hardening.
 
-    Default behavior remains sequential. The concurrency flag cannot activate
-    without the existing provider hierarchy, assessment pilot, lossless
-    chunking eligibility, and reliability-hardening master switch.
+    The feature still requires the existing provider hierarchy, assessment
+    pilot, lossless chunking eligibility, and reliability-hardening master
+    switch. Setting the dedicated flag to exactly "0" is the emergency kill
+    switch; unset or any other value keeps the hardened default enabled.
     """
     from .provider_hierarchy import reliability_hardening_enabled
 
     return (
         reliability_hardening_enabled()
         and cloudflare_assessment_chunking_enabled()
-        and os.getenv(ASSESSMENT_CONCURRENCY_FLAG, "") == "1"
+        and os.getenv(ASSESSMENT_CONCURRENCY_FLAG) != "0"
     )
 
 
