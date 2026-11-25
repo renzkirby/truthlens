@@ -55,7 +55,7 @@ def _arm(assessments, *, chunks, duration_ms):
 
 
 class CloudflareChunkPlanTests(SimpleTestCase):
-    def test_ten_items_plan_as_six_plus_four_without_dropping_keys(self):
+    def test_ten_items_plan_as_five_plus_five_without_dropping_keys(self):
         rows = [
             {
                 "key": f"item_{index}",
@@ -79,7 +79,7 @@ class CloudflareChunkPlanTests(SimpleTestCase):
             len(json.loads(chunk.split("\n", 1)[1])["evidence_items"])
             for chunk in chunks
         ]
-        self.assertEqual(parsed_sizes, [6, 4])
+        self.assertEqual(parsed_sizes, [5, 5])
 
     def test_char_limit_can_force_more_than_two_chunks_without_trimming(self):
         rows = [
@@ -429,6 +429,75 @@ class CloudflareChunkSizeCommandTests(TestCase):
             report["control_comparison"]["quality_gate"],
             "PASS",
         )
+
+    @override_settings(APP_ENV="development", DEBUG=True)
+    def test_eleven_item_batch_is_skipped_before_provider_arms(self):
+        dossier_groups = [
+            SimpleNamespace(
+                identity_id=uuid4(),
+                evidence=tuple(_item() for _ in range(count)),
+            )
+            for count in (3, 2, 2, 2, 2)
+        ]
+
+        output = io.StringIO()
+        with (
+            patch(
+                "api.management.commands.compare_cloudflare_assessment_chunk_sizes."
+                "tasks.clean_ocr_text",
+                return_value={
+                    "cleaned_claim": "A test claim.",
+                    "search_query": "A test claim.",
+                    "search_queries": ["A test claim."],
+                    "article_stance": "NEUTRAL",
+                },
+            ),
+            patch(
+                "api.management.commands.compare_cloudflare_assessment_chunk_sizes."
+                "tasks._retrieve_and_ingest_tavily_queries",
+                return_value={"results": []},
+            ) as retrieval,
+            patch(
+                "api.management.commands.compare_cloudflare_assessment_chunk_sizes."
+                "load_reasoning_evidence_dossier_for_run",
+                return_value=dossier_groups,
+            ),
+            patch(
+                "api.management.commands.compare_cloudflare_assessment_chunk_sizes."
+                "filter_reasoning_evidence_dossier_by_role",
+                return_value=dossier_groups,
+            ),
+            patch(
+                "api.management.commands.compare_cloudflare_assessment_chunk_sizes."
+                "_run_baseline_arm",
+            ) as baseline,
+            patch(
+                "api.management.commands.compare_cloudflare_assessment_chunk_sizes."
+                "_run_control_arm",
+            ) as control,
+            patch(
+                "api.management.commands.compare_cloudflare_assessment_chunk_sizes."
+                "_run_candidate_arm",
+            ) as candidate,
+        ):
+            call_command(
+                "compare_cloudflare_assessment_chunk_sizes",
+                claims=["A test claim."],
+                json=True,
+                stdout=output,
+            )
+
+        report = json.loads(output.getvalue())[0]
+        self.assertEqual(report["quality_gate"], "SKIPPED")
+        self.assertEqual(
+            report["eligibility"],
+            "NOT_NINE_TO_TEN_ITEM_ELIGIBLE",
+        )
+        self.assertEqual(report["frozen_evidence"]["item_count"], 11)
+        retrieval.assert_called_once()
+        baseline.assert_not_called()
+        control.assert_not_called()
+        candidate.assert_not_called()
 
     @override_settings(APP_ENV="development", DEBUG=True)
     def test_command_stops_after_baseline_429(self):
