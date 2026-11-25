@@ -3376,11 +3376,48 @@ def _text_has_nonconfirmation_signal(value):
     )
 
 
+def _nonconfirmation_audit_excerpt(value, *, max_chars=1200):
+    """Keep the uncertainty signal plus passage edges for contradiction review."""
+    if not isinstance(value, str):
+        return ""
+    text = " ".join(value.split())
+    if len(text) <= max_chars:
+        return text
+
+    normalized = text.casefold()
+    match = next(
+        (
+            match
+            for pattern in _NONCONFIRMATION_AUDIT_EVIDENCE_PATTERNS
+            if (match := re.search(pattern, normalized)) is not None
+        ),
+        None,
+    )
+    if match is None:
+        return text[:max_chars]
+
+    # Keep both edges because an explicit denial may appear before or after an
+    # uncertainty phrase. The centered window guarantees the trigger itself
+    # remains visible without sending the full persisted passage.
+    edge_chars = max_chars // 4
+    center_chars = max_chars - (edge_chars * 2)
+    center_start = max(0, match.start() - (center_chars // 2))
+    center_end = min(len(text), center_start + center_chars)
+    center_start = max(0, center_end - center_chars)
+    parts = [
+        text[:edge_chars],
+        text[center_start:center_end],
+        text[-edge_chars:],
+    ]
+    excerpt = " … ".join(part for part in parts if part)
+    return excerpt[: max_chars + 6]
+
+
 def _bounded_nonconfirmation_refutation_context(
     evidence_groups,
     *,
     max_items=6,
-    max_chars=900,
+    max_chars=1200,
 ):
     """Return usable REFUTES evidence only when at least one item signals uncertainty."""
     candidates = []
@@ -3420,7 +3457,10 @@ def _bounded_nonconfirmation_refutation_context(
                 {
                     "evidence_id": evidence_id,
                     "title": title[:240],
-                    "content": content[:max_chars],
+                    "content": _nonconfirmation_audit_excerpt(
+                        content,
+                        max_chars=max_chars,
+                    ),
                     "stance": "REFUTES",
                     "relevance_score": relevance,
                     "directness_score": directness,
