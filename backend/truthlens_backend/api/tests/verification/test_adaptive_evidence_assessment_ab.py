@@ -10,7 +10,10 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from api.models import Claim, VerificationRun, VerificationTelemetryEvent
-from api.management.commands.compare_evidence_assessment_budget import _compare_arms
+from api.management.commands.compare_evidence_assessment_budget import (
+    _UpstreamReplayTape,
+    _compare_arms,
+)
 
 
 def _arm(**overrides):
@@ -69,6 +72,55 @@ class AdaptiveEvidenceAssessmentABComparisonTests(TestCase):
             "CONTEXTUAL_VERDICT_MANUAL_REVIEW",
             result["review_reasons"],
         )
+
+
+
+
+class AdaptiveEvidenceAssessmentReplayTapeTests(TestCase):
+    def test_replay_returns_recorded_result_without_recalling_provider(self):
+        tape = _UpstreamReplayTape()
+        calls = []
+
+        def provider(value, *, limit=5):
+            calls.append((value, limit))
+            return {"value": value, "limit": limit}
+
+        with patch(
+            "api.management.commands.compare_evidence_assessment_budget.time.sleep"
+        ) as sleep:
+            baseline = tape.call_function(
+                "claim_gate",
+                provider,
+                False,
+                "claim",
+                limit=4,
+            )
+            tape.begin_replay()
+            adaptive = tape.call_function(
+                "claim_gate",
+                provider,
+                True,
+                "claim",
+                limit=4,
+            )
+
+        self.assertEqual(baseline, adaptive)
+        self.assertEqual(calls, [("claim", 4)])
+        self.assertTrue(tape.replay_complete())
+        sleep.assert_called_once()
+
+    def test_replay_input_change_is_rejected(self):
+        tape = _UpstreamReplayTape()
+        tape.call_function("claim_gate", lambda value: value, False, "claim")
+        tape.begin_replay()
+
+        with self.assertRaises(RuntimeError):
+            tape.call_function(
+                "claim_gate",
+                lambda value: value,
+                True,
+                "different claim",
+            )
 
 
 class AdaptiveEvidenceAssessmentABCommandTests(TestCase):
