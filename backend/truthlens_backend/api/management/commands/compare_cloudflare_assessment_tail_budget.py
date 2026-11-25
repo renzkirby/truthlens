@@ -209,6 +209,17 @@ def _assessment_route(arm):
     ]
 
 
+def _final_route(arm):
+    return [
+        (
+            event.get("provider"),
+            event.get("outcome"),
+            event.get("error_label"),
+        )
+        for event in arm.get("final_provider_calls", [])
+    ]
+
+
 def _tail_budget_metadata(arm):
     for event in reversed(arm.get("assessment_provider_calls", [])):
         if event.get("provider") != "cloudflare":
@@ -243,6 +254,8 @@ def _compare_arms(baseline, budgeted):
         reasons.append("STATUS_CHANGED")
     if _assessment_route(baseline) != _assessment_route(budgeted):
         reasons.append("ASSESSMENT_PROVIDER_ROUTE_CHANGED")
+    if _final_route(baseline) != _final_route(budgeted):
+        reasons.append("FINAL_PROVIDER_ROUTE_CHANGED")
     if baseline["verdict"] != budgeted["verdict"]:
         reasons.append("VERDICT_CHANGED")
     if baseline.get("summary") != budgeted.get("summary"):
@@ -540,6 +553,7 @@ class Command(BaseCommand):
                 "secondary_identity_stance_counts": {},
                 "assessment_stages": [],
                 "assessment_provider_calls": [],
+                "final_provider_calls": [],
             }
 
         evidence = VerificationEvidence.objects.filter(verification_run=run)
@@ -584,6 +598,14 @@ class Command(BaseCommand):
                 name="evidence_assessment",
             ).order_by("sequence")
         ]
+        final_provider_calls = [
+            _event_dict(event)
+            for event in VerificationTelemetryEvent.objects.filter(
+                verification_run=run,
+                event_type=VerificationTelemetryEvent.EventType.LLM_PROVIDER_CALL,
+                name="persisted_evidence_evaluation",
+            ).order_by("sequence")
+        ]
 
         return {
             "budgeted": budgeted,
@@ -602,6 +624,7 @@ class Command(BaseCommand):
             "secondary_identity_stance_counts": secondary_identity_stance_counts,
             "assessment_stages": assessment_stages,
             "assessment_provider_calls": assessment_provider_calls,
+            "final_provider_calls": final_provider_calls,
         }
 
     def _print_report(self, report):
