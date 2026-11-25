@@ -1509,7 +1509,16 @@ def _assess_and_persist_reasoning_evidence(
     if not eligible_items:
         return
 
-    adaptive_budget = _adaptive_evidence_assessment_budget_enabled()
+    adaptive_budget = bool(
+        _adaptive_evidence_assessment_budget_enabled()
+        and len(eligible_items) > EVIDENCE_ASSESSMENT_INITIAL_ITEMS
+        and len(eligible_groups) <= EVIDENCE_ASSESSMENT_MAX_ITEMS
+        and all(
+            item.evidence_role == VerificationEvidence.EvidenceRole.SECONDARY
+            for _identity_id, items in eligible_groups
+            for item in items
+        )
+    )
     assessment_pairs = [
         (identity_id, item)
         for identity_id, items in eligible_groups
@@ -1517,16 +1526,10 @@ def _assess_and_persist_reasoning_evidence(
     ]
     deferred_items = 0
     if adaptive_budget:
-        assessment_pairs, budget_reduced = _budgeted_secondary_assessment_plan(
+        assessment_pairs, _budget_reduced = _budgeted_secondary_assessment_plan(
             eligible_groups,
         )
-        if budget_reduced:
-            deferred_items = len(eligible_items) - len(assessment_pairs)
-        else:
-            # Preserve current behavior when the safety guard declines to reduce
-            # the batch, including >8 distinct source identities or non-secondary
-            # evidence.
-            adaptive_budget = False
+        deferred_items = len(eligible_items) - len(assessment_pairs)
 
     assessment_started_at = time.perf_counter()
     assessed_pairs = []
