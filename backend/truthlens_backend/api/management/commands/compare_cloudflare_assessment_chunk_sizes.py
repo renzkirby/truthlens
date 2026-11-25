@@ -3,9 +3,10 @@
 Retrieve/persist evidence once, freeze the exact secondary evidence batch, then
 compare:
 - baseline: current production-style max 4 items per Cloudflare chunk
+- control: repeat max 4 items per Cloudflare chunk (A/A nondeterminism control)
 - candidate: experimental max 6 items per Cloudflare chunk
 
-Both arms must assess every frozen evidence item. No evidence reduction, final
+All arms must assess every frozen evidence item. No evidence reduction, final
 verdict evaluation, recovery, Groq fallback, or second retrieval is involved.
 """
 
@@ -259,6 +260,16 @@ def _run_baseline_arm(system_instructions, user_prompt, claim_text, evidence_ite
     }
 
 
+
+def _run_control_arm(system_instructions, user_prompt, claim_text, evidence_items):
+    """Repeat the production-style four-item chunk path as an A/A control."""
+    return _run_baseline_arm(
+        system_instructions,
+        user_prompt,
+        claim_text,
+        evidence_items,
+    )
+
 def _run_candidate_arm(
     system_instructions,
     user_prompt,
@@ -395,16 +406,27 @@ def _assessment_available(value):
     )
 
 
-def _compare_arms(identity_groups, evidence_items, baseline, candidate):
+def _compare_arms(
+    identity_groups,
+    evidence_items,
+    baseline,
+    candidate,
+    *,
+    expected_candidate_chunks=2,
+    candidate_label="CANDIDATE",
+):
     reasons = []
+    normalized_label = str(candidate_label or "CANDIDATE").upper()
     if not baseline["success"]:
         reasons.append("BASELINE_NOT_SUCCESSFUL")
     if baseline.get("chunks_attempted") != 3:
         reasons.append("BASELINE_NOT_THREE_CHUNKS")
     if not candidate["success"]:
-        reasons.append("CANDIDATE_NOT_SUCCESSFUL")
-    if candidate.get("chunks_attempted") != 2:
-        reasons.append("CANDIDATE_NOT_TWO_CHUNKS")
+        reasons.append(f"{normalized_label}_NOT_SUCCESSFUL")
+    if candidate.get("chunks_attempted") != expected_candidate_chunks:
+        reasons.append(
+            f"{normalized_label}_NOT_{expected_candidate_chunks}_CHUNKS"
+        )
 
     if reasons:
         return {
@@ -577,6 +599,35 @@ def _compare_arms(identity_groups, evidence_items, baseline, candidate):
         "latency_change_pct": latency_change_pct,
         "items": item_rows,
         "identities": identity_rows,
+    }
+
+
+def _causal_summary(control_comparison, candidate_comparison):
+    """Classify whether observed drift can be attributed to larger chunks."""
+    if (
+        control_comparison.get("quality_gate") == "INVALID"
+        or candidate_comparison.get("quality_gate") == "INVALID"
+    ):
+        return {
+            "quality_gate": "INVALID",
+            "causal_interpretation": "INVALID_COMPARISON",
+        }
+
+    if control_comparison.get("quality_gate") != "PASS":
+        return {
+            "quality_gate": "INCONCLUSIVE",
+            "causal_interpretation": "MODEL_NONDETERMINISM_PRESENT",
+        }
+
+    if candidate_comparison.get("quality_gate") != "PASS":
+        return {
+            "quality_gate": "REVIEW",
+            "causal_interpretation": "CHUNK_SIZE_EFFECT_PLAUSIBLE",
+        }
+
+    return {
+        "quality_gate": "PASS",
+        "causal_interpretation": "NO_SEMANTIC_DRIFT_DETECTED",
     }
 
 
@@ -780,6 +831,31 @@ class Command(BaseCommand):
                 },
             }
 
+        control = _run_control_arm(
+            system_instructions,
+            user_prompt,
+            cleaned_claim,
+            evidence_items,
+        )
+        if _is_http_429(control):
+            return {
+                "claim": claim_text,
+                "eligibility": "ELIGIBLE",
+                "quality_gate": "BLOCKED",
+                "blocked_reason": "CLOUDFLARE_HTTP_429",
+                "frozen_evidence": frozen,
+                "baseline": {
+                    key: value
+                    for key, value in baseline.items()
+                    if key != "assessments"
+                },
+                "control": {
+                    key: value
+                    for key, value in control.items()
+                    if key != "assessments"
+                },
+            }
+
         candidate = _run_candidate_arm(
             system_instructions,
             user_prompt,
@@ -798,6 +874,11 @@ class Command(BaseCommand):
                     for key, value in baseline.items()
                     if key != "assessments"
                 },
+                "control": {
+                    key: value
+                    for key, value in control.items()
+                    if key != "assessments"
+                },
                 "candidate": {
                     key: value
                     for key, value in candidate.items()
@@ -809,21 +890,39 @@ class Command(BaseCommand):
             secondary_groups,
             evidence_items,
         )
+        control_comparison = _compare_arms(
+            identity_groups,
+            evidence_items,
+            baseline,
+            control,
+            expected_candidate_chunks=3,
+            candidate_label="CONTROL",
+        )
         comparison = _compare_arms(
             identity_groups,
             evidence_items,
             baseline,
             candidate,
         )
+        causal = _causal_summary(
+            control_comparison,
+            comparison,
+        )
 
         return {
             "claim": claim_text,
             "eligibility": "ELIGIBLE",
-            "quality_gate": comparison["quality_gate"],
+            "quality_gate": causal["quality_gate"],
+            "causal_interpretation": causal["causal_interpretation"],
             "frozen_evidence": frozen,
             "baseline": {
                 key: value
                 for key, value in baseline.items()
+                if key != "assessments"
+            },
+            "control": {
+                key: value
+                for key, value in control.items()
                 if key != "assessments"
             },
             "candidate": {
@@ -831,6 +930,7 @@ class Command(BaseCommand):
                 for key, value in candidate.items()
                 if key != "assessments"
             },
+            "control_comparison": control_comparison,
             "comparison": comparison,
         }
 
@@ -852,12 +952,24 @@ class Command(BaseCommand):
             )
         comparison = report.get("comparison")
         if comparison:
+            control_comparison = report.get("control_comparison") or {}
+            self.stdout.write(
+                "A/A CONTROL "
+                f"quality_gate={control_comparison.get('quality_gate')} "
+                f"stances_match={control_comparison.get('all_item_stances_match')} "
+                f"decisive_topology_match="
+                f"{control_comparison.get('decisive_identity_topology_match')}"
+            )
             self.stdout.write(
                 "LOSSLESS A/B "
                 f"latency_delta_ms={comparison['latency_delta_ms']} "
                 f"stances_match={comparison['all_item_stances_match']} "
                 f"decisive_topology_match="
                 f"{comparison['decisive_identity_topology_match']}"
+            )
+            self.stdout.write(
+                "CAUSAL_INTERPRETATION: "
+                + str(report.get("causal_interpretation"))
             )
             self.stdout.write(
                 "REASONS: "
