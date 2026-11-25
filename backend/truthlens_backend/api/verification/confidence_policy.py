@@ -493,6 +493,8 @@ def enforce_noneditable_fallback_evidence_support(
 def enforce_decisive_evidence_support(
     verdict_result: dict,
     evidence_groups: Iterable[ReasoningEvidenceGroup],
+    *,
+    fail_on_completed_low_quality: bool = False,
 ) -> dict:
     """Fail closed when an automated FACT/FAKE has no usable aligned evidence.
 
@@ -511,6 +513,7 @@ def enforce_decisive_evidence_support(
         return result
 
     assessment_completed = False
+    has_usable_assessed_evidence = False
     for group in tuple(evidence_groups):
         for item in group.evidence:
             quality = _item_quality(item)
@@ -519,13 +522,16 @@ def enforce_decisive_evidence_support(
             assessment_completed = True
             if quality < _USABLE_SCORE_FLOOR:
                 continue
+            has_usable_assessed_evidence = True
             if item.stance in consistent_stances:
                 return result
 
-    # A genuinely unavailable assessor must not override the final evaluator.
-    # Once assessment completed, however, a decisive FACT/FAKE may survive only
-    # when at least one usable current-run item aligns with that verdict.
-    if not assessment_completed:
+    # Preserve the original best-effort behavior when assessment is genuinely
+    # unavailable. Callers may opt into stricter live-web handling so a completed
+    # but uniformly low-quality assessment cannot backstop a decisive FACT/FAKE.
+    if not has_usable_assessed_evidence and not (
+        fail_on_completed_low_quality and assessment_completed
+    ):
         return result
 
     final_score = min(
