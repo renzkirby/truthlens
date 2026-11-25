@@ -237,6 +237,8 @@ def _compare_arms(baseline, budgeted):
         reasons.append("ASSESSMENT_PROVIDER_ROUTE_CHANGED")
     if baseline["verdict"] != budgeted["verdict"]:
         reasons.append("VERDICT_CHANGED")
+    if baseline.get("summary") != budgeted.get("summary"):
+        reasons.append("SUMMARY_CHANGED_MANUAL_REVIEW")
     if (
         baseline["verdict"] == "UNVERIFIED"
         and budgeted["verdict"] in DECISIVE_VERDICTS
