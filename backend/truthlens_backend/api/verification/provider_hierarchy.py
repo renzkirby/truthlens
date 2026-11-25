@@ -16,9 +16,6 @@ HIERARCHY_FLAG = "ENABLE_AI_RQ2_PROVIDER_HIERARCHY"
 UNIVERSAL_HIERARCHY_FLAG = "ENABLE_UNIVERSAL_LLM_HIERARCHY"
 RELIABILITY_HARDENING_FLAG = "ENABLE_PROVIDER_RELIABILITY_HARDENING"
 GROQ_BOUNDED_FALLBACK_FLAG = "ENABLE_GROQ_BOUNDED_FALLBACK"
-CLOUDFLARE_ASSESSMENT_TAIL_BUDGET_FLAG = (
-    "ENABLE_CLOUDFLARE_ASSESSMENT_TAIL_BUDGET"
-)
 GEMINI_TRANSIENT_CIRCUIT_BREAKER_FLAG = "ENABLE_GEMINI_TRANSIENT_CIRCUIT_BREAKER"
 GEMINI_TRANSIENT_MODEL_FALLBACK_FLAG = "ENABLE_GEMINI_TRANSIENT_MODEL_FALLBACK"
 STAGE_CONTRACT_OPERATIONS = frozenset({
@@ -83,19 +80,6 @@ def _reliability_subfeature_enabled(name):
 def groq_bounded_fallback_enabled():
     """Use a deterministic bounded persisted-evidence prompt only on fallback."""
     return _reliability_subfeature_enabled(GROQ_BOUNDED_FALLBACK_FLAG)
-
-
-def cloudflare_assessment_tail_budget_enabled():
-    """Explicit opt-in for degraded-path-only Cloudflare assessment budgeting.
-
-    Unlike defense-period defaults, this remains off until operators deliberately
-    enable it after controlled validation. Reliability hardening is still the
-    master prerequisite.
-    """
-    return (
-        reliability_hardening_enabled()
-        and os.getenv(CLOUDFLARE_ASSESSMENT_TAIL_BUDGET_FLAG, "").strip() == "1"
-    )
 
 
 def gemini_transient_circuit_breaker_enabled():
