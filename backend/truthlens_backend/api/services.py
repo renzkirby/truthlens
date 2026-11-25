@@ -344,6 +344,7 @@ class ClaimGateError(RuntimeError):
 KNOWN_SATIRE_SOURCE_DOMAINS = {
     "theonion.com",
     "babylonbee.com",
+    "thebeaverton.com",
 }
 
 
