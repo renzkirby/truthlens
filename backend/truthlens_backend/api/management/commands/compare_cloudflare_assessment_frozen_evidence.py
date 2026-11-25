@@ -96,6 +96,16 @@ def _groq_attempts(events):
     )
 
 
+def _cloudflare_http_429(events):
+    return any(
+        event["provider"] == "cloudflare"
+        and event["outcome"] == "failed"
+        and isinstance(event.get("error_label"), str)
+        and "HTTP_429" in event["error_label"]
+        for event in events
+    )
+
+
 def _run_assessment_arm(
     claim_text,
     evidence_items,
@@ -455,10 +465,12 @@ class Command(BaseCommand):
         if len(claims) > MAX_CLAIMS:
             raise CommandError(f"At most {MAX_CLAIMS} claims may be run at once.")
 
-        reports = [
-            self._run_rollback_isolated_claim(claim)
-            for claim in claims
-        ]
+        reports = []
+        for claim in claims:
+            report = self._run_rollback_isolated_claim(claim)
+            reports.append(report)
+            if report.get("quality_gate") == "BLOCKED":
+                break
 
         if options["json"]:
             self.stdout.write(json.dumps(reports, indent=2, sort_keys=True))
@@ -565,6 +577,20 @@ class Command(BaseCommand):
             budgeted=False,
             selected_ids=selected_ids,
         )
+        if _cloudflare_http_429(baseline["provider_events"]):
+            return {
+                "claim": claim_text,
+                "eligibility": "ELIGIBLE",
+                "quality_gate": "BLOCKED",
+                "blocked_reason": "CLOUDFLARE_HTTP_429",
+                "frozen_evidence": frozen,
+                "baseline": {
+                    key: value
+                    for key, value in baseline.items()
+                    if key != "assessments"
+                },
+            }
+
         budgeted = _run_assessment_arm(
             cleaned_claim,
             eligible_items,
