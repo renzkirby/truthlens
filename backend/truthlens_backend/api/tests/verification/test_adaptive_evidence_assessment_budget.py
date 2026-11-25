@@ -219,10 +219,11 @@ class AdaptiveEvidenceAssessmentBudgetTests(SimpleTestCase):
             [4, 4],
         )
         self.assertEqual(len(persisted), 8)
-        self.assertEqual(
-            len({group.identity_id for group in groups}),
-            len({group.identity_id for group in groups}),
-        )
+        persisted_ids = {item.evidence_link_id for item in persisted}
+        self.assertTrue(all(
+            group.evidence[0].evidence_link_id in persisted_ids
+            for group in groups
+        ))
         self.assertTrue(batch_call.kwargs["adaptive_budget"])
         self.assertEqual(batch_call.kwargs["selected_items"], 8)
         self.assertEqual(batch_call.kwargs["deferred_items"], 1)
