@@ -29,6 +29,12 @@ class VerificationRunURLRuntimeTests(TestCase):
             },
             clear=False,
         ))
+        # These URL runtime tests do not exercise automatic subject
+        # classification. Keep a developer/local classification rollout from
+        # rewriting context_text and changing unrelated verification assertions.
+        self.enterContext(override_settings(
+            INVESTIGATION_CLASSIFICATION_MODE="off",
+        ))
         self.url_reputation = self._patch(
             "api.tasks.check_url_threat_reputation",
             return_value={
