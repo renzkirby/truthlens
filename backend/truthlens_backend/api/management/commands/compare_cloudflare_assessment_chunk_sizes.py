@@ -4,7 +4,7 @@ Retrieve/persist evidence once, freeze the exact secondary evidence batch, then
 compare:
 - baseline: current production-style max 4 items per Cloudflare chunk
 - control: repeat max 4 items per Cloudflare chunk (A/A nondeterminism control)
-- candidate: experimental max 6 items per Cloudflare chunk
+- candidate: experimental max 5 items per Cloudflare chunk
 
 All arms must assess every frozen evidence item. No evidence reduction, final
 verdict evaluation, recovery, Groq fallback, or second retrieval is involved.
@@ -48,9 +48,9 @@ from api.verification.runs import create_verification_run, start_verification_ru
 
 MAX_CLAIMS = 4
 BASELINE_MAX_ITEMS = 4
-CANDIDATE_MAX_ITEMS = 6
+CANDIDATE_MAX_ITEMS = 5
 MIN_ITEMS = 9
-MAX_ITEMS = 12
+MAX_ITEMS = 10
 SCORE_SHIFT_REVIEW_THRESHOLD = 0.20
 DECISIVE_STANCES = frozenset({
     VerificationEvidence.Stance.SUPPORTS,
@@ -634,7 +634,7 @@ def _causal_summary(control_comparison, candidate_comparison):
 class Command(BaseCommand):
     help = (
         "Development-only lossless Cloudflare assessment A/B comparing "
-        "current max-4 chunks with experimental max-6 chunks."
+        "current max-4 chunks with experimental max-5 chunks for 9-10 items."
     )
 
     def add_arguments(self, parser):
@@ -775,7 +775,7 @@ class Command(BaseCommand):
         if not MIN_ITEMS <= len(evidence_items) <= MAX_ITEMS:
             return {
                 "claim": claim_text,
-                "eligibility": "NOT_THREE_TO_TWO_CHUNK_ELIGIBLE",
+                "eligibility": "NOT_NINE_TO_TEN_ITEM_ELIGIBLE",
                 "quality_gate": "SKIPPED",
                 "frozen_evidence": frozen,
             }
