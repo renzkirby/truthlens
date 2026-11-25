@@ -688,6 +688,7 @@ def call_llm_with_fallback(
     operation=None,
     gemini_timeout_ms=None,
     fallback_user_prompt=None,
+    supplemental_audit=False,
 ):
     """Opt-in Gemini -> alternate Gemini -> Cloudflare -> Groq routing.
 
@@ -1155,7 +1156,7 @@ def call_llm_with_fallback(
     groq_retry_prompt = groq_user_prompt
     groq_retry_variant = groq_request_variant
     groq_retry_number = 0
-    supplemental_audit = operation in {
+    supplemental_audit = bool(supplemental_audit) or operation in {
         SATIRE_PROVENANCE_AUDIT_OPERATION,
         STRUCTURED_MISLEADING_AUDIT_OPERATION,
     }
@@ -1207,6 +1208,7 @@ def call_llm_with_fallback(
         and hierarchy_active
         and reliability_hardening_enabled()
         and operation == PILOT_OPERATION
+        and not supplemental_audit
         and groq_rate_limit_retries < GROQ_RATE_LIMIT_RETRY_MAX_ATTEMPTS
     ):
         remaining_budget = (
@@ -2577,6 +2579,12 @@ def build_persisted_evidence_prompt(
     - FACT requires explicit support for the claim in the evidence.
     - FAKE requires affirmative contradiction, fabrication, or false attribution.
       Failure to corroborate a claim alone is not sufficient for FAKE.
+    - Absence of confirmation is not confirmation of absence. Evidence saying the
+      proposition is unconfirmed, not detected, inconclusive, unknown, unsupported
+      by sufficient evidence, or that an observation failed to confirm it does not
+      by itself establish the opposite proposition. Prefer UNVERIFIED unless the
+      supplied evidence affirmatively establishes the negation, nonoccurrence,
+      absence, fabrication, false attribution, or a mutually exclusive factual state.
     - MISLEADING applies to partial truth, omitted material context, or false context.
     - VERDICT PRECEDENCE (MANDATORY): before choosing FAKE, check whether the
       evidence explicitly supports any material part of the submitted claim, or
@@ -3338,6 +3346,206 @@ def _bounded_structured_misleading_context(
 
 
 
+_NONCONFIRMATION_AUDIT_EVIDENCE_PATTERNS = (
+    r"\bnot (?:yet )?(?:been )?confirmed\b",
+    r"\bunconfirmed\b",
+    r"\b(?:fail|fails|failed) to confirm\b",
+    r"\b(?:unable to|could not|cannot|can't) confirm\b",
+    r"\bnot (?:yet )?(?:been )?detected\b",
+    r"\b(?:fail|fails|failed) to detect\b",
+    r"\bno (?:conclusive|convincing|statistically significant|sufficient|direct )?evidence\b",
+    r"\binsufficient evidence\b",
+    r"\black of evidence\b",
+    r"\binconclusive\b",
+    r"\b(?:remains|is) unknown\b",
+    r"\b(?:could not|cannot|unable to) determine\b",
+    r"\bnot (?:yet )?established\b",
+    r"\bnot (?:yet )?proven\b",
+    r"\bno proof\b",
+    r"\bcannot (?:be )?ruled out\b",
+)
+
+
+def _text_has_nonconfirmation_signal(value):
+    if not isinstance(value, str) or not value.strip():
+        return False
+    normalized = value.casefold()
+    return any(
+        re.search(pattern, normalized)
+        for pattern in _NONCONFIRMATION_AUDIT_EVIDENCE_PATTERNS
+    )
+
+
+def _bounded_nonconfirmation_refutation_context(
+    evidence_groups,
+    *,
+    max_items=6,
+    max_chars=900,
+):
+    """Return usable REFUTES evidence only when at least one item signals uncertainty."""
+    candidates = []
+    has_trigger = False
+    seen = set()
+    for group in evidence_groups or ():
+        for item in getattr(group, "evidence", ()):
+            evidence_id = getattr(item, "evidence_link_id", None)
+            if not evidence_id:
+                continue
+            evidence_id = str(evidence_id)
+            if evidence_id in seen:
+                continue
+            seen.add(evidence_id)
+
+            if str(getattr(item, "stance", "") or "") != "REFUTES":
+                continue
+            relevance = getattr(item, "relevance_score", None)
+            directness = getattr(item, "directness_score", None)
+            try:
+                quality = min(float(relevance), float(directness))
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(quality) or quality < 0.50:
+                continue
+
+            title = str(getattr(item, "title", "") or "")
+            content = str(getattr(item, "content", "") or "")
+            nonconfirmation_signal = (
+                _text_has_nonconfirmation_signal(title)
+                or _text_has_nonconfirmation_signal(content)
+            )
+            has_trigger = has_trigger or nonconfirmation_signal
+            candidates.append((
+                0 if nonconfirmation_signal else 1,
+                -quality,
+                {
+                    "evidence_id": evidence_id,
+                    "title": title[:240],
+                    "content": content[:max_chars],
+                    "stance": "REFUTES",
+                    "relevance_score": relevance,
+                    "directness_score": directness,
+                    "nonconfirmation_signal": nonconfirmation_signal,
+                },
+            ))
+
+    if not has_trigger:
+        return ""
+
+    candidates.sort(key=lambda row: (row[0], row[1], row[2]["evidence_id"]))
+    return json.dumps(
+        [row[2] for row in candidates[:max_items]],
+        ensure_ascii=False,
+    )
+
+
+def _fake_nonconfirmation_unverified_result():
+    return {
+        "reasoning": (
+            "The available refuting evidence contains nonconfirmation or uncertainty "
+            "language, but it does not safely establish an affirmative contradiction "
+            "sufficient for a FAKE verdict."
+        ),
+        "verdict": "UNVERIFIED",
+        "summary": (
+            "The available evidence does not confirm the claim, but it also does not "
+            "establish the opposite proposition strongly enough to classify it as fake."
+        ),
+        "confidence_score": 0,
+        "score_context": (
+            "Nonconfirmation is not affirmative contradiction; the claim remains "
+            "unverified."
+        ),
+        "contextual_basis_kind": "NONE",
+        "contextual_basis_evidence_ids": [],
+    }
+
+
+def _audit_fake_nonconfirmation_signal(
+    original_claim,
+    evaluator_result,
+    evidence_groups=(),
+):
+    """Re-check ordinary FAKE when assessed refutation may only mean unconfirmed."""
+    compact_context = _bounded_nonconfirmation_refutation_context(evidence_groups)
+    if not compact_context:
+        return evaluator_result
+
+    system_instructions = """
+    Role: You are the TruthLens FAKE contradiction-sufficiency auditor.
+
+    Use ONLY the supplied persisted refutation candidates. Do not use pre-trained
+    knowledge, external facts, or assumptions. The first evaluator proposed FAKE,
+    and at least one assessed REFUTES item contains uncertainty/nonconfirmation
+    language. That lexical signal only opens this audit; it never decides the result.
+
+    VERDICT RULES:
+    - Return FAKE only if the supplied passage itself affirmatively establishes the
+      negation/opposite proposition, nonoccurrence, demonstrated absence,
+      fabrication, false attribution, or another mutually exclusive factual state.
+    - A passage may contain words such as "unconfirmed" or "no evidence" and still
+      support FAKE if it separately establishes a decisive contradiction.
+    - Return UNVERIFIED when the supposed refutation only says the proposition is
+      not confirmed, not detected, not proven, inconclusive, unknown, unsupported
+      by sufficient evidence, or that an observation failed to confirm it.
+    - Return UNVERIFIED when the supplied candidates are insufficient or materially
+      conflicting.
+    - Do not return FACT, MISLEADING, or SATIRE from this audit.
+    - contextual_basis_kind must be NONE and contextual_basis_evidence_ids must be [].
+
+    Return only a valid JSON object with exactly these fields:
+    {
+        "reasoning": "Evidence-bound explanation",
+        "verdict": "FAKE or UNVERIFIED",
+        "summary": "Concise user-facing evidence summary",
+        "confidence_score": <numeric percentage 0 to 100>,
+        "score_context": "Concise explanation of confidence",
+        "contextual_basis_kind": "NONE",
+        "contextual_basis_evidence_ids": []
+    }
+    """
+    system_instructions = _with_user_facing_summary_rules(system_instructions)
+    user_data = (
+        f"<claim>{original_claim}</claim>\n\n"
+        f"<first_evaluator_verdict>{evaluator_result.get('verdict', 'FAKE')}"
+        f"</first_evaluator_verdict>\n\n"
+        f"<refutation_candidates>{compact_context}</refutation_candidates>"
+    )
+
+    try:
+        response_text = call_llm_with_fallback(
+            system_instructions,
+            user_data,
+            operation=PILOT_OPERATION,
+            gemini_timeout_ms=PERSISTED_EVIDENCE_GEMINI_TIMEOUT_MS,
+            supplemental_audit=True,
+        )
+        audited = _parse_llm_json(response_text)
+        required_fields = {
+            "reasoning",
+            "verdict",
+            "summary",
+            "confidence_score",
+            "score_context",
+        }
+        if not isinstance(audited, dict) or not required_fields.issubset(audited):
+            raise ValueError("FAKE nonconfirmation audit returned an invalid result")
+        if audited.get("verdict") not in {"FAKE", "UNVERIFIED"}:
+            raise ValueError("FAKE nonconfirmation audit returned an invalid verdict")
+        audited["confidence_score"] = _normalize_verdict_confidence_score(
+            audited["confidence_score"]
+        )
+        audited["contextual_basis_kind"] = "NONE"
+        audited["contextual_basis_evidence_ids"] = []
+        return audited
+    except Exception as exc:
+        logger.warning(
+            "FAKE nonconfirmation audit unavailable (%s): %s",
+            _provider_error_label(exc),
+            str(exc)[:160],
+        )
+        return _fake_nonconfirmation_unverified_result()
+
+
 _FALSE_CONTEXT_AUDIT_CLAIM_PATTERNS = (
     r"\bedited\b",
     r"\bspliced\b",
@@ -3872,6 +4080,18 @@ def evaluate_claim_with_persisted_evidence(
                 parsed_result,
                 evidence_groups,
             )
+
+        if (
+            parsed_result.get("verdict") == "FAKE"
+            and official_fact_check_resolution == OFFICIAL_FACT_CHECK_RESOLUTION_NONE
+        ):
+            audited_fake = _audit_fake_nonconfirmation_signal(
+                original_claim,
+                parsed_result,
+                evidence_groups,
+            )
+            if audited_fake is not parsed_result:
+                return audited_fake
 
         if (
             parsed_result.get("verdict") == "MISLEADING"
