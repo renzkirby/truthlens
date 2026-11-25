@@ -225,6 +225,97 @@ class FrozenEvidenceABCommandTests(TestCase):
             )
 
     @override_settings(APP_ENV="development", DEBUG=True)
+    def test_command_stops_corpus_after_baseline_cloudflare_429(self):
+        groups = [
+            SimpleNamespace(
+                identity_kind="URL",
+                identity_id=uuid4(),
+                evidence=tuple(_item() for _ in range(2)),
+            )
+            for _ in range(5)
+        ]
+        calls = []
+
+        def blocked_arm(
+            claim_text,
+            evidence_items,
+            *,
+            budgeted,
+            selected_ids,
+            material_scope_hardening=True,
+        ):
+            calls.append((claim_text, budgeted))
+            return {
+                "budgeted": budgeted,
+                "duration_ms": 500,
+                "assessments": [
+                    _assessment(VerificationEvidence.Stance.UNKNOWN)
+                    for _ in evidence_items
+                ],
+                "provider_events": [
+                    {
+                        "operation": "evidence_assessment",
+                        "provider": "cloudflare",
+                        "duration_ms": 490,
+                        "outcome": "failed",
+                        "error_label": "CloudflareEvaluationError code=HTTP_429",
+                        "metadata": {"assessment_chunks_attempted": 1},
+                    }
+                ],
+                "cloudflare_success": False,
+                "cloudflare_chunks": None,
+                "tail_budget_applied": False,
+                "assessment_items_original": None,
+                "assessment_items_selected": None,
+                "groq_attempts": 0,
+            }
+
+        output = io.StringIO()
+        with (
+            patch(
+                "api.management.commands.compare_cloudflare_assessment_frozen_evidence."
+                "tasks.clean_ocr_text",
+                return_value={
+                    "cleaned_claim": "A test claim.",
+                    "search_query": "A test claim.",
+                    "search_queries": ["A test claim."],
+                    "article_stance": "NEUTRAL",
+                },
+            ),
+            patch(
+                "api.management.commands.compare_cloudflare_assessment_frozen_evidence."
+                "tasks._retrieve_and_ingest_tavily_queries",
+                return_value={"results": []},
+            ) as retrieval,
+            patch(
+                "api.management.commands.compare_cloudflare_assessment_frozen_evidence."
+                "load_reasoning_evidence_dossier_for_run",
+                return_value=groups,
+            ),
+            patch(
+                "api.management.commands.compare_cloudflare_assessment_frozen_evidence."
+                "_run_assessment_arm",
+                side_effect=blocked_arm,
+            ),
+        ):
+            call_command(
+                "compare_cloudflare_assessment_frozen_evidence",
+                claims=["A test claim.", "A second claim."],
+                json=True,
+                stdout=output,
+            )
+
+        report = json.loads(output.getvalue())
+        self.assertEqual(len(report), 1)
+        self.assertEqual(report[0]["quality_gate"], "BLOCKED")
+        self.assertEqual(
+            report[0]["blocked_reason"],
+            "CLOUDFLARE_HTTP_429",
+        )
+        self.assertEqual(calls, [("A test claim.", False)])
+        retrieval.assert_called_once()
+
+    @override_settings(APP_ENV="development", DEBUG=True)
     def test_retrieval_runs_once_and_both_arms_share_frozen_snapshot(self):
         groups = [
             SimpleNamespace(
