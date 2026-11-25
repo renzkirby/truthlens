@@ -1380,6 +1380,7 @@ def _attempt_primary_source_recovery(
         recovered = enforce_decisive_evidence_support(
             recovered,
             evaluation_groups,
+            fail_on_completed_low_quality=True,
         )
     recovered = _apply_noneditable_fallback_verdict_policy(
         recovered,
@@ -2594,6 +2595,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             ai_verdict = enforce_decisive_evidence_support(
                                 ai_verdict,
                                 evaluation_groups,
+                                fail_on_completed_low_quality=True,
                             )
                         ai_verdict = _apply_noneditable_fallback_verdict_policy(
                             ai_verdict,
@@ -3423,15 +3425,6 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                             ai_verdict,
                             fact_check_groups,
                         )
-                        if not (
-                            official_rating_policy["resolution"]
-                            == OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT
-                            and ai_verdict.get("verdict") == "FAKE"
-                        ):
-                            ai_verdict = enforce_decisive_evidence_support(
-                                ai_verdict,
-                                fact_check_groups,
-                            )
                         ai_verdict = _apply_noneditable_fallback_verdict_policy(
                             ai_verdict,
                             fact_check_groups,
@@ -3739,6 +3732,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         ai_verdict = enforce_decisive_evidence_support(
                             ai_verdict,
                             evaluation_groups,
+                            fail_on_completed_low_quality=True,
                         )
                     ai_verdict = _apply_noneditable_fallback_verdict_policy(
                         ai_verdict,
