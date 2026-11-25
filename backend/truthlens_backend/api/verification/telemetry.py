@@ -174,10 +174,15 @@ def record_llm_provider_call(
         for key in (
             "prompt_tokens", "completion_tokens", "total_tokens",
             "reasoning_tokens", "assessment_chunks_attempted",
+            "assessment_items_original", "assessment_items_selected",
         ):
             count = safe_int(metadata.get(key))
             if count is not None:
                 safe_metadata[key] = count
+        if isinstance(metadata.get("assessment_tail_budget_applied"), bool):
+            safe_metadata["assessment_tail_budget_applied"] = metadata[
+                "assessment_tail_budget_applied"
+            ]
         finish = metadata.get("finish_reason")
         if isinstance(finish, str) and finish in KNOWN_FINISH:
             safe_metadata["finish_reason"] = finish
