@@ -107,11 +107,11 @@ class VerificationRunTextRuntimeTests(TestCase):
         )
         self.calibrate_confidence = self._patch(
             "api.tasks.calibrate_verdict_confidence",
-            side_effect=lambda verdict, _groups: verdict,
+            side_effect=lambda verdict, _groups, **_kwargs: verdict,
         )
         self.decisive_support = self._patch(
             "api.tasks.enforce_decisive_evidence_support",
-            side_effect=lambda verdict, _groups: verdict,
+            side_effect=lambda verdict, _groups, **_kwargs: verdict,
         )
         self.load_dossier = self._patch(
             "api.tasks.load_reasoning_evidence_dossier_for_run",
@@ -1537,11 +1537,11 @@ class PrimarySourceRecoveryTests(TestCase):
             ) as evaluator,
             patch(
                 "api.tasks.calibrate_verdict_confidence",
-                side_effect=lambda result, _groups: result,
+                side_effect=lambda result, _groups, **_kwargs: result,
             ),
             patch(
                 "api.tasks.enforce_decisive_evidence_support",
-                side_effect=lambda result, _groups: result,
+                side_effect=lambda result, _groups, **_kwargs: result,
             ),
             patch("api.tasks._log_stage"),
         ):
@@ -1944,7 +1944,7 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
         ) as recovery:
             run = self._execute()
 
-        self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        self.assertEqual(run.status, VerificationRun.Status.ABSTAINED)
         self.assessor.assert_not_called()
         link = VerificationEvidence.objects.get()
         self.assertEqual(link.stance, VerificationEvidence.Stance.CONTEXT)
@@ -2072,7 +2072,7 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
         ):
             with self.subTest(verdict=verdict), patch(
                 "api.tasks.enforce_decisive_evidence_support",
-                side_effect=lambda result, _groups: result,
+                side_effect=lambda result, _groups, **_kwargs: result,
             ):
                 self.verdict["verdict"] = verdict
                 evaluator_calls_before = self.evaluate_persisted.call_count
