@@ -112,8 +112,7 @@ class CloudflareConcurrencyCandidateTests(SimpleTestCase):
                     active -= 1
 
         with patch(
-            "api.management.commands.compare_cloudflare_assessment_chunk_concurrency."
-            "call_validated_cloudflare_pilot",
+            "api.verification.cloudflare_pilot.call_validated_cloudflare_pilot",
             side_effect=fake_call,
         ):
             result = _run_candidate_arm(
@@ -125,8 +124,8 @@ class CloudflareConcurrencyCandidateTests(SimpleTestCase):
 
         self.assertTrue(result["success"])
         self.assertEqual(result["chunks_attempted"], 3)
-        self.assertEqual(result["metadata"]["max_concurrency"], 2)
-        self.assertEqual(result["metadata"]["waves_attempted"], 2)
+        self.assertEqual(result["metadata"]["assessment_max_concurrency"], 2)
+        self.assertEqual(result["metadata"]["assessment_waves_attempted"], 2)
         self.assertEqual(max_active, 2)
         self.assertCountEqual(seen_prompts, expected_prompts)
         self.assertEqual(len(result["assessments"]), 10)
@@ -148,8 +147,7 @@ class CloudflareConcurrencyCandidateTests(SimpleTestCase):
             return _raw_assessments_for_prompt(user_prompt)
 
         with patch(
-            "api.management.commands.compare_cloudflare_assessment_chunk_concurrency."
-            "call_validated_cloudflare_pilot",
+            "api.verification.cloudflare_pilot.call_validated_cloudflare_pilot",
             side_effect=fake_call,
         ):
             result = _run_candidate_arm(
@@ -162,7 +160,7 @@ class CloudflareConcurrencyCandidateTests(SimpleTestCase):
         self.assertFalse(result["success"])
         self.assertEqual(result["error_code"], "HTTP_429")
         self.assertEqual(result["chunks_attempted"], 2)
-        self.assertEqual(result["metadata"]["waves_attempted"], 1)
+        self.assertEqual(result["metadata"]["assessment_waves_attempted"], 1)
         self.assertCountEqual(seen_prompts, expected_prompts[:2])
         self.assertNotIn(expected_prompts[2], seen_prompts)
 
