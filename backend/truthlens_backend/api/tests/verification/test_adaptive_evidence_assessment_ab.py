@@ -123,6 +123,31 @@ class AdaptiveEvidenceAssessmentReplayTapeTests(TestCase):
             )
 
 
+class AdaptiveEvidenceAssessmentPersistenceRegressionTests(TestCase):
+    def test_numeric_confidence_can_still_be_persisted(self):
+        from api import tasks
+
+        claim = Claim.objects.create(
+            claim_type=Claim.ClaimType.TEXT,
+            context_text="A persistence regression claim.",
+        )
+        with patch("api.embedding_service.generate_embedding", return_value=None):
+            saved = tasks._save_claim(
+                claim.pk,
+                {
+                    "verdict": "FACT",
+                    "summary": "Synthetic persistence regression result.",
+                    "confidence_score": 91,
+                    "score_context": "Synthetic score context.",
+                },
+                "A/B regression",
+                claim.context_text,
+            )
+
+        self.assertEqual(saved.ai_verdict, "FACT")
+        self.assertEqual(saved.consensus_score, 91.0)
+
+
 class AdaptiveEvidenceAssessmentABCommandTests(TestCase):
     @override_settings(APP_ENV="production", DEBUG=False)
     def test_command_is_restricted_to_local_development(self):
