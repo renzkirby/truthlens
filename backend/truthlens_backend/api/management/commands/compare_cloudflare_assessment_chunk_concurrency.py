@@ -661,7 +661,7 @@ class Command(BaseCommand):
             and getattr(settings, "DEBUG", False) is True
         ):
             raise CommandError(
-                "Cloudflare chunk-size A/B is development-only."
+                "Cloudflare chunk-concurrency A/B is development-only."
             )
 
         claims = [
@@ -705,7 +705,7 @@ class Command(BaseCommand):
         run = start_verification_run(create_verification_run(claim))
 
         # Keep claim normalization/retrieval preparation off Cloudflare so the
-        # only Workers AI traffic in this experiment is the two assessment arms.
+        # only Workers AI traffic in this experiment is the three assessment arms.
         with (
             override_settings(INVESTIGATION_CLASSIFICATION_MODE="off"),
             patch.dict(
@@ -754,7 +754,7 @@ class Command(BaseCommand):
         tasks._retrieve_and_ingest_tavily_queries(
             search_queries,
             claim.pk,
-            stage_prefix="lossless_chunk_ab_",
+            stage_prefix="lossless_chunk_concurrency_ab_",
             verification_run=run,
         )
         retrieval_ms = int(
@@ -811,7 +811,7 @@ class Command(BaseCommand):
         if len(baseline_plan) != 3 or candidate_plan != baseline_plan:
             return {
                 "claim": claim_text,
-                "eligibility": "NOT_THREE_TO_TWO_CHUNK_ELIGIBLE",
+                "eligibility": "NOT_THREE_CHUNK_ELIGIBLE",
                 "quality_gate": "SKIPPED",
                 "frozen_evidence": frozen,
             }
