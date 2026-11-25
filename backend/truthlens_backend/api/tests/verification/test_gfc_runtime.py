@@ -210,7 +210,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         ))
         stack.enter_context(patch(
             "api.tasks.enforce_decisive_evidence_support",
-            side_effect=lambda verdict, _groups: verdict,
+            side_effect=lambda verdict, _groups, **_kwargs: verdict,
         ))
         assess_evidence = stack.enter_context(patch(
             "api.tasks._assess_and_persist_reasoning_evidence"
@@ -390,7 +390,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         ))
         stack.enter_context(patch(
             "api.tasks.enforce_decisive_evidence_support",
-            side_effect=lambda verdict, _groups: verdict,
+            side_effect=lambda verdict, _groups, **_kwargs: verdict,
         ))
         assess_evidence = stack.enter_context(patch(
             "api.tasks._assess_and_persist_reasoning_evidence"
@@ -581,7 +581,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         ))
         stack.enter_context(patch(
             "api.tasks.enforce_decisive_evidence_support",
-            side_effect=lambda verdict, _groups: verdict,
+            side_effect=lambda verdict, _groups, **_kwargs: verdict,
         ))
         assess_evidence = stack.enter_context(patch(
             "api.tasks._assess_and_persist_reasoning_evidence"
@@ -782,7 +782,7 @@ class GoogleFactCheckRuntimeBridgeTests(SimpleTestCase):
         ))
         stack.enter_context(patch(
             "api.tasks.enforce_decisive_evidence_support",
-            side_effect=lambda verdict, _groups: verdict,
+            side_effect=lambda verdict, _groups, **_kwargs: verdict,
         ))
         assess_evidence = stack.enter_context(patch(
             "api.tasks._assess_and_persist_reasoning_evidence"

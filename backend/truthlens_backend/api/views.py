@@ -43,6 +43,7 @@ from rest_framework.parsers import (
 )
 from rest_framework.views import APIView
 from datetime import timedelta
+from urllib.parse import urlparse
 from django.shortcuts import get_object_or_404
 from PIL import Image
 import json
@@ -625,6 +626,29 @@ def _authenticated_user_or_none(request):
     if user and user.is_authenticated:
         return user
     return None
+
+
+STANDALONE_TEXT_URL_MESSAGE = (
+    "URL detected. Please use URL Verification to analyze this webpage."
+)
+
+
+def _is_standalone_http_url(value):
+    """Return True only when the complete submitted text is one HTTP(S) URL."""
+    if not isinstance(value, str):
+        return False
+
+    candidate = value.strip()
+    if not candidate or any(character.isspace() for character in candidate):
+        return False
+
+    try:
+        parsed = urlparse(candidate)
+        host = parsed.hostname
+    except (TypeError, ValueError):
+        return False
+
+    return (parsed.scheme or "").lower() in {"http", "https"} and bool(host)
 
 
 def _record_authenticated_claim_check(user, claim):
@@ -4344,6 +4368,15 @@ def verify_text(request):
 
     if not text_content:
         return Response({"error": "Text is required"}, status=400)
+
+    if _is_standalone_http_url(text_content):
+        return Response(
+            {
+                "code": "URL_INPUT_DETECTED",
+                "detail": STANDALONE_TEXT_URL_MESSAGE,
+            },
+            status=400,
+        )
 
     # ── Claim Deduplication Pre-Check ──
     fingerprint = compute_fingerprint("TEXT", text_content)

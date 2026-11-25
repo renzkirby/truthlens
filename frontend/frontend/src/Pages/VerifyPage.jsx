@@ -40,6 +40,8 @@ const hasNumericValue = (value) =>
 
 const KNOWN_URL_THREAT_MESSAGE =
    "This URL was flagged for a known security threat and cannot be analyzed.";
+const STANDALONE_TEXT_URL_MESSAGE =
+   "URL detected. Please use URL Verification to analyze this webpage.";
 
 const getErrorMessage = (error, fallback) =>
    userFacingErrorMessage(error, {
@@ -72,6 +74,22 @@ const getSafeSourceUrl = (value) => {
       return parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:" ? value : null;
    } catch {
       return null;
+   }
+};
+
+const isStandaloneHttpUrl = (value) => {
+   if (typeof value !== "string") return false;
+   const candidate = value.trim();
+   if (!candidate || /\s/.test(candidate)) return false;
+
+   try {
+      const parsedUrl = new URL(candidate);
+      return (
+         (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") &&
+         Boolean(parsedUrl.hostname)
+      );
+   } catch {
+      return false;
    }
 };
 
@@ -671,14 +689,24 @@ function VerifyPage() {
    };
 
    const handleTextVerify = async () => {
-      if (!text.trim()) return;
+      const trimmedText = text.trim();
+      if (!trimmedText) return;
+
+      if (isStandaloneHttpUrl(trimmedText)) {
+         cancelActiveWork();
+         setResult(null);
+         setError(STANDALONE_TEXT_URL_MESSAGE);
+         setLoading(false);
+         return;
+      }
+
       const operationId = beginOperation();
 
       try {
          const data = await authFetch(`${import.meta.env.VITE_API_BASE_URL}/verify-text/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: { text: text.trim() },
+            body: { text: trimmedText },
          });
          handleSubmissionResponse(data, operationId);
       } catch (submissionError) {

@@ -1520,6 +1520,48 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
         sleep.assert_not_called()
 
     @override_settings(APP_ENV="production", DEBUG=False)
+    def test_supplemental_persisted_audit_does_not_retry_groq_429(self):
+        class ProviderError(RuntimeError):
+            pass
+
+        gemini_429 = ProviderError("quota unavailable")
+        gemini_429.code = 429
+        groq_429 = ProviderError("rate limited")
+        groq_429.status_code = 429
+        groq_429.response = SimpleNamespace(headers={"retry-after": "2"})
+
+        gemini = Mock()
+        gemini.models.generate_content.side_effect = gemini_429
+        cloudflare = Mock(side_effect=RuntimeError("cloudflare unavailable"))
+        groq = Mock()
+        groq.with_options.return_value.chat.completions.create.side_effect = groq_429
+
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+                    "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                },
+            ),
+            patch("api.services.gemini_client", gemini),
+            patch("api.services.groq_client", groq),
+            patch("api.services.call_validated_cloudflare_pilot", cloudflare),
+            patch("api.services.time.sleep") as sleep,
+        ):
+            with llm_provider_scope():
+                with self.assertRaises(LLMProviderUnavailableError):
+                    call_llm_with_fallback(
+                        "Instructions",
+                        "SUPPLEMENTAL AUDIT PROMPT",
+                        operation="persisted_evidence_evaluation",
+                        supplemental_audit=True,
+                    )
+
+        groq.with_options.return_value.chat.completions.create.assert_called_once()
+        sleep.assert_not_called()
+
+    @override_settings(APP_ENV="production", DEBUG=False)
     def test_non_final_groq_429_is_not_retried(self):
         class ProviderError(RuntimeError):
             pass

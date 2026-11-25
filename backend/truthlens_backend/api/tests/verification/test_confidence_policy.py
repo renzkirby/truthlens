@@ -126,6 +126,35 @@ class ConfidencePolicyTests(SimpleTestCase):
         self.assertEqual(fake["verdict"], "FAKE")
 
     def test_decisive_gate_does_not_overrule_unavailable_assessment(self):
+        item = _item(
+            stance=VerificationEvidence.Stance.UNKNOWN,
+            relevance=None,
+            directness=None,
+        )
+        original = _verdict(verdict="FAKE", confidence=60)
+
+        result = enforce_decisive_evidence_support(
+            original,
+            [_group(item)],
+            fail_on_completed_low_quality=True,
+        )
+
+        self.assertEqual(result, original)
+
+    def test_default_decisive_gate_preserves_low_quality_assessment(self):
+        original = _verdict(verdict="FAKE", confidence=60)
+        result = enforce_decisive_evidence_support(
+            original,
+            [_group(_item(
+                stance=VerificationEvidence.Stance.CONTEXT,
+                relevance=0.6,
+                directness=0.3,
+            ))],
+        )
+
+        self.assertEqual(result, original)
+
+    def test_strict_decisive_gate_fails_closed_after_low_quality_assessment(self):
         for item in (
             _item(
                 stance=VerificationEvidence.Stance.UNKNOWN,
@@ -139,12 +168,18 @@ class ConfidencePolicyTests(SimpleTestCase):
             ),
         ):
             with self.subTest(stance=item.stance):
-                original = _verdict(verdict="FAKE", confidence=60)
                 result = enforce_decisive_evidence_support(
-                    original,
+                    _verdict(verdict="FAKE", confidence=60),
                     [_group(item)],
+                    fail_on_completed_low_quality=True,
                 )
-                self.assertEqual(result, original)
+
+                self.assertEqual(result["verdict"], "UNVERIFIED")
+                self.assertEqual(result["confidence_score"], 49)
+                self.assertIn(
+                    "No usable assessed evidence supports a decisive automated verdict",
+                    result["score_context"],
+                )
 
     def test_decisive_support_gate_does_not_replace_conflict_policy(self):
         result = enforce_decisive_evidence_support(

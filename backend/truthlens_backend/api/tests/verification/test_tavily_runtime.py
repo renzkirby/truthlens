@@ -582,7 +582,7 @@ class TavilyTextRuntimeIngestionTests(TestCase):
         )
         self.decisive_support = self._patch(
             "api.tasks.enforce_decisive_evidence_support",
-            side_effect=lambda verdict, _groups: verdict,
+            side_effect=lambda verdict, _groups, **_kwargs: verdict,
         )
         self._patch("api.embedding_service.generate_embedding", return_value=None)
         self.log_stage = self._patch("api.tasks._log_stage")

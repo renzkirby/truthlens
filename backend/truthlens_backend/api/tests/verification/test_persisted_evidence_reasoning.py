@@ -25,6 +25,38 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
             "contextual_basis_evidence_ids": [],
         }
 
+    def test_beaverton_url_gets_verified_satire_source_stance(self):
+        provider_result = {
+            "cleaned_claim": (
+                "Bilingual people forget twice as many words after hitting middle age."
+            ),
+            "search_query": "bilingual people forget words middle age study",
+            "search_queries": [
+                "bilingual people forget words middle age study",
+            ],
+            "article_stance": "NEUTRAL",
+        }
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            return_value=json.dumps(provider_result),
+        ):
+            result = services.extract_search_query(
+                "Submitted article text.",
+                (
+                    "https://www.thebeaverton.com/2025/11/"
+                    "study-bilingual-people-forget-twice-as-many-words-after-"
+                    "hitting-middle-age/"
+                ),
+            )
+
+        self.assertEqual(result["article_stance"], "SATIRE")
+        self.assertFalse(
+            services._is_known_satire_source_url(
+                "https://thebeaverton.com.example.org/not-the-publisher"
+            )
+        )
+
     def test_persisted_prompt_makes_misleading_precedence_explicit(self):
         system, _user = services.build_persisted_evidence_prompt(
             "A multi-part claim.",
@@ -46,6 +78,25 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
             "Reserve FAKE for a core proposition that is wholly fabricated",
             normalized_system,
         )
+    def test_persisted_prompt_distinguishes_nonconfirmation_from_contradiction(self):
+        system, _user = services.build_persisted_evidence_prompt(
+            "The exoplanet hosts biological life.",
+            "Persisted evidence.",
+            "NEUTRAL",
+        )
+
+        normalized = " ".join(system.split())
+        for required_rule in (
+            "Absence of confirmation is not confirmation of absence",
+            "unconfirmed",
+            "not detected",
+            "failed to confirm",
+            "Prefer UNVERIFIED",
+            "affirmatively establishes the negation",
+        ):
+            with self.subTest(required_rule=required_rule):
+                self.assertIn(required_rule, normalized)
+
     def test_persisted_prompt_rechecks_predicate_and_role_entailment(self):
         system, _user = services.build_persisted_evidence_prompt(
             "An official called for an investigation to stop.",
@@ -1026,6 +1077,222 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
 
         self.assertEqual(call_llm.call_count, 1)
         self.assertEqual(result["verdict"], "FAKE")
+
+    def test_plain_explicit_refutation_without_uncertainty_does_not_add_audit(self):
+        evidence_id = "05050505-0505-0505-0505-050505050505"
+        initial = {
+            **self.result,
+            "verdict": "FAKE",
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        }
+        evidence_groups = [SimpleNamespace(evidence=(SimpleNamespace(
+            evidence_link_id=evidence_id,
+            title="Official record directly contradicts the claim",
+            content=(
+                "The awarding body explicitly states the person did not receive "
+                "the award and is not listed among the recipients."
+            ),
+            stance="REFUTES",
+            relevance_score=0.98,
+            directness_score=0.98,
+        ),))]
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            return_value=json.dumps(initial),
+        ) as call_llm:
+            result = evaluate_claim_with_persisted_evidence(
+                "The person received the award.",
+                "Persisted assessed evidence.",
+                evidence_groups=evidence_groups,
+            )
+
+        self.assertEqual(result["verdict"], "FAKE")
+        self.assertEqual(call_llm.call_count, 1)
+
+    def test_fake_nonconfirmation_is_reaudited_to_unverified(self):
+        evidence_id = "10101010-1010-1010-1010-101010101010"
+        initial = {
+            **self.result,
+            "verdict": "FAKE",
+            "summary": "The claim is contradicted because life was not confirmed.",
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        }
+        audited = {
+            "reasoning": (
+                "The observations failed to confirm biosignatures but do not "
+                "establish that biological life is absent."
+            ),
+            "verdict": "UNVERIFIED",
+            "summary": (
+                "Biological life has not been confirmed, but the evidence does "
+                "not establish that it is absent."
+            ),
+            "confidence_score": 40,
+            "score_context": "The evidence is inconclusive.",
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        }
+        evidence_groups = [SimpleNamespace(evidence=(SimpleNamespace(
+            evidence_link_id=evidence_id,
+            title="New observations fail to confirm biosignatures",
+            content=(
+                "New observations failed to confirm the proposed biosignatures. "
+                "The presence of biological life remains unconfirmed."
+            ),
+            stance="REFUTES",
+            relevance_score=0.95,
+            directness_score=0.90,
+        ),))]
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            side_effect=[json.dumps(initial), json.dumps(audited)],
+        ) as call_llm:
+            result = evaluate_claim_with_persisted_evidence(
+                "The exoplanet K2-18 b hosts biological life.",
+                "Persisted assessed evidence.",
+                evidence_groups=evidence_groups,
+            )
+
+        self.assertEqual(result["verdict"], "UNVERIFIED")
+        self.assertEqual(call_llm.call_count, 2)
+        second_call = call_llm.call_args_list[1]
+        self.assertEqual(
+            second_call.kwargs["operation"],
+            "persisted_evidence_evaluation",
+        )
+        self.assertTrue(second_call.kwargs["supplemental_audit"])
+        self.assertIn(
+            "FAKE contradiction-sufficiency auditor",
+            second_call.args[0],
+        )
+        self.assertIn("failed to confirm", second_call.args[1])
+
+    def test_nonconfirmation_audit_excerpt_keeps_late_explicit_contradiction(self):
+        content = (
+            "The proposed signal has not been confirmed. "
+            + ("Background discussion. " * 90)
+            + "The official record explicitly states the claimed event did not occur."
+        )
+
+        excerpt = services._nonconfirmation_audit_excerpt(content, max_chars=1200)
+
+        self.assertIn("has not been confirmed", excerpt)
+        self.assertIn("did not occur", excerpt)
+        self.assertLessEqual(len(excerpt), 1206)
+
+    def test_fake_nonconfirmation_audit_preserves_explicit_contradiction(self):
+        evidence_id = "20202020-2020-2020-2020-202020202020"
+        initial = {
+            **self.result,
+            "verdict": "FAKE",
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        }
+        audited = {
+            **initial,
+            "reasoning": (
+                "The awarding body explicitly states the person did not receive "
+                "the award."
+            ),
+            "summary": "The awarding body explicitly denies the claimed award.",
+            "confidence_score": 90,
+        }
+        evidence_groups = [SimpleNamespace(evidence=(SimpleNamespace(
+            evidence_link_id=evidence_id,
+            title="Rumor remains unconfirmed; official roster contradicts it",
+            content=(
+                "The viral report was not confirmed. The awarding body explicitly "
+                "states that the person did not receive the award and is absent "
+                "from the official recipient roster."
+            ),
+            stance="REFUTES",
+            relevance_score=0.98,
+            directness_score=0.98,
+        ),))]
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            side_effect=[json.dumps(initial), json.dumps(audited)],
+        ) as call_llm:
+            result = evaluate_claim_with_persisted_evidence(
+                "The person received the award.",
+                "Persisted assessed evidence.",
+                evidence_groups=evidence_groups,
+            )
+
+        self.assertEqual(result["verdict"], "FAKE")
+        self.assertEqual(call_llm.call_count, 2)
+
+    def test_fake_nonconfirmation_audit_failure_fails_closed(self):
+        evidence_id = "30303030-3030-3030-3030-303030303030"
+        initial = {
+            **self.result,
+            "verdict": "FAKE",
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        }
+        evidence_groups = [SimpleNamespace(evidence=(SimpleNamespace(
+            evidence_link_id=evidence_id,
+            title="Evidence remains inconclusive",
+            content="The proposed finding has not been confirmed.",
+            stance="REFUTES",
+            relevance_score=0.90,
+            directness_score=0.90,
+        ),))]
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            side_effect=[
+                json.dumps(initial),
+                LLMProviderUnavailableError("audit providers unavailable"),
+            ],
+        ):
+            result = evaluate_claim_with_persisted_evidence(
+                "The proposed phenomenon exists.",
+                "Persisted assessed evidence.",
+                evidence_groups=evidence_groups,
+            )
+
+        self.assertEqual(result["verdict"], "UNVERIFIED")
+        self.assertEqual(result["confidence_score"], 0)
+        self.assertIn("does not confirm", result["summary"])
+
+    def test_official_false_resolution_does_not_open_nonconfirmation_audit(self):
+        evidence_id = "40404040-4040-4040-4040-404040404040"
+        initial = {
+            **self.result,
+            "verdict": "FAKE",
+            "contextual_basis_kind": "NONE",
+            "contextual_basis_evidence_ids": [],
+        }
+        evidence_groups = [SimpleNamespace(evidence=(SimpleNamespace(
+            evidence_link_id=evidence_id,
+            title="Claim not confirmed",
+            content="The report was not confirmed.",
+            stance="REFUTES",
+            relevance_score=0.95,
+            directness_score=0.95,
+        ),))]
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            return_value=json.dumps(initial),
+        ) as call_llm:
+            result = evaluate_claim_with_persisted_evidence(
+                "An officially refuted claim.",
+                "Persisted assessed evidence.",
+                official_fact_check_resolution=(
+                    OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT
+                ),
+                evidence_groups=evidence_groups,
+            )
+
+        self.assertEqual(result["verdict"], "FAKE")
+        self.assertEqual(call_llm.call_count, 1)
 
     def test_materiality_audit_provider_failure_preserves_strong_claim_scoped_misleading(self):
         evidence_id = "55555555-5555-5555-5555-555555555555"

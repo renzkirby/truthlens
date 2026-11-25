@@ -493,6 +493,8 @@ def enforce_noneditable_fallback_evidence_support(
 def enforce_decisive_evidence_support(
     verdict_result: dict,
     evidence_groups: Iterable[ReasoningEvidenceGroup],
+    *,
+    fail_on_completed_low_quality: bool = False,
 ) -> dict:
     """Fail closed when an automated FACT/FAKE has no usable aligned evidence.
 
@@ -510,20 +512,26 @@ def enforce_decisive_evidence_support(
     if consistent_stances is None:
         return result
 
+    assessment_completed = False
     has_usable_assessed_evidence = False
     for group in tuple(evidence_groups):
         for item in group.evidence:
             quality = _item_quality(item)
-            if quality is None or quality < _USABLE_SCORE_FLOOR:
+            if quality is None:
+                continue
+            assessment_completed = True
+            if quality < _USABLE_SCORE_FLOOR:
                 continue
             has_usable_assessed_evidence = True
             if item.stance in consistent_stances:
                 return result
 
-    # An unavailable/low-quality assessor must not override the final evaluator.
-    # The gate only adjudicates a contradiction already established by usable
-    # current-run assessment metadata.
-    if not has_usable_assessed_evidence:
+    # Preserve the original best-effort behavior when assessment is genuinely
+    # unavailable. Callers may opt into stricter live-web handling so a completed
+    # but uniformly low-quality assessment cannot backstop a decisive FACT/FAKE.
+    if not has_usable_assessed_evidence and not (
+        fail_on_completed_low_quality and assessment_completed
+    ):
         return result
 
     final_score = min(

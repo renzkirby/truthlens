@@ -74,6 +74,22 @@ Stance and directness are separate dimensions. Evidence may SUPPORT or REFUTE
 a claim even when its directness is less than 1.0. Do not downgrade supporting
 or refuting evidence to CONTEXT merely because it is indirect.
 
+EPISTEMIC STATUS RULES:
+- Absence of confirmation is not affirmative contradiction.
+- Statements such as "not confirmed", "not detected", "no conclusive evidence",
+  "insufficient evidence", "inconclusive", "unknown", "could not determine",
+  "unable to confirm", or "failed to confirm" do not by themselves REFUTE an
+  affirmative proposition.
+- Use CONTEXT when such a passage is relevant background about evidentiary
+  uncertainty but does not establish the opposite proposition. Use UNKNOWN when
+  the relationship cannot responsibly be established from the passage alone.
+- REFUTES requires the passage itself to establish the negation or mutually
+  exclusive factual state, demonstrate the claimed event/state did not occur or
+  exist, or explicitly establish a false attribution/fabrication.
+- Do not infer nonexistence merely from failure to observe or detect something
+  unless the passage itself establishes that the observation/detection result
+  rules out the submitted proposition.
+
 RELEVANCE SCORE (relevance_score):
 How closely the evidence addresses the specific claim being assessed.
 - 1.0 means the evidence directly addresses the claim's core proposition and
