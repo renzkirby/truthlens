@@ -1,5 +1,6 @@
 import io
 import json
+import os
 import threading
 import time
 from types import SimpleNamespace
@@ -19,7 +20,18 @@ from api.management.commands.compare_cloudflare_assessment_chunk_concurrency imp
 )
 from api.models import Claim, VerificationEvidence
 from api.verification.cloudflare_evaluation import CloudflareEvaluationError
-from api.verification.cloudflare_pilot import _assessment_chunk_plan
+from api.verification.cloudflare_pilot import (
+    ASSESSMENT_MAX_CONCURRENCY,
+    ASSESSMENT_OPERATION,
+    _assessment_chunk_plan,
+    call_validated_cloudflare_assessment_chunks,
+    cloudflare_assessment_concurrency_enabled,
+)
+from api.verification.telemetry import (
+    get_current_collector,
+    record_llm_provider_call,
+    verification_telemetry_scope,
+)
 from api.verification.evidence_assessment import EvidenceAssessment
 
 
@@ -492,3 +504,201 @@ class CloudflareConcurrencyCommandTests(TestCase):
         )
         control.assert_not_called()
         candidate.assert_not_called()
+
+
+@override_settings(APP_ENV="production", DEBUG=False)
+class CloudflareConcurrencyRuntimeTests(SimpleTestCase):
+    def _env(self, **overrides):
+        values = {
+            "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+            "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+            "ENABLE_CLOUDFLARE_ASSESSMENT_CONCURRENCY": "0",
+            "CLOUDFLARE_PILOT_ASSESSMENT_CHUNKING": "0",
+        }
+        values.update(overrides)
+        return patch.dict(os.environ, values, clear=False)
+
+    def test_runtime_flag_is_default_off_and_requires_hardening(self):
+        with self._env():
+            self.assertFalse(cloudflare_assessment_concurrency_enabled())
+        with self._env(ENABLE_CLOUDFLARE_ASSESSMENT_CONCURRENCY="1"):
+            self.assertTrue(cloudflare_assessment_concurrency_enabled())
+        with self._env(
+            ENABLE_PROVIDER_RELIABILITY_HARDENING="0",
+            ENABLE_CLOUDFLARE_ASSESSMENT_CONCURRENCY="1",
+        ):
+            self.assertFalse(cloudflare_assessment_concurrency_enabled())
+
+    def test_runtime_single_chunk_stays_sequential_with_flag_enabled(self):
+        evidence_items = [_item(f"Evidence {index}") for index in range(4)]
+        system = _material_scope_system_instructions()
+        prompt = _full_prompt("A test claim.", evidence_items)
+        calls = []
+
+        def fake_call(_system, chunk_prompt, **kwargs):
+            calls.append(chunk_prompt)
+            kwargs["audit_metadata"].update({
+                "prompt_tokens": 100,
+                "completion_tokens": 50,
+                "total_tokens": 150,
+                "finish_reason": "stop",
+            })
+            return _raw_assessments_for_prompt(chunk_prompt)
+
+        with (
+            self._env(ENABLE_CLOUDFLARE_ASSESSMENT_CONCURRENCY="1"),
+            patch(
+                "api.verification.cloudflare_pilot.call_validated_cloudflare_pilot",
+                side_effect=fake_call,
+            ),
+            patch(
+                "api.verification.cloudflare_pilot.ThreadPoolExecutor",
+            ) as executor,
+        ):
+            metadata = {}
+            result = call_validated_cloudflare_assessment_chunks(
+                system,
+                prompt,
+                audit_metadata=metadata,
+            )
+
+        executor.assert_not_called()
+        self.assertEqual(calls, [prompt])
+        self.assertEqual(len(json.loads(result)["assessments"]), 4)
+        self.assertNotIn("assessment_max_concurrency", metadata)
+        self.assertNotIn("assessment_waves_attempted", metadata)
+
+    def test_runtime_uses_exact_chunks_and_max_two_in_flight(self):
+        evidence_items = [_item(f"Evidence {index}") for index in range(12)]
+        system = _material_scope_system_instructions()
+        prompt = _full_prompt("A test claim.", evidence_items)
+        expected_prompts, _ = _assessment_chunk_plan(system, prompt)
+        barrier = threading.Barrier(2)
+        lock = threading.Lock()
+        active = 0
+        max_active = 0
+        seen_prompts = []
+
+        def fake_call(_system, chunk_prompt, **kwargs):
+            nonlocal active, max_active
+            first_key = json.loads(chunk_prompt.split("\n", 1)[1])[
+                "evidence_items"
+            ][0]["key"]
+            with lock:
+                active += 1
+                max_active = max(max_active, active)
+                seen_prompts.append(chunk_prompt)
+            try:
+                if first_key in {"item_0", "item_4"}:
+                    barrier.wait(timeout=1.0)
+                kwargs["audit_metadata"].update({
+                    "prompt_tokens": 100,
+                    "completion_tokens": 50,
+                    "total_tokens": 150,
+                    "finish_reason": "stop",
+                })
+                return _raw_assessments_for_prompt(chunk_prompt)
+            finally:
+                with lock:
+                    active -= 1
+
+        with (
+            self._env(ENABLE_CLOUDFLARE_ASSESSMENT_CONCURRENCY="1"),
+            patch(
+                "api.verification.cloudflare_pilot.call_validated_cloudflare_pilot",
+                side_effect=fake_call,
+            ),
+        ):
+            metadata = {}
+            result = call_validated_cloudflare_assessment_chunks(
+                system,
+                prompt,
+                audit_metadata=metadata,
+            )
+
+        self.assertEqual(ASSESSMENT_MAX_CONCURRENCY, 2)
+        self.assertEqual(max_active, 2)
+        self.assertCountEqual(seen_prompts, expected_prompts)
+        self.assertEqual(len(json.loads(result)["assessments"]), 12)
+        self.assertEqual(metadata["assessment_chunks_attempted"], 3)
+        self.assertEqual(metadata["assessment_max_concurrency"], 2)
+        self.assertEqual(metadata["assessment_waves_attempted"], 2)
+        self.assertEqual(metadata["prompt_tokens"], 300)
+        self.assertEqual(metadata["completion_tokens"], 150)
+        self.assertEqual(metadata["total_tokens"], 450)
+
+    def test_runtime_first_wave_failure_never_starts_third_chunk(self):
+        evidence_items = [_item(f"Evidence {index}") for index in range(12)]
+        system = _material_scope_system_instructions()
+        prompt = _full_prompt("A test claim.", evidence_items)
+        expected_prompts, _ = _assessment_chunk_plan(system, prompt)
+        barrier = threading.Barrier(2)
+        lock = threading.Lock()
+        seen_prompts = []
+
+        def fake_call(_system, chunk_prompt, **kwargs):
+            first_key = json.loads(chunk_prompt.split("\n", 1)[1])[
+                "evidence_items"
+            ][0]["key"]
+            with lock:
+                seen_prompts.append(chunk_prompt)
+            if first_key in {"item_0", "item_4"}:
+                barrier.wait(timeout=1.0)
+            if first_key == "item_0":
+                raise CloudflareEvaluationError("HTTP_429")
+            if first_key == "item_4":
+                kwargs["audit_metadata"].update({
+                    "prompt_tokens": 100,
+                    "completion_tokens": 50,
+                    "total_tokens": 150,
+                })
+                return _raw_assessments_for_prompt(chunk_prompt)
+            raise AssertionError("third chunk must not start after first-wave failure")
+
+        with (
+            self._env(ENABLE_CLOUDFLARE_ASSESSMENT_CONCURRENCY="1"),
+            patch(
+                "api.verification.cloudflare_pilot.call_validated_cloudflare_pilot",
+                side_effect=fake_call,
+            ),
+        ):
+            metadata = {}
+            with self.assertRaisesRegex(CloudflareEvaluationError, "HTTP_429"):
+                call_validated_cloudflare_assessment_chunks(
+                    system,
+                    prompt,
+                    audit_metadata=metadata,
+                )
+
+        self.assertCountEqual(seen_prompts, expected_prompts[:2])
+        self.assertNotIn(expected_prompts[2], seen_prompts)
+        self.assertEqual(metadata["assessment_chunks_attempted"], 2)
+        self.assertEqual(metadata["assessment_max_concurrency"], 2)
+        self.assertEqual(metadata["assessment_waves_attempted"], 1)
+        self.assertNotIn("finish_reason", metadata)
+
+    def test_runtime_concurrency_counters_are_safe_telemetry(self):
+        @verification_telemetry_scope()
+        def capture(claim_id):
+            record_llm_provider_call(
+                ASSESSMENT_OPERATION,
+                "cloudflare",
+                uuid4(),
+                1200,
+                "success",
+                metadata={
+                    "assessment_chunks_attempted": 3,
+                    "assessment_max_concurrency": 2,
+                    "assessment_waves_attempted": 2,
+                    "private_evidence": "DO_NOT_PERSIST",
+                },
+            )
+            return get_current_collector().events[0]
+
+        event = capture(str(uuid4()))
+        self.assertEqual(event["metadata"], {
+            "assessment_chunks_attempted": 3,
+            "assessment_max_concurrency": 2,
+            "assessment_waves_attempted": 2,
+        })
+        self.assertNotIn("DO_NOT_PERSIST", str(event))
