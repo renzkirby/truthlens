@@ -884,18 +884,18 @@ def call_llm_with_fallback(
         cloudflare_user_prompt = resolved_fallback_user_prompt
         cloudflare_request_variant = "BOUNDED"
 
-    assessment_tail_budget_details = None
+    assessment_tail_budget_plan = None
     if (
         operation == ASSESSMENT_OPERATION
         and cloudflare_assessment_tail_budget_enabled()
         and isinstance(cloudflare_assessment_user_prompt, str)
     ):
-        assessment_tail_budget_details = cloudflare_assessment_tail_budget_details(
+        assessment_tail_budget_plan = cloudflare_assessment_tail_budget_details(
             system_instructions,
             user_prompt,
             cloudflare_assessment_user_prompt,
         )
-        if assessment_tail_budget_details is not None:
+        if assessment_tail_budget_plan is not None:
             cloudflare_user_prompt = cloudflare_assessment_user_prompt
             cloudflare_request_variant = "BOUNDED"
 
@@ -953,14 +953,14 @@ def call_llm_with_fallback(
         cloudflare_metrics = {}
         try:
             if use_assessment_chunks:
-                if assessment_tail_budget_details is not None:
+                if assessment_tail_budget_plan is not None:
                     cloudflare_metrics.update({
                         "assessment_tail_budget_applied": True,
                         "assessment_items_original": (
-                            assessment_tail_budget_details["original_items"]
+                            assessment_tail_budget_plan["original_items"]
                         ),
                         "assessment_items_selected": (
-                            assessment_tail_budget_details["selected_items"]
+                            assessment_tail_budget_plan["selected_items"]
                         ),
                     })
                 cloudflare_text = call_validated_cloudflare_assessment_chunks(
