@@ -136,6 +136,7 @@ def _event_dict(event):
         "name": event.name,
         "provider": event.provider,
         "outcome": event.outcome,
+        "error_label": event.error_label,
         "duration_ms": event.duration_ms,
         "metadata": event.metadata if isinstance(event.metadata, dict) else {},
     }
@@ -403,6 +404,7 @@ class Command(BaseCommand):
                 "evidence_assessed": 0,
                 "source_identity_count": 0,
                 "stance_counts": {},
+                "evidence_role_counts": {},
                 "assessment_stages": [],
                 "assessment_provider_calls": [],
                 "run_id": str(claim.pk) if keep_artifacts else None,
@@ -419,6 +421,7 @@ class Command(BaseCommand):
             | ~Q(stance=VerificationEvidence.Stance.UNKNOWN)
         ).count()
         stance_counts = Counter(evidence.values_list("stance", flat=True))
+        evidence_role_counts = Counter(evidence.values_list("evidence_role", flat=True))
 
         try:
             dossier = load_reasoning_evidence_dossier_for_run(run)
@@ -460,6 +463,7 @@ class Command(BaseCommand):
             "evidence_assessed": evidence_assessed,
             "source_identity_count": source_identity_count,
             "stance_counts": dict(sorted(stance_counts.items())),
+            "evidence_role_counts": dict(sorted(evidence_role_counts.items())),
             "assessment_stages": assessment_stages,
             "assessment_provider_calls": assessment_provider_calls,
             "run_id": str(run.pk) if keep_artifacts else None,
