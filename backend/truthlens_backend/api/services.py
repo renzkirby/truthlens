@@ -29,7 +29,6 @@ from .verification.cloudflare_pilot import (
     cloudflare_assessment_bypass_reason,
     cloudflare_assessment_chunking_enabled,
     cloudflare_assessment_chunking_bypass_reason,
-    cloudflare_assessment_tail_budget_details,
     call_validated_cloudflare_assessment_chunks,
     plan_lossless_assessment_chunks,
     ASSESSMENT_OPERATION,
@@ -51,7 +50,6 @@ from .verification.provider_hierarchy import (
     gemini_transient_circuit_breaker_enabled,
     gemini_transient_model_fallback_enabled,
     groq_bounded_fallback_enabled,
-    cloudflare_assessment_tail_budget_enabled,
     reliability_hardening_enabled,
 )
 from .verification.evidence_budget import (
@@ -690,7 +688,6 @@ def call_llm_with_fallback(
     operation=None,
     gemini_timeout_ms=None,
     fallback_user_prompt=None,
-    cloudflare_assessment_user_prompt=None,
 ):
     """Opt-in Gemini -> alternate Gemini -> Cloudflare -> Groq routing.
 
@@ -884,27 +881,12 @@ def call_llm_with_fallback(
         cloudflare_user_prompt = resolved_fallback_user_prompt
         cloudflare_request_variant = "BOUNDED"
 
-    assessment_tail_budget_plan = None
-    if (
-        operation == ASSESSMENT_OPERATION
-        and cloudflare_assessment_tail_budget_enabled()
-        and isinstance(cloudflare_assessment_user_prompt, str)
-    ):
-        assessment_tail_budget_plan = cloudflare_assessment_tail_budget_details(
-            system_instructions,
-            user_prompt,
-            cloudflare_assessment_user_prompt,
-        )
-        if assessment_tail_budget_plan is not None:
-            cloudflare_user_prompt = cloudflare_assessment_user_prompt
-            cloudflare_request_variant = "BOUNDED"
-
     cloudflare_degraded = _cloudflare_pilot_degraded.get() is True
     assessment_bypass_reason = None
     use_assessment_chunks = False
     if pilot_active and not cloudflare_degraded and operation == ASSESSMENT_OPERATION:
         assessment_bypass_reason = cloudflare_assessment_bypass_reason(
-            system_instructions, cloudflare_user_prompt,
+            system_instructions, user_prompt,
         )
         if (
             assessment_bypass_reason in {"ASSESSMENT_BATCH_TOO_LARGE", "PROMPT_TOO_LONG"}
@@ -913,7 +895,7 @@ def call_llm_with_fallback(
             # An entire bounded lossless plan must fit before Cloudflare can
             # be called. Nothing is silently dropped to fit a token budget.
             assessment_bypass_reason = cloudflare_assessment_chunking_bypass_reason(
-                system_instructions, cloudflare_user_prompt,
+                system_instructions, user_prompt,
             )
             use_assessment_chunks = assessment_bypass_reason is None
         if assessment_bypass_reason is not None:
@@ -953,18 +935,8 @@ def call_llm_with_fallback(
         cloudflare_metrics = {}
         try:
             if use_assessment_chunks:
-                if assessment_tail_budget_plan is not None:
-                    cloudflare_metrics.update({
-                        "assessment_tail_budget_applied": True,
-                        "assessment_items_original": (
-                            assessment_tail_budget_plan["original_items"]
-                        ),
-                        "assessment_items_selected": (
-                            assessment_tail_budget_plan["selected_items"]
-                        ),
-                    })
                 cloudflare_text = call_validated_cloudflare_assessment_chunks(
-                    system_instructions, cloudflare_user_prompt,
+                    system_instructions, user_prompt,
                     audit_metadata=cloudflare_metrics,
                 )
             elif operation in {ASSESSMENT_OPERATION, CLASSIFICATION_OPERATION}:
