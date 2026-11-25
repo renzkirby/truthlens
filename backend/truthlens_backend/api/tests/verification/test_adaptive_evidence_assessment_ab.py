@@ -77,7 +77,7 @@ class AdaptiveEvidenceAssessmentABCommandTests(TestCase):
         with self.assertRaises(CommandError):
             call_command(
                 "compare_evidence_assessment_budget",
-                claim=["A test claim."],
+                claims=["A test claim."],
             )
 
     @override_settings(APP_ENV="development", DEBUG=True)
@@ -160,7 +160,7 @@ class AdaptiveEvidenceAssessmentABCommandTests(TestCase):
         ):
             call_command(
                 "compare_evidence_assessment_budget",
-                claim=["A test claim."],
+                claims=["A test claim."],
                 json=True,
                 stdout=output,
             )
