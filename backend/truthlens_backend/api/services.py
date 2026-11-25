@@ -3353,7 +3353,7 @@ _NONCONFIRMATION_AUDIT_EVIDENCE_PATTERNS = (
     r"\b(?:unable to|could not|cannot|can't) confirm\b",
     r"\bnot (?:yet )?(?:been )?detected\b",
     r"\b(?:fail|fails|failed) to detect\b",
-    r"\bno (?:conclusive|convincing|statistically significant|sufficient|direct )?evidence\b",
+    r"\bno (?:(?:conclusive|convincing|statistically significant|sufficient|direct) )?evidence\b",
     r"\binsufficient evidence\b",
     r"\black of evidence\b",
     r"\binconclusive\b",
@@ -3508,7 +3508,7 @@ def _audit_fake_nonconfirmation_signal(
     """Re-check ordinary FAKE when assessed refutation may only mean unconfirmed."""
     compact_context = _bounded_nonconfirmation_refutation_context(evidence_groups)
     if not compact_context:
-        return evaluator_result
+        return None
 
     system_instructions = """
     Role: You are the TruthLens FAKE contradiction-sufficiency auditor.
@@ -4130,7 +4130,7 @@ def evaluate_claim_with_persisted_evidence(
                 parsed_result,
                 evidence_groups,
             )
-            if audited_fake is not parsed_result:
+            if audited_fake is not None:
                 return audited_fake
 
         if (
