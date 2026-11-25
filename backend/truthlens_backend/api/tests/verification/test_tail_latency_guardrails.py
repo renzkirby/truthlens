@@ -1,7 +1,11 @@
+import json
 import os
+from io import StringIO
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import SimpleTestCase, override_settings
 
 from api import tasks
@@ -154,3 +158,65 @@ class OptionalRecoveryTailLatencyGuardrailTests(SimpleTestCase):
             limit=tasks.PRIMARY_SOURCE_RECOVERY_RESULT_LIMIT,
             primary_source_recovery=True,
         )
+
+@override_settings(APP_ENV="development", DEBUG=True)
+class TailLatencyValidationCommandTests(SimpleTestCase):
+    def test_offline_validation_report_passes_all_guardrails(self):
+        output = StringIO()
+
+        call_command(
+            "validate_verification_tail_latency",
+            json=True,
+            stdout=output,
+        )
+
+        report = json.loads(output.getvalue())
+        self.assertTrue(report["passed"])
+        self.assertTrue(report["offline_only"])
+        self.assertFalse(report["database_writes"])
+        self.assertFalse(report["external_calls"])
+        self.assertEqual(
+            report["guardrails"]["groq_request_timeout_seconds"],
+            20.0,
+        )
+        self.assertEqual(
+            report["guardrails"]["optional_recovery_cutoff_seconds"],
+            75.0,
+        )
+
+        checks = {check["id"]: check for check in report["checks"]}
+        self.assertEqual(
+            checks["groq_timeout_guardrail"]["provider_route"],
+            ["gemini", "cloudflare", "groq"],
+        )
+        self.assertEqual(
+            checks["groq_timeout_guardrail"]["groq_attempts"],
+            1,
+        )
+        self.assertEqual(
+            checks["groq_timeout_guardrail"]["terminal_exception"],
+            "LLMProviderUnavailableError",
+        )
+        self.assertTrue(
+            checks["recovery_before_cutoff"]["recovery_requested"]
+        )
+        self.assertFalse(
+            checks["recovery_after_cutoff"]["recovery_requested"]
+        )
+        self.assertTrue(
+            checks["recovery_after_cutoff"]["unverified_preserved"]
+        )
+        self.assertEqual(
+            checks["recovery_after_cutoff"]["stage_outcome"],
+            "skipped_tail_latency_budget",
+        )
+
+    @override_settings(APP_ENV="production", DEBUG=False)
+    def test_validation_command_is_rejected_outside_development(self):
+        with self.assertRaises(CommandError):
+            call_command(
+                "validate_verification_tail_latency",
+                json=True,
+                stdout=StringIO(),
+            )
+
