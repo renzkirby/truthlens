@@ -1367,11 +1367,7 @@ def _attempt_primary_source_recovery(
             evidence_groups=evaluation_groups,
         )
     )
-    recovered = calibrate_verdict_confidence(
-        recovered,
-        evaluation_groups,
-        direct_satire_provenance=(article_stance == "SATIRE"),
-    )
+    recovered = calibrate_verdict_confidence(recovered, evaluation_groups)
     if (
         (is_text_claim or enforce_decisive_support)
         and not (
@@ -3426,7 +3422,6 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         ai_verdict = calibrate_verdict_confidence(
                             ai_verdict,
                             fact_check_groups,
-                            direct_satire_provenance=(article_stance == "SATIRE"),
                         )
                         if not (
                             official_rating_policy["resolution"]
@@ -3734,7 +3729,6 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     ai_verdict = calibrate_verdict_confidence(
                         ai_verdict,
                         evaluation_groups,
-                        direct_satire_provenance=(article_stance == "SATIRE"),
                     )
                     if not (
                         gfc_evidence_assessed
