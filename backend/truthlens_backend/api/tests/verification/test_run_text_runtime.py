@@ -1938,7 +1938,11 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
         self.provider.search_with_payload.return_value = ({"claims": []}, [])
         self.retrieve_tavily.side_effect = self._record_assessed_tavily_link
 
-        run = self._execute()
+        with patch(
+            "api.tasks._attempt_primary_source_recovery",
+            side_effect=lambda **kwargs: kwargs["initial_result"],
+        ) as recovery:
+            run = self._execute()
 
         self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
         self.assessor.assert_not_called()
@@ -1950,6 +1954,14 @@ class VerificationEvidenceTextRuntimeTests(TestCase):
         self.assertIn("Stance: CONTEXT", persisted_context)
         self.assertIn("Relevance score: 0.6", persisted_context)
         self.assertIn("Directness score: 0.3", persisted_context)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
+        self.assertEqual(
+            self.claim.score_context,
+            "No usable assessed evidence supports a decisive automated verdict; "
+            "final confidence is 49%.",
+        )
+        recovery.assert_called_once()
 
     def test_unknown_numeric_assessment_is_persisted_and_rendered(self):
         self.assessor.return_value = [EvidenceAssessment(
