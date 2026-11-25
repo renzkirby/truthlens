@@ -141,6 +141,19 @@ class ConfidencePolicyTests(SimpleTestCase):
 
         self.assertEqual(result, original)
 
+    def test_default_decisive_gate_preserves_low_quality_assessment(self):
+        original = _verdict(verdict="FAKE", confidence=60)
+        result = enforce_decisive_evidence_support(
+            original,
+            [_group(_item(
+                stance=VerificationEvidence.Stance.CONTEXT,
+                relevance=0.6,
+                directness=0.3,
+            ))],
+        )
+
+        self.assertEqual(result, original)
+
     def test_strict_decisive_gate_fails_closed_after_low_quality_assessment(self):
         for item in (
             _item(
