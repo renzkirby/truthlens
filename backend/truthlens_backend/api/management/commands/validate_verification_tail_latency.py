@@ -60,7 +60,11 @@ def _groq_timeout_check():
             terminal_exception = type(exc).__name__
 
     provider_route = [call.args[1] for call in telemetry.call_args_list]
-    groq_options = groq.with_options.call_args.kwargs
+    groq_options = (
+        groq.with_options.call_args.kwargs
+        if groq.with_options.call_args is not None
+        else {}
+    )
     groq_attempts = groq_lane.chat.completions.create.call_count
 
     passed = (
