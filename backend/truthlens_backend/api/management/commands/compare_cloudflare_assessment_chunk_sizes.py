@@ -9,9 +9,10 @@ Both arms must assess every frozen evidence item. No evidence reduction, final
 verdict evaluation, recovery, Groq fallback, or second retrieval is involved.
 """
 
-from collections import Counter
 import json
+import os
 import time
+from unittest.mock import patch
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -502,8 +503,8 @@ def _compare_arms(identity_groups, evidence_items, baseline, candidate):
         })
 
     if (
-        max_relevance_delta > SCORE_SHIFT_REVIEW_THRESHOLD
-        or max_directness_delta > SCORE_SHIFT_REVIEW_THRESHOLD
+        round(max_relevance_delta, 4) > SCORE_SHIFT_REVIEW_THRESHOLD
+        or round(max_directness_delta, 4) > SCORE_SHIFT_REVIEW_THRESHOLD
     ):
         reasons.append("ITEM_SCORE_SHIFT_GT_0_20")
 
@@ -647,7 +648,21 @@ class Command(BaseCommand):
         )
         run = start_verification_run(create_verification_run(claim))
 
-        with override_settings(INVESTIGATION_CLASSIFICATION_MODE="off"):
+        # Keep claim normalization/retrieval preparation off Cloudflare so the
+        # only Workers AI traffic in this experiment is the two assessment arms.
+        with (
+            override_settings(INVESTIGATION_CLASSIFICATION_MODE="off"),
+            patch.dict(
+                os.environ,
+                {
+                    "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
+                    "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "0",
+                    "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "0",
+                    "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT": "0",
+                },
+                clear=False,
+            ),
+        ):
             cleaned = tasks.clean_ocr_text(claim_text)
 
         if not isinstance(cleaned, dict):
