@@ -378,7 +378,7 @@ def call_validated_cloudflare_assessment_chunks(
             attempted_metadata.extend(first_wave_metadata)
             waves_attempted = 1
             wave_results = {}
-            first_error = None
+            wave_errors = {}
             with ThreadPoolExecutor(
                 max_workers=ASSESSMENT_MAX_CONCURRENCY,
             ) as executor:
@@ -395,11 +395,10 @@ def call_validated_cloudflare_assessment_chunks(
                     try:
                         wave_results[index] = future.result()
                     except Exception as exc:
-                        if first_error is None:
-                            first_error = exc
+                        wave_errors[index] = exc
 
-            if first_error is not None:
-                raise first_error
+            if wave_errors:
+                raise wave_errors[min(wave_errors)]
 
             for index in range(first_wave_size):
                 merge_rows(wave_results[index])
@@ -438,6 +437,7 @@ def call_validated_cloudflare_assessment_chunks(
                 ASSESSMENT_MAX_CONCURRENCY
             )
             audit_metadata["assessment_waves_attempted"] = waves_attempted
+
 
 def _final_completion_budget():
     """Optional controlled dev-only latency experiment; default unchanged."""
