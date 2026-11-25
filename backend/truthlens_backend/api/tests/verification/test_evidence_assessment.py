@@ -408,6 +408,21 @@ class EvidenceAssessmentTests(SimpleTestCase):
             with self.subTest(prohibited_inference=prohibited_inference):
                 self.assertIn(prohibited_inference, system_instructions)
 
+    def test_system_instructions_distinguish_nonconfirmation_from_refutation(self):
+        _, call_llm = self._assess()
+        system_instructions = call_llm.call_args.args[0]
+        for required_rule in (
+            "EPISTEMIC STATUS RULES",
+            "Absence of confirmation is not affirmative contradiction",
+            "do not by themselves REFUTE",
+            "Use CONTEXT",
+            "Use UNKNOWN",
+            "REFUTES requires the passage itself to establish the negation",
+            "Do not infer nonexistence merely from failure to observe or detect",
+        ):
+            with self.subTest(required_rule=required_rule):
+                self.assertIn(required_rule, system_instructions)
+
     def test_material_scope_hardening_is_opt_in(self):
         _, default_call = self._assess()
         self.assertNotIn(
