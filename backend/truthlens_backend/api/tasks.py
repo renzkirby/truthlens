@@ -650,6 +650,14 @@ SUPABASE_MEDIA_FETCH_TIMEOUT_SEC = _float_env("SUPABASE_MEDIA_FETCH_TIMEOUT_SEC"
 GFC_HTTP_TIMEOUT_SEC = _float_env("GFC_HTTP_TIMEOUT_SEC", DEFAULT_HTTP_TIMEOUT_SEC)
 TAVILY_EXTRACT_TIMEOUT_SEC = _float_env("TAVILY_EXTRACT_TIMEOUT_SEC", 20.0)
 
+# Controlled performance experiment. Keep disabled until local A/B quality
+# validation proves that reducing redundant assessment metadata does not change
+# user-facing verdict quality.
+EVIDENCE_ASSESSMENT_BUDGET_FLAG = "ENABLE_ADAPTIVE_EVIDENCE_ASSESSMENT_BUDGET"
+EVIDENCE_ASSESSMENT_INITIAL_ITEMS = 4
+EVIDENCE_ASSESSMENT_MAX_ITEMS = 8
+EVIDENCE_ASSESSMENT_EARLY_STOP_SCORE = 0.80
+
 
 def _apply_noneditable_fallback_verdict_policy(
     verdict_result,
@@ -1387,6 +1395,101 @@ def _log_stage(claim_id, stage, started_at, **metadata):
     record_pipeline_stage(stage, duration_ms, **metadata)
 
 
+def _adaptive_evidence_assessment_budget_enabled():
+    return os.getenv(EVIDENCE_ASSESSMENT_BUDGET_FLAG, "").strip() == "1"
+
+
+def _eligible_evidence_assessment_groups(evidence_groups):
+    eligible_groups = []
+    for evidence_group in evidence_groups:
+        eligible_items = tuple(
+            evidence_item
+            for evidence_item in evidence_group.evidence
+            if (
+                evidence_item.stance == VerificationEvidence.Stance.UNKNOWN
+                and evidence_item.relevance_score is None
+                and evidence_item.directness_score is None
+            )
+        )
+        if eligible_items:
+            eligible_groups.append((evidence_group.identity_id, eligible_items))
+    return eligible_groups
+
+
+def _budgeted_secondary_assessment_plan(eligible_groups):
+    """Return a deterministic, source-diverse plan without dropping identities.
+
+    The experimental eight-item ceiling is used only when every distinct source
+    identity can still be represented. If more than eight source identities are
+    eligible, the caller falls back to the current full assessment behavior.
+
+    Within the budget, take one item from each source identity before taking a
+    second item from any identity. This reduces repeated assessment of records
+    that share normalized source identity without changing evidence persistence.
+    """
+    total_items = sum(len(items) for _identity_id, items in eligible_groups)
+    if not eligible_groups:
+        return [], False
+
+    if len(eligible_groups) > EVIDENCE_ASSESSMENT_MAX_ITEMS:
+        return [
+            (identity_id, item)
+            for identity_id, items in eligible_groups
+            for item in items
+        ], False
+
+    if any(
+        item.evidence_role != VerificationEvidence.EvidenceRole.SECONDARY
+        for _identity_id, items in eligible_groups
+        for item in items
+    ):
+        return [
+            (identity_id, item)
+            for identity_id, items in eligible_groups
+            for item in items
+        ], False
+
+    selected = []
+    member_index = 0
+    while len(selected) < EVIDENCE_ASSESSMENT_MAX_ITEMS:
+        appended = False
+        for identity_id, items in eligible_groups:
+            if member_index >= len(items):
+                continue
+            selected.append((identity_id, items[member_index]))
+            appended = True
+            if len(selected) >= EVIDENCE_ASSESSMENT_MAX_ITEMS:
+                break
+        if not appended:
+            break
+        member_index += 1
+
+    return selected, len(selected) < total_items
+
+
+def _assessment_wave_is_strongly_decisive(assessments):
+    """Allow early stop only for unanimous, direct first-wave evidence."""
+    if len(assessments) != EVIDENCE_ASSESSMENT_INITIAL_ITEMS:
+        return False
+
+    stances = {assessment.stance for assessment in assessments}
+    if stances not in (
+        {VerificationEvidence.Stance.SUPPORTS},
+        {VerificationEvidence.Stance.REFUTES},
+    ):
+        return False
+
+    return all(
+        isinstance(assessment.relevance_score, Number)
+        and not isinstance(assessment.relevance_score, bool)
+        and isinstance(assessment.directness_score, Number)
+        and not isinstance(assessment.directness_score, bool)
+        and assessment.relevance_score >= EVIDENCE_ASSESSMENT_EARLY_STOP_SCORE
+        and assessment.directness_score >= EVIDENCE_ASSESSMENT_EARLY_STOP_SCORE
+        for assessment in assessments
+    )
+
+
 def _assess_and_persist_reasoning_evidence(
     claim_text,
     evidence_groups,
@@ -1396,33 +1499,97 @@ def _assess_and_persist_reasoning_evidence(
     material_scope_hardening=False,
 ):
     stage_name = f"{stage_prefix}_evidence_assessment"
-    eligible_items = []
-    for evidence_group in evidence_groups:
-        for evidence_item in evidence_group.evidence:
-            if (
-                evidence_item.stance != VerificationEvidence.Stance.UNKNOWN
-                or evidence_item.relevance_score is not None
-                or evidence_item.directness_score is not None
-            ):
-                continue
-            eligible_items.append(evidence_item)
+    eligible_groups = _eligible_evidence_assessment_groups(evidence_groups)
+    eligible_items = [
+        item
+        for _identity_id, items in eligible_groups
+        for item in items
+    ]
 
     if not eligible_items:
         return
 
-    assessment_started_at = time.perf_counter()
-    try:
-        assessments = assess_reasoning_evidence_batch_against_claim(
-            claim_text,
-            eligible_items,
-            enforce_material_scope=material_scope_hardening,
+    adaptive_budget = _adaptive_evidence_assessment_budget_enabled()
+    assessment_pairs = [
+        (identity_id, item)
+        for identity_id, items in eligible_groups
+        for item in items
+    ]
+    deferred_items = 0
+    if adaptive_budget:
+        assessment_pairs, budget_reduced = _budgeted_secondary_assessment_plan(
+            eligible_groups,
         )
+        if budget_reduced:
+            deferred_items = len(eligible_items) - len(assessment_pairs)
+        else:
+            # Preserve current behavior when the safety guard declines to reduce
+            # the batch, including >8 distinct source identities or non-secondary
+            # evidence.
+            adaptive_budget = False
+
+    assessment_started_at = time.perf_counter()
+    assessed_pairs = []
+    assessments = []
+    assessment_waves = 0
+    early_stopped = False
+
+    try:
+        if adaptive_budget:
+            first_wave = assessment_pairs[:EVIDENCE_ASSESSMENT_INITIAL_ITEMS]
+            first_items = [item for _identity_id, item in first_wave]
+            first_assessments = assess_reasoning_evidence_batch_against_claim(
+                claim_text,
+                first_items,
+                enforce_material_scope=material_scope_hardening,
+            )
+            assessed_pairs.extend(first_wave)
+            assessments.extend(first_assessments)
+            assessment_waves = 1
+
+            remaining = assessment_pairs[EVIDENCE_ASSESSMENT_INITIAL_ITEMS:]
+            if remaining:
+                first_identity_ids = {
+                    identity_id for identity_id, _item in first_wave
+                }
+                remaining_has_new_identity = any(
+                    identity_id not in first_identity_ids
+                    for identity_id, _item in remaining
+                )
+                if (
+                    not remaining_has_new_identity
+                    and _assessment_wave_is_strongly_decisive(first_assessments)
+                ):
+                    early_stopped = True
+                    deferred_items += len(remaining)
+                else:
+                    second_items = [item for _identity_id, item in remaining]
+                    second_assessments = assess_reasoning_evidence_batch_against_claim(
+                        claim_text,
+                        second_items,
+                        enforce_material_scope=material_scope_hardening,
+                    )
+                    assessed_pairs.extend(remaining)
+                    assessments.extend(second_assessments)
+                    assessment_waves = 2
+        else:
+            assessments = assess_reasoning_evidence_batch_against_claim(
+                claim_text,
+                eligible_items,
+                enforce_material_scope=material_scope_hardening,
+            )
+            assessed_pairs = assessment_pairs
+            assessment_waves = 1
     except Exception as exc:
         _log_stage(
             claim_id,
             f"{stage_prefix}_evidence_assessment_batch",
             assessment_started_at,
             eligible_items=len(eligible_items),
+            selected_items=len(assessment_pairs),
+            deferred_items=deferred_items,
+            assessment_waves=assessment_waves,
+            adaptive_budget=adaptive_budget,
             outcome="assessment_failed",
             error=str(exc)[:120],
         )
@@ -1433,21 +1600,27 @@ def _assess_and_persist_reasoning_evidence(
         )
         return
 
+    assessed_items = [item for _identity_id, item in assessed_pairs]
     _log_stage(
         claim_id,
         f"{stage_prefix}_evidence_assessment_batch",
         assessment_started_at,
         eligible_items=len(eligible_items),
+        selected_items=len(assessed_items),
+        deferred_items=deferred_items,
+        assessment_waves=assessment_waves,
+        adaptive_budget=adaptive_budget,
+        early_stopped=early_stopped,
     )
 
     persistence_started_at = time.perf_counter()
     try:
         persistence_outcomes = persist_evidence_assessments_batch(
-            eligible_items,
+            assessed_items,
             assessments,
         )
     except Exception as exc:
-        for evidence_item in eligible_items:
+        for evidence_item in assessed_items:
             _log_stage(
                 claim_id,
                 stage_name,
@@ -1464,7 +1637,7 @@ def _assess_and_persist_reasoning_evidence(
             )
         return
 
-    for evidence_item, outcome in zip(eligible_items, persistence_outcomes):
+    for evidence_item, outcome in zip(assessed_items, persistence_outcomes):
         if outcome.error is not None:
             _log_stage(
                 claim_id,
