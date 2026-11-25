@@ -1106,6 +1106,19 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         )
         self.assertIn("failed to confirm", second_call.args[1])
 
+    def test_nonconfirmation_audit_excerpt_keeps_late_explicit_contradiction(self):
+        content = (
+            "The proposed signal has not been confirmed. "
+            + ("Background discussion. " * 90)
+            + "The official record explicitly states the claimed event did not occur."
+        )
+
+        excerpt = services._nonconfirmation_audit_excerpt(content, max_chars=1200)
+
+        self.assertIn("has not been confirmed", excerpt)
+        self.assertIn("did not occur", excerpt)
+        self.assertLessEqual(len(excerpt), 1206)
+
     def test_fake_nonconfirmation_audit_preserves_explicit_contradiction(self):
         evidence_id = "20202020-2020-2020-2020-202020202020"
         initial = {
