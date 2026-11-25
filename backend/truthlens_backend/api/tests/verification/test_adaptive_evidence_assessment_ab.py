@@ -9,7 +9,12 @@ from django.core.management.base import CommandError
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from api.models import Claim, VerificationRun, VerificationTelemetryEvent
+from api.models import (
+    Claim,
+    EvidenceSource,
+    VerificationRun,
+    VerificationTelemetryEvent,
+)
 from api.management.commands.compare_evidence_assessment_budget import (
     _UpstreamReplayTape,
     _compare_arms,
@@ -30,6 +35,12 @@ def _arm(**overrides):
         "evidence_assessed": 6,
         "source_identity_count": 6,
         "stance_counts": {"SUPPORTS": 6},
+        "evidence_role_counts": {"SECONDARY": 6},
+        "secondary_identity_stance_counts": {
+            "ASSESSED": 6,
+            "SUPPORTS": 6,
+        },
+        "database_isolated": True,
         "assessment_stages": [],
         "assessment_provider_calls": [],
         "run_id": None,
@@ -116,6 +127,30 @@ class AdaptiveEvidenceAssessmentABComparisonTests(TestCase):
         self.assertEqual(result["automated_gate"], "REVIEW")
         self.assertIn(
             "ASSESSMENT_PROVIDER_ROUTE_CHANGED",
+            result["review_reasons"],
+        )
+
+    def test_identity_stance_topology_change_requires_review(self):
+        baseline = _arm(
+            secondary_identity_stance_counts={
+                "ASSESSED": 7,
+                "SUPPORTS": 7,
+            }
+        )
+        adaptive = _arm(
+            adaptive=True,
+            secondary_identity_stance_counts={
+                "ASSESSED": 6,
+                "SUPPORTS": 6,
+                "UNKNOWN_ONLY": 1,
+            },
+        )
+
+        result = _compare_arms(baseline, adaptive)
+
+        self.assertEqual(result["automated_gate"], "REVIEW")
+        self.assertIn(
+            "IDENTITY_STANCE_TOPOLOGY_CHANGED",
             result["review_reasons"],
         )
 
@@ -216,9 +251,19 @@ class AdaptiveEvidenceAssessmentABCommandTests(TestCase):
             )
 
     @override_settings(APP_ENV="development", DEBUG=True)
+    def test_keep_artifacts_is_rejected_for_controlled_ab(self):
+        with self.assertRaises(CommandError):
+            call_command(
+                "compare_evidence_assessment_budget",
+                claims=["A test claim."],
+                keep_artifacts=True,
+            )
+
+    @override_settings(APP_ENV="development", DEBUG=True)
     def test_live_harness_switches_flag_bypasses_reuse_and_cleans_temp_claims(self):
         seen_flags = []
         seen_claim_ids = []
+        seen_existing_sentinels = []
 
         def fake_pipeline(claim_text, claim_id, triggered_by_id=None):
             from api import claim_matching, tasks
@@ -244,6 +289,13 @@ class AdaptiveEvidenceAssessmentABCommandTests(TestCase):
                 os.getenv(tasks.EVIDENCE_ASSESSMENT_BUDGET_FLAG)
             )
             seen_claim_ids.append(str(claim_id))
+            seen_existing_sentinels.append(
+                EvidenceSource.objects.filter(provider="AB_SENTINEL").count()
+            )
+            EvidenceSource.objects.create(
+                provider="AB_SENTINEL",
+                title="Rollback sentinel",
+            )
 
             claim = Claim.objects.get(pk=claim_id)
             claim.ai_verdict = "FACT"
@@ -303,9 +355,15 @@ class AdaptiveEvidenceAssessmentABCommandTests(TestCase):
         report = json.loads(output.getvalue())
         self.assertEqual(seen_flags, ["0", "1"])
         self.assertEqual(len(set(seen_claim_ids)), 2)
+        self.assertEqual(seen_existing_sentinels, [0, 0])
+        self.assertFalse(
+            EvidenceSource.objects.filter(provider="AB_SENTINEL").exists()
+        )
         self.assertEqual(Claim.objects.count(), before_claims)
         self.assertEqual(report[0]["baseline"]["verdict"], "FACT")
         self.assertEqual(report[0]["adaptive"]["verdict"], "FACT")
+        self.assertTrue(report[0]["baseline"]["database_isolated"])
+        self.assertTrue(report[0]["adaptive"]["database_isolated"])
         self.assertEqual(
             report[0]["comparison"]["automated_gate"],
             "PASS",
