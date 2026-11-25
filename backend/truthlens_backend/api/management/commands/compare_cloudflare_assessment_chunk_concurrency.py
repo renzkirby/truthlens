@@ -12,7 +12,6 @@ evidence reduction, prompt resizing, final verdict evaluation, recovery, Groq
 fallback, or second retrieval is involved.
 """
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import os
 import time
@@ -31,8 +30,6 @@ from api.verification.cloudflare_pilot import (
     _ASSESSMENT_PREFIX,
     _assessment_chunk_plan,
     call_validated_cloudflare_assessment_chunks,
-    call_validated_cloudflare_pilot,
-    validate_pilot_response,
 )
 from api.verification.evidence_assessment import (
     EvidenceAssessment,
@@ -51,7 +48,6 @@ from api.verification.runs import create_verification_run, start_verification_ru
 MAX_CLAIMS = 4
 MIN_ITEMS = 9
 MAX_ITEMS = 12
-MAX_CONCURRENCY = 2
 SCORE_SHIFT_REVIEW_THRESHOLD = 0.20
 DECISIVE_STANCES = frozenset({
     VerificationEvidence.Stance.SUPPORTS,
@@ -138,32 +134,21 @@ def _parse_assessments(
     return results
 
 
-def _aggregate_chunk_metadata(chunks):
-    metadata = {"assessment_chunks_attempted": len(chunks)}
-    for key in (
-        "prompt_tokens",
-        "completion_tokens",
-        "total_tokens",
-        "reasoning_tokens",
-    ):
-        values = [chunk.get(key) for chunk in chunks]
-        if values and all(
-            type(value) is int and 0 <= value <= 10_000_000
-            for value in values
-        ):
-            metadata[key] = sum(values)
-    return metadata
-
-
 def _run_baseline_arm(system_instructions, user_prompt, claim_text, evidence_items):
+    """Run the production chunk executor with concurrency explicitly disabled."""
     metadata = {}
     started = time.perf_counter()
     try:
-        raw = call_validated_cloudflare_assessment_chunks(
-            system_instructions,
-            user_prompt,
-            audit_metadata=metadata,
-        )
+        with patch.dict(
+            os.environ,
+            {"ENABLE_CLOUDFLARE_ASSESSMENT_CONCURRENCY": "0"},
+            clear=False,
+        ):
+            raw = call_validated_cloudflare_assessment_chunks(
+                system_instructions,
+                user_prompt,
+                audit_metadata=metadata,
+            )
     except CloudflareEvaluationError as exc:
         return {
             "success": False,
@@ -188,9 +173,8 @@ def _run_baseline_arm(system_instructions, user_prompt, claim_text, evidence_ite
     }
 
 
-
 def _run_control_arm(system_instructions, user_prompt, claim_text, evidence_items):
-    """Repeat the production-style four-item chunk path as an A/A control."""
+    """Repeat the production chunk executor sequentially as an A/A control."""
     return _run_baseline_arm(
         system_instructions,
         user_prompt,
@@ -204,9 +188,9 @@ def _run_candidate_arm(
     claim_text,
     evidence_items,
 ):
-    """Run the exact production chunk prompts with bounded two-call concurrency."""
+    """Run the actual production chunk executor with concurrency enabled."""
     try:
-        chunk_prompts, ordered_keys = _assessment_chunk_plan(
+        chunk_prompts, _ = _assessment_chunk_plan(
             system_instructions,
             user_prompt,
         )
@@ -230,154 +214,48 @@ def _run_candidate_arm(
             "assessments": [],
         }
 
+    metadata = {}
     started = time.perf_counter()
-    completed = {}
-    chunk_metadata = [{}, {}]
-    first_wave_results = {}
-    first_wave_error = None
-
-    def run_chunk(index):
-        raw = call_validated_cloudflare_pilot(
-            system_instructions,
-            chunk_prompts[index],
-            operation=ASSESSMENT_OPERATION,
-            audit_metadata=chunk_metadata[index],
-        )
-        return json.loads(raw)["assessments"]
-
-    with ThreadPoolExecutor(max_workers=MAX_CONCURRENCY) as executor:
-        futures = {
-            executor.submit(run_chunk, index): index
-            for index in (0, 1)
-        }
-        for future in as_completed(futures):
-            index = futures[future]
-            try:
-                first_wave_results[index] = future.result()
-            except (
-                CloudflareEvaluationError,
-                TypeError,
-                ValueError,
-                KeyError,
-            ) as exc:
-                if first_wave_error is None:
-                    first_wave_error = exc
-
-    if first_wave_error is not None:
-        code = (
-            str(first_wave_error).split(" ", 1)[0]
-            if isinstance(first_wave_error, CloudflareEvaluationError)
-            else type(first_wave_error).__name__
-        )
-        metadata = _aggregate_chunk_metadata(chunk_metadata)
-        metadata["max_concurrency"] = MAX_CONCURRENCY
-        metadata["waves_attempted"] = 1
-        return {
-            "success": False,
-            "duration_ms": int((time.perf_counter() - started) * 1000),
-            "error_code": code,
-            "chunks_attempted": 2,
-            "metadata": metadata,
-            "assessments": [],
-        }
-
-    for index in (0, 1):
-        for row in first_wave_results[index]:
-            key = row.get("key") if isinstance(row, dict) else None
-            if key in completed:
-                return {
-                    "success": False,
-                    "duration_ms": int((time.perf_counter() - started) * 1000),
-                    "error_code": "INVALID_ASSESSMENT_JSON",
-                    "chunks_attempted": 2,
-                    "metadata": {
-                        **_aggregate_chunk_metadata(chunk_metadata),
-                        "max_concurrency": MAX_CONCURRENCY,
-                        "waves_attempted": 1,
-                    },
-                    "assessments": [],
-                }
-            completed[key] = row
-
-    chunk_metadata.append({})
     try:
-        raw = call_validated_cloudflare_pilot(
-            system_instructions,
-            chunk_prompts[2],
-            operation=ASSESSMENT_OPERATION,
-            audit_metadata=chunk_metadata[2],
-        )
-        final_rows = json.loads(raw)["assessments"]
-        for row in final_rows:
-            key = row.get("key") if isinstance(row, dict) else None
-            if key in completed:
-                raise CloudflareEvaluationError("INVALID_ASSESSMENT_JSON")
-            completed[key] = row
+        with patch.dict(
+            os.environ,
+            {
+                "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
+                "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                "ENABLE_CLOUDFLARE_ASSESSMENT_CONCURRENCY": "1",
+            },
+            clear=False,
+        ):
+            raw = call_validated_cloudflare_assessment_chunks(
+                system_instructions,
+                user_prompt,
+                audit_metadata=metadata,
+            )
     except (CloudflareEvaluationError, TypeError, ValueError, KeyError) as exc:
         code = (
             str(exc).split(" ", 1)[0]
             if isinstance(exc, CloudflareEvaluationError)
             else type(exc).__name__
         )
-        metadata = _aggregate_chunk_metadata(chunk_metadata)
-        metadata["max_concurrency"] = MAX_CONCURRENCY
-        metadata["waves_attempted"] = 2
         return {
             "success": False,
             "duration_ms": int((time.perf_counter() - started) * 1000),
             "error_code": code,
-            "chunks_attempted": 3,
+            "chunks_attempted": metadata.get("assessment_chunks_attempted"),
             "metadata": metadata,
             "assessments": [],
         }
 
-    if set(completed) != set(ordered_keys):
-        metadata = _aggregate_chunk_metadata(chunk_metadata)
-        metadata["max_concurrency"] = MAX_CONCURRENCY
-        metadata["waves_attempted"] = 2
-        return {
-            "success": False,
-            "duration_ms": int((time.perf_counter() - started) * 1000),
-            "error_code": "INVALID_ASSESSMENT_JSON",
-            "chunks_attempted": 3,
-            "metadata": metadata,
-            "assessments": [],
-        }
-
-    combined = json.dumps(
-        {"assessments": [completed[key] for key in ordered_keys]},
-        ensure_ascii=False,
-    )
-    if not validate_pilot_response(
-        ASSESSMENT_OPERATION,
-        combined,
-        user_prompt,
-    ):
-        metadata = _aggregate_chunk_metadata(chunk_metadata)
-        metadata["max_concurrency"] = MAX_CONCURRENCY
-        metadata["waves_attempted"] = 2
-        return {
-            "success": False,
-            "duration_ms": int((time.perf_counter() - started) * 1000),
-            "error_code": "INVALID_ASSESSMENT_JSON",
-            "chunks_attempted": 3,
-            "metadata": metadata,
-            "assessments": [],
-        }
-
-    metadata = _aggregate_chunk_metadata(chunk_metadata)
-    metadata["max_concurrency"] = MAX_CONCURRENCY
-    metadata["waves_attempted"] = 2
     return {
         "success": True,
         "duration_ms": int((time.perf_counter() - started) * 1000),
         "error_code": "",
-        "chunks_attempted": 3,
+        "chunks_attempted": metadata.get("assessment_chunks_attempted"),
         "metadata": metadata,
         "assessments": _parse_assessments(
             claim_text,
             evidence_items,
-            combined,
+            raw,
         ),
     }
 
