@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
 from django.db.models import Q
 from django.test.utils import override_settings
 
@@ -142,6 +143,30 @@ def _event_dict(event):
     }
 
 
+def _secondary_identity_stance_counts(secondary_groups):
+    """Count assessed stance signals at source-identity granularity."""
+    counts = Counter()
+    for evidence_group in secondary_groups:
+        stances = {
+            item.stance
+            for item in evidence_group.evidence
+            if item.stance
+        }
+        non_unknown = stances - {VerificationEvidence.Stance.UNKNOWN}
+        if non_unknown:
+            counts["ASSESSED"] += 1
+        else:
+            counts["UNKNOWN_ONLY"] += 1
+        for stance in (
+            VerificationEvidence.Stance.SUPPORTS,
+            VerificationEvidence.Stance.REFUTES,
+            VerificationEvidence.Stance.CONTEXT,
+        ):
+            if stance in stances:
+                counts[stance] += 1
+    return dict(sorted(counts.items()))
+
+
 def _confidence_delta(baseline, adaptive):
     left = baseline.get("confidence")
     right = adaptive.get("confidence")
@@ -192,6 +217,17 @@ def _compare_arms(baseline, adaptive):
         reasons.append("SOURCE_IDENTITY_COUNT_CHANGED")
     if baseline["evidence_total"] != adaptive["evidence_total"]:
         reasons.append("EVIDENCE_COUNT_CHANGED")
+    if baseline.get("evidence_role_counts") != adaptive.get("evidence_role_counts"):
+        reasons.append("EVIDENCE_ROLE_COUNTS_CHANGED")
+    if (
+        baseline.get("secondary_identity_stance_counts")
+        != adaptive.get("secondary_identity_stance_counts")
+    ):
+        reasons.append("IDENTITY_STANCE_TOPOLOGY_CHANGED")
+    if not baseline.get("database_isolated", False):
+        reasons.append("BASELINE_DATABASE_NOT_ISOLATED")
+    if not adaptive.get("database_isolated", False):
+        reasons.append("ADAPTIVE_DATABASE_NOT_ISOLATED")
     if adaptive.get("upstream_replay_complete") is False:
         reasons.append("UPSTREAM_REPLAY_DIVERGED")
     if baseline["verdict"] in {"MISLEADING", "SATIRE"} or adaptive["verdict"] in {
@@ -259,6 +295,10 @@ class Command(BaseCommand):
             raise CommandError("Provide at least one --claim.")
         if len(claims) > MAX_CLAIMS:
             raise CommandError(f"At most {MAX_CLAIMS} claims may be run at once.")
+        if options["keep_artifacts"]:
+            raise CommandError(
+                "--keep-artifacts is incompatible with rollback-isolated A/B runs."
+            )
 
         reports = []
         for index, claim_text in enumerate(claims, start=1):
@@ -270,10 +310,9 @@ class Command(BaseCommand):
                 )
                 self.stdout.write("Running BASELINE (adaptive budget off)...")
             replay_tape = _UpstreamReplayTape()
-            baseline = self._run_arm(
+            baseline = self._run_isolated_arm(
                 claim_text,
                 adaptive=False,
-                keep_artifacts=options["keep_artifacts"],
                 replay_tape=replay_tape,
                 replay_upstream=False,
             )
@@ -283,10 +322,9 @@ class Command(BaseCommand):
                 self.stdout.write(
                     "Running ADAPTIVE (adaptive budget on; upstream replayed)..."
                 )
-            adaptive = self._run_arm(
+            adaptive = self._run_isolated_arm(
                 claim_text,
                 adaptive=True,
-                keep_artifacts=options["keep_artifacts"],
                 replay_tape=replay_tape,
                 replay_upstream=True,
             )
@@ -308,6 +346,29 @@ class Command(BaseCommand):
 
         if options["json"]:
             self.stdout.write(json.dumps(reports, indent=2, sort_keys=True))
+
+    def _run_isolated_arm(
+        self,
+        claim_text,
+        *,
+        adaptive,
+        replay_tape,
+        replay_upstream,
+    ):
+        """Run one arm and roll back every database write before returning."""
+        with transaction.atomic():
+            try:
+                result = self._run_arm(
+                    claim_text,
+                    adaptive=adaptive,
+                    keep_artifacts=False,
+                    replay_tape=replay_tape,
+                    replay_upstream=replay_upstream,
+                )
+                result["database_isolated"] = True
+                return result
+            finally:
+                transaction.set_rollback(True)
 
     def _run_arm(
         self,
@@ -427,6 +488,7 @@ class Command(BaseCommand):
                 "source_identity_count": 0,
                 "stance_counts": {},
                 "evidence_role_counts": {},
+                "secondary_identity_stance_counts": {},
                 "assessment_stages": [],
                 "assessment_provider_calls": [],
                 "run_id": str(claim.pk) if keep_artifacts else None,
@@ -452,8 +514,12 @@ class Command(BaseCommand):
                 VerificationEvidence.EvidenceRole.SECONDARY,
             )
             source_identity_count = len(secondary_groups)
+            secondary_identity_stance_counts = _secondary_identity_stance_counts(
+                secondary_groups,
+            )
         except Exception:
             source_identity_count = 0
+            secondary_identity_stance_counts = {}
 
         assessment_stages = [
             _event_dict(event)
@@ -486,6 +552,7 @@ class Command(BaseCommand):
             "source_identity_count": source_identity_count,
             "stance_counts": dict(sorted(stance_counts.items())),
             "evidence_role_counts": dict(sorted(evidence_role_counts.items())),
+            "secondary_identity_stance_counts": secondary_identity_stance_counts,
             "assessment_stages": assessment_stages,
             "assessment_provider_calls": assessment_provider_calls,
             "run_id": str(run.pk) if keep_artifacts else None,
@@ -560,8 +627,14 @@ class Command(BaseCommand):
             )
         )
         self.stdout.write(
-            "NOTE Baseline ClaimGate/GFC/Tavily upstream results are replayed "
-            "to the adaptive arm with their recorded delays. Downstream LLM "
-            "responses can still vary, so contextual/verdict changes require review."
+            "IDENTITY_STANCES "
+            f"baseline={baseline.get('secondary_identity_stance_counts', {})} "
+            f"adaptive={adaptive.get('secondary_identity_stance_counts', {})}"
+        )
+        self.stdout.write(
+            "NOTE Each arm is rollback-isolated to the same starting database state. "
+            "Baseline ClaimGate/GFC/Tavily upstream results are replayed to the "
+            "adaptive arm with their recorded delays. Downstream LLM responses can "
+            "still vary, so contextual/verdict or identity-topology changes require review."
         )
         self.stdout.write("")
