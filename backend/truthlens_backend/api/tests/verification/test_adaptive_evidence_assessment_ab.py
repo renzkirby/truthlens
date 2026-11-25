@@ -61,6 +61,64 @@ class AdaptiveEvidenceAssessmentABComparisonTests(TestCase):
         self.assertIn("ADAPTIVE_MORE_DECISIVE", result["review_reasons"])
         self.assertIn("CONFIDENCE_SHIFT_GT_15", result["review_reasons"])
 
+    def test_failed_runs_cannot_pass_automated_gate(self):
+        baseline = _arm(
+            status=VerificationRun.Status.FAILED,
+            verdict=None,
+            exception_type="ClaimPersistenceError",
+        )
+        adaptive = _arm(
+            adaptive=True,
+            status=VerificationRun.Status.FAILED,
+            verdict=None,
+            exception_type="ClaimPersistenceError",
+        )
+
+        result = _compare_arms(baseline, adaptive)
+
+        self.assertEqual(result["automated_gate"], "REVIEW")
+        self.assertIn("BASELINE_NOT_COMPLETED", result["review_reasons"])
+        self.assertIn("ADAPTIVE_NOT_COMPLETED", result["review_reasons"])
+        self.assertIn("BASELINE_EXCEPTION", result["review_reasons"])
+        self.assertIn("ADAPTIVE_EXCEPTION", result["review_reasons"])
+
+    def test_assessment_provider_route_change_requires_review(self):
+        baseline = _arm(
+            assessment_provider_calls=[
+                {
+                    "provider": "gemini",
+                    "outcome": "success",
+                    "error_label": "",
+                    "metadata": {"model_id": "gemini-3.5-flash-lite"},
+                }
+            ]
+        )
+        adaptive = _arm(
+            adaptive=True,
+            assessment_provider_calls=[
+                {
+                    "provider": "gemini",
+                    "outcome": "failed",
+                    "error_label": "ProviderError",
+                    "metadata": {"model_id": "gemini-3.5-flash-lite"},
+                },
+                {
+                    "provider": "gemini",
+                    "outcome": "success",
+                    "error_label": "",
+                    "metadata": {"model_id": "gemini-3.6-flash"},
+                },
+            ],
+        )
+
+        result = _compare_arms(baseline, adaptive)
+
+        self.assertEqual(result["automated_gate"], "REVIEW")
+        self.assertIn(
+            "ASSESSMENT_PROVIDER_ROUTE_CHANGED",
+            result["review_reasons"],
+        )
+
     def test_contextual_verdict_always_requires_manual_review(self):
         baseline = _arm(verdict="MISLEADING", confidence=80)
         adaptive = _arm(adaptive=True, verdict="MISLEADING", confidence=80)
