@@ -8,6 +8,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase, override_settings
 
+from api import tasks
 from api.management.commands.compare_cloudflare_assessment_frozen_evidence import (
     _compare_frozen_arms,
 )
@@ -67,18 +68,23 @@ class FrozenEvidenceComparisonTests(SimpleTestCase):
     def test_redundant_context_loss_can_pass_when_decisive_topology_is_preserved(self):
         groups = _groups()
         items = [item for _identity_id, members in groups for item in members]
-        selected_ids = tuple(item.evidence_link_id for item in items[:8])
+        selected_ids = tasks._cloudflare_tail_assessment_evidence_link_ids(groups)
 
         baseline_assessments = [
             _assessment(VerificationEvidence.Stance.SUPPORTS)
             for _ in items
         ]
-        baseline_assessments[1] = _assessment(
+        deferred_index = next(
+            index
+            for index, item in enumerate(items)
+            if item.evidence_link_id not in set(selected_ids)
+        )
+        baseline_assessments[deferred_index] = _assessment(
             VerificationEvidence.Stance.CONTEXT
         )
 
         budgeted_assessments = list(baseline_assessments)
-        budgeted_assessments[1] = _assessment(
+        budgeted_assessments[deferred_index] = _assessment(
             VerificationEvidence.Stance.UNKNOWN
         )
 
@@ -105,18 +111,23 @@ class FrozenEvidenceComparisonTests(SimpleTestCase):
     def test_losing_unique_refutation_requires_review(self):
         groups = _groups()
         items = [item for _identity_id, members in groups for item in members]
-        selected_ids = tuple(item.evidence_link_id for item in items[:8])
+        selected_ids = tasks._cloudflare_tail_assessment_evidence_link_ids(groups)
 
         baseline_assessments = [
             _assessment(VerificationEvidence.Stance.SUPPORTS)
             for _ in items
         ]
-        baseline_assessments[9] = _assessment(
+        deferred_index = [
+            index
+            for index, item in enumerate(items)
+            if item.evidence_link_id not in set(selected_ids)
+        ][-1]
+        baseline_assessments[deferred_index] = _assessment(
             VerificationEvidence.Stance.REFUTES
         )
 
         budgeted_assessments = list(baseline_assessments)
-        budgeted_assessments[9] = _assessment(
+        budgeted_assessments[deferred_index] = _assessment(
             VerificationEvidence.Stance.UNKNOWN
         )
 
@@ -141,7 +152,7 @@ class FrozenEvidenceComparisonTests(SimpleTestCase):
     def test_selected_item_stance_change_requires_review(self):
         groups = _groups()
         items = [item for _identity_id, members in groups for item in members]
-        selected_ids = tuple(item.evidence_link_id for item in items[:8])
+        selected_ids = tasks._cloudflare_tail_assessment_evidence_link_ids(groups)
 
         baseline_assessments = [
             _assessment(VerificationEvidence.Stance.SUPPORTS)
@@ -173,7 +184,7 @@ class FrozenEvidenceComparisonTests(SimpleTestCase):
     def test_provider_or_chunk_contamination_is_invalid(self):
         groups = _groups()
         items = [item for _identity_id, members in groups for item in members]
-        selected_ids = tuple(item.evidence_link_id for item in items[:8])
+        selected_ids = tasks._cloudflare_tail_assessment_evidence_link_ids(groups)
         assessments = [
             _assessment(VerificationEvidence.Stance.SUPPORTS)
             for _ in items
@@ -231,12 +242,19 @@ class FrozenEvidenceABCommandTests(TestCase):
             for _ in eligible_items
         ]
         budgeted_assessments = list(baseline_assessments)
-        # The production selector chooses eight of ten across these five
-        # identities, so the two deferred records remain unavailable.
-        for index in (8, 9):
-            budgeted_assessments[index] = _assessment(
-                VerificationEvidence.Stance.UNKNOWN
-            )
+        selected_ids = set(
+            tasks._cloudflare_tail_assessment_evidence_link_ids([
+                (group.identity_id, group.evidence) for group in groups
+            ])
+        )
+        # The production selector chooses eight of ten round-robin across
+        # source identities. Only the two genuinely deferred records become
+        # unavailable in the budgeted arm.
+        for index, item in enumerate(eligible_items):
+            if item.evidence_link_id not in selected_ids:
+                budgeted_assessments[index] = _assessment(
+                    VerificationEvidence.Stance.UNKNOWN
+                )
 
         seen_item_ids = []
 
