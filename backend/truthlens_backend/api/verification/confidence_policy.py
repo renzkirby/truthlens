@@ -558,8 +558,6 @@ def enforce_decisive_evidence_support(
 def calibrate_verdict_confidence(
     verdict_result: dict,
     evidence_groups: Iterable[ReasoningEvidenceGroup],
-    *,
-    direct_satire_provenance: bool = False,
 ) -> dict:
     """Apply deterministic evidence-topology ceilings to an AI verdict score.
 
@@ -576,15 +574,6 @@ def calibrate_verdict_confidence(
     )
     result = dict(verdict_result)
     evidence_groups = tuple(evidence_groups)
-
-    if verdict == "SATIRE" and direct_satire_provenance:
-        final_score = min(confidence, _TOPOLOGY_CAPS[1])
-        result["confidence_score"] = final_score
-        result["score_context"] = (
-            "Submitted source is a verified satire/parody publisher; "
-            f"final confidence is {_score_text(final_score)}%."
-        )
-        return result
 
     if verdict == "UNVERIFIED":
         final_score = min(confidence, _UNVERIFIED_MAX)
