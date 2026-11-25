@@ -510,20 +510,22 @@ def enforce_decisive_evidence_support(
     if consistent_stances is None:
         return result
 
-    has_usable_assessed_evidence = False
+    assessment_completed = False
     for group in tuple(evidence_groups):
         for item in group.evidence:
             quality = _item_quality(item)
-            if quality is None or quality < _USABLE_SCORE_FLOOR:
+            if quality is None:
                 continue
-            has_usable_assessed_evidence = True
+            assessment_completed = True
+            if quality < _USABLE_SCORE_FLOOR:
+                continue
             if item.stance in consistent_stances:
                 return result
 
-    # An unavailable/low-quality assessor must not override the final evaluator.
-    # The gate only adjudicates a contradiction already established by usable
-    # current-run assessment metadata.
-    if not has_usable_assessed_evidence:
+    # A genuinely unavailable assessor must not override the final evaluator.
+    # Once assessment completed, however, a decisive FACT/FAKE may survive only
+    # when at least one usable current-run item aligns with that verdict.
+    if not assessment_completed:
         return result
 
     final_score = min(
@@ -556,6 +558,8 @@ def enforce_decisive_evidence_support(
 def calibrate_verdict_confidence(
     verdict_result: dict,
     evidence_groups: Iterable[ReasoningEvidenceGroup],
+    *,
+    direct_satire_provenance: bool = False,
 ) -> dict:
     """Apply deterministic evidence-topology ceilings to an AI verdict score.
 
@@ -572,6 +576,15 @@ def calibrate_verdict_confidence(
     )
     result = dict(verdict_result)
     evidence_groups = tuple(evidence_groups)
+
+    if verdict == "SATIRE" and direct_satire_provenance:
+        final_score = min(confidence, _TOPOLOGY_CAPS[1])
+        result["confidence_score"] = final_score
+        result["score_context"] = (
+            "Submitted source is a verified satire/parody publisher; "
+            f"final confidence is {_score_text(final_score)}%."
+        )
+        return result
 
     if verdict == "UNVERIFIED":
         final_score = min(confidence, _UNVERIFIED_MAX)
