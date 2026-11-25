@@ -25,6 +25,38 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
             "contextual_basis_evidence_ids": [],
         }
 
+    def test_beaverton_url_gets_verified_satire_source_stance(self):
+        provider_result = {
+            "cleaned_claim": (
+                "Bilingual people forget twice as many words after hitting middle age."
+            ),
+            "search_query": "bilingual people forget words middle age study",
+            "search_queries": [
+                "bilingual people forget words middle age study",
+            ],
+            "article_stance": "NEUTRAL",
+        }
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            return_value=json.dumps(provider_result),
+        ):
+            result = services.extract_search_query(
+                "Submitted article text.",
+                (
+                    "https://www.thebeaverton.com/2025/11/"
+                    "study-bilingual-people-forget-twice-as-many-words-after-"
+                    "hitting-middle-age/"
+                ),
+            )
+
+        self.assertEqual(result["article_stance"], "SATIRE")
+        self.assertFalse(
+            services._is_known_satire_source_url(
+                "https://thebeaverton.com.example.org/not-the-publisher"
+            )
+        )
+
     def test_persisted_prompt_makes_misleading_precedence_explicit(self):
         system, _user = services.build_persisted_evidence_prompt(
             "A multi-part claim.",
