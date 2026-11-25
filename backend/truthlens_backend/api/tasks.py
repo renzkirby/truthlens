@@ -1180,6 +1180,7 @@ def _attempt_primary_source_recovery(
     official_rating_policy,
     gfc_evidence_assessed,
     is_text_claim,
+    enforce_decisive_support=False,
     normal_tavily_had_results=False,
     noneditable_context_fallback=False,
     required_anchor_tokens=(),
@@ -1366,9 +1367,13 @@ def _attempt_primary_source_recovery(
             evidence_groups=evaluation_groups,
         )
     )
-    recovered = calibrate_verdict_confidence(recovered, evaluation_groups)
+    recovered = calibrate_verdict_confidence(
+        recovered,
+        evaluation_groups,
+        direct_satire_provenance=(article_stance == "SATIRE"),
+    )
     if (
-        is_text_claim
+        (is_text_claim or enforce_decisive_support)
         and not (
             gfc_evidence_assessed
             and official_rating_policy["resolution"]
@@ -3421,7 +3426,17 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                         ai_verdict = calibrate_verdict_confidence(
                             ai_verdict,
                             fact_check_groups,
+                            direct_satire_provenance=(article_stance == "SATIRE"),
                         )
+                        if not (
+                            official_rating_policy["resolution"]
+                            == OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT
+                            and ai_verdict.get("verdict") == "FAKE"
+                        ):
+                            ai_verdict = enforce_decisive_evidence_support(
+                                ai_verdict,
+                                fact_check_groups,
+                            )
                         ai_verdict = _apply_noneditable_fallback_verdict_policy(
                             ai_verdict,
                             fact_check_groups,
@@ -3719,7 +3734,18 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     ai_verdict = calibrate_verdict_confidence(
                         ai_verdict,
                         evaluation_groups,
+                        direct_satire_provenance=(article_stance == "SATIRE"),
                     )
+                    if not (
+                        gfc_evidence_assessed
+                        and official_rating_policy["resolution"]
+                        == OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT
+                        and ai_verdict.get("verdict") == "FAKE"
+                    ):
+                        ai_verdict = enforce_decisive_evidence_support(
+                            ai_verdict,
+                            evaluation_groups,
+                        )
                     ai_verdict = _apply_noneditable_fallback_verdict_policy(
                         ai_verdict,
                         evaluation_groups,
@@ -3758,6 +3784,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     official_rating_policy=official_rating_policy,
                     gfc_evidence_assessed=gfc_evidence_assessed,
                     is_text_claim=False,
+                    enforce_decisive_support=True,
                     normal_tavily_had_results=bool(tavily_results),
                     noneditable_context_fallback=noneditable_context_fallback,
                     required_anchor_tokens=noneditable_fallback_anchor_tokens,
