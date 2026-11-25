@@ -1768,6 +1768,59 @@ class VerificationEvidenceURLRuntimeTests(TestCase):
             for source in self.claim.ai_sources
         ))
 
+    def test_url_tavily_low_quality_assessment_cannot_backstop_fake(self):
+        self.relevance.return_value = {
+            "candidate_count": 1,
+            "relevant_candidate_count": 0,
+            "covered_candidate_count": 0,
+            "terminally_sufficient": False,
+            "reason_code": "MATERIAL_DIFFERENCE",
+            "candidates": [],
+        }
+
+        def add_low_quality_tavily_link(
+            search_query, claim_id, *, stage_prefix, verification_run
+        ):
+            self.assertEqual(stage_prefix, "url_")
+            source = EvidenceSource.objects.create(
+                provider="TAVILY",
+                url="https://example.com/low-quality-web",
+                canonical_url="https://example.com/low-quality-web",
+                title="Broad background source",
+                content="Broad contextual evidence only.",
+            )
+            VerificationEvidence.objects.create(
+                verification_run=verification_run,
+                evidence_source=source,
+                evidence_role=VerificationEvidence.EvidenceRole.SECONDARY,
+                stance=VerificationEvidence.Stance.CONTEXT,
+                relevance_score=0.6,
+                directness_score=0.3,
+            )
+            return self.tavily_response
+
+        self.retrieve_tavily.side_effect = add_low_quality_tavily_link
+
+        with patch(
+            "api.tasks._attempt_primary_source_recovery",
+            side_effect=lambda **kwargs: kwargs["initial_result"],
+        ) as recovery:
+            run = self._execute()
+
+        self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        self.assessor.assert_not_called()
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
+        self.assertEqual(
+            self.claim.score_context,
+            "No usable assessed evidence supports a decisive automated verdict; "
+            "final confidence is 49%.",
+        )
+        recovery.assert_called_once()
+        self.assertTrue(
+            recovery.call_args.kwargs["enforce_decisive_support"]
+        )
+
     def test_irrelevant_gfc_is_not_assessed_and_tavily_is_role_isolated(self):
         self.relevance.return_value = {
             "candidate_count": 1,
