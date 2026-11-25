@@ -1,6 +1,7 @@
 """Local-only live A/B harness for the adaptive evidence assessment budget."""
 
 from collections import Counter
+from copy import deepcopy
 import json
 import os
 import time
@@ -17,10 +18,111 @@ from api.verification.evidence_dossier import (
     filter_reasoning_evidence_dossier_by_role,
     load_reasoning_evidence_dossier_for_run,
 )
+from api.verification.providers.google_fact_check import GoogleFactCheckProvider
+from api.verification.providers.tavily import TavilyProvider
 
 
 MAX_CLAIMS = 10
 DECISIVE_VERDICTS = frozenset({"FACT", "FAKE", "MISLEADING", "SATIRE"})
+
+_ORIGINAL_CLEAN_OCR_TEXT = tasks.clean_ocr_text
+_ORIGINAL_GFC_COVERAGE = tasks.assess_fact_check_proposition_coverage
+_ORIGINAL_GFC_SEARCH = GoogleFactCheckProvider.search_with_payload
+_ORIGINAL_TAVILY_SEARCH = TavilyProvider.search_with_payload
+
+
+class UpstreamReplayMismatch(RuntimeError):
+    """Baseline/adaptive upstream call sequence diverged during controlled A/B."""
+
+
+class _UpstreamReplayTape:
+    """Record baseline upstream results and replay them with equal wall-clock delay."""
+
+    KEYS = ("claim_gate", "gfc_coverage", "gfc_search", "tavily_search")
+
+    def __init__(self):
+        self.records = {key: [] for key in self.KEYS}
+        self.cursors = {key: 0 for key in self.KEYS}
+
+    def begin_replay(self):
+        self.cursors = {key: 0 for key in self.KEYS}
+
+    def _record(self, key, args, kwargs, result, duration_ms):
+        self.records[key].append({
+            "args": deepcopy(args),
+            "kwargs": deepcopy(kwargs),
+            "result": deepcopy(result),
+            "duration_ms": max(0, int(duration_ms)),
+        })
+        return result
+
+    def _replay(self, key, args, kwargs):
+        cursor = self.cursors[key]
+        if cursor >= len(self.records[key]):
+            raise UpstreamReplayMismatch(
+                f"Adaptive arm made an extra upstream {key} call."
+            )
+        record = self.records[key][cursor]
+        self.cursors[key] += 1
+        if record["args"] != args or record["kwargs"] != kwargs:
+            raise UpstreamReplayMismatch(
+                f"Adaptive arm changed upstream {key} inputs."
+            )
+        if record["duration_ms"]:
+            time.sleep(record["duration_ms"] / 1000)
+        return deepcopy(record["result"])
+
+    def call_function(self, key, original, replay, *args, **kwargs):
+        safe_args = deepcopy(args)
+        safe_kwargs = deepcopy(kwargs)
+        if replay:
+            return self._replay(key, safe_args, safe_kwargs)
+
+        started = time.perf_counter()
+        result = original(*args, **kwargs)
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        return self._record(
+            key,
+            safe_args,
+            safe_kwargs,
+            result,
+            duration_ms,
+        )
+
+    def call_method(self, key, original, replay, instance, *args, **kwargs):
+        safe_args = deepcopy(args)
+        safe_kwargs = deepcopy(kwargs)
+        if replay:
+            return self._replay(key, safe_args, safe_kwargs)
+
+        started = time.perf_counter()
+        result = original(instance, *args, **kwargs)
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        return self._record(
+            key,
+            safe_args,
+            safe_kwargs,
+            result,
+            duration_ms,
+        )
+
+    def replay_complete(self):
+        return all(
+            self.cursors[key] == len(self.records[key])
+            for key in self.KEYS
+        )
+
+    def summary(self):
+        return {
+            key: {
+                "recorded_calls": len(self.records[key]),
+                "replayed_calls": self.cursors[key],
+                "recorded_duration_ms": sum(
+                    record["duration_ms"] for record in self.records[key]
+                ),
+            }
+            for key in self.KEYS
+        }
 
 
 def _duration_ms(run, fallback_ms):
@@ -64,9 +166,11 @@ def _compare_arms(baseline, adaptive):
     if confidence_delta is not None and abs(confidence_delta) > 15:
         reasons.append("CONFIDENCE_SHIFT_GT_15")
     if baseline["source_identity_count"] != adaptive["source_identity_count"]:
-        reasons.append("LIVE_RETRIEVAL_IDENTITY_COUNT_CHANGED")
+        reasons.append("SOURCE_IDENTITY_COUNT_CHANGED")
     if baseline["evidence_total"] != adaptive["evidence_total"]:
-        reasons.append("LIVE_RETRIEVAL_EVIDENCE_COUNT_CHANGED")
+        reasons.append("EVIDENCE_COUNT_CHANGED")
+    if adaptive.get("upstream_replay_complete") is False:
+        reasons.append("UPSTREAM_REPLAY_DIVERGED")
     if baseline["verdict"] in {"MISLEADING", "SATIRE"} or adaptive["verdict"] in {
         "MISLEADING", "SATIRE"
     }:
@@ -142,19 +246,31 @@ class Command(BaseCommand):
                     )
                 )
                 self.stdout.write("Running BASELINE (adaptive budget off)...")
+            replay_tape = _UpstreamReplayTape()
             baseline = self._run_arm(
                 claim_text,
                 adaptive=False,
                 keep_artifacts=options["keep_artifacts"],
+                replay_tape=replay_tape,
+                replay_upstream=False,
             )
 
+            replay_tape.begin_replay()
             if not options["json"]:
-                self.stdout.write("Running ADAPTIVE (adaptive budget on)...")
+                self.stdout.write(
+                    "Running ADAPTIVE (adaptive budget on; upstream replayed)..."
+                )
             adaptive = self._run_arm(
                 claim_text,
                 adaptive=True,
                 keep_artifacts=options["keep_artifacts"],
+                replay_tape=replay_tape,
+                replay_upstream=True,
             )
+            adaptive["upstream_replay_complete"] = replay_tape.replay_complete()
+            adaptive["upstream_replay"] = replay_tape.summary()
+            baseline["upstream_replay_complete"] = True
+            baseline["upstream_replay"] = replay_tape.summary()
 
             comparison = _compare_arms(baseline, adaptive)
             report = {
@@ -170,7 +286,15 @@ class Command(BaseCommand):
         if options["json"]:
             self.stdout.write(json.dumps(reports, indent=2, sort_keys=True))
 
-    def _run_arm(self, claim_text, *, adaptive, keep_artifacts):
+    def _run_arm(
+        self,
+        claim_text,
+        *,
+        adaptive,
+        keep_artifacts,
+        replay_tape,
+        replay_upstream,
+    ):
         claim = Claim.objects.create(
             claim_type=Claim.ClaimType.TEXT,
             context_text=claim_text,
@@ -196,6 +320,60 @@ class Command(BaseCommand):
                 patch(
                     "api.tasks._resolve_equivalent_published_claim",
                     return_value=False,
+                ),
+                patch(
+                    "api.tasks.clean_ocr_text",
+                    side_effect=lambda *call_args, **call_kwargs: (
+                        replay_tape.call_function(
+                            "claim_gate",
+                            _ORIGINAL_CLEAN_OCR_TEXT,
+                            replay_upstream,
+                            *call_args,
+                            **call_kwargs,
+                        )
+                    ),
+                ),
+                patch(
+                    "api.tasks.assess_fact_check_proposition_coverage",
+                    side_effect=lambda *call_args, **call_kwargs: (
+                        replay_tape.call_function(
+                            "gfc_coverage",
+                            _ORIGINAL_GFC_COVERAGE,
+                            replay_upstream,
+                            *call_args,
+                            **call_kwargs,
+                        )
+                    ),
+                ),
+                patch.object(
+                    GoogleFactCheckProvider,
+                    "search_with_payload",
+                    autospec=True,
+                    side_effect=lambda instance, *call_args, **call_kwargs: (
+                        replay_tape.call_method(
+                            "gfc_search",
+                            _ORIGINAL_GFC_SEARCH,
+                            replay_upstream,
+                            instance,
+                            *call_args,
+                            **call_kwargs,
+                        )
+                    ),
+                ),
+                patch.object(
+                    TavilyProvider,
+                    "search_with_payload",
+                    autospec=True,
+                    side_effect=lambda instance, *call_args, **call_kwargs: (
+                        replay_tape.call_method(
+                            "tavily_search",
+                            _ORIGINAL_TAVILY_SEARCH,
+                            replay_upstream,
+                            instance,
+                            *call_args,
+                            **call_kwargs,
+                        )
+                    ),
                 ),
                 patch("api.verification.runs.dispatch_after_commit"),
             ):
@@ -345,8 +523,19 @@ class Command(BaseCommand):
             self.stdout.write(
                 "REVIEW_REASONS " + ",".join(comparison["review_reasons"])
             )
+        replay = adaptive.get("upstream_replay", {})
+        replay_complete = adaptive.get("upstream_replay_complete")
         self.stdout.write(
-            "NOTE Live retrieval/provider responses can vary between arms; "
-            "a matching verdict is not by itself proof of unchanged quality."
+            f"UPSTREAM_REPLAY complete={replay_complete} "
+            + " ".join(
+                f"{key}={value.get('replayed_calls', 0)}/"
+                f"{value.get('recorded_calls', 0)}"
+                for key, value in sorted(replay.items())
+            )
+        )
+        self.stdout.write(
+            "NOTE Baseline ClaimGate/GFC/Tavily upstream results are replayed "
+            "to the adaptive arm with their recorded delays. Downstream LLM "
+            "responses can still vary, so contextual/verdict changes require review."
         )
         self.stdout.write("")
