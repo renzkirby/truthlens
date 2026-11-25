@@ -650,6 +650,13 @@ SUPABASE_MEDIA_FETCH_TIMEOUT_SEC = _float_env("SUPABASE_MEDIA_FETCH_TIMEOUT_SEC"
 GFC_HTTP_TIMEOUT_SEC = _float_env("GFC_HTTP_TIMEOUT_SEC", DEFAULT_HTTP_TIMEOUT_SEC)
 TAVILY_EXTRACT_TIMEOUT_SEC = _float_env("TAVILY_EXTRACT_TIMEOUT_SEC", 20.0)
 
+# Degraded-path Cloudflare candidate planning. This does not reduce the normal
+# Gemini assessment batch; it only prepares a source-diverse subset for the
+# explicitly enabled Cloudflare tail-latency fallback.
+CLOUDFLARE_ASSESSMENT_TAIL_MAX_ITEMS = 8
+CLOUDFLARE_ASSESSMENT_TAIL_MIN_ORIGINAL_ITEMS = 9
+CLOUDFLARE_ASSESSMENT_TAIL_MAX_ORIGINAL_ITEMS = 12
+
 
 def _apply_noneditable_fallback_verdict_policy(
     verdict_result,
@@ -1416,6 +1423,68 @@ def _log_stage(claim_id, stage, started_at, **metadata):
     record_pipeline_stage(stage, duration_ms, **metadata)
 
 
+def _eligible_evidence_assessment_groups(evidence_groups):
+    eligible_groups = []
+    for evidence_group in evidence_groups:
+        eligible_items = tuple(
+            evidence_item
+            for evidence_item in evidence_group.evidence
+            if (
+                evidence_item.stance == VerificationEvidence.Stance.UNKNOWN
+                and evidence_item.relevance_score is None
+                and evidence_item.directness_score is None
+            )
+        )
+        if eligible_items:
+            eligible_groups.append((evidence_group.identity_id, eligible_items))
+    return eligible_groups
+
+
+def _cloudflare_tail_assessment_evidence_link_ids(eligible_groups):
+    """Prepare an eight-item source-diverse candidate for 9-12 secondary items.
+
+    Every distinct source identity must remain represented. Mixed-role evidence,
+    more than eight source identities, and batches outside the 9-12 range keep
+    the existing full assessment behavior.
+    """
+    total_items = sum(len(items) for _identity_id, items in eligible_groups)
+    if not (
+        CLOUDFLARE_ASSESSMENT_TAIL_MIN_ORIGINAL_ITEMS
+        <= total_items
+        <= CLOUDFLARE_ASSESSMENT_TAIL_MAX_ORIGINAL_ITEMS
+    ):
+        return ()
+
+    if len(eligible_groups) > CLOUDFLARE_ASSESSMENT_TAIL_MAX_ITEMS:
+        return ()
+
+    if any(
+        item.evidence_role != VerificationEvidence.EvidenceRole.SECONDARY
+        for _identity_id, items in eligible_groups
+        for item in items
+    ):
+        return ()
+
+    selected = []
+    member_index = 0
+    while len(selected) < CLOUDFLARE_ASSESSMENT_TAIL_MAX_ITEMS:
+        appended = False
+        for _identity_id, items in eligible_groups:
+            if member_index >= len(items):
+                continue
+            selected.append(items[member_index].evidence_link_id)
+            appended = True
+            if len(selected) >= CLOUDFLARE_ASSESSMENT_TAIL_MAX_ITEMS:
+                break
+        if not appended:
+            break
+        member_index += 1
+
+    if len(selected) >= total_items:
+        return ()
+    return tuple(selected)
+
+
 def _assess_and_persist_reasoning_evidence(
     claim_text,
     evidence_groups,
@@ -1425,19 +1494,19 @@ def _assess_and_persist_reasoning_evidence(
     material_scope_hardening=False,
 ):
     stage_name = f"{stage_prefix}_evidence_assessment"
-    eligible_items = []
-    for evidence_group in evidence_groups:
-        for evidence_item in evidence_group.evidence:
-            if (
-                evidence_item.stance != VerificationEvidence.Stance.UNKNOWN
-                or evidence_item.relevance_score is not None
-                or evidence_item.directness_score is not None
-            ):
-                continue
-            eligible_items.append(evidence_item)
+    eligible_groups = _eligible_evidence_assessment_groups(evidence_groups)
+    eligible_items = [
+        item
+        for _identity_id, items in eligible_groups
+        for item in items
+    ]
 
     if not eligible_items:
         return
+
+    cloudflare_fallback_ids = _cloudflare_tail_assessment_evidence_link_ids(
+        eligible_groups,
+    )
 
     assessment_started_at = time.perf_counter()
     try:
@@ -1445,6 +1514,7 @@ def _assess_and_persist_reasoning_evidence(
             claim_text,
             eligible_items,
             enforce_material_scope=material_scope_hardening,
+            cloudflare_fallback_evidence_link_ids=cloudflare_fallback_ids or None,
         )
     except Exception as exc:
         _log_stage(
