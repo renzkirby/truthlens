@@ -218,21 +218,28 @@ class CloudflareAssessmentForcedFallbackTests(SimpleTestCase):
 
         def fake_call(*args, **kwargs):
             observed["inside"] = services.gemini_client
+            observed["scope_state"] = services._gemini_degraded_models.get()
+            services._gemini_degraded_models.set(frozenset({"synthetic-model"}))
             return '{"assessments": []}'
 
-        with patch(
-            "api.management.commands.compare_cloudflare_assessment_tail_budget."
-            "_ORIGINAL_ASSESSMENT_CALL_LLM",
-            side_effect=fake_call,
-        ):
-            result = _forced_cloudflare_assessment(
-                "instructions",
-                "prompt",
-                operation="evidence_assessment",
-            )
+        with services.llm_provider_scope():
+            outer_state = services._gemini_degraded_models.get()
+            with patch(
+                "api.management.commands.compare_cloudflare_assessment_tail_budget."
+                "_ORIGINAL_ASSESSMENT_CALL_LLM",
+                side_effect=fake_call,
+            ):
+                result = _forced_cloudflare_assessment(
+                    "instructions",
+                    "prompt",
+                    operation="evidence_assessment",
+                )
+            restored_state = services._gemini_degraded_models.get()
 
         self.assertEqual(result, '{"assessments": []}')
         self.assertIsNot(observed["inside"], original_client)
+        self.assertEqual(observed["scope_state"], frozenset())
+        self.assertEqual(restored_state, outer_state)
         self.assertIs(services.gemini_client, original_client)
 
 
