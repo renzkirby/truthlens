@@ -143,6 +143,39 @@ class CloudflareAssessmentTailBudgetABComparisonTests(SimpleTestCase):
         self.assertEqual(result["automated_gate"], "REVIEW")
         self.assertIn("TAIL_BUDGET_NOT_APPLIED", result["review_reasons"])
 
+    def test_changed_summary_requires_manual_review(self):
+        baseline = _arm(summary="Baseline factual explanation.")
+        budgeted = _arm(
+            summary="Different factual explanation.",
+            assessment_provider_calls=[
+                {
+                    "provider": "gemini",
+                    "outcome": "failed",
+                    "error_label": "_AssessmentGeminiQuotaError",
+                    "metadata": {},
+                },
+                {
+                    "provider": "cloudflare",
+                    "outcome": "success",
+                    "error_label": "",
+                    "metadata": {
+                        "assessment_tail_budget_applied": True,
+                        "assessment_items_original": 10,
+                        "assessment_items_selected": 8,
+                        "assessment_chunks_attempted": 2,
+                    },
+                },
+            ],
+        )
+
+        result = _compare_arms(baseline, budgeted)
+
+        self.assertEqual(result["automated_gate"], "REVIEW")
+        self.assertIn(
+            "SUMMARY_CHANGED_MANUAL_REVIEW",
+            result["review_reasons"],
+        )
+
     def test_contextual_verdict_always_requires_manual_review(self):
         baseline = _arm(verdict="MISLEADING")
         budgeted = _arm(
