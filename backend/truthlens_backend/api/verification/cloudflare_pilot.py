@@ -3,6 +3,7 @@
 The original verdict pilot is unchanged unless explicitly opted in. Evidence
 assessment has a separate flag and strict per-item JSON validation.
 """
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import math
 import os
@@ -26,6 +27,7 @@ ASSESSMENT_PILOT_FLAG = "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT"
 # Explicit opt-in only for capacity-queue diagnosis; never changes verdict rules.
 ASSESSMENT_REJECT_BUSY_FLAG = "CLOUDFLARE_PILOT_ASSESSMENT_REJECT_IF_BUSY"
 ASSESSMENT_CHUNKING_FLAG = "CLOUDFLARE_PILOT_ASSESSMENT_CHUNKING"
+ASSESSMENT_CONCURRENCY_FLAG = "ENABLE_CLOUDFLARE_ASSESSMENT_CONCURRENCY"
 CLASSIFICATION_PILOT_FLAG = "ENABLE_CLOUDFLARE_CLASSIFICATION_PILOT"
 CLASSIFICATION_REJECT_BUSY_FLAG = "CLOUDFLARE_PILOT_CLASSIFICATION_REJECT_IF_BUSY"
 CLASSIFICATION_READ_TIMEOUT_FLAG = "CLOUDFLARE_PILOT_CLASSIFICATION_READ_TIMEOUT_SEC"
@@ -46,6 +48,7 @@ ASSESSMENT_COMPLETION_TOKENS = 2048
 # all-or-nothing, lossless chunking experiment is explicitly enabled.
 ASSESSMENT_MAX_ITEMS = 4
 ASSESSMENT_MAX_CHUNKS = 3
+ASSESSMENT_MAX_CONCURRENCY = 2
 ASSESSMENT_HTTP_TIMEOUT = (3, 15)
 CLASSIFICATION_HTTP_TIMEOUT = (3, 15)
 # Conservative baseline; 4096 requires a distinct, dev-only opt-in.
@@ -169,6 +172,23 @@ def cloudflare_assessment_chunking_enabled():
             reliability_hardening_enabled()
             or os.getenv(ASSESSMENT_CHUNKING_FLAG, "") == "1"
         )
+    )
+
+
+def cloudflare_assessment_concurrency_enabled():
+    """Use bounded chunk concurrency by default under reliability hardening.
+
+    The feature still requires the existing provider hierarchy, assessment
+    pilot, lossless chunking eligibility, and reliability-hardening master
+    switch. Setting the dedicated flag to exactly "0" is the emergency kill
+    switch; unset or any other value keeps the hardened default enabled.
+    """
+    from .provider_hierarchy import reliability_hardening_enabled
+
+    return (
+        reliability_hardening_enabled()
+        and cloudflare_assessment_chunking_enabled()
+        and os.getenv(ASSESSMENT_CONCURRENCY_FLAG) != "0"
     )
 
 
@@ -310,10 +330,13 @@ def _aggregate_chunk_metadata(metadata, chunks, *, complete=False):
 def call_validated_cloudflare_assessment_chunks(
     system_instructions, user_prompt, *, audit_metadata=None,
 ):
-    """Bounded lossless sequential assessment; all-or-nothing JSON output.
+    """Bounded lossless assessment with optional max-two chunk concurrency.
 
-    No silent partial acceptance and no retry within a chunk. The caller
-    owns failover to the full original Gemini/Groq assessment request.
+    Sequential execution remains the default. When the explicit concurrency
+    rollout flag is enabled under reliability hardening, the first two exact
+    production chunk prompts run concurrently. A third chunk starts only after
+    the first wave succeeds. Any failure discards partial results and propagates
+    to the caller, which owns fallback to the full original provider request.
     """
     if audit_metadata is not None and not isinstance(audit_metadata, dict):
         raise CloudflareEvaluationError("INVALID_AUDIT_METADATA")
@@ -323,27 +346,86 @@ def call_validated_cloudflare_assessment_chunks(
     completed = {}
     attempted_metadata = []
     complete = False
+    use_concurrency = (
+        len(prompts) > 1
+        and cloudflare_assessment_concurrency_enabled()
+    )
+    waves_attempted = 0
+
+    def call_chunk(chunk_prompt, chunk_metadata):
+        raw = call_validated_cloudflare_pilot(
+            system_instructions, chunk_prompt,
+            operation=ASSESSMENT_OPERATION,
+            audit_metadata=chunk_metadata,
+        )
+        return json.loads(raw)["assessments"]
+
+    def merge_rows(rows):
+        for result in rows:
+            key = result["key"]
+            if key in completed:
+                raise CloudflareEvaluationError("INVALID_ASSESSMENT_JSON")
+            completed[key] = result
+
     try:
-        for chunk_prompt in prompts:
-            chunk_metadata = {}
-            attempted_metadata.append(chunk_metadata)
-            raw = call_validated_cloudflare_pilot(
-                system_instructions, chunk_prompt,
-                operation=ASSESSMENT_OPERATION,
-                audit_metadata=chunk_metadata,
+        if use_concurrency:
+            first_wave_size = min(
+                ASSESSMENT_MAX_CONCURRENCY,
+                len(prompts),
             )
-            for result in json.loads(raw)["assessments"]:
-                key = result["key"]
-                if key in completed:
-                    raise CloudflareEvaluationError("INVALID_ASSESSMENT_JSON")
-                completed[key] = result
+            first_wave_metadata = [
+                {} for _ in range(first_wave_size)
+            ]
+            attempted_metadata.extend(first_wave_metadata)
+            waves_attempted = 1
+            wave_results = {}
+            wave_errors = {}
+            with ThreadPoolExecutor(
+                max_workers=ASSESSMENT_MAX_CONCURRENCY,
+            ) as executor:
+                futures = {
+                    executor.submit(
+                        call_chunk,
+                        prompts[index],
+                        first_wave_metadata[index],
+                    ): index
+                    for index in range(first_wave_size)
+                }
+                for future in as_completed(futures):
+                    index = futures[future]
+                    try:
+                        wave_results[index] = future.result()
+                    except Exception as exc:
+                        wave_errors[index] = exc
+
+            if wave_errors:
+                raise wave_errors[min(wave_errors)]
+
+            for index in range(first_wave_size):
+                merge_rows(wave_results[index])
+
+            for chunk_prompt in prompts[first_wave_size:]:
+                waves_attempted += 1
+                chunk_metadata = {}
+                attempted_metadata.append(chunk_metadata)
+                merge_rows(call_chunk(chunk_prompt, chunk_metadata))
+        else:
+            for chunk_prompt in prompts:
+                chunk_metadata = {}
+                attempted_metadata.append(chunk_metadata)
+                merge_rows(call_chunk(chunk_prompt, chunk_metadata))
+
         if set(completed) != set(ordered_keys):
             raise CloudflareEvaluationError("INVALID_ASSESSMENT_JSON")
         full_response = json.dumps(
             {"assessments": [completed[key] for key in ordered_keys]},
             ensure_ascii=False,
         )
-        if not validate_pilot_response(ASSESSMENT_OPERATION, full_response, user_prompt):
+        if not validate_pilot_response(
+            ASSESSMENT_OPERATION,
+            full_response,
+            user_prompt,
+        ):
             raise CloudflareEvaluationError("INVALID_ASSESSMENT_JSON")
         complete = True
         return full_response
@@ -351,6 +433,11 @@ def call_validated_cloudflare_assessment_chunks(
         _aggregate_chunk_metadata(
             audit_metadata, attempted_metadata, complete=complete,
         )
+        if audit_metadata is not None and use_concurrency:
+            audit_metadata["assessment_max_concurrency"] = (
+                ASSESSMENT_MAX_CONCURRENCY
+            )
+            audit_metadata["assessment_waves_attempted"] = waves_attempted
 
 
 def _final_completion_budget():

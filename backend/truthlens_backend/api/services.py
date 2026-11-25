@@ -110,6 +110,10 @@ GROQ_RATE_LIMIT_RETRY_MAX_SINGLE_DELAY_SECONDS = 10.0
 # rolling-window reset. Supplemental semantic audits never receive this allowance.
 GROQ_ESSENTIAL_RETRY_MAX_SINGLE_DELAY_SECONDS = 15.0
 GROQ_RATE_LIMIT_RETRY_SAFETY_SECONDS = 0.25
+# The Groq SDK defaults to a 60-second request timeout. Under reliability
+# hardening, bound each synchronous fallback request so one stalled provider
+# cannot consume most of the 30-90 second verification NFR by itself.
+GROQ_RELIABILITY_HTTP_TIMEOUT_SECONDS = 20.0
 
 # Bound latency-sensitive Gemini stages so an alternate transient model cannot
 # consume the entire interactive verification window before fallbacks run.
@@ -1007,10 +1011,13 @@ def call_llm_with_fallback(
             return legacy_gemini_response
 
     groq_model = _model_from_env("GROQ_MODEL", DEFAULT_GROQ_MODEL)
-    selected_groq_client = (
-        groq_client.with_options(max_retries=0)
-        if hierarchy_active else groq_client
-    )
+    if hierarchy_active:
+        groq_options = {"max_retries": 0}
+        if reliability_hardening_enabled():
+            groq_options["timeout"] = GROQ_RELIABILITY_HTTP_TIMEOUT_SECONDS
+        selected_groq_client = groq_client.with_options(**groq_options)
+    else:
+        selected_groq_client = groq_client
 
     groq_user_prompt = user_prompt
     groq_request_variant = "FULL"

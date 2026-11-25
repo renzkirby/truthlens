@@ -1152,6 +1152,11 @@ def _retrieve_and_ingest_tavily_queries(
 
 
 PRIMARY_SOURCE_RECOVERY_RESULT_LIMIT = 3
+# Primary-source recovery is optional and can repeat retrieval, assessment, and
+# final reasoning. Once a verification is already near the manuscript's
+# 90-second NFR ceiling, preserve the valid UNVERIFIED result instead of
+# starting another potentially expensive provider cycle.
+OPTIONAL_PRIMARY_SOURCE_RECOVERY_CUTOFF_SECONDS = 75.0
 
 
 def _has_material_support_or_refutation(evidence_groups):
@@ -1179,6 +1184,7 @@ def _attempt_primary_source_recovery(
     noneditable_context_fallback=False,
     required_anchor_tokens=(),
     assertion_complete=True,
+    pipeline_started_at=None,
     stage_prefix="",
 ):
     """Run at most one bounded open-domain recovery for true evidence gaps.
@@ -1195,6 +1201,29 @@ def _attempt_primary_source_recovery(
         or not cleaned_claim.strip()
     ):
         return initial_result
+
+    if (
+        isinstance(pipeline_started_at, Number)
+        and not isinstance(pipeline_started_at, bool)
+    ):
+        elapsed_seconds = max(
+            0.0,
+            time.perf_counter() - float(pipeline_started_at),
+        )
+        if elapsed_seconds >= OPTIONAL_PRIMARY_SOURCE_RECOVERY_CUTOFF_SECONDS:
+            _log_stage(
+                claim_id,
+                f"{stage_prefix}primary_source_recovery",
+                time.perf_counter(),
+                outcome="skipped_tail_latency_budget",
+            )
+            logger.info(
+                "Skipping optional primary-source recovery for claim %s after "
+                "%.2fs of pipeline runtime.",
+                claim_id,
+                elapsed_seconds,
+            )
+            return initial_result
 
     evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
     # Fail closed before any role filtering. Placeholder/malformed dossier values
@@ -2607,6 +2636,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                         noneditable_context_fallback=noneditable_context_fallback,
                         required_anchor_tokens=noneditable_fallback_anchor_tokens,
                         assertion_complete=noneditable_fallback_assertion_complete,
+                        pipeline_started_at=pipeline_started_at,
                     )
 
                 if evaluator_invoked:
@@ -3732,6 +3762,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
                     noneditable_context_fallback=noneditable_context_fallback,
                     required_anchor_tokens=noneditable_fallback_anchor_tokens,
                     assertion_complete=noneditable_fallback_assertion_complete,
+                    pipeline_started_at=pipeline_started_at,
                     stage_prefix="url_",
                 )
 
