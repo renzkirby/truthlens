@@ -9,6 +9,7 @@ from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from api.management.commands.compare_cloudflare_assessment_chunk_sizes import (
+    _causal_summary,
     _compare_arms,
     _experimental_chunk_plan,
 )
@@ -104,6 +105,59 @@ class CloudflareChunkPlanTests(SimpleTestCase):
 
 
 class CloudflareChunkComparisonTests(SimpleTestCase):
+    def test_aa_control_stable_and_candidate_stable_passes(self):
+        summary = _causal_summary(
+            {"quality_gate": "PASS"},
+            {"quality_gate": "PASS"},
+        )
+        self.assertEqual(summary["quality_gate"], "PASS")
+        self.assertEqual(
+            summary["causal_interpretation"],
+            "NO_SEMANTIC_DRIFT_DETECTED",
+        )
+
+    def test_aa_control_drift_makes_candidate_result_inconclusive(self):
+        summary = _causal_summary(
+            {"quality_gate": "REVIEW"},
+            {"quality_gate": "REVIEW"},
+        )
+        self.assertEqual(summary["quality_gate"], "INCONCLUSIVE")
+        self.assertEqual(
+            summary["causal_interpretation"],
+            "MODEL_NONDETERMINISM_PRESENT",
+        )
+
+    def test_stable_aa_with_candidate_drift_flags_chunk_size_effect(self):
+        summary = _causal_summary(
+            {"quality_gate": "PASS"},
+            {"quality_gate": "REVIEW"},
+        )
+        self.assertEqual(summary["quality_gate"], "REVIEW")
+        self.assertEqual(
+            summary["causal_interpretation"],
+            "CHUNK_SIZE_EFFECT_PLAUSIBLE",
+        )
+
+    def test_aa_control_uses_three_chunk_expectation(self):
+        groups = _groups()
+        items = [item for _identity_id, members in groups for item in members]
+        values = [
+            _assessment(VerificationEvidence.Stance.SUPPORTS)
+            for _ in items
+        ]
+
+        result = _compare_arms(
+            groups,
+            items,
+            _arm(values, chunks=3, duration_ms=2000),
+            _arm(values, chunks=3, duration_ms=2100),
+            expected_candidate_chunks=3,
+            candidate_label="CONTROL",
+        )
+
+        self.assertEqual(result["quality_gate"], "PASS")
+        self.assertNotIn("CONTROL_NOT_3_CHUNKS", result["review_reasons"])
+
     def test_lossless_stable_assessments_pass(self):
         groups = _groups()
         items = [item for _identity_id, members in groups for item in members]
@@ -258,6 +312,10 @@ class CloudflareChunkSizeCommandTests(TestCase):
             _assessment(VerificationEvidence.Stance.SUPPORTS)
             for _ in all_items
         ]
+        control_values = [
+            _assessment(VerificationEvidence.Stance.SUPPORTS)
+            for _ in all_items
+        ]
         candidate_values = [
             _assessment(VerificationEvidence.Stance.SUPPORTS)
             for _ in all_items
@@ -272,6 +330,16 @@ class CloudflareChunkSizeCommandTests(TestCase):
                 baseline_values,
                 chunks=3,
                 duration_ms=2000,
+            )
+
+        def control_arm(system, prompt, claim_text, evidence_items):
+            seen_ids.append(tuple(
+                item.evidence_link_id for item in evidence_items
+            ))
+            return _arm(
+                control_values,
+                chunks=3,
+                duration_ms=2100,
             )
 
         def candidate_arm(system, prompt, claim_text, evidence_items):
@@ -320,6 +388,11 @@ class CloudflareChunkSizeCommandTests(TestCase):
             ),
             patch(
                 "api.management.commands.compare_cloudflare_assessment_chunk_sizes."
+                "_run_control_arm",
+                side_effect=control_arm,
+            ),
+            patch(
+                "api.management.commands.compare_cloudflare_assessment_chunk_sizes."
                 "_run_candidate_arm",
                 side_effect=candidate_arm,
             ),
@@ -333,8 +406,9 @@ class CloudflareChunkSizeCommandTests(TestCase):
 
         report = json.loads(output.getvalue())[0]
         retrieval.assert_called_once()
-        self.assertEqual(len(seen_ids), 2)
+        self.assertEqual(len(seen_ids), 3)
         self.assertEqual(seen_ids[0], seen_ids[1])
+        self.assertEqual(seen_ids[0], seen_ids[2])
         self.assertEqual(Claim.objects.count(), before_claims)
         self.assertTrue(report["database_isolated"])
         self.assertEqual(report["frozen_evidence"]["item_count"], 10)
@@ -347,6 +421,14 @@ class CloudflareChunkSizeCommandTests(TestCase):
             2,
         )
         self.assertEqual(report["quality_gate"], "PASS")
+        self.assertEqual(
+            report["causal_interpretation"],
+            "NO_SEMANTIC_DRIFT_DETECTED",
+        )
+        self.assertEqual(
+            report["control_comparison"]["quality_gate"],
+            "PASS",
+        )
 
     @override_settings(APP_ENV="development", DEBUG=True)
     def test_command_stops_after_baseline_429(self):
@@ -404,6 +486,10 @@ class CloudflareChunkSizeCommandTests(TestCase):
             ),
             patch(
                 "api.management.commands.compare_cloudflare_assessment_chunk_sizes."
+                "_run_control_arm",
+            ) as control,
+            patch(
+                "api.management.commands.compare_cloudflare_assessment_chunk_sizes."
                 "_run_candidate_arm",
             ) as candidate,
         ):
@@ -423,4 +509,87 @@ class CloudflareChunkSizeCommandTests(TestCase):
         )
         self.assertEqual(calls, ["A test claim."])
         retrieval.assert_called_once()
+        control.assert_not_called()
         candidate.assert_not_called()
+
+    @override_settings(APP_ENV="development", DEBUG=True)
+    def test_command_stops_after_control_429(self):
+        dossier_groups = [
+            SimpleNamespace(
+                identity_id=uuid4(),
+                evidence=tuple(_item() for _ in range(2)),
+            )
+            for _ in range(5)
+        ]
+        values = [
+            _assessment(VerificationEvidence.Stance.SUPPORTS)
+            for group in dossier_groups
+            for _item_value in group.evidence
+        ]
+
+        output = io.StringIO()
+        with (
+            patch(
+                "api.management.commands.compare_cloudflare_assessment_chunk_sizes."
+                "tasks.clean_ocr_text",
+                return_value={
+                    "cleaned_claim": "A test claim.",
+                    "search_query": "A test claim.",
+                    "search_queries": ["A test claim."],
+                    "article_stance": "NEUTRAL",
+                },
+            ),
+            patch(
+                "api.management.commands.compare_cloudflare_assessment_chunk_sizes."
+                "tasks._retrieve_and_ingest_tavily_queries",
+                return_value={"results": []},
+            ) as retrieval,
+            patch(
+                "api.management.commands.compare_cloudflare_assessment_chunk_sizes."
+                "load_reasoning_evidence_dossier_for_run",
+                return_value=dossier_groups,
+            ),
+            patch(
+                "api.management.commands.compare_cloudflare_assessment_chunk_sizes."
+                "filter_reasoning_evidence_dossier_by_role",
+                return_value=dossier_groups,
+            ),
+            patch(
+                "api.management.commands.compare_cloudflare_assessment_chunk_sizes."
+                "_run_baseline_arm",
+                return_value=_arm(values, chunks=3, duration_ms=1000),
+            ),
+            patch(
+                "api.management.commands.compare_cloudflare_assessment_chunk_sizes."
+                "_run_control_arm",
+                return_value={
+                    "success": False,
+                    "duration_ms": 400,
+                    "error_code": "HTTP_429",
+                    "chunks_attempted": 1,
+                    "metadata": {},
+                    "assessments": [],
+                },
+            ),
+            patch(
+                "api.management.commands.compare_cloudflare_assessment_chunk_sizes."
+                "_run_candidate_arm",
+            ) as candidate,
+        ):
+            call_command(
+                "compare_cloudflare_assessment_chunk_sizes",
+                claims=["A test claim.", "A second claim."],
+                json=True,
+                stdout=output,
+            )
+
+        report = json.loads(output.getvalue())
+        self.assertEqual(len(report), 1)
+        self.assertEqual(report[0]["quality_gate"], "BLOCKED")
+        self.assertEqual(
+            report[0]["blocked_reason"],
+            "CLOUDFLARE_HTTP_429",
+        )
+        retrieval.assert_called_once()
+        candidate.assert_not_called()
+
