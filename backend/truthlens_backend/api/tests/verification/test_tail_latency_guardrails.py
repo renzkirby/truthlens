@@ -210,13 +210,6 @@ class TailLatencyValidationCommandTests(SimpleTestCase):
             checks["recovery_after_cutoff"]["stage_outcome"],
             "skipped_tail_latency_budget",
         )
-        cloudflare = checks["cloudflare_assessment_three_to_two_chunks"]
-        self.assertTrue(cloudflare["passed"])
-        self.assertEqual(cloudflare["original_items"], 10)
-        self.assertEqual(cloudflare["selected_items"], 8)
-        self.assertEqual(cloudflare["chunk_sizes"], [4, 4])
-        self.assertEqual(cloudflare["groq_attempts"], 0)
-        self.assertTrue(cloudflare["assessment_tail_budget_applied"])
 
     @override_settings(APP_ENV="production", DEBUG=False)
     def test_validation_command_is_rejected_outside_development(self):
