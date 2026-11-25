@@ -555,7 +555,7 @@ class Command(BaseCommand):
             return {
                 "claim": claim_text,
                 "eligibility": "NOT_TAIL_BUDGET_ELIGIBLE",
-                "quality_gate": "INVALID",
+                "quality_gate": "SKIPPED",
                 "frozen_evidence": frozen,
             }
 
