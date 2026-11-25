@@ -1817,7 +1817,7 @@ class VerificationEvidenceURLRuntimeTests(TestCase):
         self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
         self.assertEqual(
             self.claim.score_context,
-            "No usable assessed evidence supports a decisive automated verdict; "
+            "Evidence remains insufficient for a decisive verdict; "
             "final confidence is 49%.",
         )
         recovery.assert_called_once()
