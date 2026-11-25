@@ -36,6 +36,14 @@ def _arm(**overrides):
             "SUPPORTS": 5,
         },
         "assessment_stages": [],
+        "final_provider_calls": [
+            {
+                "provider": "gemini",
+                "outcome": "success",
+                "error_label": "",
+                "metadata": {},
+            },
+        ],
         "assessment_provider_calls": [
             {
                 "provider": "gemini",
@@ -98,6 +106,46 @@ class CloudflareAssessmentTailBudgetABComparisonTests(SimpleTestCase):
                 "selected_items": 8,
                 "chunks": 2,
             },
+        )
+
+    def test_final_provider_route_change_requires_review(self):
+        baseline = _arm()
+        budgeted = _arm(
+            final_provider_calls=[
+                {
+                    "provider": "cloudflare",
+                    "outcome": "success",
+                    "error_label": "",
+                    "metadata": {},
+                },
+            ],
+            assessment_provider_calls=[
+                {
+                    "provider": "gemini",
+                    "outcome": "failed",
+                    "error_label": "_AssessmentGeminiQuotaError",
+                    "metadata": {},
+                },
+                {
+                    "provider": "cloudflare",
+                    "outcome": "success",
+                    "error_label": "",
+                    "metadata": {
+                        "assessment_tail_budget_applied": True,
+                        "assessment_items_original": 10,
+                        "assessment_items_selected": 8,
+                        "assessment_chunks_attempted": 2,
+                    },
+                },
+            ],
+        )
+
+        result = _compare_arms(baseline, budgeted)
+
+        self.assertEqual(result["automated_gate"], "REVIEW")
+        self.assertIn(
+            "FINAL_PROVIDER_ROUTE_CHANGED",
+            result["review_reasons"],
         )
 
     def test_identity_topology_change_requires_review(self):
