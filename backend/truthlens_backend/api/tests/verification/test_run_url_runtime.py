@@ -136,6 +136,10 @@ class VerificationRunURLRuntimeTests(TestCase):
             "api.tasks.calibrate_verdict_confidence",
             side_effect=lambda verdict, _groups: verdict,
         )
+        self.decisive_support = self._patch(
+            "api.tasks.enforce_decisive_evidence_support",
+            side_effect=lambda verdict, _groups, **_kwargs: verdict,
+        )
         self.load_dossier = self._patch(
             "api.tasks.load_reasoning_evidence_dossier_for_run",
             return_value=["persisted dossier"],
@@ -1807,7 +1811,7 @@ class VerificationEvidenceURLRuntimeTests(TestCase):
         ) as recovery:
             run = self._execute()
 
-        self.assertEqual(run.status, VerificationRun.Status.COMPLETED)
+        self.assertEqual(run.status, VerificationRun.Status.ABSTAINED)
         self.assessor.assert_not_called()
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.ai_verdict, "UNVERIFIED")
