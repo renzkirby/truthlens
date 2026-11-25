@@ -151,6 +151,34 @@ class CloudflareChunkComparisonTests(SimpleTestCase):
 
         self.assertEqual(result["quality_gate"], "REVIEW")
         self.assertIn("ITEM_STANCE_CHANGED", result["review_reasons"])
+        # The first identity still has another SUPPORTS item, so item-level
+        # drift must not be mislabeled as decisive identity-topology loss.
+        self.assertNotIn(
+            "DECISIVE_IDENTITY_TOPOLOGY_CHANGED",
+            result["review_reasons"],
+        )
+
+    def test_losing_identity_only_decisive_stance_requires_review(self):
+        groups = _groups(item_counts=(1, 2, 2, 2, 2))
+        items = [item for _identity_id, members in groups for item in members]
+        baseline_values = [
+            _assessment(VerificationEvidence.Stance.SUPPORTS)
+            for _ in items
+        ]
+        candidate_values = list(baseline_values)
+        candidate_values[0] = _assessment(
+            VerificationEvidence.Stance.CONTEXT
+        )
+
+        result = _compare_arms(
+            groups,
+            items,
+            _arm(baseline_values, chunks=3, duration_ms=2000),
+            _arm(candidate_values, chunks=2, duration_ms=1300),
+        )
+
+        self.assertEqual(result["quality_gate"], "REVIEW")
+        self.assertIn("ITEM_STANCE_CHANGED", result["review_reasons"])
         self.assertIn(
             "DECISIVE_IDENTITY_TOPOLOGY_CHANGED",
             result["review_reasons"],
