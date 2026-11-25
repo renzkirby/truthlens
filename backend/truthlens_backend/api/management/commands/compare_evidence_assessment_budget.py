@@ -152,10 +152,32 @@ def _confidence_delta(baseline, adaptive):
     return round(float(right) - float(left), 2)
 
 
+def _assessment_provider_route(arm):
+    return [
+        (
+            event.get("provider"),
+            (event.get("metadata") or {}).get("model_id"),
+            event.get("outcome"),
+            event.get("error_label"),
+        )
+        for event in arm.get("assessment_provider_calls", [])
+    ]
+
+
 def _compare_arms(baseline, adaptive):
     reasons = []
+    if baseline["status"] != VerificationRun.Status.COMPLETED:
+        reasons.append("BASELINE_NOT_COMPLETED")
+    if adaptive["status"] != VerificationRun.Status.COMPLETED:
+        reasons.append("ADAPTIVE_NOT_COMPLETED")
+    if baseline.get("exception_type"):
+        reasons.append("BASELINE_EXCEPTION")
+    if adaptive.get("exception_type"):
+        reasons.append("ADAPTIVE_EXCEPTION")
     if baseline["status"] != adaptive["status"]:
         reasons.append("STATUS_CHANGED")
+    if _assessment_provider_route(baseline) != _assessment_provider_route(adaptive):
+        reasons.append("ASSESSMENT_PROVIDER_ROUTE_CHANGED")
     if baseline["verdict"] != adaptive["verdict"]:
         reasons.append("VERDICT_CHANGED")
     if (
