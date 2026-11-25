@@ -13,7 +13,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.test.utils import override_settings
 
-from api import tasks
+from api import services, tasks
 from api.models import (
     Claim,
     VerificationEvidence,
@@ -135,12 +135,20 @@ class _UpstreamReplayTape:
 
 
 def _forced_cloudflare_assessment(*args, **kwargs):
-    """Fail Gemini only for the evidence-assessment call, then use real fallbacks."""
+    """Force only evidence assessment onto Cloudflare without leaking degradation.
+
+    The nested provider scope ensures the synthetic Gemini 402 and any Cloudflare
+    provider state are discarded when the assessment call returns, so later
+    verdict stages retain the outer verification job's real provider state.
+    """
     gemini = Mock()
     gemini.models.generate_content.side_effect = _AssessmentGeminiQuotaError(
         "synthetic assessment Gemini unavailable"
     )
-    with patch("api.services.gemini_client", gemini):
+    with (
+        patch("api.services.gemini_client", gemini),
+        services.llm_provider_scope(),
+    ):
         return _ORIGINAL_ASSESSMENT_CALL_LLM(*args, **kwargs)
 
 
