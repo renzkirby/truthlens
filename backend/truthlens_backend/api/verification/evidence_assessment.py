@@ -238,7 +238,6 @@ def assess_reasoning_evidence_batch_against_claim(
     evidence_items,
     *,
     enforce_material_scope=False,
-    cloudflare_fallback_evidence_link_ids=None,
 ) -> list[EvidenceAssessment]:
     """Assess persisted evidence in one request with positional results."""
     evidence_items = list(evidence_items)
@@ -273,44 +272,8 @@ def assess_reasoning_evidence_batch_against_claim(
     )
     user_prompt = f"UNTRUSTED ASSESSMENT DATA:\n{assessment_data}"
 
-    cloudflare_assessment_user_prompt = None
-    if cloudflare_fallback_evidence_link_ids is not None:
-        requested_ids = tuple(cloudflare_fallback_evidence_link_ids)
-        requested_id_set = set(requested_ids)
-        if len(requested_ids) == len(requested_id_set):
-            fallback_items = []
-            for index, evidence_item in enumerate(evidence_items):
-                if getattr(evidence_item, "evidence_link_id", None) not in requested_id_set:
-                    continue
-                evidence_content = getattr(evidence_item, "content", None)
-                if not isinstance(evidence_content, str) or not evidence_content.strip():
-                    continue
-                fallback_items.append({
-                    "key": f"item_{index}",
-                    "evidence_content": evidence_content,
-                })
-            if (
-                fallback_items
-                and len(fallback_items) < len(assessment_items)
-                and len(fallback_items) == len(requested_ids)
-            ):
-                fallback_data = json.dumps(
-                    {
-                        "claim_text": claim_text,
-                        "evidence_items": fallback_items,
-                    },
-                    ensure_ascii=False,
-                )
-                cloudflare_assessment_user_prompt = (
-                    f"UNTRUSTED ASSESSMENT DATA:\n{fallback_data}"
-                )
-
     try:
         provider_options = {"operation": "evidence_assessment"}
-        if cloudflare_assessment_user_prompt is not None:
-            provider_options["cloudflare_assessment_user_prompt"] = (
-                cloudflare_assessment_user_prompt
-            )
         gemini_timeout_ms = _gemini_timeout_ms_from_env()
         if gemini_timeout_ms is not None:
             provider_options["gemini_timeout_ms"] = gemini_timeout_ms
