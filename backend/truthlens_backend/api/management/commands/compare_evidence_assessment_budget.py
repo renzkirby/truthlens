@@ -269,7 +269,10 @@ class Command(BaseCommand):
         parser.add_argument(
             "--keep-artifacts",
             action="store_true",
-            help="Keep temporary Claim/VerificationRun rows for manual inspection.",
+            help=(
+                "Deprecated for this harness; controlled A/B runs are always "
+                "rollback-isolated and this option is rejected."
+            ),
         )
         parser.add_argument(
             "--json",
