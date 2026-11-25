@@ -15,6 +15,7 @@ from api.services import (
     call_llm_with_fallback,
     llm_provider_scope,
 )
+from api.verification.cloudflare_pilot import ASSESSMENT_OPERATION
 
 
 def _groq_timeout_check():
@@ -167,11 +168,125 @@ def _recovery_check(*, elapsed_seconds):
     }
 
 
+def _cloudflare_assessment_budget_check():
+    original_items = [
+        {
+            "key": f"item_{index}",
+            "evidence_content": f"Synthetic evidence passage {index}.",
+        }
+        for index in range(10)
+    ]
+    original_prompt = "UNTRUSTED ASSESSMENT DATA:\n" + json.dumps({
+        "claim_text": "A verifiable public claim.",
+        "evidence_items": original_items,
+    }, ensure_ascii=False)
+    candidate_prompt = "UNTRUSTED ASSESSMENT DATA:\n" + json.dumps({
+        "claim_text": "A verifiable public claim.",
+        "evidence_items": original_items[:8],
+    }, ensure_ascii=False)
+
+    def response_for(prompt):
+        payload = json.loads(prompt.split("\n", 1)[1])
+        return json.dumps({
+            "assessments": [
+                {
+                    "key": item["key"],
+                    "stance": "SUPPORTS",
+                    "relevance_score": 0.9,
+                    "directness_score": 0.8,
+                }
+                for item in payload["evidence_items"]
+            ]
+        })
+
+    gemini = Mock()
+    quota = RuntimeError("synthetic Gemini unavailable")
+    quota.code = 402
+    gemini.models.generate_content.side_effect = quota
+
+    groq = Mock()
+    chunk_prompts = []
+
+    def cloudflare_response(system, prompt, **kwargs):
+        chunk_prompts.append(prompt)
+        return response_for(prompt)
+
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "ENABLE_UNIVERSAL_LLM_HIERARCHY": "0",
+                "ENABLE_AI_RQ2_PROVIDER_HIERARCHY": "1",
+                "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
+                "ENABLE_GEMINI_TRANSIENT_MODEL_FALLBACK": "0",
+                "ENABLE_CLOUDFLARE_VERIFICATION_PILOT": "1",
+                "ENABLE_CLOUDFLARE_EVIDENCE_ASSESSMENT_PILOT": "1",
+                "ENABLE_CLOUDFLARE_ASSESSMENT_TAIL_BUDGET": "1",
+            },
+            clear=False,
+        ),
+        patch("api.services.gemini_client", gemini),
+        patch("api.services.groq_client", groq),
+        patch(
+            "api.verification.cloudflare_pilot.generate_evaluation_json",
+            side_effect=cloudflare_response,
+        ),
+        patch("api.services.record_llm_provider_call") as telemetry,
+        llm_provider_scope(),
+    ):
+        raw = call_llm_with_fallback(
+            "Assess every passage independently. Preserve each key.",
+            original_prompt,
+            operation=ASSESSMENT_OPERATION,
+            cloudflare_assessment_user_prompt=candidate_prompt,
+        )
+
+    parsed = json.loads(raw)
+    chunk_sizes = [
+        len(json.loads(prompt.split("\n", 1)[1])["evidence_items"])
+        for prompt in chunk_prompts
+    ]
+    cloudflare_events = [
+        call for call in telemetry.call_args_list
+        if call.args[1] == "cloudflare"
+    ]
+    metadata = (
+        cloudflare_events[-1].kwargs.get("metadata", {})
+        if cloudflare_events
+        else {}
+    )
+    groq_attempts = (
+        groq.with_options.return_value.chat.completions.create.call_count
+    )
+
+    passed = (
+        len(parsed.get("assessments", [])) == 8
+        and chunk_sizes == [4, 4]
+        and groq_attempts == 0
+        and metadata.get("assessment_tail_budget_applied") is True
+        and metadata.get("assessment_items_original") == 10
+        and metadata.get("assessment_items_selected") == 8
+        and metadata.get("assessment_chunks_attempted") == 2
+    )
+    return {
+        "id": "cloudflare_assessment_three_to_two_chunks",
+        "passed": passed,
+        "original_items": 10,
+        "selected_items": len(parsed.get("assessments", [])),
+        "chunk_sizes": chunk_sizes,
+        "groq_attempts": groq_attempts,
+        "assessment_tail_budget_applied": metadata.get(
+            "assessment_tail_budget_applied"
+        ),
+    }
+
+
 def build_tail_latency_validation_report():
     checks = [
         _groq_timeout_check(),
         _recovery_check(elapsed_seconds=60.0),
         _recovery_check(elapsed_seconds=80.0),
+        _cloudflare_assessment_budget_check(),
     ]
     return {
         "passed": all(check["passed"] for check in checks),
