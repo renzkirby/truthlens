@@ -510,17 +510,22 @@ class CloudflareConcurrencyRuntimeTests(SimpleTestCase):
         values = {
             "ENABLE_UNIVERSAL_LLM_HIERARCHY": "1",
             "ENABLE_PROVIDER_RELIABILITY_HARDENING": "1",
-            "ENABLE_CLOUDFLARE_ASSESSMENT_CONCURRENCY": "0",
             "CLOUDFLARE_PILOT_ASSESSMENT_CHUNKING": "0",
         }
         values.update(overrides)
         return patch.dict(os.environ, values, clear=False)
 
-    def test_runtime_flag_is_default_off_and_requires_hardening(self):
+    def test_runtime_flag_defaults_on_but_retains_explicit_kill_switch(self):
         with self._env():
-            self.assertFalse(cloudflare_assessment_concurrency_enabled())
+            os.environ.pop("ENABLE_CLOUDFLARE_ASSESSMENT_CONCURRENCY", None)
+            self.assertTrue(cloudflare_assessment_concurrency_enabled())
+
         with self._env(ENABLE_CLOUDFLARE_ASSESSMENT_CONCURRENCY="1"):
             self.assertTrue(cloudflare_assessment_concurrency_enabled())
+
+        with self._env(ENABLE_CLOUDFLARE_ASSESSMENT_CONCURRENCY="0"):
+            self.assertFalse(cloudflare_assessment_concurrency_enabled())
+
         with self._env(
             ENABLE_PROVIDER_RELIABILITY_HARDENING="0",
             ENABLE_CLOUDFLARE_ASSESSMENT_CONCURRENCY="1",
