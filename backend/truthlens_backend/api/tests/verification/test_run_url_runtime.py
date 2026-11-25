@@ -17,6 +17,12 @@ from api.services import ClaimGateError, LLMProviderUnavailableError
 
 class VerificationRunURLRuntimeTests(TestCase):
     def setUp(self):
+        # These runtime tests do not exercise automatic subject classification.
+        # Keep a developer/local classification rollout from mutating context_text
+        # and changing unrelated URL-verification assertions.
+        self.enterContext(override_settings(
+            INVESTIGATION_CLASSIFICATION_MODE="off",
+        ))
         # These runtime tests exercise the legacy/non-universal call shapes
         # unless a test explicitly opts into another routing mode. Keep local
         # Cloudflare credentials from silently auto-enabling universal routing.
