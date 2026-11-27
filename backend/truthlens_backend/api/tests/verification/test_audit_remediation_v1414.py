@@ -114,6 +114,7 @@ class VerificationAuditRemediationV1414Tests(SimpleTestCase):
         audited = {
             "relationship": "MATERIAL_MISDESCRIPTION",
             "basis_kind": "MISSING_CONTEXT",
+            "basis_evidence_ids": [context_id],
         }
 
         with patch(
@@ -159,7 +160,7 @@ class VerificationAuditRemediationV1414Tests(SimpleTestCase):
         self.assertEqual(result["contextual_basis_kind"], "MISSING_CONTEXT")
         self.assertEqual(
             result["contextual_basis_evidence_ids"],
-            [signal_id],
+            [context_id],
         )
 
     def test_final_validation_hardening_remains_in_v1414_or_later(self):
