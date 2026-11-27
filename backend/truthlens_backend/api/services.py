@@ -3983,15 +3983,13 @@ _NONMEDIA_TRANSFER_CLAIM_FINANCIAL_PATTERNS = (
 )
 
 
-def _claim_has_nonmedia_relationship_shape(value):
-    """Gate non-media arbitration to claims that assert the targeted relationship.
-
-    This is a recall-limiting safety gate only. It never assigns a verdict.
-    """
+def _claim_nonmedia_relationship_families(value):
+    """Return narrow non-media relationship families asserted by the claim."""
     if not isinstance(value, str) or not value.strip():
-        return False
+        return frozenset()
     normalized = " ".join(value.split()).casefold()
-    status_shape = (
+    families = set()
+    if (
         any(
             re.search(pattern, normalized)
             for pattern in _NONMEDIA_STATUS_CLAIM_EFFECT_PATTERNS
@@ -4000,8 +3998,9 @@ def _claim_has_nonmedia_relationship_shape(value):
             re.search(pattern, normalized)
             for pattern in _NONMEDIA_STATUS_CLAIM_PROCESS_PATTERNS
         )
-    )
-    transfer_shape = (
+    ):
+        families.add("STATUS_PROCESS")
+    if (
         any(
             re.search(pattern, normalized)
             for pattern in _NONMEDIA_TRANSFER_CLAIM_ACTION_PATTERNS
@@ -4010,38 +4009,48 @@ def _claim_has_nonmedia_relationship_shape(value):
             re.search(pattern, normalized)
             for pattern in _NONMEDIA_TRANSFER_CLAIM_FINANCIAL_PATTERNS
         )
-    )
-    return status_shape or transfer_shape
+    ):
+        families.add("TRANSFER_RECIPIENT")
+    return frozenset(families)
+
+
+def _claim_has_nonmedia_relationship_shape(value):
+    """Backward-compatible boolean safety gate for non-media arbitration."""
+    return bool(_claim_nonmedia_relationship_families(value))
+
+
+def _nonmedia_relationship_families_for_text(value):
+    """Return deterministic relationship families explicitly present in one body."""
+    if not isinstance(value, str) or not value.strip():
+        return frozenset()
+    normalized = " ".join(value.split()).casefold()
+    families = set()
+
+    if (
+        any(re.search(pattern, normalized) for pattern in _NONMEDIA_STATUS_SUBSTRATE_PATTERNS)
+        and any(re.search(pattern, normalized) for pattern in _NONMEDIA_STATUS_CORRECTION_PATTERNS)
+    ):
+        families.add("STATUS_PROCESS")
+    if (
+        any(re.search(pattern, normalized) for pattern in _NONMEDIA_TRANSFER_SUBSTRATE_PATTERNS)
+        and any(re.search(pattern, normalized) for pattern in _NONMEDIA_TRANSFER_CORRECTION_PATTERNS)
+    ):
+        families.add("TRANSFER_RECIPIENT")
+    return frozenset(families)
 
 
 def _text_has_qualified_nonmedia_relationship_correction(value):
-    """Return whether one evidence body contains a high-precision substrate/correction pair.
-
-    These lexical pairs only qualify evidence for a later relationship audit.
-    They never determine the verdict and intentionally avoid generic words such
-    as "misleading", "false", "but", "however", or "context".
-    """
-    if not isinstance(value, str) or not value.strip():
-        return False
-    normalized = " ".join(value.split()).casefold()
-
-    status_pair = (
-        any(re.search(pattern, normalized) for pattern in _NONMEDIA_STATUS_SUBSTRATE_PATTERNS)
-        and any(re.search(pattern, normalized) for pattern in _NONMEDIA_STATUS_CORRECTION_PATTERNS)
-    )
-    transfer_pair = (
-        any(re.search(pattern, normalized) for pattern in _NONMEDIA_TRANSFER_SUBSTRATE_PATTERNS)
-        and any(re.search(pattern, normalized) for pattern in _NONMEDIA_TRANSFER_CORRECTION_PATTERNS)
-    )
-    return status_pair or transfer_pair
+    """Backward-compatible boolean wrapper around the family-aware qualifier."""
+    return bool(_nonmedia_relationship_families_for_text(value))
 
 
-def _qualified_nonmedia_relationship_basis_ids(evidence_groups):
-    """Return strong REFUTES evidence IDs that may ground non-media partial truth.
-
-    Qualification is deterministic and body-only. Publisher names, titles,
-    textual ratings, and weak/background evidence cannot enter this whitelist.
-    """
+def _qualified_nonmedia_relationship_candidates(
+    evidence_groups,
+    *,
+    allowed_families=(),
+):
+    """Return strongest body-only REFUTES candidates with matching family metadata."""
+    allowed = frozenset(allowed_families)
     qualified = []
     seen = set()
     for group in evidence_groups or ():
@@ -4060,7 +4069,10 @@ def _qualified_nonmedia_relationship_basis_ids(evidence_groups):
             ):
                 continue
             content = getattr(item, "content", None)
-            if not _text_has_qualified_nonmedia_relationship_correction(content):
+            families = _nonmedia_relationship_families_for_text(content)
+            if allowed:
+                families = families.intersection(allowed)
+            if not families:
                 continue
             evidence_id = getattr(item, "evidence_link_id", None)
             if not evidence_id:
@@ -4069,13 +4081,35 @@ def _qualified_nonmedia_relationship_basis_ids(evidence_groups):
             if evidence_id in seen:
                 continue
             seen.add(evidence_id)
-            quality = min(relevance, directness)
-            qualified.append((quality, evidence_id))
-    qualified.sort(key=lambda row: (-row[0], row[1]))
+            qualified.append({
+                "evidence_id": evidence_id,
+                "families": tuple(sorted(families)),
+                "quality": min(relevance, directness),
+                "relevance_score": relevance,
+                "directness_score": directness,
+                "content": str(content or ""),
+            })
+
+    qualified.sort(
+        key=lambda row: (-row["quality"], row["evidence_id"])
+    )
     return tuple(
-        evidence_id
-        for _quality, evidence_id
-        in qualified[:_NONMEDIA_RELATIONSHIP_MAX_BASIS_CANDIDATES]
+        qualified[:_NONMEDIA_RELATIONSHIP_MAX_BASIS_CANDIDATES]
+    )
+
+
+def _qualified_nonmedia_relationship_basis_ids(
+    evidence_groups,
+    *,
+    allowed_families=(),
+):
+    """Return strongest qualified evidence IDs for compatibility and callers."""
+    return tuple(
+        row["evidence_id"]
+        for row in _qualified_nonmedia_relationship_candidates(
+            evidence_groups,
+            allowed_families=allowed_families,
+        )
     )
 
 
@@ -4263,6 +4297,24 @@ def _fake_nonmedia_relationship_unverified_result():
     }
 
 
+def _render_nonmedia_relationship_candidates(candidates, *, max_chars=900):
+    """Render only pre-qualified body evidence for the isolated non-media auditor."""
+    rendered = []
+    for row in candidates:
+        rendered.append({
+            "evidence_id": row["evidence_id"],
+            "relationship_families": list(row["families"]),
+            "stance": "REFUTES",
+            "relevance_score": row["relevance_score"],
+            "directness_score": row["directness_score"],
+            "content": _relationship_audit_excerpt(
+                row["content"],
+                max_chars=max_chars,
+            ),
+        })
+    return json.dumps(rendered, ensure_ascii=False)
+
+
 def _audit_fake_nonmedia_partial_truth_signal(
     original_claim,
     evaluator_result,
@@ -4276,33 +4328,39 @@ def _audit_fake_nonmedia_partial_truth_signal(
     independently accepts. The audit can classify the relationship, but it cannot
     expand the evidence whitelist or author user-facing factual prose.
     """
-    qualified_now = set(
-        _qualified_nonmedia_relationship_basis_ids(evidence_groups)
+    claim_families = _claim_nonmedia_relationship_families(original_claim)
+    if not claim_families:
+        return _fake_nonmedia_relationship_unverified_result()
+
+    qualified_candidates = _qualified_nonmedia_relationship_candidates(
+        evidence_groups,
+        allowed_families=claim_families,
     )
+    qualified_by_id = {
+        row["evidence_id"]: row for row in qualified_candidates
+    }
     eligible_ids = tuple(dict.fromkeys(
         value.strip()
         for value in eligible_basis_evidence_ids
         if (
             isinstance(value, str)
             and value.strip()
-            and value.strip() in qualified_now
+            and value.strip() in qualified_by_id
         )
     ))
     if not eligible_ids:
         return _fake_nonmedia_relationship_unverified_result()
 
-    compact_context = _bounded_structured_misleading_context(
-        (),
-        evidence_groups,
-        required_evidence_ids=eligible_ids,
+    eligible_candidates = tuple(
+        qualified_by_id[evidence_id] for evidence_id in eligible_ids
+    )
+    compact_context = _render_nonmedia_relationship_candidates(
+        eligible_candidates
     )
     if not compact_context or compact_context == "[]":
         return _fake_nonmedia_relationship_unverified_result()
 
-    compact_ids = _compact_relationship_evidence_ids(compact_context)
-    allowed_basis_ids = compact_ids.intersection(eligible_ids)
-    if not allowed_basis_ids:
-        return _fake_nonmedia_relationship_unverified_result()
+    allowed_basis_ids = set(eligible_ids)
 
     system_instructions = """
     Role: You are the TruthLens non-media FAKE-vs-MISLEADING relationship auditor.
@@ -4313,10 +4371,21 @@ def _audit_fake_nonmedia_partial_truth_signal(
     source-title labels alone, textual fact-check ratings as proof, or assumptions.
 
     The first evaluator returned FAKE. Deterministic code found a small set of
-    strong REFUTES evidence bodies that contain a high-precision status/process or
-    financial-transfer correction pattern. That trigger is NOT proof of partial
-    truth. Determine only the factual relationship between the exact submitted
-    proposition and the supplied evidence.
+    strong REFUTES evidence bodies whose relationship family also matches the
+    submitted claim. That trigger is NOT proof of partial truth. Determine only
+    the factual relationship between the exact submitted proposition and the
+    supplied evidence.
+
+    The only relationship families in this audit are:
+    - STATUS_PROCESS: the claim says a downstream legal/status effect followed
+      from a legislative or approval step. If an eligible passage explicitly
+      confirms that material step occurred but explicitly refutes the claimed
+      downstream legal/status effect, that is MATERIAL_MISDESCRIPTION rather than
+      FABRICATED_CORE.
+    - TRANSFER_RECIPIENT: the claim says a financial amount or funds were released,
+      transferred, or disbursed to a recipient. If an eligible passage explicitly
+      confirms the material release/amount but explicitly corrects the recipient,
+      that is MATERIAL_MISDESCRIPTION rather than FABRICATED_CORE.
 
     Choose MATERIAL_MISDESCRIPTION only when the cited eligible passage itself
     explicitly establishes BOTH:
@@ -4359,6 +4428,9 @@ def _audit_fake_nonmedia_partial_truth_signal(
         f"<claim>{original_claim}</claim>\n\n"
         f"<first_evaluator_verdict>{evaluator_result.get('verdict', 'FAKE')}"
         f"</first_evaluator_verdict>\n\n"
+        f"<claim_relationship_families>"
+        f"{json.dumps(sorted(claim_families))}"
+        f"</claim_relationship_families>\n\n"
         f"<eligible_relationship_basis_ids>"
         f"{json.dumps(sorted(allowed_basis_ids))}"
         f"</eligible_relationship_basis_ids>\n\n"
@@ -4895,10 +4967,13 @@ def evaluate_claim_with_persisted_evidence(
         if (
             parsed_result.get("verdict") == "FAKE"
             and official_fact_check_resolution == OFFICIAL_FACT_CHECK_RESOLUTION_NONE
-            and _claim_has_nonmedia_relationship_shape(original_claim)
         ):
+            nonmedia_claim_families = _claim_nonmedia_relationship_families(
+                original_claim
+            )
             nonmedia_basis_ids = _qualified_nonmedia_relationship_basis_ids(
-                evidence_groups
+                evidence_groups,
+                allowed_families=nonmedia_claim_families,
             )
             if nonmedia_basis_ids:
                 logger.info(
