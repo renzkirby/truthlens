@@ -3500,6 +3500,7 @@ def _bounded_structured_misleading_context(
     signal_ids,
     evidence_groups,
     *,
+    required_evidence_ids=(),
     max_items=6,
     max_chars=900,
 ):
@@ -3512,6 +3513,10 @@ def _bounded_structured_misleading_context(
     to distinguish FABRICATED_CORE from MATERIAL_MISDESCRIPTION.
     """
     signal_ids = {str(value) for value in signal_ids}
+    required_ids = {
+        str(value) for value in required_evidence_ids if value
+    }
+    retain_ids = signal_ids | required_ids
     candidates = []
     seen = set()
     for group in evidence_groups or ():
@@ -3541,6 +3546,7 @@ def _bounded_structured_misleading_context(
                 "relevance_score": relevance,
                 "directness_score": directness,
                 "structured_misleading_signal": evidence_id in signal_ids,
+                "_retain_for_relationship_audit": evidence_id in retain_ids,
                 "_quality": quality,
             })
 
@@ -3553,10 +3559,12 @@ def _bounded_structured_misleading_context(
         selected.append(item)
         selected_ids.add(item["evidence_id"])
 
-    # Every strict-equivalent structured signal must remain visible, even when
-    # there are more signals than the ordinary compact-item budget.
+    # Every strict-equivalent structured signal and every caller-required
+    # relationship candidate must remain visible, even when there are more than
+    # the ordinary compact-item budget. Required non-media candidates are retained
+    # without falsely labeling them as structured publisher-rating signals.
     for item in sorted(
-        (row for row in candidates if row["structured_misleading_signal"]),
+        (row for row in candidates if row["_retain_for_relationship_audit"]),
         key=lambda row: (-row["_quality"], row["evidence_id"]),
     ):
         add(item)
@@ -3599,6 +3607,7 @@ def _bounded_structured_misleading_context(
     for item in selected:
         clean_item = dict(item)
         clean_item.pop("_quality", None)
+        clean_item.pop("_retain_for_relationship_audit", None)
         rendered.append(clean_item)
     return json.dumps(rendered, ensure_ascii=False)
 
@@ -4108,8 +4117,13 @@ def _audit_fake_false_context_signal(
         if isinstance(value, str) and value.strip()
     ))
     compact_context = _bounded_structured_misleading_context(
-        eligible_ids if normalized_scope == "NONMEDIA_PARTIAL_TRUTH" else (),
+        (),
         evidence_groups,
+        required_evidence_ids=(
+            eligible_ids
+            if normalized_scope == "NONMEDIA_PARTIAL_TRUTH"
+            else ()
+        ),
     )
     if not compact_context or compact_context == "[]":
         return _fake_false_context_unverified_result()
