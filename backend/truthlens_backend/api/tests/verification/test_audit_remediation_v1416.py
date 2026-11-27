@@ -88,6 +88,10 @@ class VerificationAuditRemediationV1416Tests(SimpleTestCase):
             "NASA funding request 2026.",
             "Company X building permit Manila.",
             "WHO rating update 2026.",
+            "WHO report malaria 2026.",
+            "NASA lunar plan 2026.",
+            "Company X support program 2026.",
+            "Mars host mission 2026.",
         )
         for text in fragments:
             with self.subTest(text=text):
@@ -95,6 +99,17 @@ class VerificationAuditRemediationV1416Tests(SimpleTestCase):
                 self.assertFalse(
                     services.can_rescue_direct_text_insufficient_context(text)
                 )
+
+    def test_uppercase_acronyms_do_not_become_casefolded_predicates(self):
+        self.assertFalse(services._has_explicit_predicate_cue(
+            "NASA funding request 2026."
+        ))
+        self.assertFalse(services._has_explicit_direct_text_predicate_cue(
+            "NASA funding request 2026."
+        ))
+        self.assertTrue(services._has_explicit_direct_text_predicate_cue(
+            "NASA plans a lunar mission for 2027."
+        ))
 
     def test_common_present_tense_factual_predicates_are_recognized(self):
         for claim in (
