@@ -136,7 +136,7 @@ class VerificationAuditRemediationV1414Tests(SimpleTestCase):
                 groups,
             )
 
-        system_prompt = provider.call_args.args[0]
+        system_prompt = " ".join(provider.call_args.args[0].split())
         self.assertIn(
             "the reviewed proposition establishes that this audit concerns the "
             "same submitted proposition",
