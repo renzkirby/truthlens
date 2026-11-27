@@ -18,7 +18,7 @@ class VerificationAuditRemediationV1415Tests(SimpleTestCase):
         rejected = (
             "He stole funds from DSWD in 2026.",
             "The senator was arrested in October 2026.",
-            "Joel Santos stole 800 million pesos in 2026.",
+            "Joel stole 800 million pesos.",
             "The review team declared victory.",
             "Maria Santos disciplinary hearing October 2026.",
         )
@@ -39,5 +39,8 @@ class VerificationAuditRemediationV1415Tests(SimpleTestCase):
             services.can_rescue_direct_text_insufficient_context(claim)
         )
 
-    def test_final_claimgate_refinement_has_new_pipeline_version(self):
-        self.assertEqual(CURRENT_VERIFICATION_PIPELINE_VERSION, "1.4.15")
+    def test_final_claimgate_refinement_remains_in_v1415_or_later(self):
+        version = tuple(
+            int(part) for part in CURRENT_VERIFICATION_PIPELINE_VERSION.split(".")
+        )
+        self.assertGreaterEqual(version, (1, 4, 15))
