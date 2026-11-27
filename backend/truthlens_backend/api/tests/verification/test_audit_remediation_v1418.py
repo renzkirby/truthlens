@@ -149,8 +149,6 @@ class VerificationAuditRemediationV1418Tests(SimpleTestCase):
             "relationship": "MATERIAL_MISDESCRIPTION",
             "basis_kind": "PARTIAL_TRUTH",
             "basis_evidence_ids": [evidence_id],
-            "reasoning": "INVENTED FREE-FORM AUDITOR EXPLANATION",
-            "summary": "INVENTED FREE-FORM AUDITOR SUMMARY",
         }
 
         with patch(
@@ -167,11 +165,40 @@ class VerificationAuditRemediationV1418Tests(SimpleTestCase):
         self.assertEqual(result["verdict"], "MISLEADING")
         self.assertEqual(result["contextual_basis_kind"], "PARTIAL_TRUTH")
         self.assertEqual(result["contextual_basis_evidence_ids"], [evidence_id])
-        self.assertNotIn("INVENTED", result["reasoning"])
-        self.assertNotIn("INVENTED", result["summary"])
         audit_prompt = provider.call_args_list[1].args[1]
         self.assertIn("<eligible_relationship_basis_ids>", audit_prompt)
         self.assertIn(evidence_id, audit_prompt)
+
+    def test_nonmedia_audit_rejects_freeform_extra_fields(self):
+        evidence_id = "7f7f7f7f-7777-7777-7777-777777777777"
+        groups = [_group(_item(
+            evidence_id,
+            content=(
+                "Divorce remains illegal. The House approved House Bill No. "
+                "9349, but the remaining legislative steps were not completed."
+            ),
+            relevance=0.97,
+            directness=0.94,
+        ))]
+        audited = {
+            "relationship": "MATERIAL_MISDESCRIPTION",
+            "basis_kind": "PARTIAL_TRUTH",
+            "basis_evidence_ids": [evidence_id],
+            "reasoning": "Provider-authored factual prose must not be accepted here.",
+        }
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            side_effect=[json.dumps(self.initial_fake), json.dumps(audited)],
+        ):
+            result = services.evaluate_claim_with_persisted_evidence(
+                "Divorce became legal after the House passed the bill.",
+                "Persisted assessed evidence.",
+                evidence_groups=groups,
+            )
+
+        self.assertEqual(result["verdict"], "UNVERIFIED")
+        self.assertEqual(result["confidence_score"], 0)
 
     def test_nonmedia_audit_rejects_unqualified_visible_basis_id(self):
         qualified_id = "88888888-8888-8888-8888-888888888888"
@@ -324,5 +351,23 @@ class VerificationAuditRemediationV1418Tests(SimpleTestCase):
         self.assertFalse(validate_pilot_response(
             "structured_misleading_audit",
             json.dumps(rejected),
+            prompt,
+        ))
+        wrong_kind = {
+            **accepted,
+            "basis_kind": "FALSE_CONTEXT",
+        }
+        extra_field = {
+            **accepted,
+            "reasoning": "Provider-authored prose is not part of this contract.",
+        }
+        self.assertFalse(validate_pilot_response(
+            "structured_misleading_audit",
+            json.dumps(wrong_kind),
+            prompt,
+        ))
+        self.assertFalse(validate_pilot_response(
+            "structured_misleading_audit",
+            json.dumps(extra_field),
             prompt,
         ))
