@@ -1869,6 +1869,18 @@ def _has_explicit_predicate_cue(value):
         "accepts", "accept", "increases", "increase", "decreases", "decrease",
         "rises", "rise", "falls", "fall", "lives", "live",
         "operates", "operate", "controls", "control",
+        # Common finite past forms. Keep these explicit rather than accepting every
+        # English -ed/-ing token, because nouns/adjectives such as "hearing",
+        # "meeting", "funding", or "United" must not manufacture a predicate.
+        "harbored", "harboured", "hosted", "existed", "orbited", "included",
+        "comprised", "constituted", "supported", "caused", "required",
+        "produced", "used", "served", "held", "remained", "reached",
+        "exceeded", "equaled", "equalled", "represented", "recognized",
+        "recognised", "planned", "sold", "bought", "sent", "became",
+        "called", "declared", "filed", "faced", "visited", "transferred",
+        "moved", "predicted", "showed", "depicted", "confirmed", "denied",
+        "rejected", "accepted", "increased", "decreased", "rose", "fell",
+        "lived", "operated", "controlled",
         # Filipino/Tagalog relation words commonly present in news claims.
         "ay", "may", "mayroon", "nasa", "naging", "ginawa", "gumawa",
         "gumagawa", "sinabi", "inanunsyo", "inilunsad", "pinangunahan",
@@ -1879,10 +1891,11 @@ def _has_explicit_predicate_cue(value):
     if any(token in explicit_predicates for token in tokens):
         return True
 
-    # Conservative morphology for common English and Filipino verb forms.
+    # Keep morphology only for the bounded Filipino/Tagalog patterns below.
+    # Generic English suffix matching is intentionally avoided: many common
+    # nouns/adjectives (for example "hearing", "meeting", "funding", "United")
+    # would otherwise make a keyword fragment look like a complete proposition.
     for token in tokens:
-        if len(token) >= 5 and token.endswith(("ed", "ing")):
-            return True
         if re.match(r"^(?:nag|mag|pinag|ipinag|naka|maka|pina|ipa)[a-z]+$", token):
             return True
         if re.match(r"^[bcdfghjklmnpqrstvwxyz](?:um|in)[a-z]+$", token):
