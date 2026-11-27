@@ -1909,8 +1909,8 @@ _DIRECT_TEXT_CONTEXT_RESCUE_MONTHS = frozenset({
 })
 _DIRECT_TEXT_CONTEXT_RESCUE_MIN_TOKENS = 5
 _DIRECT_TEXT_CONTEXT_RESCUE_UNRESOLVED_REFERENCE_RE = re.compile(
-    r"\b(?:he|she|they|him|her|them|it|this|these|those)\b"
-    r"|\bthe\s+(?:president|senator|governor|mayor|minister|secretary|"
+    r"^\s*(?:he|she|they|it|this|that|these|those)\b"
+    r"|^\s*the\s+(?:president|senator|governor|mayor|minister|secretary|"
     r"congressman|congresswoman|representative|official)\b",
     flags=re.IGNORECASE,
 )
