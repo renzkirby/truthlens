@@ -577,6 +577,37 @@ def _satire_aliases_from_prompt(user_prompt):
 def _relationship_evidence_ids_from_prompt(user_prompt):
     if not isinstance(user_prompt, str):
         return set()
+
+    # Non-media partial-truth arbitration supplies a deterministic whitelist.
+    # When present, provider output may cite only those pre-qualified IDs rather
+    # than any other evidence item that happens to be visible in the dossier.
+    eligible_start_tag = "<eligible_relationship_basis_ids>"
+    eligible_end_tag = "</eligible_relationship_basis_ids>"
+    eligible_start = user_prompt.find(eligible_start_tag)
+    eligible_end = user_prompt.find(
+        eligible_end_tag,
+        eligible_start + len(eligible_start_tag),
+    )
+    if eligible_start >= 0 and eligible_end >= 0:
+        try:
+            ids = json.loads(
+                user_prompt[
+                    eligible_start + len(eligible_start_tag):eligible_end
+                ]
+            )
+        except (TypeError, ValueError):
+            return set()
+        if (
+            not isinstance(ids, list)
+            or any(
+                not isinstance(value, str) or not value.strip()
+                for value in ids
+            )
+            or len(set(ids)) != len(ids)
+        ):
+            return set()
+        return {value.strip() for value in ids}
+
     for start_tag, end_tag in (
         ("<structured_misleading_candidates>", "</structured_misleading_candidates>"),
         ("<assessed_candidates>", "</assessed_candidates>"),
