@@ -43,8 +43,11 @@ class VerificationAuditRemediationV1417Tests(SimpleTestCase):
             "contextual_basis_evidence_ids": [],
         }
 
-    def test_v1417_pipeline_version(self):
-        self.assertEqual(CURRENT_VERIFICATION_PIPELINE_VERSION, "1.4.17")
+    def test_v1417_pipeline_version_or_later(self):
+        version = tuple(
+            int(part) for part in CURRENT_VERIFICATION_PIPELINE_VERSION.split(".")
+        )
+        self.assertGreaterEqual(version, (1, 4, 17))
 
     def test_evidence_context_trigger_is_narrow_and_quality_gated(self):
         contextual = _group(_item(
