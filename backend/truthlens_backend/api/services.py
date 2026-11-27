@@ -4015,13 +4015,13 @@ def _fake_false_context_unverified_result():
         "reasoning": (
             "The persisted evidence contradicts the submitted claim, but the "
             "available relationship audit could not safely distinguish a fabricated "
-            "core from genuine material presented in a materially false context."
+            "core from a genuine factual substrate that was materially misdescribed."
         ),
         "verdict": "UNVERIFIED",
         "summary": (
             "The evidence contradicts the claim, but does not establish clearly "
-            "enough whether the core assertion was fabricated or genuine material "
-            "was materially recontextualized."
+            "enough whether the core assertion was fabricated or a genuine factual "
+            "component was materially misdescribed."
         ),
         "confidence_score": 0,
         "score_context": (
@@ -4163,6 +4163,14 @@ def _audit_fake_false_context_signal(
         audited = _parse_llm_json(response_text)
         if not isinstance(audited, dict):
             raise ValueError("false-context audit response was not a JSON object")
+        if (
+            normalized_scope == "NONMEDIA_PARTIAL_TRUTH"
+            and set(audited)
+            != {"relationship", "basis_kind", "basis_evidence_ids"}
+        ):
+            raise ValueError(
+                "non-media relationship audit returned unexpected fields"
+            )
         relationship = audited.get("relationship")
         basis_kind = audited.get("basis_kind", "NONE")
         raw_basis_ids = audited.get("basis_evidence_ids", [])
