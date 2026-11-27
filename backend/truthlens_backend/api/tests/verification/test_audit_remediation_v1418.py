@@ -215,6 +215,39 @@ class VerificationAuditRemediationV1418Tests(SimpleTestCase):
         self.assertIn(evidence_id, audit_prompt)
         self.assertIn('"structured_misleading_signal": false', audit_prompt)
 
+    def test_transfer_recipient_partial_truth_reaches_nonmedia_audit(self):
+        evidence_id = "78787878-7878-7878-7878-787878787878"
+        groups = [_group(_item(
+            evidence_id,
+            content=(
+                "The Department of Budget and Management released 64.9% of the "
+                "2025 budget, but these funds went to various government agencies, "
+                "not the president."
+            ),
+            relevance=1.0,
+            directness=1.0,
+        ))]
+        audited = {
+            "relationship": "MATERIAL_MISDESCRIPTION",
+            "basis_kind": "PARTIAL_TRUTH",
+            "basis_evidence_ids": [evidence_id],
+        }
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            side_effect=[json.dumps(self.initial_fake), json.dumps(audited)],
+        ) as provider:
+            result = services.evaluate_claim_with_persisted_evidence(
+                "₱4.1 trillion of the 2025 national budget was released to the president.",
+                "Persisted assessed evidence.",
+                evidence_groups=groups,
+            )
+
+        self.assertEqual(provider.call_count, 2)
+        self.assertEqual(result["verdict"], "MISLEADING")
+        self.assertEqual(result["contextual_basis_kind"], "PARTIAL_TRUTH")
+        self.assertEqual(result["contextual_basis_evidence_ids"], [evidence_id])
+
     def test_nonmedia_audit_rejects_freeform_extra_fields(self):
         evidence_id = "7f7f7f7f-7777-7777-7777-777777777777"
         groups = [_group(_item(
