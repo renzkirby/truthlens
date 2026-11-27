@@ -3506,8 +3506,9 @@ def _bounded_structured_misleading_context(
 ):
     """Render a compact but stance-diverse relationship-audit dossier.
 
-    Strict-equivalent structured signals are always retained. The remaining
-    budget deliberately preserves the strongest SUPPORTS, CONTEXT, and REFUTES
+    Strict-equivalent structured signals and caller-required relationship
+    candidates are always retained. The remaining budget deliberately preserves
+    the strongest SUPPORTS, CONTEXT, and REFUTES
     items before filling by quality. This prevents a large set of same-direction
     refutations from crowding out the genuine-substrate/context evidence needed
     to distinguish FABRICATED_CORE from MATERIAL_MISDESCRIPTION.
@@ -3935,6 +3936,7 @@ def _evidence_needs_fake_false_context_audit(evidence_groups):
 
 
 _NONMEDIA_RELATIONSHIP_QUALITY_FLOOR = 0.85
+_NONMEDIA_RELATIONSHIP_MAX_BASIS_CANDIDATES = 3
 
 _NONMEDIA_STATUS_SUBSTRATE_PATTERNS = (
     r"\b(?:house|senate|congress|chamber)\b.{0,180}\b(?:passed|approved|transmitted)\b",
@@ -4067,8 +4069,14 @@ def _qualified_nonmedia_relationship_basis_ids(evidence_groups):
             if evidence_id in seen:
                 continue
             seen.add(evidence_id)
-            qualified.append(evidence_id)
-    return tuple(qualified)
+            quality = min(relevance, directness)
+            qualified.append((quality, evidence_id))
+    qualified.sort(key=lambda row: (-row[0], row[1]))
+    return tuple(
+        evidence_id
+        for _quality, evidence_id
+        in qualified[:_NONMEDIA_RELATIONSHIP_MAX_BASIS_CANDIDATES]
+    )
 
 
 def _fake_false_context_unverified_result():
