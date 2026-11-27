@@ -48,6 +48,18 @@ class VerificationAuditRemediationV1418Tests(SimpleTestCase):
         self.assertEqual(CURRENT_VERIFICATION_PIPELINE_VERSION, "1.4.18")
 
     def test_nonmedia_claim_shape_gate_accepts_only_targeted_relationships(self):
+        self.assertEqual(
+            services._claim_nonmedia_relationship_families(
+                "Divorce was legalized after the House passed an absolute divorce bill."
+            ),
+            frozenset({"STATUS_PROCESS"}),
+        )
+        self.assertEqual(
+            services._claim_nonmedia_relationship_families(
+                "₱4.1 trillion of the national budget was released to the president."
+            ),
+            frozenset({"TRANSFER_RECIPIENT"}),
+        )
         self.assertTrue(services._claim_has_nonmedia_relationship_shape(
             "Divorce was legalized after the House passed an absolute divorce bill."
         ))
@@ -223,9 +235,12 @@ class VerificationAuditRemediationV1418Tests(SimpleTestCase):
             "textual fact-check ratings as proof",
             normalized_audit_system,
         )
+        self.assertIn("<claim_relationship_families>", audit_prompt)
+        self.assertIn("STATUS_PROCESS", audit_prompt)
         self.assertIn("<eligible_relationship_basis_ids>", audit_prompt)
         self.assertIn(evidence_id, audit_prompt)
-        self.assertIn('"structured_misleading_signal": false', audit_prompt)
+        self.assertIn('"relationship_families": ["STATUS_PROCESS"]', audit_prompt)
+        self.assertNotIn("structured_misleading_signal", audit_prompt)
 
     def test_transfer_recipient_partial_truth_reaches_nonmedia_audit(self):
         evidence_id = "78787878-7878-7878-7878-787878787878"
@@ -415,6 +430,119 @@ class VerificationAuditRemediationV1418Tests(SimpleTestCase):
 
         self.assertEqual(provider.call_count, 1)
         self.assertEqual(result["verdict"], "FAKE")
+
+    def test_status_claim_does_not_use_transfer_recipient_evidence(self):
+        groups = [_group(_item(
+            "cdcdcdcd-cdcd-cdcd-cdcd-cdcdcdcdcdcd",
+            content=(
+                "The Department released 64.9% of the budget, but these funds "
+                "went to government agencies, not the president."
+            ),
+            relevance=1.0,
+            directness=1.0,
+        ))]
+
+        self.assertEqual(
+            services._qualified_nonmedia_relationship_basis_ids(
+                groups,
+                allowed_families={"STATUS_PROCESS"},
+            ),
+            (),
+        )
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            return_value=json.dumps(self.initial_fake),
+        ) as provider:
+            result = services.evaluate_claim_with_persisted_evidence(
+                "Divorce was legalized after the House passed a bill.",
+                "Persisted assessed evidence.",
+                evidence_groups=groups,
+            )
+
+        self.assertEqual(provider.call_count, 1)
+        self.assertEqual(result["verdict"], "FAKE")
+
+    def test_transfer_claim_does_not_use_status_process_evidence(self):
+        groups = [_group(_item(
+            "dededede-dede-dede-dede-dededededede",
+            content=(
+                "Divorce remains illegal. The House approved House Bill No. "
+                "9349 on third reading."
+            ),
+            relevance=1.0,
+            directness=1.0,
+        ))]
+
+        self.assertEqual(
+            services._qualified_nonmedia_relationship_basis_ids(
+                groups,
+                allowed_families={"TRANSFER_RECIPIENT"},
+            ),
+            (),
+        )
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            return_value=json.dumps(self.initial_fake),
+        ) as provider:
+            result = services.evaluate_claim_with_persisted_evidence(
+                "₱4.1 trillion of the budget was released to the president.",
+                "Persisted assessed evidence.",
+                evidence_groups=groups,
+            )
+
+        self.assertEqual(provider.call_count, 1)
+        self.assertEqual(result["verdict"], "FAKE")
+
+    def test_nonmedia_audit_prompt_contains_only_prequalified_body_evidence(self):
+        qualified_id = "efefefef-efef-efef-efef-efefefefefef"
+        unrelated_id = "f0f0f0f0-f0f0-f0f0-f0f0-f0f0f0f0f0f0"
+        groups = [_group(
+            _item(
+                qualified_id,
+                title="Publisher rating label must not be sent",
+                content=(
+                    "Divorce remains illegal. The House approved House Bill No. "
+                    "9349 on third reading."
+                ),
+                relevance=1.0,
+                directness=1.0,
+            ),
+            _item(
+                unrelated_id,
+                title="Unrelated evidence title",
+                content=(
+                    "The Department released 64.9% of the budget, but these funds "
+                    "went to government agencies, not the president."
+                ),
+                relevance=1.0,
+                directness=1.0,
+            ),
+        )]
+        audited = {
+            "relationship": "MATERIAL_MISDESCRIPTION",
+            "basis_kind": "PARTIAL_TRUTH",
+            "basis_evidence_ids": [qualified_id],
+        }
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            side_effect=[json.dumps(self.initial_fake), json.dumps(audited)],
+        ) as provider:
+            result = services.evaluate_claim_with_persisted_evidence(
+                "Divorce was legalized after the House passed a bill.",
+                "Persisted assessed evidence.",
+                evidence_groups=groups,
+            )
+
+        self.assertEqual(result["verdict"], "MISLEADING")
+        audit_prompt = provider.call_args_list[1].args[1]
+        self.assertIn(qualified_id, audit_prompt)
+        self.assertNotIn(unrelated_id, audit_prompt)
+        self.assertNotIn("Publisher rating label must not be sent", audit_prompt)
+        self.assertNotIn("Unrelated evidence title", audit_prompt)
+        self.assertNotIn("publisher", audit_prompt.casefold())
 
     def test_ordinary_fabricated_claim_keeps_single_main_evaluator_call(self):
         groups = [_group(_item(
