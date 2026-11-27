@@ -22,7 +22,7 @@ class VerificationAuditRemediationTests(SimpleTestCase):
             return_value=json.dumps(payload),
         ) as call_llm:
             result = services.clean_ocr_text(
-                "School cafeterias should offer healthier food."
+                "Public libraries should stay open later."
             )
 
         self.assertEqual(result["cleaned_claim"], "OUT_OF_SCOPE")
@@ -30,10 +30,10 @@ class VerificationAuditRemediationTests(SimpleTestCase):
         for required in (
             "Un-attributed recommendations",
             "subjective preferences",
-            "School cafeterias should offer healthier food.",
-            "Chocolate ice cream tastes better than every other flavor.",
+            "Public libraries should stay open later.",
+            "Vanilla ice cream tastes better than chocolate.",
             "Do NOT use INSUFFICIENT_CONTEXT for a statement that is non-factual",
-            "WHO said schools should offer healthier food.",
+            "The health ministry said schools should serve healthier meals.",
         ):
             with self.subTest(required=required):
                 self.assertIn(required, prompt)
