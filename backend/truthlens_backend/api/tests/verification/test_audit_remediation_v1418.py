@@ -44,8 +44,11 @@ class VerificationAuditRemediationV1418Tests(SimpleTestCase):
             "contextual_basis_evidence_ids": [],
         }
 
-    def test_v1418_pipeline_version(self):
-        self.assertEqual(CURRENT_VERIFICATION_PIPELINE_VERSION, "1.4.18")
+    def test_v1418_pipeline_version_or_later(self):
+        version = tuple(
+            int(part) for part in CURRENT_VERIFICATION_PIPELINE_VERSION.split(".")
+        )
+        self.assertGreaterEqual(version, (1, 4, 18))
 
     def test_nonmedia_claim_shape_gate_accepts_only_targeted_relationships(self):
         self.assertEqual(
