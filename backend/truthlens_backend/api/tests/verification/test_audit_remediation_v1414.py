@@ -162,5 +162,8 @@ class VerificationAuditRemediationV1414Tests(SimpleTestCase):
             [signal_id],
         )
 
-    def test_final_validation_hardening_has_new_pipeline_version(self):
-        self.assertEqual(CURRENT_VERIFICATION_PIPELINE_VERSION, "1.4.14")
+    def test_final_validation_hardening_remains_in_v1414_or_later(self):
+        version = tuple(
+            int(part) for part in CURRENT_VERIFICATION_PIPELINE_VERSION.split(".")
+        )
+        self.assertGreaterEqual(version, (1, 4, 14))
