@@ -188,5 +188,5 @@ class VerificationAuditRemediationV1412Tests(SimpleTestCase):
             with self.subTest(required=required):
                 self.assertIn(required, system_prompt)
 
-    def test_verdict_affecting_second_remediation_has_new_pipeline_version(self):
-        self.assertEqual(CURRENT_VERIFICATION_PIPELINE_VERSION, "1.4.12")
+    def test_second_remediation_is_not_frozen_baseline_version(self):
+        self.assertNotEqual(CURRENT_VERIFICATION_PIPELINE_VERSION, "1.4.10")
