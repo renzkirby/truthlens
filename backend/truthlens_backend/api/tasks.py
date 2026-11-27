@@ -219,6 +219,7 @@ def _resolve_official_fact_check_rating_policy(
         "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
         "satire_evidence_ids": (),
         "misleading_evidence_ids": (),
+        "false_evidence_ids": (),
     }
     records = []
     for group in evidence_groups:
@@ -243,10 +244,12 @@ def _resolve_official_fact_check_rating_policy(
                 "evidence_link_id": str(evidence_link_id),
             })
 
-    # FALSE remains ordinary evidence unless paired with equivalent SATIRE.
-    # Unknown publisher labels remain ordinary evidence.
+    # Recognized structured ratings remain routing/provenance signals only.
+    # FALSE alone never determines the TruthLens verdict, but preserving its
+    # evidence ID prevents later provenance logic from erasing an equivalent
+    # factual contradiction. Unknown publisher labels remain ordinary evidence.
     if not any(
-        record["rating_kind"] in {"SATIRE", "MISLEADING"}
+        record["rating_kind"] in {"SATIRE", "MISLEADING", "FALSE"}
         for record in records
     ):
         return empty_policy
@@ -283,7 +286,7 @@ def _resolve_official_fact_check_rating_policy(
 
     equivalent_signal_records = []
     for record in records:
-        if record["rating_kind"] not in {"SATIRE", "MISLEADING"}:
+        if record["rating_kind"] not in {"SATIRE", "MISLEADING", "FALSE"}:
             continue
         match = equivalent(record["claim_text"])
         if match is None:
@@ -319,6 +322,10 @@ def _resolve_official_fact_check_rating_policy(
         record for record in equivalent_records
         if record["rating_kind"] == "MISLEADING"
     ]
+    equivalent_false = [
+        record for record in equivalent_records
+        if record["rating_kind"] == "FALSE"
+    ]
 
     # Preserve the existing SATIRE + explicit FALSE conflict policy. Any extra
     # equivalent rating makes the publisher signals non-deterministic.
@@ -330,6 +337,7 @@ def _resolve_official_fact_check_rating_policy(
                     item["evidence_link_id"] for item in equivalent_satire
                 ),
                 "misleading_evidence_ids": (),
+                "false_evidence_ids": (),
             }
         if equivalent_kinds == {"SATIRE", "FALSE"}:
             return {
@@ -338,18 +346,39 @@ def _resolve_official_fact_check_rating_policy(
                     item["evidence_link_id"] for item in equivalent_satire
                 ),
                 "misleading_evidence_ids": (),
+                "false_evidence_ids": tuple(
+                    item["evidence_link_id"] for item in equivalent_false
+                ),
             }
         return empty_policy
 
-    # Misleading is never a deterministic verdict. It becomes a contextual
-    # signal only when every equivalent recognized review agrees on that exact
-    # rating and no equivalent unknown/False review introduces ambiguity.
-    if equivalent_misleading and equivalent_kinds == {"MISLEADING"}:
+    # Misleading is never a deterministic verdict. FALSE and MISLEADING are
+    # publisher taxonomies, not contradictory facts, so preserve both signals
+    # and let the evidence-bound relationship audit decide whether the core is
+    # fabricated or a genuine substrate is materially misdescribed. Unknown
+    # labels or SATIRE/MISLEADING mixtures still fail closed to ordinary evidence.
+    if equivalent_misleading and equivalent_kinds in (
+        {"MISLEADING"},
+        {"MISLEADING", "FALSE"},
+    ):
         return {
             "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
             "satire_evidence_ids": (),
             "misleading_evidence_ids": tuple(
                 item["evidence_link_id"] for item in equivalent_misleading
+            ),
+            "false_evidence_ids": tuple(
+                item["evidence_link_id"] for item in equivalent_false
+            ),
+        }
+
+    if equivalent_false and equivalent_kinds == {"FALSE"}:
+        return {
+            "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+            "misleading_evidence_ids": (),
+            "false_evidence_ids": tuple(
+                item["evidence_link_id"] for item in equivalent_false
             ),
         }
 
@@ -365,32 +394,15 @@ def _evaluate_persisted_with_official_rating_policy(
     evidence_groups=(),
 ):
     misleading_ids = official_rating_policy["misleading_evidence_ids"]
-    if misleading_ids:
-        return evaluate_claim_with_persisted_evidence(
-            claim_text,
-            evidence_context,
-            article_stance,
-            official_rating_policy["resolution"],
-            official_rating_policy["satire_evidence_ids"],
-            misleading_ids,
-            evidence_groups=evidence_groups,
-        )
-    if (
-        official_rating_policy["resolution"]
-        == OFFICIAL_FACT_CHECK_RESOLUTION_NONE
-    ):
-        return evaluate_claim_with_persisted_evidence(
-            claim_text,
-            evidence_context,
-            article_stance,
-            evidence_groups=evidence_groups,
-        )
+    false_ids = official_rating_policy.get("false_evidence_ids", ())
     return evaluate_claim_with_persisted_evidence(
         claim_text,
         evidence_context,
         article_stance,
-        official_rating_policy["resolution"],
-        official_rating_policy["satire_evidence_ids"],
+        official_fact_check_resolution=official_rating_policy["resolution"],
+        official_satire_evidence_ids=official_rating_policy["satire_evidence_ids"],
+        official_misleading_evidence_ids=misleading_ids,
+        official_false_evidence_ids=false_ids,
         evidence_groups=evidence_groups,
     )
 
@@ -2209,6 +2221,7 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
                 "satire_evidence_ids": (),
                 "misleading_evidence_ids": (),
+                "false_evidence_ids": (),
             }
             precheck_fact_check_groups = ()
 
@@ -3351,6 +3364,7 @@ def url_fact_check_process(url, claim_id, triggered_by_id=None):
             "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
             "satire_evidence_ids": (),
             "misleading_evidence_ids": (),
+            "false_evidence_ids": (),
         }
         precheck_fact_check_groups = ()
 
