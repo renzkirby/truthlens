@@ -689,6 +689,16 @@ def _valid_small_decision(operation, raw, user_prompt=None):
         relationship = value.get("relationship")
         basis_kind = value.get("basis_kind", "NONE")
         basis_ids = value.get("basis_evidence_ids", [])
+        nonmedia_whitelist_active = (
+            isinstance(user_prompt, str)
+            and "<eligible_relationship_basis_ids>" in user_prompt
+        )
+        if (
+            nonmedia_whitelist_active
+            and set(value)
+            != {"relationship", "basis_kind", "basis_evidence_ids"}
+        ):
+            return False
         if relationship not in {
             "MATERIAL_MISDESCRIPTION",
             "FABRICATED_CORE",
@@ -703,8 +713,13 @@ def _valid_small_decision(operation, raw, user_prompt=None):
             return False
         if relationship == "MATERIAL_MISDESCRIPTION":
             allowed_ids = _relationship_evidence_ids_from_prompt(user_prompt)
+            allowed_kinds = (
+                {"PARTIAL_TRUTH"}
+                if nonmedia_whitelist_active
+                else {"MISSING_CONTEXT", "PARTIAL_TRUTH", "FALSE_CONTEXT"}
+            )
             return (
-                basis_kind in {"MISSING_CONTEXT", "PARTIAL_TRUTH", "FALSE_CONTEXT"}
+                basis_kind in allowed_kinds
                 and bool(basis_ids)
                 and set(basis_ids).issubset(allowed_ids)
             )
