@@ -3951,6 +3951,58 @@ _NONMEDIA_TRANSFER_CORRECTION_PATTERNS = (
 )
 
 
+_NONMEDIA_STATUS_CLAIM_EFFECT_PATTERNS = (
+    r"\blegali[sz](?:e|ed|es|ing)\b",
+    r"\bbecame (?:legal|law)\b",
+    r"\bmade legal\b",
+    r"\bbecame (?:illegal|banned)\b",
+)
+_NONMEDIA_STATUS_CLAIM_PROCESS_PATTERNS = (
+    r"\b(?:bill|measure|proposal)\b",
+    r"\b(?:house|senate|congress|chamber)\b",
+    r"\b(?:passed|approved|transmitted)\b",
+)
+_NONMEDIA_TRANSFER_CLAIM_ACTION_PATTERNS = (
+    r"\b(?:released|transferred|disbursed) to\b",
+    r"\b(?:released|transferred|disbursed)\b.{0,80}\bto\b",
+)
+_NONMEDIA_TRANSFER_CLAIM_FINANCIAL_PATTERNS = (
+    r"\b(?:funds?|budget|appropriations?|pesos?|trillion|billion|million)\b",
+    r"₱",
+)
+
+
+def _claim_has_nonmedia_relationship_shape(value):
+    """Gate non-media arbitration to claims that assert the targeted relationship.
+
+    This is a recall-limiting safety gate only. It never assigns a verdict.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return False
+    normalized = " ".join(value.split()).casefold()
+    status_shape = (
+        any(
+            re.search(pattern, normalized)
+            for pattern in _NONMEDIA_STATUS_CLAIM_EFFECT_PATTERNS
+        )
+        and any(
+            re.search(pattern, normalized)
+            for pattern in _NONMEDIA_STATUS_CLAIM_PROCESS_PATTERNS
+        )
+    )
+    transfer_shape = (
+        any(
+            re.search(pattern, normalized)
+            for pattern in _NONMEDIA_TRANSFER_CLAIM_ACTION_PATTERNS
+        )
+        and any(
+            re.search(pattern, normalized)
+            for pattern in _NONMEDIA_TRANSFER_CLAIM_FINANCIAL_PATTERNS
+        )
+    )
+    return status_shape or transfer_shape
+
+
 def _text_has_qualified_nonmedia_relationship_correction(value):
     """Return whether one evidence body contains a high-precision substrate/correction pair.
 
@@ -4695,6 +4747,7 @@ def evaluate_claim_with_persisted_evidence(
         if (
             parsed_result.get("verdict") == "FAKE"
             and official_fact_check_resolution == OFFICIAL_FACT_CHECK_RESOLUTION_NONE
+            and _claim_has_nonmedia_relationship_shape(original_claim)
         ):
             nonmedia_basis_ids = _qualified_nonmedia_relationship_basis_ids(
                 evidence_groups
