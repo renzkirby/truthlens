@@ -2135,6 +2135,35 @@ _GFC_PROPOSITION_RELATIONSHIPS = frozenset({
     "UNDETERMINED",
 })
 
+_GFC_COMMUTATIVE_PURPOSE_TRIGGER_RE = re.compile(
+    r"\b(?:to|in order to)\s+(?:commemorat\w*|honou?r\w*|memorializ\w*)\b"
+    r"|\bas\s+(?:a\s+)?tribute\s+to\b",
+    flags=re.IGNORECASE,
+)
+_GFC_COMMUTATIVE_PURPOSE_SEMANTIC_RE = re.compile(
+    r"\b(?:commemorat\w*|honou?r\w*|memorializ\w*|tribute)\b",
+    flags=re.IGNORECASE,
+)
+
+
+def _missing_material_gfc_purpose(submitted_claim, reviewed_claim):
+    """Return a high-precision missing-purpose reason for terminal GFC coverage.
+
+    Only explicit commemorative/tribute purpose language is guarded
+    deterministically. Broader purpose/causal relationships remain part of the
+    LLM proposition-coverage contract below.
+    """
+    if not isinstance(submitted_claim, str) or not isinstance(reviewed_claim, str):
+        return None
+    if not _GFC_COMMUTATIVE_PURPOSE_TRIGGER_RE.search(submitted_claim):
+        return None
+    if _GFC_COMMUTATIVE_PURPOSE_SEMANTIC_RE.search(reviewed_claim):
+        return None
+    return (
+        "The submitted claim contains an explicit commemorative/tribute purpose "
+        "that the reviewed claim does not cover."
+    )
+
 
 def _gfc_coverage_result(candidate_rows, *, reason_code):
     covered_count = sum(
@@ -2213,9 +2242,14 @@ For every candidate choose exactly one relationship:
 
 Compare all truth-relevant slots: actor/subject, predicate/action, object/target,
 date/time period, location, quantity/statistic, attribution/speaker,
-polarity/negation, causal relationship, certainty, and other material qualifiers.
-A difference is material whenever it could change the truth value of the submitted
-claim. Topical similarity or the same real-world event is never enough by itself.
+polarity/negation, causal relationship, purpose/rationale/intent, certainty, and
+other material qualifiers. A purpose clause such as "to commemorate", "to honor",
+"in order to", "because", or "for the purpose of" is material when it explains
+why the claimed action occurred. A reviewed claim that establishes the action
+but omits or changes such a submitted purpose does NOT fully cover the submitted
+proposition. A difference is material whenever it could change the truth value
+of the submitted claim. Topical similarity or the same real-world event is never
+enough by itself.
 
 Return ONLY a JSON object with exactly this shape:
 {"candidates":[
@@ -2294,6 +2328,17 @@ Never output a factual verdict."""
         normalized_rows = [by_index[index] for index in range(len(candidates))]
         for index, row in enumerate(normalized_rows):
             row["reviewed_claim"] = candidates[index]
+            if row["relationship"] == "EQUIVALENT_OR_COVERS":
+                purpose_difference = _missing_material_gfc_purpose(
+                    original_text,
+                    candidates[index],
+                )
+                if purpose_difference:
+                    row["relationship"] = "PARTIAL_OR_RELATED"
+                    row["reasoning"] = (
+                        f"{row['reasoning']} {purpose_difference}"
+                    ).strip()
+                    row["material_differences"] = [purpose_difference]
         if any(
             row["relationship"] == "EQUIVALENT_OR_COVERS"
             for row in normalized_rows
