@@ -1530,6 +1530,10 @@ def clean_ocr_text(raw_text):
     9. INSUFFICIENT CONTEXT DETECTION (CRITICAL GATEKEEPER):
     - If the text DOES contain a factual assertion or rumor, but a material person, organization, event, transaction, attribution, object, place, time reference, or other referent is too ambiguous to identify one stable proposition without guessing, set "cleaned_claim" to exactly "INSUFFICIENT_CONTEXT".
     - Use this only when proceeding would require inventing or assuming a material detail that could change which real-world proposition is being checked.
+    - A factual claim is sufficiently specific when the submitted text itself fixes a stable actor or organization, the asserted action or relationship, and the material event, process, object, or proceeding being discussed. Do not demand extra background merely because more detail could make retrieval easier.
+    - Named or otherwise clearly scoped proceedings, programs, cases, policies, reviews, or events can supply the needed referent. If the actor and event/process are already stable, do not require an additional date, location, source name, or quotation unless omitting it would create materially different propositions.
+    - A date is NOT required for a stable state-of-the-world claim. A specifically named organization, place, product/model, scientific object, celestial body, case, program, or other identifiable entity plus an explicit factual state/action can be verified without a calendar date.
+    - Do not use INSUFFICIENT_CONTEXT merely because the claim is scientific, unusual, difficult to verify, or likely to end as UNVERIFIED. Use it only when a material referent or proposition is genuinely unresolved.
     - Examples that require more context include: "Joel stole 800 million pesos", "Sara gave back the money she stole", "The senator was arrested yesterday", and "He stole government funds".
     - Do NOT infer that a first name, surname, title, pronoun, abbreviation, organization, or vague event refers to a particular real-world entity merely because one interpretation seems likely.
     - Do NOT require a date, location, or other detail when the proposition is already stable and identifiable. For example, "The Philippines has 82 provinces" is sufficiently specific.
@@ -1823,49 +1827,147 @@ def _material_entity_anchor_tokens(value):
     return anchors
 
 
-def _has_explicit_predicate_cue(value):
-    """Conservatively detect whether source-bounded text states a relation/action.
+_HIGH_CONFIDENCE_FACTUAL_PREDICATES = frozenset({
+    # Auxiliaries/copulas/modals establish a grammatical predicate frame.
+    "am", "is", "are", "was", "were", "has", "have", "had",
+    "does", "do", "did", "will", "would", "can", "could", "may",
+    "might", "must", "shall", "should",
+    # High-confidence finite lexical verb forms used in factual claims.
+    "stole", "built", "made", "led", "said", "says", "gave", "took",
+    "won", "lost", "died", "killed", "arrested", "convicted", "launched",
+    "opened", "signed", "approved", "banned", "claimed", "announced",
+    "reported", "owns", "received", "paid", "contains", "harbors",
+    "harbours", "hosts", "exists", "orbits", "includes", "comprises",
+    "constitutes", "supports", "causes", "requires", "produces", "uses",
+    "serves", "holds", "remains", "reaches", "exceeds", "equals",
+    "represents", "recognizes", "recognises", "makes", "plans", "sells",
+    "buys", "gives", "sends", "becomes", "leads", "calls", "declares",
+    "files", "faces", "wins", "loses", "visits", "transfers", "moves",
+    "predicts", "forecasts", "shows", "depicts", "confirms", "denies",
+    "rejects", "accepts", "increases", "decreases", "rises", "falls",
+    "lives", "operates", "controls",
+    # Explicit finite/past forms. Keep these enumerated rather than accepting
+    # every English -ed/-ing token, because topic nouns/adjectives such as
+    # "hearing", "meeting", "funding", and "United" are common.
+    "harbored", "harboured", "hosted", "existed", "orbited", "included",
+    "comprised", "constituted", "supported", "caused", "required",
+    "produced", "used", "served", "held", "remained", "reached",
+    "exceeded", "equaled", "equalled", "represented", "recognized",
+    "recognised", "planned", "sold", "bought", "sent", "became",
+    "called", "declared", "filed", "faced", "visited", "transferred",
+    "moved", "predicted", "showed", "depicted", "confirmed", "denied",
+    "rejected", "accepted", "increased", "decreased", "rose", "fell",
+    "lived", "operated", "controlled",
+    # Filipino/Tagalog finite relation/action forms.
+    "ay", "may", "mayroon", "nasa", "naging", "ginawa", "gumawa",
+    "gumagawa", "sinabi", "inanunsyo", "inilunsad", "pinangunahan",
+    "nagtayo", "magtayo", "nagpatayo", "pinatayo", "dumaan",
+    "dumadaan", "nagbigay", "ibinigay", "kinuha", "ninakaw",
+    "inaresto", "hinatulan",
+})
 
-    This is used only after the strict ClaimGate has already returned
-    INSUFFICIENT_CONTEXT. False negatives therefore abstain to UNVERIFIED rather
-    than blocking normal verification.
+
+def _predicate_tokens_preserving_acronyms(value):
+    """Return case-folded predicate candidates without treating acronyms as words."""
+    if not isinstance(value, str):
+        return []
+
+    raw_tokens = [
+        token.strip("'’-")
+        for token in re.findall(r"\b[\w'’.-]+\b", value, flags=re.UNICODE)
+        if token.strip("'’-")
+    ]
+    return [
+        raw.casefold()
+        for raw in raw_tokens
+        if not (
+            len(raw) >= 2
+            and any(character.isalpha() for character in raw)
+            and raw.isupper()
+        )
+    ]
+
+
+def _has_high_confidence_predicate_cue(value):
+    """Conservatively detect a finite factual relation/action.
+
+    This is used only after strict ClaimGate abstention. Precision is preferred
+    over recall: ambiguous bare noun/verb forms such as "report", "plan",
+    "support", "host", "file", or "claim" do not qualify by themselves.
     """
-    tokens = _source_bounded_tokens(value)
-    if not tokens:
-        return False
-
-    explicit_predicates = {
-        # English auxiliaries/copulas and common factual verbs.
-        "am", "is", "are", "was", "were", "be", "been", "being",
-        "has", "have", "had", "does", "do", "did", "will", "would",
-        "can", "could", "may", "might", "must", "shall", "should",
-        "stole", "steal", "stolen", "built", "build", "made", "make",
-        "led", "lead", "said", "say", "says", "gave", "give", "given",
-        "took", "take", "taken", "won", "win", "lost", "lose",
-        "died", "die", "killed", "kill", "arrested", "arrest",
-        "convicted", "convict", "launched", "launch", "opened", "open",
-        "signed", "sign", "approved", "approve", "banned", "ban",
-        "claimed", "claim", "announced", "announce", "reported", "report",
-        "owns", "own", "received", "receive", "paid", "pay",
-        # Filipino/Tagalog relation words commonly present in news claims.
-        "ay", "may", "mayroon", "nasa", "naging", "ginawa", "gumawa",
-        "gumagawa", "sinabi", "inanunsyo", "inilunsad", "pinangunahan",
-        "nagtayo", "magtayo", "nagpatayo", "pinatayo", "dumaan",
-        "dumadaan", "nagbigay", "ibinigay", "kinuha", "ninakaw",
-        "inaresto", "hinatulan",
-    }
-    if any(token in explicit_predicates for token in tokens):
+    predicate_tokens = _predicate_tokens_preserving_acronyms(value)
+    if any(token in _HIGH_CONFIDENCE_FACTUAL_PREDICATES for token in predicate_tokens):
         return True
 
-    # Conservative morphology for common English and Filipino verb forms.
-    for token in tokens:
-        if len(token) >= 5 and token.endswith(("ed", "ing")):
-            return True
+    # Keep only bounded Filipino/Tagalog morphology. Avoid generic English
+    # suffix rules and acronym collisions such as NASA -> "nasa".
+    for token in predicate_tokens:
         if re.match(r"^(?:nag|mag|pinag|ipinag|naka|maka|pina|ipa)[a-z]+$", token):
             return True
         if re.match(r"^[bcdfghjklmnpqrstvwxyz](?:um|in)[a-z]+$", token):
             return True
     return False
+
+
+def _has_explicit_predicate_cue(value):
+    """Compatibility helper for source-bounded fallback completeness checks."""
+    return _has_high_confidence_predicate_cue(value)
+
+
+def _has_explicit_direct_text_predicate_cue(value):
+    """Strict predicate check for direct-text rescue after ClaimGate abstains."""
+    return _has_high_confidence_predicate_cue(value)
+
+
+_DIRECT_TEXT_CONTEXT_RESCUE_MONTHS = frozenset({
+    "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december",
+})
+_DIRECT_TEXT_CONTEXT_RESCUE_MIN_TOKENS = 5
+_DIRECT_TEXT_CONTEXT_RESCUE_UNRESOLVED_REFERENCE_RE = re.compile(
+    r"^\s*(?:he|she|they|it|this|that|these|those)\b"
+    r"|^\s*the\s+(?:president|senator|governor|mayor|minister|secretary|"
+    r"congressman|congresswoman|representative|official)\b",
+    flags=re.IGNORECASE,
+)
+
+
+def can_rescue_direct_text_insufficient_context(value):
+    """Recognize a stable direct-text proposition after a strict gate abstains.
+
+    This helper does not decide truth and never runs on the normal claimable path.
+    It only prevents a false INSUFFICIENT_CONTEXT result when the user's exact text
+    is already structurally self-contained enough to search safely.
+
+    Rescue requires:
+    - a complete-looking direct-text proposition of at least a few tokens;
+    - an explicit factual predicate/state/relation;
+    - at least one non-temporal named identity anchor; and
+    - no unresolved personal/deictic pronoun or bare generic public-role referent.
+
+    A calendar date is deliberately NOT required. Evidence difficulty and likely
+    UNVERIFIED outcomes belong downstream, not in the claimability gate.
+    """
+    if not isinstance(value, str):
+        return False
+    normalized = " ".join(value.split())
+    if not normalized or len(normalized) > _DIRECT_TEXT_FIDELITY_MAX_CHARS:
+        return False
+
+    tokens = _source_bounded_tokens(normalized)
+    if len(tokens) < _DIRECT_TEXT_CONTEXT_RESCUE_MIN_TOKENS:
+        return False
+    if _DIRECT_TEXT_CONTEXT_RESCUE_UNRESOLVED_REFERENCE_RE.search(normalized):
+        return False
+    if not _has_explicit_direct_text_predicate_cue(normalized):
+        return False
+
+    anchors = {
+        token
+        for token in _material_entity_anchor_tokens(normalized)
+        if token not in _DIRECT_TEXT_CONTEXT_RESCUE_MONTHS
+    }
+    return bool(anchors)
 
 
 def _bound_noneditable_fallback_to_source(result, source_text):
@@ -2627,6 +2729,7 @@ def build_persisted_evidence_prompt(
 
     VERDICT RULES:
     - FACT requires explicit support for the claim in the evidence.
+    - FACT also requires modal and epistemic entailment. Evidence that says a proposition may, might, or could be true; is hypothetical, theoretical, proposed, possible, or only a candidate; or is conditional on phrases such as "if X exists" does NOT establish a categorical submitted claim that it is actually true, exists, or occurred. Such evidence is contextual for the stronger categorical claim unless another supplied passage explicitly establishes actuality. If the dossier establishes only possibility, candidacy, or theory while actuality remains unconfirmed, return UNVERIFIED.
     - FAKE requires affirmative contradiction, fabrication, or false attribution.
       Failure to corroborate a claim alone is not sufficient for FAKE.
     - Absence of confirmation is not confirmation of absence. Evidence saying the
@@ -3945,6 +4048,21 @@ def _audit_structured_misleading_signal(
       materially changing the meaning of genuine same-source/content material. If
       yes, choose MATERIAL_MISDESCRIPTION. If the asserted words/action were simply
       invented without such a genuine substrate, choose FABRICATED_CORE.
+    - A strict-equivalent ClaimReview rating does not decide the verdict, but the
+      reviewed proposition establishes that this audit concerns the same submitted
+      proposition. Corrective passages may establish a material misdescription by
+      showing the real legal, administrative, custody, eligibility, status, or
+      process relationship even when they do not repeat the misleading wording.
+    - Treat a materially false voluntary-versus-mandatory or status framing as
+      MATERIAL_MISDESCRIPTION when the evidence establishes the same underlying
+      event/process. Examples include portraying required custody, rehabilitation,
+      compliance, or another legal/administrative process as a discretionary
+      promise, favor, reward, or voluntary benefit when that difference changes the
+      ordinary factual impression of the submitted claim.
+    - Do not choose INSUFFICIENT_OR_CONFLICTING merely because corrective evidence
+      describes the actual status/process rather than quoting the misleading phrase,
+      when the strict-equivalent signal fixes claim identity and the persisted
+      evidence establishes the corrected relationship.
     - FULLY_SUPPORTED: every material assertion in the submitted proposition is
       explicitly supported by the persisted evidence.
     - INSUFFICIENT_OR_CONFLICTING: the evidence cannot safely establish one of the
@@ -4303,6 +4421,10 @@ def extract_search_query(text, source_url=""):
     9. INSUFFICIENT CONTEXT DETECTION (CRITICAL GATEKEEPER):
     - If the text DOES contain a factual assertion or rumor, but a material person, organization, event, transaction, attribution, object, place, time reference, or other referent is too ambiguous to identify one stable proposition without guessing, set "cleaned_claim" to exactly "INSUFFICIENT_CONTEXT".
     - Use this only when proceeding would require inventing or assuming a material detail that could change which real-world proposition is being checked.
+    - A factual claim is sufficiently specific when the submitted text itself fixes a stable actor or organization, the asserted action or relationship, and the material event, process, object, or proceeding being discussed. Do not demand extra background merely because more detail could make retrieval easier.
+    - Named or otherwise clearly scoped proceedings, programs, cases, policies, reviews, or events can supply the needed referent. If the actor and event/process are already stable, do not require an additional date, location, source name, or quotation unless omitting it would create materially different propositions.
+    - A date is NOT required for a stable state-of-the-world claim. A specifically named organization, place, product/model, scientific object, celestial body, case, program, or other identifiable entity plus an explicit factual state/action can be verified without a calendar date.
+    - Do not use INSUFFICIENT_CONTEXT merely because the claim is scientific, unusual, difficult to verify, or likely to end as UNVERIFIED. Use it only when a material referent or proposition is genuinely unresolved.
     - Examples that require more context include: "Joel stole 800 million pesos", "Sara gave back the money she stole", "The senator was arrested yesterday", and "He stole government funds".
     - Do NOT infer that a first name, surname, title, pronoun, abbreviation, organization, or vague event refers to a particular real-world entity merely because one interpretation seems likely.
     - Do NOT require a date, location, or other detail when the proposition is already stable and identifiable. For example, "The Philippines has 82 provinces" is sufficiently specific.

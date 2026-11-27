@@ -53,5 +53,8 @@ class VerificationAuditRemediationV1413Tests(SimpleTestCase):
                 with self.subTest(kind="frozen", value=value):
                     self.assertNotIn(value, prompt)
 
-    def test_prompt_generalization_has_new_pipeline_version(self):
-        self.assertEqual(CURRENT_VERIFICATION_PIPELINE_VERSION, "1.4.13")
+    def test_prompt_generalization_remains_in_v1413_or_later(self):
+        version = tuple(
+            int(part) for part in CURRENT_VERIFICATION_PIPELINE_VERSION.split(".")
+        )
+        self.assertGreaterEqual(version, (1, 4, 13))

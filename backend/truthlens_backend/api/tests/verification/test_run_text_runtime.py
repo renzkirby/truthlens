@@ -558,6 +558,79 @@ class VerificationRunTextRuntimeTests(TestCase):
             "abstained_insufficient_context",
         )
 
+    def test_high_specificity_direct_text_can_recover_from_insufficient_context(self):
+        submitted = (
+            "The review team in Maria Santos's disciplinary hearing declared "
+            "victory in October 2026."
+        )
+        self.claim.context_text = submitted
+        self.claim.save(update_fields=["context_text"])
+        self.cleaned = {
+            "cleaned_claim": "INSUFFICIENT_CONTEXT",
+            "search_query": "",
+            "search_queries": [],
+            "article_stance": "NEUTRAL",
+        }
+        self.clean.return_value = self.cleaned
+
+        run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        self.claim.refresh_from_db()
+        self.assertEqual(
+            self.claim.claimability_status,
+            Claim.ClaimabilityStatus.CLAIMABLE,
+        )
+        self.assertEqual(self.claim.ai_verdict, "FAKE")
+        self.retrieve_gfc.assert_called_once_with(
+            submitted,
+            self.claim.id,
+            verification_run=run,
+        )
+        self.noneditable_fallback.assert_not_called()
+        rescue_calls = [
+            call for call in self.log_stage.call_args_list
+            if len(call.args) >= 2 and call.args[1] == "direct_text_context_rescue"
+        ]
+        self.assertEqual(len(rescue_calls), 1)
+        self.assertEqual(rescue_calls[0].kwargs.get("outcome"), "claimable")
+
+    def test_specific_no_date_direct_text_recovers_from_insufficient_context(self):
+        submitted = (
+            "Jupiter's moon Europa currently harbors microbial life in its "
+            "subsurface ocean."
+        )
+        self.claim.context_text = submitted
+        self.claim.save(update_fields=["context_text"])
+        self.cleaned = {
+            "cleaned_claim": "INSUFFICIENT_CONTEXT",
+            "search_query": "",
+            "search_queries": [],
+            "article_stance": "NEUTRAL",
+        }
+        self.clean.return_value = self.cleaned
+
+        run = self._execute()
+
+        self._assert_terminal(run, VerificationRun.Status.COMPLETED)
+        self.claim.refresh_from_db()
+        self.assertEqual(
+            self.claim.claimability_status,
+            Claim.ClaimabilityStatus.CLAIMABLE,
+        )
+        self.retrieve_gfc.assert_called_once_with(
+            submitted,
+            self.claim.id,
+            verification_run=run,
+        )
+        self.noneditable_fallback.assert_not_called()
+        rescue_calls = [
+            call for call in self.log_stage.call_args_list
+            if len(call.args) >= 2 and call.args[1] == "direct_text_context_rescue"
+        ]
+        self.assertEqual(len(rescue_calls), 1)
+        self.assertEqual(rescue_calls[0].kwargs.get("outcome"), "claimable")
+
     def test_image_insufficient_context_uses_source_bounded_fallback(self):
         self.claim.claim_type = Claim.ClaimType.IMAGE
         self.claim.save(update_fields=["claim_type"])

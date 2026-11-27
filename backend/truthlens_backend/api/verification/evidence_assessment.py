@@ -76,6 +76,8 @@ or refuting evidence to CONTEXT merely because it is indirect.
 
 EPISTEMIC STATUS RULES:
 - Absence of confirmation is not affirmative contradiction.
+- Modal or hypothetical evidence does not establish categorical actuality. Wording such as "may", "might", "could", "hypothetical", "theoretical", "candidate", "proposed", "possible", or a condition such as "if X exists" can SUPPORT a claim about possibility or candidacy, but does not SUPPORT a stronger categorical claim that X actually exists, is true, or occurred.
+- For a categorical claim, classify evidence that establishes only possibility, candidacy, theory, or an unconfirmed hypothesis as CONTEXT unless the same passage explicitly establishes the claimed actuality.
 - Statements such as "not confirmed", "not detected", "no conclusive evidence",
   "insufficient evidence", "inconclusive", "unknown", "could not determine",
   "unable to confirm", or "failed to confirm" do not by themselves REFUTE an

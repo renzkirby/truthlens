@@ -27,6 +27,7 @@ from .services import (
     llm_provider_scope,
     process_image,
     clean_ocr_text,
+    can_rescue_direct_text_insufficient_context,
     inspect_direct_text_claim_fidelity,
     clean_extracted_text,
     extract_search_query,
@@ -1941,6 +1942,25 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 outcome = "abstained_out_of_scope"
                 selected_verdict = "OUT_OF_SCOPE"
                 return
+
+            if (
+                cleaned_claim == "INSUFFICIENT_CONTEXT"
+                and is_text_claim
+                and can_rescue_direct_text_insufficient_context(raw_text)
+            ):
+                rescue_started_at = time.perf_counter()
+                submitted_claim = " ".join(raw_text.split())
+                cleaned_claim = submitted_claim
+                search_query = submitted_claim
+                search_queries = [submitted_claim]
+                article_stance = "NEUTRAL"
+                _log_stage(
+                    claim_id,
+                    "direct_text_context_rescue",
+                    rescue_started_at,
+                    outcome="claimable",
+                    query_count=1,
+                )
 
             if cleaned_claim == "INSUFFICIENT_CONTEXT":
                 if not is_image_claim:
