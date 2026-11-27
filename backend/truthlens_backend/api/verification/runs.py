@@ -5,7 +5,7 @@ from ..models import Claim, VerificationRun
 from ..notification_service import dispatch_after_commit, notify_verification_finished
 
 
-CURRENT_VERIFICATION_PIPELINE_VERSION = "1.4.11"
+CURRENT_VERIFICATION_PIPELINE_VERSION = "1.4.12"
 
 
 class InvalidVerificationRunTransition(
