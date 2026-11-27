@@ -1523,9 +1523,9 @@ def clean_ocr_text(raw_text):
         - NEUTRAL: The text presents the claim without clearly endorsing or debunking it.
     8. OUT OF SCOPE DETECTION (CRITICAL GATEKEEPER):
     - If the text is a personal message, a greeting, a menu, a recipe, song lyrics, random UI buttons, a selfie with no text, or contains NO verifiable public factual claim or rumor, you MUST set "cleaned_claim" to exactly "OUT_OF_SCOPE".
-    - Un-attributed recommendations, value judgments, wishes, commands, and subjective preferences are NOT factual claims. Examples such as "School cafeterias should offer healthier food.", "I hope our presentation goes well tomorrow.", "Please send this link to your classmates.", "That speech was really inspiring.", and "Chocolate ice cream tastes better than every other flavor." MUST be OUT_OF_SCOPE.
+    - Un-attributed recommendations, value judgments, wishes, commands, and subjective preferences are NOT factual claims. Examples such as "Public libraries should stay open later.", "I hope the meeting goes well tomorrow.", "Please forward this note to your classmates.", "That movie was really inspiring.", and "Vanilla ice cream tastes better than chocolate." MUST be OUT_OF_SCOPE.
     - Do NOT use INSUFFICIENT_CONTEXT for a statement that is non-factual by nature. INSUFFICIENT_CONTEXT is only for a factual proposition whose material referent is ambiguous.
-    - Preserve factual attribution. For example, "WHO said schools should offer healthier food." is a verifiable factual attribution about what WHO said and must NOT be rejected merely because the quoted recommendation contains "should".
+    - Preserve factual attribution. For example, "The health ministry said schools should serve healthier meals." is a verifiable factual attribution about what WHO said and must NOT be rejected merely because the quoted recommendation contains "should".
 
     9. INSUFFICIENT CONTEXT DETECTION (CRITICAL GATEKEEPER):
     - If the text DOES contain a factual assertion or rumor, but a material person, organization, event, transaction, attribution, object, place, time reference, or other referent is too ambiguous to identify one stable proposition without guessing, set "cleaned_claim" to exactly "INSUFFICIENT_CONTEXT".
@@ -4296,9 +4296,9 @@ def extract_search_query(text, source_url=""):
         - NEUTRAL: The text presents the claim without clearly endorsing or debunking it.
     8. OUT OF SCOPE DETECTION (CRITICAL GATEKEEPER):
     - If the text is a personal message, a greeting, a menu, a recipe, song lyrics, random UI buttons, a selfie with no text, or contains NO verifiable public factual claim or rumor, you MUST set "cleaned_claim" to exactly "OUT_OF_SCOPE".
-    - Un-attributed recommendations, value judgments, wishes, commands, and subjective preferences are NOT factual claims. Examples such as "School cafeterias should offer healthier food.", "I hope our presentation goes well tomorrow.", "Please send this link to your classmates.", "That speech was really inspiring.", and "Chocolate ice cream tastes better than every other flavor." MUST be OUT_OF_SCOPE.
+    - Un-attributed recommendations, value judgments, wishes, commands, and subjective preferences are NOT factual claims. Examples such as "Public libraries should stay open later.", "I hope the meeting goes well tomorrow.", "Please forward this note to your classmates.", "That movie was really inspiring.", and "Vanilla ice cream tastes better than chocolate." MUST be OUT_OF_SCOPE.
     - Do NOT use INSUFFICIENT_CONTEXT for a statement that is non-factual by nature. INSUFFICIENT_CONTEXT is only for a factual proposition whose material referent is ambiguous.
-    - Preserve factual attribution. For example, "WHO said schools should offer healthier food." is a verifiable factual attribution about what WHO said and must NOT be rejected merely because the quoted recommendation contains "should".
+    - Preserve factual attribution. For example, "The health ministry said schools should serve healthier meals." is a verifiable factual attribution about what WHO said and must NOT be rejected merely because the quoted recommendation contains "should".
 
     9. INSUFFICIENT CONTEXT DETECTION (CRITICAL GATEKEEPER):
     - If the text DOES contain a factual assertion or rumor, but a material person, organization, event, transaction, attribution, object, place, time reference, or other referent is too ambiguous to identify one stable proposition without guessing, set "cleaned_claim" to exactly "INSUFFICIENT_CONTEXT".
