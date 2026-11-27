@@ -15,6 +15,7 @@ class VerificationAuditRemediationV1416Tests(SimpleTestCase):
             "WHO recognizes malaria as a global health concern.",
             "Joel Santos stole 800 million pesos in 2026.",
             "The city government plans to open a new hospital in Bacoor.",
+            "NASA said it launched Artemis II in April 2026.",
         )
         for claim in accepted:
             with self.subTest(claim=claim):
@@ -84,7 +85,7 @@ class VerificationAuditRemediationV1416Tests(SimpleTestCase):
         fragments = (
             "Maria Santos disciplinary hearing October 2026.",
             "United Nations climate meeting 2026.",
-            "NASA funding increase 2026.",
+            "NASA funding request 2026.",
             "Company X building permit Manila.",
             "WHO rating update 2026.",
         )
