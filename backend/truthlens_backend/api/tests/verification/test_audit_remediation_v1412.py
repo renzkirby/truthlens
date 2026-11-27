@@ -64,7 +64,7 @@ class VerificationAuditRemediationV1412Tests(SimpleTestCase):
         ) as link_sources, patch(
             "api.tasks.record_retrieval_provenance"
         ) as provenance, patch(
-            "api.tasks.load_reasoning_evidence_dossier", return_value=groups
+            "api.tasks.load_reasoning_evidence_dossier_for_run", return_value=groups
         ), patch(
             "api.tasks.filter_reasoning_evidence_dossier_by_role",
             return_value=groups,
