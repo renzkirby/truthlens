@@ -4014,11 +4014,16 @@ def _audit_fake_false_context_signal(
             raise ValueError("false-context audit response was not a JSON object")
         relationship = audited.get("relationship")
         basis_kind = audited.get("basis_kind", "NONE")
+        raw_basis_ids = audited.get("basis_evidence_ids", [])
+        if not isinstance(raw_basis_ids, list):
+            raise ValueError("false-context audit returned invalid basis IDs")
         basis_ids = [
-            str(value).strip()
-            for value in audited.get("basis_evidence_ids", [])
+            value.strip()
+            for value in raw_basis_ids
             if isinstance(value, str) and value.strip()
         ]
+        if len(basis_ids) != len(raw_basis_ids) or len(set(basis_ids)) != len(basis_ids):
+            raise ValueError("false-context audit returned malformed basis IDs")
         if relationship not in {
             "MATERIAL_MISDESCRIPTION",
             "FABRICATED_CORE",
