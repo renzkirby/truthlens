@@ -80,6 +80,21 @@ class VerificationAuditRemediationV1416Tests(SimpleTestCase):
                 prompt,
             )
 
+    def test_noun_like_suffixes_do_not_manufacture_predicates(self):
+        fragments = (
+            "Maria Santos disciplinary hearing October 2026.",
+            "United Nations climate meeting 2026.",
+            "NASA funding increase 2026.",
+            "Company X building permit Manila.",
+            "WHO rating update 2026.",
+        )
+        for text in fragments:
+            with self.subTest(text=text):
+                self.assertFalse(services._has_explicit_predicate_cue(text))
+                self.assertFalse(
+                    services.can_rescue_direct_text_insufficient_context(text)
+                )
+
     def test_common_present_tense_factual_predicates_are_recognized(self):
         for claim in (
             "WHO recognizes malaria as a global health concern.",
