@@ -156,20 +156,30 @@ of the same submitted proposition/content and a material contextual distortion
 of that component. Fabricated-core claims remain FAKE, while unresolved
 FAKE-versus-MISLEADING relationships abstain to UNVERIFIED rather than guessing.
 The existing misleading-materiality audit remains the second-stage safeguard
-for proposed MISLEADING verdicts. Ordinary FAKE results do not add a provider
-call; only a narrow explicit edited/spliced/clipped/recontextualized-media claim
-may open the compact FAKE-versus-MISLEADING false-context audit. Structured
-Misleading signals use the compact relationship auditor when deterministic
-claim-scoped reuse is not sufficient.
+for proposed MISLEADING verdicts. Ordinary FAKE results still do not add a
+provider call. The compact FAKE-versus-MISLEADING relationship audit opens only
+when either the submitted claim contains the existing narrow manipulated-media
+cues or strong assessed REFUTES/CONTEXT evidence contains explicit
+recontextualization cues such as a full-versus-shortened clip or omitted material
+context. The trigger never determines the verdict. A MATERIAL_MISDESCRIPTION
+decision must cite exact persisted evidence IDs that were actually present in
+the compact audit dossier and pass the existing contextual-evidence quality
+checks.
 
-Structured Google ClaimReview ratings and GFC terminal-coverage decisions now
-share one proposition-matching judgment. Exact normalized claim matches remain
+Structured Google ClaimReview ratings and GFC terminal-coverage decisions share
+one proposition-matching judgment. Exact normalized claim matches remain
 deterministic. For semantic matches, the structured-rating policy consumes the
 already-computed proposition-coverage rows instead of issuing a second
-claim-equivalence LLM call. An equivalent structured `Misleading` rating still
-does not set the verdict: it only requires Tavily enrichment and opens the
-existing evidence-bound relationship audit. PARTIAL_OR_RELATED, DIFFERENT, and
-UNDETERMINED coverage cannot activate that signal.
+claim-equivalence LLM call. Equivalent `False` and `Misleading` publisher
+ratings are retained as separate structured signals rather than treated as a
+factual contradiction between sources. Neither publisher label alone determines
+the TruthLens verdict: a `Misleading` signal opens the evidence-bound
+relationship audit, while `False` is retained as routing/provenance metadata.
+The relationship audit must identify the corrective/genuine-substrate evidence
+that supports MISLEADING; it may not substitute the ClaimReview signal ID unless
+that evidence itself establishes the required factual relationship.
+PARTIAL_OR_RELATED, DIFFERENT, and UNDETERMINED coverage cannot activate these
+equivalent structured signals.
 
 
 Direct TEXT submissions now keep the user's normalized submitted wording as the
