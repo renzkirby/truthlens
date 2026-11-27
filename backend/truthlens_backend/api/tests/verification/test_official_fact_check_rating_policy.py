@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.test import SimpleTestCase
 
@@ -70,6 +71,88 @@ def _coverage(*records):
 
 
 class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
+    def test_evaluator_wrapper_preserves_legacy_none_call_shape(self):
+        policy = {
+            "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+            "misleading_evidence_ids": (),
+            "false_evidence_ids": (),
+        }
+        with patch(
+            "api.tasks.evaluate_claim_with_persisted_evidence",
+            return_value={"verdict": "UNVERIFIED"},
+        ) as evaluator:
+            tasks._evaluate_persisted_with_official_rating_policy(
+                "Claim.",
+                "Persisted evidence.",
+                "NEUTRAL",
+                policy,
+                evidence_groups=["group"],
+            )
+
+        evaluator.assert_called_once_with(
+            "Claim.",
+            "Persisted evidence.",
+            "NEUTRAL",
+            evidence_groups=["group"],
+        )
+
+    def test_evaluator_wrapper_forwards_false_only_metadata_additively(self):
+        policy = {
+            "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+            "misleading_evidence_ids": (),
+            "false_evidence_ids": ("false-1",),
+        }
+        with patch(
+            "api.tasks.evaluate_claim_with_persisted_evidence",
+            return_value={"verdict": "FAKE"},
+        ) as evaluator:
+            tasks._evaluate_persisted_with_official_rating_policy(
+                "Claim.",
+                "Persisted evidence.",
+                "NEUTRAL",
+                policy,
+                evidence_groups=["group"],
+            )
+
+        evaluator.assert_called_once_with(
+            "Claim.",
+            "Persisted evidence.",
+            "NEUTRAL",
+            official_false_evidence_ids=("false-1",),
+            evidence_groups=["group"],
+        )
+
+    def test_evaluator_wrapper_preserves_legacy_misleading_call_shape(self):
+        policy = {
+            "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+            "misleading_evidence_ids": ("misleading-1",),
+            "false_evidence_ids": (),
+        }
+        with patch(
+            "api.tasks.evaluate_claim_with_persisted_evidence",
+            return_value={"verdict": "MISLEADING"},
+        ) as evaluator:
+            tasks._evaluate_persisted_with_official_rating_policy(
+                "Claim.",
+                "Persisted evidence.",
+                "NEUTRAL",
+                policy,
+                evidence_groups=["group"],
+            )
+
+        evaluator.assert_called_once_with(
+            "Claim.",
+            "Persisted evidence.",
+            "NEUTRAL",
+            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            (),
+            ("misleading-1",),
+            evidence_groups=["group"],
+        )
+
     def test_rating_normalization_is_high_precision(self):
         for rating in (
             "Satire",
