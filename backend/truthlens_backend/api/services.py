@@ -162,6 +162,10 @@ _OFFICIAL_FALSE_RATINGS = frozenset({
 })
 _OFFICIAL_MISLEADING_RATINGS = frozenset({
     "misleading",
+    # VERA Files uses this exact structured rating for claims whose missing
+    # context can materially change the factual impression. It is an audit
+    # trigger only; it never directly sets the TruthLens verdict.
+    "needs context",
 })
 _OFFICIAL_SATIRE_RATING_PREFIXES = (
     "this is a satirical post",
@@ -2776,6 +2780,21 @@ def build_persisted_evidence_prompt(
       Evidence about a separate action, relationship, or reversed role direction
       must not be used as support or contradiction unless the supplied passage
       explicitly connects it to the submitted proposition.
+    - ATTRIBUTED SPEECH/ACTION ENTAILMENT: when the submitted claim says a named
+      person or organization said, stated, announced, admitted, promised, denied,
+      ordered, approved, or otherwise performed a specific communicative/action
+      predicate, FACT requires supplied evidence establishing that same actor made
+      or performed the materially same statement/action. Evidence proving only
+      that the underlying technology, policy, event, program, or topic is real,
+      or that the actor discussed a related subject, does not establish the
+      attribution.
+    - Do not demand verbatim wording when the evidence clearly establishes a
+      faithful paraphrase of the same material statement. But if supplied evidence
+      explicitly says the attributed wording/statement was not reported or cannot
+      be established while confirming only related remarks or a genuine underlying
+      project/event, do not return FACT. Evaluate the supported substrate and the
+      attribution gap under MISLEADING/FAKE/UNVERIFIED using the ordinary verdict
+      rules and claim-scoped evidence.
     - Evidence stance labels are assessment metadata, not proof. Re-check the
       supplied passage itself before relying on SUPPORTS or REFUTES. If the passage
       describes a different action/relation involving the same actor and topic,
@@ -3434,6 +3453,8 @@ def _deterministic_structured_misleading_result(
 
 
 _RELATIONSHIP_AUDIT_EXCERPT_PATTERNS = (
+    r"\bno (?:reports?|record|evidence).{0,120}\b(?:said|saying|quote|statement|remark)\b",
+    r"\b(?:exact|attributed) (?:quote|statement|wording).{0,120}\b(?:not|unreported|unsupported)\b",
     r"\bout[- ]of[- ]context\b",
     r"\b(?:selectively|materially) (?:edited|spliced|clipped|cropped)\b",
     r"\bfull (?:video|clip|footage|recording)\b",
@@ -4637,6 +4658,15 @@ def _audit_structured_misleading_signal(
       materially changing the meaning of genuine same-source/content material. If
       yes, choose MATERIAL_MISDESCRIPTION. If the asserted words/action were simply
       invented without such a genuine substrate, choose FABRICATED_CORE.
+    - For attributed speech, FULLY_SUPPORTED requires evidence that the named actor
+      made a materially equivalent statement, not merely evidence that the topic,
+      technology, project, or policy itself is real. If the evidence explicitly
+      says the exact attributed quote/statement is not reported or established,
+      while also showing the same actor made related remarks about the same
+      underlying project/event, treat the attribution gap as
+      MATERIAL_MISDESCRIPTION when it materially changes the ordinary impression.
+      Do not require verbatim wording when the submitted text is a faithful
+      paraphrase that the evidence actually establishes.
     - A strict-equivalent ClaimReview rating does not decide the verdict, but the
       reviewed proposition establishes that this audit concerns the same submitted
       proposition. Corrective passages may establish a material misdescription by
