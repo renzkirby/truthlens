@@ -2135,12 +2135,12 @@ _GFC_PROPOSITION_RELATIONSHIPS = frozenset({
     "UNDETERMINED",
 })
 
-_GFC_COMMUTATIVE_PURPOSE_TRIGGER_RE = re.compile(
+_GFC_COMMEMORATIVE_PURPOSE_TRIGGER_RE = re.compile(
     r"\b(?:to|in order to)\s+(?:commemorat\w*|honou?r\w*|memorializ\w*)\b"
     r"|\bas\s+(?:a\s+)?tribute\s+to\b",
     flags=re.IGNORECASE,
 )
-_GFC_COMMUTATIVE_PURPOSE_SEMANTIC_RE = re.compile(
+_GFC_COMMEMORATIVE_PURPOSE_SEMANTIC_RE = re.compile(
     r"\b(?:commemorat\w*|honou?r\w*|memorializ\w*|tribute)\b",
     flags=re.IGNORECASE,
 )
@@ -2155,9 +2155,9 @@ def _missing_material_gfc_purpose(submitted_claim, reviewed_claim):
     """
     if not isinstance(submitted_claim, str) or not isinstance(reviewed_claim, str):
         return None
-    if not _GFC_COMMUTATIVE_PURPOSE_TRIGGER_RE.search(submitted_claim):
+    if not _GFC_COMMEMORATIVE_PURPOSE_TRIGGER_RE.search(submitted_claim):
         return None
-    if _GFC_COMMUTATIVE_PURPOSE_SEMANTIC_RE.search(reviewed_claim):
+    if _GFC_COMMEMORATIVE_PURPOSE_SEMANTIC_RE.search(reviewed_claim):
         return None
     return (
         "The submitted claim contains an explicit commemorative/tribute purpose "
