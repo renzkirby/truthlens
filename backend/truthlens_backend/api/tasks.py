@@ -393,16 +393,42 @@ def _evaluate_persisted_with_official_rating_policy(
     *,
     evidence_groups=(),
 ):
+    """Preserve legacy evaluator call shapes while forwarding new FALSE metadata."""
+    resolution = official_rating_policy["resolution"]
+    satire_ids = official_rating_policy["satire_evidence_ids"]
     misleading_ids = official_rating_policy["misleading_evidence_ids"]
     false_ids = official_rating_policy.get("false_evidence_ids", ())
+
+    # Keep the established positional contracts for existing NONE, SATIRE and
+    # structured-Misleading paths. FALSE metadata is additive and keyword-only;
+    # it is forwarded only when the new v1.4.17 provenance safeguard needs it.
+    extra_kwargs = {"evidence_groups": evidence_groups}
+    if false_ids and resolution == OFFICIAL_FACT_CHECK_RESOLUTION_NONE:
+        extra_kwargs["official_false_evidence_ids"] = false_ids
+
+    if misleading_ids:
+        return evaluate_claim_with_persisted_evidence(
+            claim_text,
+            evidence_context,
+            article_stance,
+            resolution,
+            satire_ids,
+            misleading_ids,
+            **extra_kwargs,
+        )
+    if resolution == OFFICIAL_FACT_CHECK_RESOLUTION_NONE:
+        return evaluate_claim_with_persisted_evidence(
+            claim_text,
+            evidence_context,
+            article_stance,
+            **extra_kwargs,
+        )
     return evaluate_claim_with_persisted_evidence(
         claim_text,
         evidence_context,
         article_stance,
-        official_fact_check_resolution=official_rating_policy["resolution"],
-        official_satire_evidence_ids=official_rating_policy["satire_evidence_ids"],
-        official_misleading_evidence_ids=misleading_ids,
-        official_false_evidence_ids=false_ids,
+        resolution,
+        satire_ids,
         evidence_groups=evidence_groups,
     )
 
