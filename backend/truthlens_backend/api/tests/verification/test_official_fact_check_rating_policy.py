@@ -173,6 +173,7 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
         self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_NONE)
         self.assertEqual(result["satire_evidence_ids"], ())
         self.assertEqual(result["misleading_evidence_ids"], ())
+        self.assertEqual(result["false_evidence_ids"], ("evidence-1",))
 
     def test_exact_misleading_rating_becomes_context_signal_without_coverage(self):
         result = tasks._resolve_official_fact_check_rating_policy(
@@ -223,6 +224,7 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
             OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT,
         )
         self.assertEqual(result["satire_evidence_ids"], ("evidence-1",))
+        self.assertEqual(result["false_evidence_ids"], ("evidence-2",))
 
     def test_equivalent_unknown_rating_defers_to_normal_evaluator(self):
         result = tasks._resolve_official_fact_check_rating_policy(
@@ -320,7 +322,7 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
         self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE)
         self.assertEqual(result["satire_evidence_ids"], ("evidence-1",))
 
-    def test_equivalent_misleading_and_false_ratings_disable_context_signal(self):
+    def test_equivalent_misleading_and_false_ratings_preserve_both_signals(self):
         result = tasks._resolve_official_fact_check_rating_policy(
             "Same claim.",
             _groups(
@@ -330,7 +332,8 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
         )
 
         self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_NONE)
-        self.assertEqual(result["misleading_evidence_ids"], ())
+        self.assertEqual(result["misleading_evidence_ids"], ("evidence-1",))
+        self.assertEqual(result["false_evidence_ids"], ("evidence-2",))
 
     def test_equivalent_misleading_and_unknown_ratings_disable_context_signal(self):
         result = tasks._resolve_official_fact_check_rating_policy(
