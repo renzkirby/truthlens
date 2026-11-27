@@ -154,6 +154,11 @@ MATERIAL SCOPE MATCHING:
   overlaps.
 - If the passage is relevant background but does not establish the same material
   scope, classify it as CONTEXT rather than forcing SUPPORTS or REFUTES.
+- Treat an isolated headline, teaser, related-story link, archive/listing entry,
+  navigation label, or recommendation-card fragment as non-substantive evidence
+  unless the passage itself includes body text that establishes the proposition.
+  Headline-like or link-only text may be CONTEXT or UNKNOWN, but must not receive
+  decisive SUPPORTS/REFUTES treatment merely because it repeats the claim wording.
 - If the scope relationship cannot responsibly be established from the passage
   alone, classify it as UNKNOWN.
 - Do not perform unstated unit conversions, baseline conversions, denominator
