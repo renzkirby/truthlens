@@ -13,7 +13,10 @@ from tavily.errors import (
 
 from api.verification.contracts import RawEvidence
 from api.verification.providers.tavily import (
+    AUTHORITY_INCLUDE_DOMAINS,
+    NORMAL_INCLUDE_DOMAINS,
     TavilyProvider,
+    parse_tavily_extract_response,
     parse_tavily_response,
 )
 
@@ -272,7 +275,11 @@ class TavilyProviderTests(TestCase):
                 "pna.gov.ph", "verafiles.org", "reuters.com", "apnews.com",
                 "bbc.com", "cnn.com", "aljazeera.com", "nytimes.com",
                 "theguardian.com", "snopes.com", "politifact.com",
-                "factcheck.org", "afp.com",
+                "factcheck.org", "fullfact.org", "afp.com",
+                "psa.gov.ph", "pagasa.dost.gov.ph", "bsp.gov.ph",
+                "officialgazette.gov.ph", "deped.gov.ph", "dswd.gov.ph",
+                "doh.gov.ph", "denr.gov.ph", "da.gov.ph", "nasa.gov",
+                "noaa.gov", "who.int", "unesco.org", "un.org",
             ],
             timeout=7.5,
         )
@@ -337,6 +344,62 @@ class TavilyProviderTests(TestCase):
                 "https://ministry.go.jp/report",
             ],
         )
+
+    def test_normal_search_includes_bounded_authority_domains(self):
+        self.assertIn("psa.gov.ph", AUTHORITY_INCLUDE_DOMAINS)
+        self.assertIn("pagasa.dost.gov.ph", AUTHORITY_INCLUDE_DOMAINS)
+        self.assertIn("bsp.gov.ph", AUTHORITY_INCLUDE_DOMAINS)
+        self.assertIn("who.int", AUTHORITY_INCLUDE_DOMAINS)
+        self.assertEqual(
+            len(NORMAL_INCLUDE_DOMAINS),
+            len(set(NORMAL_INCLUDE_DOMAINS)),
+        )
+
+    def test_extract_parser_uses_separate_provider_and_bounds_content(self):
+        long_content = "satire provenance " * 1000
+        evidence = parse_tavily_extract_response({
+            "results": [{
+                "url": "https://verafiles.org/article",
+                "raw_content": long_content,
+            }],
+        })
+        self.assertEqual(len(evidence), 1)
+        self.assertEqual(evidence[0].provider, "TAVILY_EXTRACT")
+        self.assertEqual(evidence[0].source_type, "WEB_EXTRACT")
+        self.assertLessEqual(len(evidence[0].content), 8000)
+
+    def test_extract_with_payload_is_bounded_and_forwards_claim_query(self):
+        self.client.extract.return_value = {
+            "results": [{
+                "url": "https://verafiles.org/article",
+                "raw_content": "The same post was explicitly satire.",
+            }],
+            "failed_results": [],
+        }
+        payload, evidence = self.provider.extract_with_payload(
+            [
+                "https://verafiles.org/article",
+                "https://example.com/second",
+                "https://example.com/third",
+            ],
+            query="same submitted claim",
+            limit=2,
+            timeout=8.0,
+        )
+
+        self.client.extract.assert_called_once_with(
+            [
+                "https://verafiles.org/article",
+                "https://example.com/second",
+            ],
+            extract_depth="basic",
+            format="text",
+            timeout=8.0,
+            query="same submitted claim",
+        )
+        self.assertEqual(payload["failed_results"], [])
+        self.assertEqual(len(evidence), 1)
+        self.assertEqual(evidence[0].provider, "TAVILY_EXTRACT")
 
     def test_query_is_stripped_without_truncation(self):
         query = "claim " * 100

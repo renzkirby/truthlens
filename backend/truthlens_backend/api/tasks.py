@@ -83,6 +83,7 @@ from .verification.providers.google_fact_check import (
     PROVIDER_NAME as GFC_PROVIDER_NAME,
 )
 from .verification.providers.tavily import (
+    EXTRACT_PROVIDER_NAME as TAVILY_EXTRACT_PROVIDER_NAME,
     PROVIDER_NAME as TAVILY_PROVIDER_NAME,
     TavilyProvider,
 )
@@ -1521,6 +1522,157 @@ def _assess_and_persist_reasoning_evidence(
         )
 
 
+SATIRE_PROVENANCE_EXTRACT_LIMIT = 2
+SATIRE_PROVENANCE_EXTRACT_TIMEOUT_SEC = 8.0
+SATIRE_PROVENANCE_EXTRACT_QUALITY_FLOOR = 0.50
+
+
+def _has_satire_text_signal(value):
+    if not isinstance(value, str):
+        return False
+    normalized = value.casefold()
+    return "satir" in normalized or "parody" in normalized
+
+
+def _satire_provenance_extract_urls(evidence_groups):
+    """Select high-quality satire-title results whose snippet lacks provenance."""
+    urls = []
+    seen = set()
+    for group in evidence_groups or ():
+        for item in getattr(group, "evidence", ()):
+            if getattr(item, "provider", None) != TAVILY_PROVIDER_NAME:
+                continue
+            url = getattr(item, "url", None)
+            if not isinstance(url, str) or not url.strip():
+                continue
+            title = str(getattr(item, "title", "") or "")
+            content = str(getattr(item, "content", "") or "")
+            if not _has_satire_text_signal(title) or _has_satire_text_signal(content):
+                continue
+            relevance = getattr(item, "relevance_score", None)
+            directness = getattr(item, "directness_score", None)
+            try:
+                quality = min(float(relevance), float(directness))
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(quality) or quality < SATIRE_PROVENANCE_EXTRACT_QUALITY_FLOOR:
+                continue
+            normalized_url = url.strip()
+            if normalized_url in seen:
+                continue
+            seen.add(normalized_url)
+            urls.append(normalized_url)
+            if len(urls) >= SATIRE_PROVENANCE_EXTRACT_LIMIT:
+                return urls
+    return urls
+
+
+def _attempt_satire_provenance_enrichment(
+    *,
+    cleaned_claim,
+    claim_id,
+    run,
+    secondary_groups,
+    is_text_claim,
+):
+    """Fetch body text only for assessed results with a missing satire explanation.
+
+    The original search result remains persisted. Extracted page text uses a
+    separate provider identity so immutable evidence rows are never overwritten;
+    canonical-source grouping still prevents the same webpage from becoming an
+    independent source identity.
+    """
+    if run is None:
+        return False
+    urls = _satire_provenance_extract_urls(secondary_groups)
+    if not urls:
+        return False
+
+    started_at = time.perf_counter()
+    try:
+        provider = TavilyProvider(timeout=SATIRE_PROVENANCE_EXTRACT_TIMEOUT_SEC)
+        payload, raw_evidence_items = provider.extract_with_payload(
+            urls,
+            query=cleaned_claim,
+            limit=SATIRE_PROVENANCE_EXTRACT_LIMIT,
+            timeout=SATIRE_PROVENANCE_EXTRACT_TIMEOUT_SEC,
+        )
+    except Exception as exc:
+        _log_stage(
+            claim_id,
+            "satire_provenance_extract",
+            started_at,
+            outcome="extract_failed",
+            error=type(exc).__name__,
+        )
+        logger.warning(
+            "Optional satire provenance extraction failed for claim %s: %s",
+            claim_id,
+            exc,
+        )
+        return False
+
+    if not raw_evidence_items:
+        _log_stage(
+            claim_id,
+            "satire_provenance_extract",
+            started_at,
+            outcome="no_extracted_content",
+            results=0,
+        )
+        return False
+
+    try:
+        evidence_sources = ingest_raw_evidence(raw_evidence_items)
+        links = link_evidence_sources_to_run(
+            run,
+            evidence_sources,
+            evidence_role=VerificationEvidence.EvidenceRole.SECONDARY,
+        )
+        record_retrieval_provenance(
+            links,
+            provider=TAVILY_EXTRACT_PROVIDER_NAME,
+            query=cleaned_claim,
+            query_index=4,
+        )
+    except Exception as exc:
+        _log_stage(
+            claim_id,
+            "satire_provenance_extract",
+            started_at,
+            outcome="persistence_failed",
+            error=type(exc).__name__,
+        )
+        logger.warning(
+            "Optional satire provenance extraction could not be persisted for "
+            "claim %s: %s",
+            claim_id,
+            exc,
+        )
+        return False
+
+    evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
+    secondary_groups = filter_reasoning_evidence_dossier_by_role(
+        evidence_dossier,
+        VerificationEvidence.EvidenceRole.SECONDARY,
+    )
+    _assess_and_persist_reasoning_evidence(
+        cleaned_claim,
+        secondary_groups,
+        claim_id,
+        stage_prefix="satire_provenance_extract",
+        material_scope_hardening=is_text_claim,
+    )
+    _log_stage(
+        claim_id,
+        "satire_provenance_extract",
+        started_at,
+        outcome="enriched",
+        results=len(raw_evidence_items),
+    )
+    return True
+
+
 # IMAGE PIPELINE
 @shared_task
 @verification_telemetry_scope()
@@ -2528,6 +2680,18 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                             evidence_dossier,
                             VerificationEvidence.EvidenceRole.SECONDARY,
                         )
+                        if _attempt_satire_provenance_enrichment(
+                            cleaned_claim=cleaned_claim,
+                            claim_id=claim_id,
+                            run=run,
+                            secondary_groups=secondary_groups,
+                            is_text_claim=is_text_claim,
+                        ):
+                            evidence_dossier = load_reasoning_evidence_dossier_for_run(run)
+                            secondary_groups = filter_reasoning_evidence_dossier_by_role(
+                                evidence_dossier,
+                                VerificationEvidence.EvidenceRole.SECONDARY,
+                            )
                         if include_deferred_gfc:
                             fact_check_groups = filter_reasoning_evidence_dossier_by_role(
                                 evidence_dossier,

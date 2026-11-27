@@ -1521,7 +1521,11 @@ def clean_ocr_text(raw_text):
         - DEBUNKING: The article is a fact-check disproving the extracted claim.
         - REPORTING: The article neutrally reports the extracted claim as true.
         - NEUTRAL: The text presents the claim without clearly endorsing or debunking it.
-    8. OUT OF SCOPE DETECTION (CRITICAL GATEKEEPER): If the text is a personal message, a greeting, a menu, a recipe, song lyrics, random UI buttons, a selfie with no text, or contains NO verifiable public factual claim or rumor, you MUST set "cleaned_claim" to exactly "OUT_OF_SCOPE".
+    8. OUT OF SCOPE DETECTION (CRITICAL GATEKEEPER):
+    - If the text is a personal message, a greeting, a menu, a recipe, song lyrics, random UI buttons, a selfie with no text, or contains NO verifiable public factual claim or rumor, you MUST set "cleaned_claim" to exactly "OUT_OF_SCOPE".
+    - Un-attributed recommendations, value judgments, wishes, commands, and subjective preferences are NOT factual claims. Examples such as "Public libraries should stay open later.", "I hope the meeting goes well tomorrow.", "Please forward this note to your classmates.", "That movie was really inspiring.", and "Vanilla ice cream tastes better than chocolate." MUST be OUT_OF_SCOPE.
+    - Do NOT use INSUFFICIENT_CONTEXT for a statement that is non-factual by nature. INSUFFICIENT_CONTEXT is only for a factual proposition whose material referent is ambiguous.
+    - Preserve factual attribution. For example, "The health ministry said schools should serve healthier meals." is a verifiable factual attribution about what WHO said and must NOT be rejected merely because the quoted recommendation contains "should".
 
     9. INSUFFICIENT CONTEXT DETECTION (CRITICAL GATEKEEPER):
     - If the text DOES contain a factual assertion or rumor, but a material person, organization, event, transaction, attribution, object, place, time reference, or other referent is too ambiguous to identify one stable proposition without guessing, set "cleaned_claim" to exactly "INSUFFICIENT_CONTEXT".
@@ -2131,6 +2135,35 @@ _GFC_PROPOSITION_RELATIONSHIPS = frozenset({
     "UNDETERMINED",
 })
 
+_GFC_COMMEMORATIVE_PURPOSE_TRIGGER_RE = re.compile(
+    r"\b(?:to|in order to)\s+(?:commemorat\w*|honou?r\w*|memorializ\w*)\b"
+    r"|\bas\s+(?:a\s+)?tribute\s+to\b",
+    flags=re.IGNORECASE,
+)
+_GFC_COMMEMORATIVE_PURPOSE_SEMANTIC_RE = re.compile(
+    r"\b(?:commemorat\w*|honou?r\w*|memorializ\w*|tribute)\b",
+    flags=re.IGNORECASE,
+)
+
+
+def _missing_material_gfc_purpose(submitted_claim, reviewed_claim):
+    """Return a high-precision missing-purpose reason for terminal GFC coverage.
+
+    Only explicit commemorative/tribute purpose language is guarded
+    deterministically. Broader purpose/causal relationships remain part of the
+    LLM proposition-coverage contract below.
+    """
+    if not isinstance(submitted_claim, str) or not isinstance(reviewed_claim, str):
+        return None
+    if not _GFC_COMMEMORATIVE_PURPOSE_TRIGGER_RE.search(submitted_claim):
+        return None
+    if _GFC_COMMEMORATIVE_PURPOSE_SEMANTIC_RE.search(reviewed_claim):
+        return None
+    return (
+        "The submitted claim contains an explicit commemorative/tribute purpose "
+        "that the reviewed claim does not cover."
+    )
+
 
 def _gfc_coverage_result(candidate_rows, *, reason_code):
     covered_count = sum(
@@ -2209,9 +2242,14 @@ For every candidate choose exactly one relationship:
 
 Compare all truth-relevant slots: actor/subject, predicate/action, object/target,
 date/time period, location, quantity/statistic, attribution/speaker,
-polarity/negation, causal relationship, certainty, and other material qualifiers.
-A difference is material whenever it could change the truth value of the submitted
-claim. Topical similarity or the same real-world event is never enough by itself.
+polarity/negation, causal relationship, purpose/rationale/intent, certainty, and
+other material qualifiers. A purpose clause such as "to commemorate", "to honor",
+"in order to", "because", or "for the purpose of" is material when it explains
+why the claimed action occurred. A reviewed claim that establishes the action
+but omits or changes such a submitted purpose does NOT fully cover the submitted
+proposition. A difference is material whenever it could change the truth value
+of the submitted claim. Topical similarity or the same real-world event is never
+enough by itself.
 
 Return ONLY a JSON object with exactly this shape:
 {"candidates":[
@@ -2290,6 +2328,17 @@ Never output a factual verdict."""
         normalized_rows = [by_index[index] for index in range(len(candidates))]
         for index, row in enumerate(normalized_rows):
             row["reviewed_claim"] = candidates[index]
+            if row["relationship"] == "EQUIVALENT_OR_COVERS":
+                purpose_difference = _missing_material_gfc_purpose(
+                    original_text,
+                    candidates[index],
+                )
+                if purpose_difference:
+                    row["relationship"] = "PARTIAL_OR_RELATED"
+                    row["reasoning"] = (
+                        f"{row['reasoning']} {purpose_difference}"
+                    ).strip()
+                    row["material_differences"] = [purpose_difference]
         if any(
             row["relationship"] == "EQUIVALENT_OR_COVERS"
             for row in normalized_rows
@@ -3288,7 +3337,14 @@ def _bounded_structured_misleading_context(
     max_items=6,
     max_chars=900,
 ):
-    """Render only the strongest assessed evidence needed for the relationship audit."""
+    """Render a compact but stance-diverse relationship-audit dossier.
+
+    Strict-equivalent structured signals are always retained. The remaining
+    budget deliberately preserves the strongest SUPPORTS, CONTEXT, and REFUTES
+    items before filling by quality. This prevents a large set of same-direction
+    refutations from crowding out the genuine-substrate/context evidence needed
+    to distinguish FABRICATED_CORE from MATERIAL_MISDESCRIPTION.
+    """
     signal_ids = {str(value) for value in signal_ids}
     candidates = []
     seen = set()
@@ -3308,43 +3364,74 @@ def _bounded_structured_misleading_context(
                 quality = (float(relevance) + float(directness)) / 2
             except (TypeError, ValueError):
                 quality = 0.0
-            priority = (
-                0 if evidence_id in signal_ids
-                else 1 if stance == "SUPPORTS"
-                else 2 if stance == "REFUTES"
-                else 3 if stance == "CONTEXT"
-                else 4
+            candidates.append({
+                "evidence_id": evidence_id,
+                "title": str(getattr(item, "title", "") or "")[:240],
+                "content": str(getattr(item, "content", "") or "")[:max_chars],
+                "stance": stance,
+                "relevance_score": relevance,
+                "directness_score": directness,
+                "structured_misleading_signal": evidence_id in signal_ids,
+                "_quality": quality,
+            })
+
+    selected = []
+    selected_ids = set()
+
+    def add(item):
+        if item["evidence_id"] in selected_ids:
+            return
+        selected.append(item)
+        selected_ids.add(item["evidence_id"])
+
+    # Every strict-equivalent structured signal must remain visible, even when
+    # there are more signals than the ordinary compact-item budget.
+    for item in sorted(
+        (row for row in candidates if row["structured_misleading_signal"]),
+        key=lambda row: (-row["_quality"], row["evidence_id"]),
+    ):
+        add(item)
+
+    # Reserve compact-dossier diversity for material relationship reasoning.
+    # A small quality floor prevents very weak background from displacing useful
+    # assessed evidence merely to satisfy stance diversity.
+    for stance in ("SUPPORTS", "CONTEXT", "REFUTES"):
+        if len(selected) >= max_items:
+            break
+        eligible = [
+            row for row in candidates
+            if (
+                row["stance"] == stance
+                and row["evidence_id"] not in selected_ids
+                and row["_quality"] >= 0.45
             )
-            candidates.append((
-                priority,
-                -quality,
-                {
-                    "evidence_id": evidence_id,
-                    "title": str(getattr(item, "title", "") or "")[:240],
-                    "content": str(getattr(item, "content", "") or "")[:max_chars],
-                    "stance": stance,
-                    "relevance_score": relevance,
-                    "directness_score": directness,
-                    "structured_misleading_signal": evidence_id in signal_ids,
-                },
+        ]
+        if eligible:
+            add(max(
+                eligible,
+                key=lambda row: (row["_quality"], row["evidence_id"]),
             ))
 
-    candidates.sort(key=lambda row: (row[0], row[1], row[2]["evidence_id"]))
-    selected = [row[2] for row in candidates[:max_items]]
-    selected_ids = {row["evidence_id"] for row in selected}
+    # Fill any remaining budget with the strongest assessed evidence regardless
+    # of stance, while retaining deterministic ordering.
+    remaining = sorted(
+        (
+            row for row in candidates
+            if row["evidence_id"] not in selected_ids
+        ),
+        key=lambda row: (-row["_quality"], row["evidence_id"]),
+    )
+    for item in remaining:
+        if len(selected) >= max_items:
+            break
+        add(item)
 
-    # Every strict-equivalent structured signal must remain visible to the audit.
-    for row in candidates:
-        item = row[2]
-        if (
-            item["structured_misleading_signal"]
-            and item["evidence_id"] not in selected_ids
-        ):
-            selected.append(item)
-            selected_ids.add(item["evidence_id"])
-
-    return json.dumps(selected, ensure_ascii=False)
-
+    rendered = []
+    for item in selected:
+        clean_item = dict(item)
+        clean_item.pop("_quality", None)
+        rendered.append(clean_item)
+    return json.dumps(rendered, ensure_ascii=False)
 
 
 _NONCONFIRMATION_AUDIT_EVIDENCE_PATTERNS = (
@@ -3596,15 +3683,29 @@ _FALSE_CONTEXT_AUDIT_CLAIM_PATTERNS = (
     r"\bre-captioned\b",
     r"\bout[- ]of[- ]context\b",
     r"\bmisleadingly edited\b",
+    # A neutral media claim can still be false because genuine material was
+    # assigned the wrong date, event, location, caption, or attribution. These
+    # nouns only OPEN the evidence-bound FAKE-vs-MISLEADING audit after the main
+    # evaluator has already returned FAKE; they never determine the verdict.
+    r"\bvideos?\b",
+    r"\bfootage\b",
+    r"\bphotos?\b",
+    r"\bphotographs?\b",
+    r"\bimages?\b",
+    r"\bclips?\b",
+    r"\baudio\b",
+    r"\brecordings?\b",
 )
 
 
 def _claim_needs_fake_false_context_audit(original_claim):
-    """Open a narrow FAKE-vs-MISLEADING audit for explicit manipulation claims.
+    """Open a narrow FAKE-vs-MISLEADING audit for manipulation/media claims.
 
     These lexical cues never determine the verdict. They only authorize a compact
-    second-stage relationship check when the first evaluator returned FAKE for a
-    proposition that itself explicitly concerns edited/recontextualized material.
+    second-stage relationship check after the first evaluator returned FAKE.
+    Media nouns are included because genuine footage/images can be assigned a
+    materially false date, event, location, caption, or attribution without the
+    submitted claim literally saying "edited" or "out of context".
     """
     if not isinstance(original_claim, str) or not original_claim.strip():
         return False
@@ -4193,7 +4294,11 @@ def extract_search_query(text, source_url=""):
         - DEBUNKING: The article is a fact-check disproving the extracted claim.
         - REPORTING: The article neutrally reports the extracted claim as true.
         - NEUTRAL: The text presents the claim without clearly endorsing or debunking it.
-    8. OUT OF SCOPE DETECTION (CRITICAL GATEKEEPER): If the text is a personal message, a greeting, a menu, a recipe, song lyrics, random UI buttons, a selfie with no text, or contains NO verifiable public factual claim or rumor, you MUST set "cleaned_claim" to exactly "OUT_OF_SCOPE".
+    8. OUT OF SCOPE DETECTION (CRITICAL GATEKEEPER):
+    - If the text is a personal message, a greeting, a menu, a recipe, song lyrics, random UI buttons, a selfie with no text, or contains NO verifiable public factual claim or rumor, you MUST set "cleaned_claim" to exactly "OUT_OF_SCOPE".
+    - Un-attributed recommendations, value judgments, wishes, commands, and subjective preferences are NOT factual claims. Examples such as "Public libraries should stay open later.", "I hope the meeting goes well tomorrow.", "Please forward this note to your classmates.", "That movie was really inspiring.", and "Vanilla ice cream tastes better than chocolate." MUST be OUT_OF_SCOPE.
+    - Do NOT use INSUFFICIENT_CONTEXT for a statement that is non-factual by nature. INSUFFICIENT_CONTEXT is only for a factual proposition whose material referent is ambiguous.
+    - Preserve factual attribution. For example, "The health ministry said schools should serve healthier meals." is a verifiable factual attribution about what WHO said and must NOT be rejected merely because the quoted recommendation contains "should".
 
     9. INSUFFICIENT CONTEXT DETECTION (CRITICAL GATEKEEPER):
     - If the text DOES contain a factual assertion or rumor, but a material person, organization, event, transaction, attribution, object, place, time reference, or other referent is too ambiguous to identify one stable proposition without guessing, set "cleaned_claim" to exactly "INSUFFICIENT_CONTEXT".

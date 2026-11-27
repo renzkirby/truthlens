@@ -9,7 +9,9 @@ from ..contracts import RawEvidence
 
 
 PROVIDER_NAME = "TAVILY"
+EXTRACT_PROVIDER_NAME = "TAVILY_EXTRACT"
 PRIMARY_SOURCE_RECOVERY_PROVIDER_RESULTS = 6
+EXTRACT_CONTENT_MAX_CHARS = 8000
 
 # Preserve the existing shared text/URL search preset during adapter staging.
 INCLUDE_DOMAINS = (
@@ -33,8 +35,30 @@ INCLUDE_DOMAINS = (
     "snopes.com",
     "politifact.com",
     "factcheck.org",
+    "fullfact.org",
     "afp.com",
 )
+
+# Keep normal retrieval bounded while ensuring institution-specific factual
+# claims can surface primary evidence without waiting for the late recovery path.
+# These are broad public-information authorities, not test-case URLs.
+AUTHORITY_INCLUDE_DOMAINS = (
+    "psa.gov.ph",
+    "pagasa.dost.gov.ph",
+    "bsp.gov.ph",
+    "officialgazette.gov.ph",
+    "deped.gov.ph",
+    "dswd.gov.ph",
+    "doh.gov.ph",
+    "denr.gov.ph",
+    "da.gov.ph",
+    "nasa.gov",
+    "noaa.gov",
+    "who.int",
+    "unesco.org",
+    "un.org",
+)
+NORMAL_INCLUDE_DOMAINS = (*INCLUDE_DOMAINS, *AUTHORITY_INCLUDE_DOMAINS)
 
 # Recovery search is intentionally narrower than a general open-web search.
 # These roots cover major intergovernmental institutions whose official domains
@@ -178,6 +202,48 @@ def parse_tavily_response(
     return evidence_items
 
 
+def parse_tavily_extract_response(
+    payload: dict[str, Any],
+    *,
+    limit: int = 2,
+) -> list[RawEvidence]:
+    """Translate bounded Tavily Extract results into separate page evidence."""
+    if limit <= 0 or not isinstance(payload, dict):
+        return []
+
+    results = payload.get("results", [])
+    if not isinstance(results, list):
+        return []
+
+    evidence_items: list[RawEvidence] = []
+    for result_index, result in enumerate(results):
+        if not isinstance(result, dict):
+            continue
+        url = _clean_optional_text(result.get("url"))
+        content = _clean_optional_text(
+            result.get("raw_content")
+            if result.get("raw_content") is not None
+            else result.get("content")
+        )
+        if url is None or content is None:
+            continue
+        content = content[:EXTRACT_CONTENT_MAX_CHARS]
+        evidence_items.append(
+            RawEvidence(
+                provider=EXTRACT_PROVIDER_NAME,
+                url=url,
+                title=_clean_optional_text(result.get("title")),
+                publisher=_clean_optional_text(result.get("publisher")),
+                content=content,
+                source_type="WEB_EXTRACT",
+                raw_reference={"tavily_extract_result_index": result_index},
+            )
+        )
+        if len(evidence_items) >= limit:
+            break
+    return evidence_items
+
+
 class TavilyProvider:
     """Retrieve source evidence only; runtime evaluation remains caller-owned."""
 
@@ -230,7 +296,7 @@ class TavilyProvider:
             )
         else:
             # Preserve the existing curated search behavior for every normal run.
-            search_kwargs["include_domains"] = list(INCLUDE_DOMAINS)
+            search_kwargs["include_domains"] = list(NORMAL_INCLUDE_DOMAINS)
 
         payload = self.client.search(**search_kwargs)
         if not isinstance(payload, dict):
@@ -239,6 +305,45 @@ class TavilyProvider:
             payload = filter_primary_source_recovery_payload(payload, limit=limit)
 
         return payload, parse_tavily_response(payload, limit=limit)
+
+    def extract_with_payload(
+        self,
+        urls,
+        *,
+        query: str | None = None,
+        limit: int = 2,
+        timeout: float | None = None,
+    ) -> tuple[dict[str, Any], list[RawEvidence]]:
+        """Extract page text for a tiny set of already-retrieved candidate URLs."""
+        if isinstance(urls, str):
+            bounded_urls = [urls.strip()] if urls.strip() else []
+        else:
+            bounded_urls = [
+                value.strip()
+                for value in (urls or ())
+                if isinstance(value, str) and value.strip()
+            ]
+        bounded_urls = bounded_urls[:limit]
+        if not bounded_urls or limit <= 0:
+            return {}, []
+
+        if self.client is None:
+            api_key = _clean_optional_text(self.api_key)
+            if api_key is None:
+                raise ValueError("TAVILY_API_KEY is required for Tavily extract.")
+            self.client = TavilyClient(api_key=api_key)
+
+        extract_timeout = self.timeout if timeout is None else timeout
+        payload = self.client.extract(
+            bounded_urls,
+            extract_depth="basic",
+            format="text",
+            timeout=extract_timeout,
+            **({"query": query.strip()} if isinstance(query, str) and query.strip() else {}),
+        )
+        if not isinstance(payload, dict):
+            raise TypeError("Tavily extract response must be a dictionary.")
+        return payload, parse_tavily_extract_response(payload, limit=limit)
 
     def search(
         self,
