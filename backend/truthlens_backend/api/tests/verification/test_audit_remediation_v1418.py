@@ -185,6 +185,7 @@ class VerificationAuditRemediationV1418Tests(SimpleTestCase):
         audit_prompt = provider.call_args_list[1].args[1]
         self.assertIn("<eligible_relationship_basis_ids>", audit_prompt)
         self.assertIn(evidence_id, audit_prompt)
+        self.assertIn('"structured_misleading_signal": false', audit_prompt)
 
     def test_nonmedia_audit_rejects_freeform_extra_fields(self):
         evidence_id = "7f7f7f7f-7777-7777-7777-777777777777"
