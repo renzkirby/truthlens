@@ -3413,7 +3413,7 @@ def _deterministic_structured_misleading_result(
         for value in evaluator_result.get("contextual_basis_evidence_ids", [])
         if value
     }
-    if not basis_ids.intersection({str(value) for value in signal_ids}):
+    if not basis_ids:
         return None
     if not has_claim_scoped_misleading_support(
         evaluator_result,
@@ -3431,6 +3431,69 @@ def _deterministic_structured_misleading_result(
         f"confidence is {result['confidence_score']:g}%."
     )
     return result
+
+
+_RELATIONSHIP_AUDIT_EXCERPT_PATTERNS = (
+    r"\bout[- ]of[- ]context\b",
+    r"\b(?:selectively|materially) (?:edited|spliced|clipped|cropped)\b",
+    r"\bfull (?:video|clip|footage|recording)\b",
+    r"\b(?:omits?|omitted|missing) (?:the )?(?:context|earlier|prior|preceding|full)\b",
+    r"\b(?:earlier|previously).{0,120}\b(?:handshake|shook hands|greeted|met|spoke)\b",
+    r"\bnot (?:given|released|transferred|disbursed) to\b",
+    r"\bwent to (?:government )?(?:agencies|projects)\b",
+    r"\bremains? (?:illegal|banned|pending)\b",
+    r"\b(?:did not|does not|has not) (?:become|make|legalize|authorize)\b",
+    r"\bmislead(?:s|ing)?\b",
+)
+
+
+def _relationship_audit_excerpt(value, *, max_chars=900):
+    """Keep a bounded correction-centered excerpt for relationship arbitration."""
+    text = " ".join(str(value or "").split())
+    if len(text) <= max_chars:
+        return text
+    normalized = text.casefold()
+    match = next(
+        (
+            found
+            for pattern in _RELATIONSHIP_AUDIT_EXCERPT_PATTERNS
+            if (found := re.search(pattern, normalized)) is not None
+        ),
+        None,
+    )
+    if match is None:
+        return text[:max_chars]
+
+    edge_chars = max_chars // 5
+    center_chars = max_chars - (edge_chars * 2)
+    center_start = max(0, match.start() - (center_chars // 2))
+    center_end = min(len(text), center_start + center_chars)
+    center_start = max(0, center_end - center_chars)
+    parts = (
+        text[:edge_chars],
+        text[center_start:center_end],
+        text[-edge_chars:],
+    )
+    return " … ".join(part for part in parts if part)[: max_chars + 6]
+
+
+def _compact_relationship_evidence_ids(compact_context):
+    """Return only persisted evidence IDs actually exposed to the compact audit."""
+    try:
+        rows = json.loads(compact_context)
+    except (TypeError, ValueError):
+        return set()
+    if not isinstance(rows, list):
+        return set()
+    return {
+        str(row.get("evidence_id")).strip()
+        for row in rows
+        if (
+            isinstance(row, dict)
+            and isinstance(row.get("evidence_id"), str)
+            and row.get("evidence_id").strip()
+        )
+    }
 
 
 def _bounded_structured_misleading_context(
@@ -3470,7 +3533,10 @@ def _bounded_structured_misleading_context(
             candidates.append({
                 "evidence_id": evidence_id,
                 "title": str(getattr(item, "title", "") or "")[:240],
-                "content": str(getattr(item, "content", "") or "")[:max_chars],
+                "content": _relationship_audit_excerpt(
+                    getattr(item, "content", ""),
+                    max_chars=max_chars,
+                ),
                 "stance": stance,
                 "relevance_score": relevance,
                 "directness_score": directness,
@@ -3819,6 +3885,46 @@ def _claim_needs_fake_false_context_audit(original_claim):
     )
 
 
+_FALSE_CONTEXT_AUDIT_EVIDENCE_PATTERNS = (
+    r"\bout[- ]of[- ]context\b",
+    r"\b(?:selectively|materially) (?:edited|spliced|clipped|cropped)\b",
+    r"\bfull (?:video|clip|footage|recording)\b",
+    r"\b(?:omits?|omitted|missing) (?:the )?(?:context|earlier|prior|preceding|full)\b",
+    r"\b(?:videos?|clips?|footage|recordings?|photos?|images?)\b.{0,160}\bmislead(?:s|ing)?\b",
+    r"\bmislead(?:s|ing)?\b.{0,160}\b(?:videos?|clips?|footage|recordings?|photos?|images?)\b",
+    r"\b(?:earlier|previously).{0,120}\b(?:handshake|shook hands|greeted|met|spoke)\b",
+)
+
+
+def _evidence_needs_fake_false_context_audit(evidence_groups):
+    """Open relationship arbitration only for strong assessed contextual-media cues."""
+    for group in evidence_groups or ():
+        for item in getattr(group, "evidence", ()):
+            if str(getattr(item, "stance", "") or "") not in {"REFUTES", "CONTEXT"}:
+                continue
+            try:
+                relevance = float(getattr(item, "relevance_score", 0))
+                directness = float(getattr(item, "directness_score", 0))
+            except (TypeError, ValueError):
+                continue
+            if not (
+                0.0 <= relevance <= 1.0
+                and 0.0 <= directness <= 1.0
+                and min(relevance, directness) >= 0.50
+            ):
+                continue
+            signal_text = " ".join((
+                str(getattr(item, "title", "") or ""),
+                str(getattr(item, "content", "") or ""),
+            )).casefold()
+            if any(
+                re.search(pattern, signal_text)
+                for pattern in _FALSE_CONTEXT_AUDIT_EVIDENCE_PATTERNS
+            ):
+                return True
+    return False
+
+
 def _fake_false_context_unverified_result():
     return {
         "reasoning": (
@@ -3846,13 +3952,14 @@ def _audit_fake_false_context_signal(
     evaluator_result,
     evidence_groups=(),
 ):
-    """Resolve FAKE vs FALSE_CONTEXT only for explicit manipulated-media claims."""
+    """Resolve FAKE vs MISLEADING from a narrow claim/evidence context trigger."""
     compact_context = _bounded_structured_misleading_context(
         (),
         evidence_groups,
     )
     if not compact_context or compact_context == "[]":
         return _fake_false_context_unverified_result()
+    allowed_basis_ids = _compact_relationship_evidence_ids(compact_context)
 
     system_instructions = """
     Role: You are the TruthLens FAKE-vs-MISLEADING false-context auditor.
@@ -3860,9 +3967,10 @@ def _audit_fake_false_context_signal(
     Use ONLY the supplied assessed persisted evidence. Do not use pre-trained
     knowledge, external facts, source-title labels alone, or assumptions.
 
-    The first evaluator returned FAKE. The submitted proposition itself explicitly
-    concerns edited, spliced, clipped, cropped, re-captioned, or otherwise
-    recontextualized material. Determine only the factual relationship:
+    The first evaluator returned FAKE. A narrow claim/evidence trigger indicates
+    that the same submitted proposition MAY involve genuine material presented with
+    false or missing context. The trigger is not proof. Determine only the factual
+    relationship from the assessed candidate evidence:
 
     - MATERIAL_MISDESCRIPTION: the underlying quoted words, media, event, exchange,
       or other material is genuine and materially connected to the submitted claim,
@@ -3922,8 +4030,13 @@ def _audit_fake_false_context_signal(
             if basis_kind not in {"PARTIAL_TRUTH", "FALSE_CONTEXT"} or not basis_ids:
                 raise ValueError("false-context audit lacked a valid contextual basis")
             persisted_ids = _persisted_evidence_link_ids(evidence_groups)
-            if any(value not in persisted_ids for value in basis_ids):
-                raise ValueError("false-context audit cited non-persisted evidence")
+            if any(
+                value not in persisted_ids or value not in allowed_basis_ids
+                for value in basis_ids
+            ):
+                raise ValueError(
+                    "false-context audit cited evidence outside the compact persisted dossier"
+                )
             result = {
                 "reasoning": (
                     "Assessed persisted evidence establishes genuine underlying "
@@ -3997,20 +4110,28 @@ def _audit_structured_misleading_signal(
     evaluator_result,
     official_misleading_evidence_ids,
     evidence_groups=(),
+    *,
+    official_false_evidence_ids=(),
 ):
-    """Classify the factual relationship behind a strict-equivalent Misleading signal."""
+    """Classify the relationship behind equivalent structured rating signals."""
     signal_ids = tuple(
         value.strip()
         for value in official_misleading_evidence_ids
         if isinstance(value, str) and value.strip()
     )
+    false_signal_ids = tuple(
+        value.strip()
+        for value in official_false_evidence_ids
+        if isinstance(value, str) and value.strip()
+    )
     if not signal_ids:
         return evaluator_result
 
+    all_signal_ids = tuple(dict.fromkeys((*signal_ids, *false_signal_ids)))
     persisted_ids = _persisted_evidence_link_ids(evidence_groups)
-    if any(value not in persisted_ids for value in signal_ids):
+    if any(value not in persisted_ids for value in all_signal_ids):
         logger.warning(
-            "Structured misleading audit unavailable: signal evidence was not persisted."
+            "Structured relationship audit unavailable: signal evidence was not persisted."
         )
         return _structured_misleading_signal_unverified_result()
 
@@ -4018,9 +4139,11 @@ def _audit_structured_misleading_signal(
     Role: You are the TruthLens structured-Misleading relationship auditor.
 
     Use ONLY the supplied persisted evidence. Do not use pre-trained knowledge,
-    external facts, or assumptions. A strict-equivalent Google ClaimReview carries
-    the textual rating "Misleading". That rating opens this audit but does NOT
-    determine the TruthLens verdict.
+    external facts, or assumptions. One or more strict-equivalent Google
+    ClaimReviews carry recognized publisher ratings. A Misleading rating opens this
+    audit, while equivalent False ratings may also be supplied as taxonomy context.
+    Publisher labels do NOT determine the TruthLens verdict and False-versus-
+    Misleading label disagreement is not by itself a factual evidence conflict.
 
     Classify the relationship between the exact submitted proposition and evidence:
     - MATERIAL_MISDESCRIPTION: a substantial genuine factual substrate of the same
@@ -4069,26 +4192,32 @@ def _audit_structured_misleading_signal(
       above relationships or materially conflicts.
 
     For MATERIAL_MISDESCRIPTION, basis_kind must be exactly one of
-    MISSING_CONTEXT, PARTIAL_TRUTH, or FALSE_CONTEXT. For every other relationship,
-    basis_kind must be NONE.
+    MISSING_CONTEXT, PARTIAL_TRUTH, or FALSE_CONTEXT and basis_evidence_ids must
+    contain one or more exact evidence_id values from the supplied candidate
+    dossier that establish the genuine substrate/corrective relationship. For every
+    other relationship, basis_kind must be NONE and basis_evidence_ids must be [].
 
     Return JSON containing at least:
     {
       "relationship": "MATERIAL_MISDESCRIPTION|FABRICATED_CORE|FULLY_SUPPORTED|INSUFFICIENT_OR_CONFLICTING",
-      "basis_kind": "NONE|MISSING_CONTEXT|PARTIAL_TRUTH|FALSE_CONTEXT"
+      "basis_kind": "NONE|MISSING_CONTEXT|PARTIAL_TRUTH|FALSE_CONTEXT",
+      "basis_evidence_ids": ["exact persisted evidence_id from supplied candidates"]
     }
     Optional reasoning/summary fields are allowed but are not required.
     """
     first_verdict = evaluator_result.get("verdict", "UNVERIFIED")
     compact_context = _bounded_structured_misleading_context(
-        signal_ids,
+        all_signal_ids,
         evidence_groups,
     )
+    allowed_basis_ids = _compact_relationship_evidence_ids(compact_context)
     user_data = (
         f"<claim>{original_claim}</claim>\n\n"
         f"<first_evaluator_verdict>{first_verdict}</first_evaluator_verdict>\n"
         f"<structured_misleading_evidence_ids>"
-        f"{json.dumps(signal_ids)}</structured_misleading_evidence_ids>\n\n"
+        f"{json.dumps(signal_ids)}</structured_misleading_evidence_ids>\n"
+        f"<structured_false_evidence_ids>"
+        f"{json.dumps(false_signal_ids)}</structured_false_evidence_ids>\n\n"
         f"<structured_misleading_candidates>"
         f"{compact_context}</structured_misleading_candidates>"
     )
@@ -4105,6 +4234,16 @@ def _audit_structured_misleading_signal(
             raise ValueError("structured misleading audit response was not a JSON object")
         relationship = audited.get("relationship")
         basis_kind = audited.get("basis_kind", "NONE")
+        raw_basis_ids = audited.get("basis_evidence_ids", [])
+        if not isinstance(raw_basis_ids, list):
+            raise ValueError("structured misleading audit returned invalid basis IDs")
+        basis_ids = [
+            value.strip()
+            for value in raw_basis_ids
+            if isinstance(value, str) and value.strip()
+        ]
+        if len(basis_ids) != len(raw_basis_ids) or len(set(basis_ids)) != len(basis_ids):
+            raise ValueError("structured misleading audit returned malformed basis IDs")
         if relationship not in {
             "MATERIAL_MISDESCRIPTION",
             "FABRICATED_CORE",
@@ -4127,8 +4266,15 @@ def _audit_structured_misleading_signal(
         )
 
         if relationship == "MATERIAL_MISDESCRIPTION":
-            if basis_kind not in _MISLEADING_MATERIALITY_BASIS_KINDS:
-                raise ValueError("material misdescription lacked a valid basis kind")
+            if basis_kind not in _MISLEADING_MATERIALITY_BASIS_KINDS or not basis_ids:
+                raise ValueError("material misdescription lacked a valid evidence basis")
+            if any(
+                value not in persisted_ids or value not in allowed_basis_ids
+                for value in basis_ids
+            ):
+                raise ValueError(
+                    "structured misleading audit cited evidence outside the compact persisted dossier"
+                )
             result = {
                 "reasoning": reasoning or (
                     "The strict-equivalent fact-check evidence establishes a "
@@ -4148,7 +4294,7 @@ def _audit_structured_misleading_signal(
                     "misdescription of a genuine factual substrate."
                 ),
                 "contextual_basis_kind": basis_kind,
-                "contextual_basis_evidence_ids": list(signal_ids),
+                "contextual_basis_evidence_ids": basis_ids,
             }
             if not has_usable_contextual_basis(
                 result,
@@ -4159,6 +4305,11 @@ def _audit_structured_misleading_signal(
                     "structured misleading basis did not meet the usable quality floor"
                 )
             return result
+
+        if basis_kind not in {None, "NONE"} or basis_ids:
+            raise ValueError(
+                "non-contextual structured relationship returned contextual basis evidence"
+            )
 
         if relationship == "FABRICATED_CORE":
             return {
@@ -4213,6 +4364,7 @@ def evaluate_claim_with_persisted_evidence(
     official_satire_evidence_ids=(),
     official_misleading_evidence_ids=(),
     *,
+    official_false_evidence_ids=(),
     evidence_groups=(),
 ):
     """Evaluate a claim using only the rendered persisted-evidence dossier."""
@@ -4281,6 +4433,7 @@ def evaluate_claim_with_persisted_evidence(
             official_fact_check_resolution == OFFICIAL_FACT_CHECK_RESOLUTION_NONE
             and article_stance != "SATIRE"
             and not official_misleading_evidence_ids
+            and not official_false_evidence_ids
             and parsed_result.get("verdict") in {"FAKE", "UNVERIFIED", "SATIRE"}
             and _has_persisted_satire_signal(evidence_groups)
         ):
@@ -4328,12 +4481,16 @@ def evaluate_claim_with_persisted_evidence(
                 parsed_result,
                 structured_misleading_ids,
                 evidence_groups,
+                official_false_evidence_ids=official_false_evidence_ids,
             )
 
         if (
             parsed_result.get("verdict") == "FAKE"
             and official_fact_check_resolution == OFFICIAL_FACT_CHECK_RESOLUTION_NONE
-            and _claim_needs_fake_false_context_audit(original_claim)
+            and (
+                _claim_needs_fake_false_context_audit(original_claim)
+                or _evidence_needs_fake_false_context_audit(evidence_groups)
+            )
         ):
             return _audit_fake_false_context_signal(
                 original_claim,
