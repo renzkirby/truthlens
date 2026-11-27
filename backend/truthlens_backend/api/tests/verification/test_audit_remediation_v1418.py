@@ -99,6 +99,34 @@ class VerificationAuditRemediationV1418Tests(SimpleTestCase):
             (evidence_id,),
         )
 
+    def test_nonmedia_basis_candidates_are_bounded_to_three_strongest(self):
+        items = [
+            _item(
+                f"12121212-1212-1212-1212-1212121212{index:02d}",
+                content=(
+                    "The Department released 64.9% of the budget, but these "
+                    "funds went to government agencies, not the president."
+                ),
+                relevance=score,
+                directness=score,
+            )
+            for index, score in enumerate((0.86, 0.99, 0.91, 0.95), start=1)
+        ]
+
+        selected = services._qualified_nonmedia_relationship_basis_ids(
+            [_group(*items)]
+        )
+
+        self.assertEqual(len(selected), 3)
+        self.assertEqual(
+            selected,
+            (
+                items[1].evidence_link_id,
+                items[3].evidence_link_id,
+                items[2].evidence_link_id,
+            ),
+        )
+
     def test_nonmedia_qualifier_is_body_only_refutes_only_and_quality_gated(self):
         title_only = _item(
             "33333333-3333-3333-3333-333333333333",
