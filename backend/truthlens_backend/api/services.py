@@ -1530,6 +1530,8 @@ def clean_ocr_text(raw_text):
     9. INSUFFICIENT CONTEXT DETECTION (CRITICAL GATEKEEPER):
     - If the text DOES contain a factual assertion or rumor, but a material person, organization, event, transaction, attribution, object, place, time reference, or other referent is too ambiguous to identify one stable proposition without guessing, set "cleaned_claim" to exactly "INSUFFICIENT_CONTEXT".
     - Use this only when proceeding would require inventing or assuming a material detail that could change which real-world proposition is being checked.
+    - A factual claim is sufficiently specific when the submitted text itself fixes a stable actor or organization, the asserted action or relationship, and the material event, process, object, or proceeding being discussed. Do not demand extra background merely because more detail could make retrieval easier.
+    - Named or otherwise clearly scoped proceedings, programs, cases, policies, reviews, or events can supply the needed referent. If the actor and event/process are already stable, do not require an additional date, location, source name, or quotation unless omitting it would create materially different propositions.
     - Examples that require more context include: "Joel stole 800 million pesos", "Sara gave back the money she stole", "The senator was arrested yesterday", and "He stole government funds".
     - Do NOT infer that a first name, surname, title, pronoun, abbreviation, organization, or vague event refers to a particular real-world entity merely because one interpretation seems likely.
     - Do NOT require a date, location, or other detail when the proposition is already stable and identifiable. For example, "The Philippines has 82 provinces" is sufficiently specific.
@@ -2627,6 +2629,7 @@ def build_persisted_evidence_prompt(
 
     VERDICT RULES:
     - FACT requires explicit support for the claim in the evidence.
+    - FACT also requires modal and epistemic entailment. Evidence that says a proposition may, might, or could be true; is hypothetical, theoretical, proposed, possible, or only a candidate; or is conditional on phrases such as "if X exists" does NOT establish a categorical submitted claim that it is actually true, exists, or occurred. Such evidence is contextual for the stronger categorical claim unless another supplied passage explicitly establishes actuality. If the dossier establishes only possibility, candidacy, or theory while actuality remains unconfirmed, return UNVERIFIED.
     - FAKE requires affirmative contradiction, fabrication, or false attribution.
       Failure to corroborate a claim alone is not sufficient for FAKE.
     - Absence of confirmation is not confirmation of absence. Evidence saying the
@@ -3945,6 +3948,21 @@ def _audit_structured_misleading_signal(
       materially changing the meaning of genuine same-source/content material. If
       yes, choose MATERIAL_MISDESCRIPTION. If the asserted words/action were simply
       invented without such a genuine substrate, choose FABRICATED_CORE.
+    - A strict-equivalent ClaimReview rating does not decide the verdict, but the
+      reviewed proposition establishes that this audit concerns the same submitted
+      proposition. Corrective passages may establish a material misdescription by
+      showing the real legal, administrative, custody, eligibility, status, or
+      process relationship even when they do not repeat the misleading wording.
+    - Treat a materially false voluntary-versus-mandatory or status framing as
+      MATERIAL_MISDESCRIPTION when the evidence establishes the same underlying
+      event/process. Examples include portraying required custody, rehabilitation,
+      compliance, or another legal/administrative process as a discretionary
+      promise, favor, reward, or voluntary benefit when that difference changes the
+      ordinary factual impression of the submitted claim.
+    - Do not choose INSUFFICIENT_OR_CONFLICTING merely because corrective evidence
+      describes the actual status/process rather than quoting the misleading phrase,
+      when the strict-equivalent signal fixes claim identity and the persisted
+      evidence establishes the corrected relationship.
     - FULLY_SUPPORTED: every material assertion in the submitted proposition is
       explicitly supported by the persisted evidence.
     - INSUFFICIENT_OR_CONFLICTING: the evidence cannot safely establish one of the
@@ -4303,6 +4321,8 @@ def extract_search_query(text, source_url=""):
     9. INSUFFICIENT CONTEXT DETECTION (CRITICAL GATEKEEPER):
     - If the text DOES contain a factual assertion or rumor, but a material person, organization, event, transaction, attribution, object, place, time reference, or other referent is too ambiguous to identify one stable proposition without guessing, set "cleaned_claim" to exactly "INSUFFICIENT_CONTEXT".
     - Use this only when proceeding would require inventing or assuming a material detail that could change which real-world proposition is being checked.
+    - A factual claim is sufficiently specific when the submitted text itself fixes a stable actor or organization, the asserted action or relationship, and the material event, process, object, or proceeding being discussed. Do not demand extra background merely because more detail could make retrieval easier.
+    - Named or otherwise clearly scoped proceedings, programs, cases, policies, reviews, or events can supply the needed referent. If the actor and event/process are already stable, do not require an additional date, location, source name, or quotation unless omitting it would create materially different propositions.
     - Examples that require more context include: "Joel stole 800 million pesos", "Sara gave back the money she stole", "The senator was arrested yesterday", and "He stole government funds".
     - Do NOT infer that a first name, surname, title, pronoun, abbreviation, organization, or vague event refers to a particular real-world entity merely because one interpretation seems likely.
     - Do NOT require a date, location, or other detail when the proposition is already stable and identifiable. For example, "The Philippines has 82 provinces" is sufficiently specific.
