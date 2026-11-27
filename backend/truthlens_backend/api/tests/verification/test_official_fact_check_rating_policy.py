@@ -259,6 +259,20 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
 
         self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE)
 
+    def test_semantic_coverage_preserves_equivalent_false_signal_without_shortcut(self):
+        reviewed = "The athlete met the head of state after the tournament final."
+        result = tasks._resolve_official_fact_check_rating_policy(
+            "The athlete met with the head of state after the tournament final.",
+            _groups((reviewed, "False")),
+            coverage=_coverage((reviewed, "EQUIVALENT_OR_COVERS")),
+        )
+
+        self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_NONE)
+        self.assertEqual(result["satire_evidence_ids"], ())
+        self.assertEqual(result["misleading_evidence_ids"], ())
+        self.assertEqual(result["false_evidence_ids"], ("evidence-1",))
+        self.assertFalse(tasks._official_rating_policy_has_signal(result))
+
     def test_semantic_coverage_can_activate_misleading_context_signal(self):
         reviewed = (
             "Erwin Tulfo said stop meddling with flood-control projects; "
