@@ -27,6 +27,7 @@ from .services import (
     llm_provider_scope,
     process_image,
     clean_ocr_text,
+    can_rescue_direct_text_insufficient_context,
     inspect_direct_text_claim_fidelity,
     clean_extracted_text,
     extract_search_query,
@@ -1943,7 +1944,24 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                 return
 
             if cleaned_claim == "INSUFFICIENT_CONTEXT":
-                if not is_image_claim:
+                if (
+                    is_text_claim
+                    and can_rescue_direct_text_insufficient_context(raw_text)
+                ):
+                    rescue_started_at = time.perf_counter()
+                    submitted_claim = " ".join(raw_text.split())
+                    cleaned_claim = submitted_claim
+                    search_query = submitted_claim
+                    search_queries = [submitted_claim]
+                    article_stance = "NEUTRAL"
+                    _log_stage(
+                        claim_id,
+                        "direct_text_context_rescue",
+                        rescue_started_at,
+                        outcome="claimable",
+                        query_count=1,
+                    )
+                elif not is_image_claim:
                     logger.info("Claim %s needs more context.", claim_id)
                     _set_claimability_status(
                         claim_id,
@@ -1952,59 +1970,59 @@ def execute_core_text_pipeline(raw_text, claim_id, triggered_by_id=None):
                     outcome = "abstained_insufficient_context"
                     selected_verdict = "INSUFFICIENT_CONTEXT"
                     return
-
-                fallback_started_at = time.perf_counter()
-                fallback_result = extract_source_bounded_noneditable_claim(
-                    raw_text,
-                    source_kind="IMAGE",
-                )
-                noneditable_context_fallback = True
-                noneditable_fallback_anchor_tokens = tuple(
-                    fallback_result.get("_material_anchor_tokens") or ()
-                )
-                noneditable_fallback_assertion_complete = bool(
-                    fallback_result.get("_assertion_complete")
-                )
-                cleaned_claim = fallback_result.get("cleaned_claim")
-                search_query = fallback_result.get("search_query")
-                search_queries = _claim_gate_retrieval_queries(fallback_result)
-                article_stance = fallback_result.get(
-                    "article_stance",
-                    article_stance,
-                )
-                _log_stage(
-                    claim_id,
-                    "image_context_fallback",
-                    fallback_started_at,
-                    outcome=cleaned_claim,
-                    query_count=len(search_queries),
-                )
-
-                if cleaned_claim == "OUT_OF_SCOPE":
-                    logger.info(
-                        "Claim %s was gated as out of scope by image fallback.",
-                        claim_id,
-                    )
-                    _set_claimability_status(
-                        claim_id,
-                        Claim.ClaimabilityStatus.OUT_OF_SCOPE,
-                    )
-                    outcome = "abstained_out_of_scope"
-                    selected_verdict = "OUT_OF_SCOPE"
-                    return
-
-                if (
-                    cleaned_claim == "INSUFFICIENT_CONTEXT"
-                    or not search_queries
-                ):
-                    _save_context_limited_unverified(
-                        claim_id,
+                else:
+                    fallback_started_at = time.perf_counter()
+                    fallback_result = extract_source_bounded_noneditable_claim(
                         raw_text,
                         source_kind="IMAGE",
                     )
-                    outcome = "context_fallback_unverified"
-                    selected_verdict = "UNVERIFIED"
-                    return
+                    noneditable_context_fallback = True
+                    noneditable_fallback_anchor_tokens = tuple(
+                        fallback_result.get("_material_anchor_tokens") or ()
+                    )
+                    noneditable_fallback_assertion_complete = bool(
+                        fallback_result.get("_assertion_complete")
+                    )
+                    cleaned_claim = fallback_result.get("cleaned_claim")
+                    search_query = fallback_result.get("search_query")
+                    search_queries = _claim_gate_retrieval_queries(fallback_result)
+                    article_stance = fallback_result.get(
+                        "article_stance",
+                        article_stance,
+                    )
+                    _log_stage(
+                        claim_id,
+                        "image_context_fallback",
+                        fallback_started_at,
+                        outcome=cleaned_claim,
+                        query_count=len(search_queries),
+                    )
+
+                    if cleaned_claim == "OUT_OF_SCOPE":
+                        logger.info(
+                            "Claim %s was gated as out of scope by image fallback.",
+                            claim_id,
+                        )
+                        _set_claimability_status(
+                            claim_id,
+                            Claim.ClaimabilityStatus.OUT_OF_SCOPE,
+                        )
+                        outcome = "abstained_out_of_scope"
+                        selected_verdict = "OUT_OF_SCOPE"
+                        return
+
+                    if (
+                        cleaned_claim == "INSUFFICIENT_CONTEXT"
+                        or not search_queries
+                    ):
+                        _save_context_limited_unverified(
+                            claim_id,
+                            raw_text,
+                            source_kind="IMAGE",
+                        )
+                        outcome = "context_fallback_unverified"
+                        selected_verdict = "UNVERIFIED"
+                        return
 
             if is_text_claim:
                 fidelity_started_at = time.perf_counter()
