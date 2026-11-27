@@ -4971,9 +4971,13 @@ def evaluate_claim_with_persisted_evidence(
             nonmedia_claim_families = _claim_nonmedia_relationship_families(
                 original_claim
             )
-            nonmedia_basis_ids = _qualified_nonmedia_relationship_basis_ids(
-                evidence_groups,
-                allowed_families=nonmedia_claim_families,
+            nonmedia_basis_ids = (
+                _qualified_nonmedia_relationship_basis_ids(
+                    evidence_groups,
+                    allowed_families=nonmedia_claim_families,
+                )
+                if nonmedia_claim_families
+                else ()
             )
             if nonmedia_basis_ids:
                 logger.info(
