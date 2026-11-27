@@ -210,7 +210,14 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
                     "FALSE",
                 )
 
-        for rating in ("Misleading", "MISLEADING", " misleading "):
+        for rating in (
+            "Misleading",
+            "MISLEADING",
+            " misleading ",
+            "Needs Context",
+            "NEEDS CONTEXT",
+            " needs context ",
+        ):
             with self.subTest(rating=rating):
                 self.assertEqual(
                     classify_official_fact_check_rating(rating),
@@ -297,6 +304,31 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
         self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_NONE)
         self.assertEqual(result["satire_evidence_ids"], ())
         self.assertEqual(result["misleading_evidence_ids"], ("evidence-1",))
+
+    def test_exact_needs_context_rating_becomes_context_signal_without_coverage(self):
+        result = tasks._resolve_official_fact_check_rating_policy(
+            "Rex Gatchalian said air can be turned into water to help address El Niño.",
+            _groups((
+                "Rex Gatchalian said air can be turned into water to help address El Niño.",
+                "Needs Context",
+            )),
+        )
+
+        self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_NONE)
+        self.assertEqual(result["satire_evidence_ids"], ())
+        self.assertEqual(result["misleading_evidence_ids"], ("evidence-1",))
+        self.assertEqual(result["false_evidence_ids"], ())
+
+    def test_related_needs_context_rating_does_not_activate_context_signal(self):
+        reviewed = "DSWD deployed atmospheric water generators during El Niño."
+        result = tasks._resolve_official_fact_check_rating_policy(
+            "Rex Gatchalian said air can now be turned into water.",
+            _groups((reviewed, "Needs Context")),
+            coverage=_coverage((reviewed, "PARTIAL_OR_RELATED")),
+        )
+
+        self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_NONE)
+        self.assertEqual(result["misleading_evidence_ids"], ())
 
     def test_exact_equivalent_satire_rating_authorizes_satire_without_coverage(self):
         result = tasks._resolve_official_fact_check_rating_policy(
