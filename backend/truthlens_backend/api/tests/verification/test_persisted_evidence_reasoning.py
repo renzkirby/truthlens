@@ -941,6 +941,7 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         audited = {
             "relationship": "MATERIAL_MISDESCRIPTION",
             "basis_kind": "FALSE_CONTEXT",
+            "basis_evidence_ids": [evidence_id],
         }
 
         with patch(
