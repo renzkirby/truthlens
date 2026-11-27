@@ -1532,6 +1532,8 @@ def clean_ocr_text(raw_text):
     - Use this only when proceeding would require inventing or assuming a material detail that could change which real-world proposition is being checked.
     - A factual claim is sufficiently specific when the submitted text itself fixes a stable actor or organization, the asserted action or relationship, and the material event, process, object, or proceeding being discussed. Do not demand extra background merely because more detail could make retrieval easier.
     - Named or otherwise clearly scoped proceedings, programs, cases, policies, reviews, or events can supply the needed referent. If the actor and event/process are already stable, do not require an additional date, location, source name, or quotation unless omitting it would create materially different propositions.
+    - A date is NOT required for a stable state-of-the-world claim. A specifically named organization, place, product/model, scientific object, celestial body, case, program, or other identifiable entity plus an explicit factual state/action can be verified without a calendar date.
+    - Do not use INSUFFICIENT_CONTEXT merely because the claim is scientific, unusual, difficult to verify, or likely to end as UNVERIFIED. Use it only when a material referent or proposition is genuinely unresolved.
     - Examples that require more context include: "Joel stole 800 million pesos", "Sara gave back the money she stole", "The senator was arrested yesterday", and "He stole government funds".
     - Do NOT infer that a first name, surname, title, pronoun, abbreviation, organization, or vague event refers to a particular real-world entity merely because one interpretation seems likely.
     - Do NOT require a date, location, or other detail when the proposition is already stable and identifiable. For example, "The Philippines has 82 provinces" is sufficiently specific.
@@ -1849,6 +1851,14 @@ def _has_explicit_predicate_cue(value):
         "signed", "sign", "approved", "approve", "banned", "ban",
         "claimed", "claim", "announced", "announce", "reported", "report",
         "owns", "own", "received", "receive", "paid", "pay",
+        "contains", "contain", "harbors", "harbor", "hosts", "host",
+        "exists", "exist", "orbits", "orbit", "includes", "include",
+        "comprises", "comprise", "constitutes", "constitute",
+        "supports", "support", "causes", "cause", "requires", "require",
+        "produces", "produce", "uses", "use", "serves", "serve",
+        "holds", "hold", "remains", "remain", "reaches", "reach",
+        "exceeds", "exceed", "equals", "equal", "represents", "represent",
+        "recognizes", "recognize", "recognises", "recognise",
         # Filipino/Tagalog relation words commonly present in news claims.
         "ay", "may", "mayroon", "nasa", "naging", "ginawa", "gumawa",
         "gumagawa", "sinabi", "inanunsyo", "inilunsad", "pinangunahan",
@@ -1874,36 +1884,41 @@ _DIRECT_TEXT_CONTEXT_RESCUE_MONTHS = frozenset({
     "january", "february", "march", "april", "may", "june",
     "july", "august", "september", "october", "november", "december",
 })
-_DIRECT_TEXT_CONTEXT_RESCUE_YEAR_RE = re.compile(r"\b(?:19|20)\d{2}\b")
-_DIRECT_TEXT_CONTEXT_RESCUE_AMBIGUOUS_SUBJECT_RE = re.compile(
-    r"^\s*(?:he|she|they|it|this|that|these|those)\b"
-    r"|^\s*the\s+(?:president|senator|governor|mayor|minister|secretary|"
+_DIRECT_TEXT_CONTEXT_RESCUE_MIN_TOKENS = 5
+_DIRECT_TEXT_CONTEXT_RESCUE_UNRESOLVED_REFERENCE_RE = re.compile(
+    r"\b(?:he|she|they|him|her|them|it|this|these|those)\b"
+    r"|\bthe\s+(?:president|senator|governor|mayor|minister|secretary|"
     r"congressman|congresswoman|representative|official)\b",
     flags=re.IGNORECASE,
 )
 
 
 def can_rescue_direct_text_insufficient_context(value):
-    """Recognize only high-specificity direct text after a strict gate abstains.
+    """Recognize a stable direct-text proposition after a strict gate abstains.
 
-    This is intentionally narrow. It does not decide truth or claimability in the
-    ordinary path. It only prevents an INSUFFICIENT_CONTEXT result from blocking
-    retrieval when the user's exact text already contains:
-    - an explicit factual predicate;
-    - a concrete calendar year; and
-    - at least two non-temporal named identity anchors.
+    This helper does not decide truth and never runs on the normal claimable path.
+    It only prevents a false INSUFFICIENT_CONTEXT result when the user's exact text
+    is already structurally self-contained enough to search safely.
 
-    Pronoun-led and generic-role-led claims remain unresolved. False negatives
-    continue to abstain, so this helper favors precision over recall.
+    Rescue requires:
+    - a complete-looking direct-text proposition of at least a few tokens;
+    - an explicit factual predicate/state/relation;
+    - at least one non-temporal named identity anchor; and
+    - no unresolved personal/deictic pronoun or bare generic public-role referent.
+
+    A calendar date is deliberately NOT required. Evidence difficulty and likely
+    UNVERIFIED outcomes belong downstream, not in the claimability gate.
     """
     if not isinstance(value, str):
         return False
     normalized = " ".join(value.split())
     if not normalized or len(normalized) > _DIRECT_TEXT_FIDELITY_MAX_CHARS:
         return False
-    if _DIRECT_TEXT_CONTEXT_RESCUE_AMBIGUOUS_SUBJECT_RE.search(normalized):
+
+    tokens = _source_bounded_tokens(normalized)
+    if len(tokens) < _DIRECT_TEXT_CONTEXT_RESCUE_MIN_TOKENS:
         return False
-    if not _DIRECT_TEXT_CONTEXT_RESCUE_YEAR_RE.search(normalized):
+    if _DIRECT_TEXT_CONTEXT_RESCUE_UNRESOLVED_REFERENCE_RE.search(normalized):
         return False
     if not _has_explicit_predicate_cue(normalized):
         return False
@@ -1913,7 +1928,7 @@ def can_rescue_direct_text_insufficient_context(value):
         for token in _material_entity_anchor_tokens(normalized)
         if token not in _DIRECT_TEXT_CONTEXT_RESCUE_MONTHS
     }
-    return len(anchors) >= 2
+    return bool(anchors)
 
 
 def _bound_noneditable_fallback_to_source(result, source_text):
@@ -4369,6 +4384,8 @@ def extract_search_query(text, source_url=""):
     - Use this only when proceeding would require inventing or assuming a material detail that could change which real-world proposition is being checked.
     - A factual claim is sufficiently specific when the submitted text itself fixes a stable actor or organization, the asserted action or relationship, and the material event, process, object, or proceeding being discussed. Do not demand extra background merely because more detail could make retrieval easier.
     - Named or otherwise clearly scoped proceedings, programs, cases, policies, reviews, or events can supply the needed referent. If the actor and event/process are already stable, do not require an additional date, location, source name, or quotation unless omitting it would create materially different propositions.
+    - A date is NOT required for a stable state-of-the-world claim. A specifically named organization, place, product/model, scientific object, celestial body, case, program, or other identifiable entity plus an explicit factual state/action can be verified without a calendar date.
+    - Do not use INSUFFICIENT_CONTEXT merely because the claim is scientific, unusual, difficult to verify, or likely to end as UNVERIFIED. Use it only when a material referent or proposition is genuinely unresolved.
     - Examples that require more context include: "Joel stole 800 million pesos", "Sara gave back the money she stole", "The senator was arrested yesterday", and "He stole government funds".
     - Do NOT infer that a first name, surname, title, pronoun, abbreviation, organization, or vague event refers to a particular real-world entity merely because one interpretation seems likely.
     - Do NOT require a date, location, or other detail when the proposition is already stable and identifiable. For example, "The Philippines has 82 provinces" is sufficiently specific.
