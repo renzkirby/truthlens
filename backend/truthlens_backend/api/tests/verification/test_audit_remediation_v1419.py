@@ -42,9 +42,10 @@ class VerificationAuditRemediationV1419Tests(SimpleTestCase):
         )
 
         self.assertIn("ATTRIBUTED SPEECH/ACTION ENTAILMENT", system_prompt)
+        normalized_prompt = " ".join(system_prompt.split())
         self.assertIn(
             "Evidence proving only that the underlying technology",
-            system_prompt,
+            normalized_prompt,
         )
         self.assertIn(
             "do not return FACT",
