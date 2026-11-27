@@ -1834,8 +1834,24 @@ def _has_explicit_predicate_cue(value):
     INSUFFICIENT_CONTEXT. False negatives therefore abstain to UNVERIFIED rather
     than blocking normal verification.
     """
-    tokens = _source_bounded_tokens(value)
-    if not tokens:
+    raw_tokens = [
+        token.strip("'’-")
+        for token in re.findall(r"\b[\w'’.-]+\b", value, flags=re.UNICODE)
+        if token.strip("'’-")
+    ]
+    if not raw_tokens:
+        return False
+
+    predicate_tokens = [
+        raw.casefold()
+        for raw in raw_tokens
+        if not (
+            len(raw) >= 2
+            and any(character.isalpha() for character in raw)
+            and raw.isupper()
+        )
+    ]
+    if not predicate_tokens:
         return False
 
     explicit_predicates = {
@@ -1888,14 +1904,89 @@ def _has_explicit_predicate_cue(value):
         "dumadaan", "nagbigay", "ibinigay", "kinuha", "ninakaw",
         "inaresto", "hinatulan",
     }
-    if any(token in explicit_predicates for token in tokens):
+    if any(token in explicit_predicates for token in predicate_tokens):
         return True
 
     # Keep morphology only for the bounded Filipino/Tagalog patterns below.
     # Generic English suffix matching is intentionally avoided: many common
     # nouns/adjectives (for example "hearing", "meeting", "funding", "United")
     # would otherwise make a keyword fragment look like a complete proposition.
-    for token in tokens:
+    for token in predicate_tokens:
+        if re.match(r"^(?:nag|mag|pinag|ipinag|naka|maka|pina|ipa)[a-z]+$", token):
+            return True
+        if re.match(r"^[bcdfghjklmnpqrstvwxyz](?:um|in)[a-z]+$", token):
+            return True
+    return False
+
+
+_DIRECT_TEXT_STRONG_PREDICATES = frozenset({
+    # Auxiliaries/copulas/modals establish a grammatical predicate frame.
+    "am", "is", "are", "was", "were", "has", "have", "had",
+    "does", "do", "did", "will", "would", "can", "could", "may",
+    "might", "must", "shall", "should",
+    # High-confidence finite lexical verb forms used in factual claims.
+    "stole", "built", "made", "led", "said", "says", "gave", "took",
+    "won", "lost", "died", "killed", "arrested", "convicted", "launched",
+    "opened", "signed", "approved", "banned", "claimed", "announced",
+    "reported", "owns", "received", "paid", "contains", "harbors",
+    "harbours", "hosts", "exists", "orbits", "includes", "comprises",
+    "constitutes", "supports", "causes", "requires", "produces", "uses",
+    "serves", "holds", "remains", "reaches", "exceeds", "equals",
+    "represents", "recognizes", "recognises", "makes", "plans", "sells",
+    "buys", "gives", "sends", "becomes", "leads", "calls", "declares",
+    "files", "faces", "wins", "loses", "visits", "transfers", "moves",
+    "predicts", "forecasts", "shows", "depicts", "confirms", "denies",
+    "rejects", "accepts", "increases", "decreases", "rises", "falls",
+    "lives", "operates", "controls",
+    # Explicit finite/past forms that are unlikely to be bare topic labels.
+    "harbored", "harboured", "hosted", "existed", "orbited", "included",
+    "comprised", "constituted", "supported", "caused", "required",
+    "produced", "used", "served", "held", "remained", "reached",
+    "exceeded", "equaled", "equalled", "represented", "recognized",
+    "recognised", "planned", "sold", "bought", "sent", "became",
+    "called", "declared", "filed", "faced", "visited", "transferred",
+    "moved", "predicted", "showed", "depicted", "confirmed", "denied",
+    "rejected", "accepted", "increased", "decreased", "rose", "fell",
+    "lived", "operated", "controlled",
+    # Filipino/Tagalog finite relation/action forms.
+    "ay", "may", "mayroon", "nasa", "naging", "ginawa", "gumawa",
+    "gumagawa", "sinabi", "inanunsyo", "inilunsad", "pinangunahan",
+    "nagtayo", "magtayo", "nagpatayo", "pinatayo", "dumaan",
+    "dumadaan", "nagbigay", "ibinigay", "kinuha", "ninakaw",
+    "inaresto", "hinatulan",
+})
+
+
+def _has_explicit_direct_text_predicate_cue(value):
+    """Return whether direct text has a high-confidence finite predicate cue.
+
+    Unlike the broader source-bounded helper, this function is intentionally
+    strict because it may rescue an input after ClaimGate abstains. Uppercase
+    acronyms are excluded before case-folding so identifiers such as NASA cannot
+    collide with Filipino words such as "nasa".
+    """
+    if not isinstance(value, str):
+        return False
+
+    raw_tokens = [
+        token.strip("'’-")
+        for token in re.findall(r"\b[\w'’.-]+\b", value, flags=re.UNICODE)
+        if token.strip("'’-")
+    ]
+    predicate_tokens = [
+        raw.casefold()
+        for raw in raw_tokens
+        if not (
+            len(raw) >= 2
+            and any(character.isalpha() for character in raw)
+            and raw.isupper()
+        )
+    ]
+    if any(token in _DIRECT_TEXT_STRONG_PREDICATES for token in predicate_tokens):
+        return True
+
+    # Keep only bounded Filipino morphology. Avoid generic English suffix rules.
+    for token in predicate_tokens:
         if re.match(r"^(?:nag|mag|pinag|ipinag|naka|maka|pina|ipa)[a-z]+$", token):
             return True
         if re.match(r"^[bcdfghjklmnpqrstvwxyz](?:um|in)[a-z]+$", token):
@@ -1943,7 +2034,7 @@ def can_rescue_direct_text_insufficient_context(value):
         return False
     if _DIRECT_TEXT_CONTEXT_RESCUE_UNRESOLVED_REFERENCE_RE.search(normalized):
         return False
-    if not _has_explicit_predicate_cue(normalized):
+    if not _has_explicit_direct_text_predicate_cue(normalized):
         return False
 
     anchors = {
