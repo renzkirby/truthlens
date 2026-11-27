@@ -1827,99 +1827,7 @@ def _material_entity_anchor_tokens(value):
     return anchors
 
 
-def _has_explicit_predicate_cue(value):
-    """Conservatively detect whether source-bounded text states a relation/action.
-
-    This is used only after the strict ClaimGate has already returned
-    INSUFFICIENT_CONTEXT. False negatives therefore abstain to UNVERIFIED rather
-    than blocking normal verification.
-    """
-    raw_tokens = [
-        token.strip("'’-")
-        for token in re.findall(r"\b[\w'’.-]+\b", value, flags=re.UNICODE)
-        if token.strip("'’-")
-    ]
-    if not raw_tokens:
-        return False
-
-    predicate_tokens = [
-        raw.casefold()
-        for raw in raw_tokens
-        if not (
-            len(raw) >= 2
-            and any(character.isalpha() for character in raw)
-            and raw.isupper()
-        )
-    ]
-    if not predicate_tokens:
-        return False
-
-    explicit_predicates = {
-        # English auxiliaries/copulas and common factual verbs.
-        "am", "is", "are", "was", "were", "be", "been", "being",
-        "has", "have", "had", "does", "do", "did", "will", "would",
-        "can", "could", "may", "might", "must", "shall", "should",
-        "stole", "steal", "stolen", "built", "build", "made", "make",
-        "led", "lead", "said", "say", "says", "gave", "give", "given",
-        "took", "take", "taken", "won", "win", "lost", "lose",
-        "died", "die", "killed", "kill", "arrested", "arrest",
-        "convicted", "convict", "launched", "launch", "opened", "open",
-        "signed", "sign", "approved", "approve", "banned", "ban",
-        "claimed", "claim", "announced", "announce", "reported", "report",
-        "owns", "own", "received", "receive", "paid", "pay",
-        "contains", "contain", "harbors", "harbor", "hosts", "host",
-        "exists", "exist", "orbits", "orbit", "includes", "include",
-        "comprises", "comprise", "constitutes", "constitute",
-        "supports", "support", "causes", "cause", "requires", "require",
-        "produces", "produce", "uses", "use", "serves", "serve",
-        "holds", "hold", "remains", "remain", "reaches", "reach",
-        "exceeds", "exceed", "equals", "equal", "represents", "represent",
-        "recognizes", "recognize", "recognises", "recognise",
-        "makes", "plans", "plan", "sells", "sell", "buys", "buy",
-        "gives", "sends", "send", "becomes", "become", "leads",
-        "calls", "call", "declares", "declare", "files", "file",
-        "faces", "face", "wins", "loses", "visits", "visit",
-        "transfers", "transfer", "moves", "move", "predicts", "predict",
-        "forecasts", "forecast", "shows", "show", "depicts", "depict",
-        "confirms", "confirm", "denies", "deny", "rejects", "reject",
-        "accepts", "accept", "increases", "increase", "decreases", "decrease",
-        "rises", "rise", "falls", "fall", "lives", "live",
-        "operates", "operate", "controls", "control",
-        # Common finite past forms. Keep these explicit rather than accepting every
-        # English -ed/-ing token, because nouns/adjectives such as "hearing",
-        # "meeting", "funding", or "United" must not manufacture a predicate.
-        "harbored", "harboured", "hosted", "existed", "orbited", "included",
-        "comprised", "constituted", "supported", "caused", "required",
-        "produced", "used", "served", "held", "remained", "reached",
-        "exceeded", "equaled", "equalled", "represented", "recognized",
-        "recognised", "planned", "sold", "bought", "sent", "became",
-        "called", "declared", "filed", "faced", "visited", "transferred",
-        "moved", "predicted", "showed", "depicted", "confirmed", "denied",
-        "rejected", "accepted", "increased", "decreased", "rose", "fell",
-        "lived", "operated", "controlled",
-        # Filipino/Tagalog relation words commonly present in news claims.
-        "ay", "may", "mayroon", "nasa", "naging", "ginawa", "gumawa",
-        "gumagawa", "sinabi", "inanunsyo", "inilunsad", "pinangunahan",
-        "nagtayo", "magtayo", "nagpatayo", "pinatayo", "dumaan",
-        "dumadaan", "nagbigay", "ibinigay", "kinuha", "ninakaw",
-        "inaresto", "hinatulan",
-    }
-    if any(token in explicit_predicates for token in predicate_tokens):
-        return True
-
-    # Keep morphology only for the bounded Filipino/Tagalog patterns below.
-    # Generic English suffix matching is intentionally avoided: many common
-    # nouns/adjectives (for example "hearing", "meeting", "funding", "United")
-    # would otherwise make a keyword fragment look like a complete proposition.
-    for token in predicate_tokens:
-        if re.match(r"^(?:nag|mag|pinag|ipinag|naka|maka|pina|ipa)[a-z]+$", token):
-            return True
-        if re.match(r"^[bcdfghjklmnpqrstvwxyz](?:um|in)[a-z]+$", token):
-            return True
-    return False
-
-
-_DIRECT_TEXT_STRONG_PREDICATES = frozenset({
+_HIGH_CONFIDENCE_FACTUAL_PREDICATES = frozenset({
     # Auxiliaries/copulas/modals establish a grammatical predicate frame.
     "am", "is", "are", "was", "were", "has", "have", "had",
     "does", "do", "did", "will", "would", "can", "could", "may",
@@ -1938,7 +1846,9 @@ _DIRECT_TEXT_STRONG_PREDICATES = frozenset({
     "predicts", "forecasts", "shows", "depicts", "confirms", "denies",
     "rejects", "accepts", "increases", "decreases", "rises", "falls",
     "lives", "operates", "controls",
-    # Explicit finite/past forms that are unlikely to be bare topic labels.
+    # Explicit finite/past forms. Keep these enumerated rather than accepting
+    # every English -ed/-ing token, because topic nouns/adjectives such as
+    # "hearing", "meeting", "funding", and "United" are common.
     "harbored", "harboured", "hosted", "existed", "orbited", "included",
     "comprised", "constituted", "supported", "caused", "required",
     "produced", "used", "served", "held", "remained", "reached",
@@ -1957,23 +1867,17 @@ _DIRECT_TEXT_STRONG_PREDICATES = frozenset({
 })
 
 
-def _has_explicit_direct_text_predicate_cue(value):
-    """Return whether direct text has a high-confidence finite predicate cue.
-
-    Unlike the broader source-bounded helper, this function is intentionally
-    strict because it may rescue an input after ClaimGate abstains. Uppercase
-    acronyms are excluded before case-folding so identifiers such as NASA cannot
-    collide with Filipino words such as "nasa".
-    """
+def _predicate_tokens_preserving_acronyms(value):
+    """Return case-folded predicate candidates without treating acronyms as words."""
     if not isinstance(value, str):
-        return False
+        return []
 
     raw_tokens = [
         token.strip("'’-")
         for token in re.findall(r"\b[\w'’.-]+\b", value, flags=re.UNICODE)
         if token.strip("'’-")
     ]
-    predicate_tokens = [
+    return [
         raw.casefold()
         for raw in raw_tokens
         if not (
@@ -1982,16 +1886,37 @@ def _has_explicit_direct_text_predicate_cue(value):
             and raw.isupper()
         )
     ]
-    if any(token in _DIRECT_TEXT_STRONG_PREDICATES for token in predicate_tokens):
+
+
+def _has_high_confidence_predicate_cue(value):
+    """Conservatively detect a finite factual relation/action.
+
+    This is used only after strict ClaimGate abstention. Precision is preferred
+    over recall: ambiguous bare noun/verb forms such as "report", "plan",
+    "support", "host", "file", or "claim" do not qualify by themselves.
+    """
+    predicate_tokens = _predicate_tokens_preserving_acronyms(value)
+    if any(token in _HIGH_CONFIDENCE_FACTUAL_PREDICATES for token in predicate_tokens):
         return True
 
-    # Keep only bounded Filipino morphology. Avoid generic English suffix rules.
+    # Keep only bounded Filipino/Tagalog morphology. Avoid generic English
+    # suffix rules and acronym collisions such as NASA -> "nasa".
     for token in predicate_tokens:
         if re.match(r"^(?:nag|mag|pinag|ipinag|naka|maka|pina|ipa)[a-z]+$", token):
             return True
         if re.match(r"^[bcdfghjklmnpqrstvwxyz](?:um|in)[a-z]+$", token):
             return True
     return False
+
+
+def _has_explicit_predicate_cue(value):
+    """Compatibility helper for source-bounded fallback completeness checks."""
+    return _has_high_confidence_predicate_cue(value)
+
+
+def _has_explicit_direct_text_predicate_cue(value):
+    """Strict predicate check for direct-text rescue after ClaimGate abstains."""
+    return _has_high_confidence_predicate_cue(value)
 
 
 _DIRECT_TEXT_CONTEXT_RESCUE_MONTHS = frozenset({
