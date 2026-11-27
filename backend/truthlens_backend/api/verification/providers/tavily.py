@@ -11,6 +11,7 @@ from ..contracts import RawEvidence
 PROVIDER_NAME = "TAVILY"
 EXTRACT_PROVIDER_NAME = "TAVILY_EXTRACT"
 PRIMARY_SOURCE_RECOVERY_PROVIDER_RESULTS = 6
+EXTRACT_CONTENT_MAX_CHARS = 8000
 
 # Preserve the existing shared text/URL search preset during adapter staging.
 INCLUDE_DOMAINS = (
@@ -226,6 +227,7 @@ def parse_tavily_extract_response(
         )
         if url is None or content is None:
             continue
+        content = content[:EXTRACT_CONTENT_MAX_CHARS]
         evidence_items.append(
             RawEvidence(
                 provider=EXTRACT_PROVIDER_NAME,
