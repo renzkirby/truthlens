@@ -1870,6 +1870,52 @@ def _has_explicit_predicate_cue(value):
     return False
 
 
+_DIRECT_TEXT_CONTEXT_RESCUE_MONTHS = frozenset({
+    "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december",
+})
+_DIRECT_TEXT_CONTEXT_RESCUE_YEAR_RE = re.compile(r"\b(?:19|20)\d{2}\b")
+_DIRECT_TEXT_CONTEXT_RESCUE_AMBIGUOUS_SUBJECT_RE = re.compile(
+    r"^\s*(?:he|she|they|it|this|that|these|those)\b"
+    r"|^\s*the\s+(?:president|senator|governor|mayor|minister|secretary|"
+    r"congressman|congresswoman|representative|official)\b",
+    flags=re.IGNORECASE,
+)
+
+
+def can_rescue_direct_text_insufficient_context(value):
+    """Recognize only high-specificity direct text after a strict gate abstains.
+
+    This is intentionally narrow. It does not decide truth or claimability in the
+    ordinary path. It only prevents an INSUFFICIENT_CONTEXT result from blocking
+    retrieval when the user's exact text already contains:
+    - an explicit factual predicate;
+    - a concrete calendar year; and
+    - at least two non-temporal named identity anchors.
+
+    Pronoun-led and generic-role-led claims remain unresolved. False negatives
+    continue to abstain, so this helper favors precision over recall.
+    """
+    if not isinstance(value, str):
+        return False
+    normalized = " ".join(value.split())
+    if not normalized or len(normalized) > _DIRECT_TEXT_FIDELITY_MAX_CHARS:
+        return False
+    if _DIRECT_TEXT_CONTEXT_RESCUE_AMBIGUOUS_SUBJECT_RE.search(normalized):
+        return False
+    if not _DIRECT_TEXT_CONTEXT_RESCUE_YEAR_RE.search(normalized):
+        return False
+    if not _has_explicit_predicate_cue(normalized):
+        return False
+
+    anchors = {
+        token
+        for token in _material_entity_anchor_tokens(normalized)
+        if token not in _DIRECT_TEXT_CONTEXT_RESCUE_MONTHS
+    }
+    return len(anchors) >= 2
+
+
 def _bound_noneditable_fallback_to_source(result, source_text):
     """Reject invented identifiers and keep fallback retrieval source-bounded."""
     normalized = _normalize_claim_gate_queries(result)
