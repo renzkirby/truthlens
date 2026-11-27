@@ -309,7 +309,7 @@ class VerificationAuditRemediationV1418Tests(SimpleTestCase):
             side_effect=[json.dumps(self.initial_fake), json.dumps(audited)],
         ) as provider:
             result = services.evaluate_claim_with_persisted_evidence(
-                "The official invented action occurred.",
+                "The fictional policy was legalized after the House approved a bill.",
                 "Persisted assessed evidence.",
                 evidence_groups=groups,
             )
