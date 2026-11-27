@@ -47,6 +47,23 @@ class VerificationAuditRemediationV1418Tests(SimpleTestCase):
     def test_v1418_pipeline_version(self):
         self.assertEqual(CURRENT_VERIFICATION_PIPELINE_VERSION, "1.4.18")
 
+    def test_nonmedia_claim_shape_gate_accepts_only_targeted_relationships(self):
+        self.assertTrue(services._claim_has_nonmedia_relationship_shape(
+            "Divorce was legalized after the House passed an absolute divorce bill."
+        ))
+        self.assertTrue(services._claim_has_nonmedia_relationship_shape(
+            "₱4.1 trillion of the national budget was released to the president."
+        ))
+        self.assertFalse(services._claim_has_nonmedia_relationship_shape(
+            "The House did not approve the bill."
+        ))
+        self.assertFalse(services._claim_has_nonmedia_relationship_shape(
+            "The president was released to police custody."
+        ))
+        self.assertFalse(services._claim_has_nonmedia_relationship_shape(
+            "The attributed quotation was fabricated."
+        ))
+
     def test_legal_status_correction_can_prequalify_one_strong_refutation(self):
         evidence_id = "11111111-1111-1111-1111-111111111111"
         groups = [_group(_item(
@@ -300,6 +317,30 @@ class VerificationAuditRemediationV1418Tests(SimpleTestCase):
         self.assertEqual(provider.call_count, 2)
         self.assertEqual(result["verdict"], "FAKE")
         self.assertEqual(result["contextual_basis_kind"], "NONE")
+
+    def test_legal_background_does_not_open_audit_for_simple_polarity_reversal(self):
+        groups = [_group(_item(
+            "bcbcbcbc-bcbc-bcbc-bcbc-bcbcbcbcbcbc",
+            content=(
+                "Divorce remains illegal. The House approved House Bill No. "
+                "9349 on third reading."
+            ),
+            relevance=1.0,
+            directness=1.0,
+        ))]
+
+        with patch(
+            "api.services.call_llm_with_fallback",
+            return_value=json.dumps(self.initial_fake),
+        ) as provider:
+            result = services.evaluate_claim_with_persisted_evidence(
+                "The House did not approve the bill.",
+                "Persisted assessed evidence.",
+                evidence_groups=groups,
+            )
+
+        self.assertEqual(provider.call_count, 1)
+        self.assertEqual(result["verdict"], "FAKE")
 
     def test_ordinary_fabricated_claim_keeps_single_main_evaluator_call(self):
         groups = [_group(_item(
