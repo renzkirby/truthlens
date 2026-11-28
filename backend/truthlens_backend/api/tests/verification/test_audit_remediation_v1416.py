@@ -122,5 +122,8 @@ class VerificationAuditRemediationV1416Tests(SimpleTestCase):
             with self.subTest(claim=claim):
                 self.assertTrue(services._has_explicit_predicate_cue(claim))
 
-    def test_v1416_pipeline_version(self):
-        self.assertEqual(CURRENT_VERIFICATION_PIPELINE_VERSION, "1.4.16")
+    def test_v1416_hardening_remains_in_v1416_or_later(self):
+        version = tuple(
+            int(part) for part in CURRENT_VERIFICATION_PIPELINE_VERSION.split(".")
+        )
+        self.assertGreaterEqual(version, (1, 4, 16))

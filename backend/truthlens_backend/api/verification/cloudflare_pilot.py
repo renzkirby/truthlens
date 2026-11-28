@@ -574,6 +574,66 @@ def _satire_aliases_from_prompt(user_prompt):
     }
 
 
+def _relationship_evidence_ids_from_prompt(user_prompt):
+    if not isinstance(user_prompt, str):
+        return set()
+
+    # Non-media partial-truth arbitration supplies a deterministic whitelist.
+    # When present, provider output may cite only those pre-qualified IDs rather
+    # than any other evidence item that happens to be visible in the dossier.
+    eligible_start_tag = "<eligible_relationship_basis_ids>"
+    eligible_end_tag = "</eligible_relationship_basis_ids>"
+    eligible_start = user_prompt.find(eligible_start_tag)
+    eligible_end = user_prompt.find(
+        eligible_end_tag,
+        eligible_start + len(eligible_start_tag),
+    )
+    if eligible_start >= 0 and eligible_end >= 0:
+        try:
+            ids = json.loads(
+                user_prompt[
+                    eligible_start + len(eligible_start_tag):eligible_end
+                ]
+            )
+        except (TypeError, ValueError):
+            return set()
+        if (
+            not isinstance(ids, list)
+            or any(
+                not isinstance(value, str) or not value.strip()
+                for value in ids
+            )
+            or len(set(ids)) != len(ids)
+        ):
+            return set()
+        return {value.strip() for value in ids}
+
+    for start_tag, end_tag in (
+        ("<structured_misleading_candidates>", "</structured_misleading_candidates>"),
+        ("<assessed_candidates>", "</assessed_candidates>"),
+    ):
+        start = user_prompt.find(start_tag)
+        end = user_prompt.find(end_tag, start + len(start_tag))
+        if start < 0 or end < 0:
+            continue
+        try:
+            rows = json.loads(user_prompt[start + len(start_tag):end])
+        except (TypeError, ValueError):
+            return set()
+        if not isinstance(rows, list):
+            return set()
+        return {
+            str(row.get("evidence_id")).strip()
+            for row in rows
+            if (
+                isinstance(row, dict)
+                and isinstance(row.get("evidence_id"), str)
+                and row.get("evidence_id").strip()
+            )
+        }
+    return set()
+
+
 def _valid_small_decision(operation, raw, user_prompt=None):
     """Strict compact JSON contracts for bounded decision-only operations."""
     try:
@@ -628,16 +688,42 @@ def _valid_small_decision(operation, raw, user_prompt=None):
     if operation == STRUCTURED_MISLEADING_AUDIT_OPERATION:
         relationship = value.get("relationship")
         basis_kind = value.get("basis_kind", "NONE")
+        basis_ids = value.get("basis_evidence_ids", [])
+        nonmedia_whitelist_active = (
+            isinstance(user_prompt, str)
+            and "<eligible_relationship_basis_ids>" in user_prompt
+        )
+        if (
+            nonmedia_whitelist_active
+            and set(value)
+            != {"relationship", "basis_kind", "basis_evidence_ids"}
+        ):
+            return False
         if relationship not in {
             "MATERIAL_MISDESCRIPTION",
             "FABRICATED_CORE",
             "FULLY_SUPPORTED",
             "INSUFFICIENT_OR_CONFLICTING",
-        }:
+        } or not isinstance(basis_ids, list):
+            return False
+        if any(
+            not isinstance(evidence_id, str) or not evidence_id.strip()
+            for evidence_id in basis_ids
+        ) or len(set(basis_ids)) != len(basis_ids):
             return False
         if relationship == "MATERIAL_MISDESCRIPTION":
-            return basis_kind in {"MISSING_CONTEXT", "PARTIAL_TRUTH", "FALSE_CONTEXT"}
-        return basis_kind in {None, "NONE"}
+            allowed_ids = _relationship_evidence_ids_from_prompt(user_prompt)
+            allowed_kinds = (
+                {"PARTIAL_TRUTH"}
+                if nonmedia_whitelist_active
+                else {"MISSING_CONTEXT", "PARTIAL_TRUTH", "FALSE_CONTEXT"}
+            )
+            return (
+                basis_kind in allowed_kinds
+                and bool(basis_ids)
+                and set(basis_ids).issubset(allowed_ids)
+            )
+        return basis_kind in {None, "NONE"} and not basis_ids
     return False
 
 

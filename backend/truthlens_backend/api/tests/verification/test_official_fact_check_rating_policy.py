@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.test import SimpleTestCase
 
@@ -70,6 +71,118 @@ def _coverage(*records):
 
 
 class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
+    def test_evaluator_wrapper_preserves_legacy_none_call_shape(self):
+        policy = {
+            "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+            "misleading_evidence_ids": (),
+            "false_evidence_ids": (),
+        }
+        with patch(
+            "api.tasks.evaluate_claim_with_persisted_evidence",
+            return_value={"verdict": "UNVERIFIED"},
+        ) as evaluator:
+            tasks._evaluate_persisted_with_official_rating_policy(
+                "Claim.",
+                "Persisted evidence.",
+                "NEUTRAL",
+                policy,
+                evidence_groups=["group"],
+            )
+
+        evaluator.assert_called_once_with(
+            "Claim.",
+            "Persisted evidence.",
+            "NEUTRAL",
+            evidence_groups=["group"],
+        )
+
+    def test_evaluator_wrapper_forwards_false_only_metadata_additively(self):
+        policy = {
+            "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+            "misleading_evidence_ids": (),
+            "false_evidence_ids": ("false-1",),
+        }
+        with patch(
+            "api.tasks.evaluate_claim_with_persisted_evidence",
+            return_value={"verdict": "FAKE"},
+        ) as evaluator:
+            tasks._evaluate_persisted_with_official_rating_policy(
+                "Claim.",
+                "Persisted evidence.",
+                "NEUTRAL",
+                policy,
+                evidence_groups=["group"],
+            )
+
+        evaluator.assert_called_once_with(
+            "Claim.",
+            "Persisted evidence.",
+            "NEUTRAL",
+            official_false_evidence_ids=("false-1",),
+            evidence_groups=["group"],
+        )
+
+    def test_evaluator_wrapper_preserves_legacy_misleading_call_shape(self):
+        policy = {
+            "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+            "misleading_evidence_ids": ("misleading-1",),
+            "false_evidence_ids": (),
+        }
+        with patch(
+            "api.tasks.evaluate_claim_with_persisted_evidence",
+            return_value={"verdict": "MISLEADING"},
+        ) as evaluator:
+            tasks._evaluate_persisted_with_official_rating_policy(
+                "Claim.",
+                "Persisted evidence.",
+                "NEUTRAL",
+                policy,
+                evidence_groups=["group"],
+            )
+
+        evaluator.assert_called_once_with(
+            "Claim.",
+            "Persisted evidence.",
+            "NEUTRAL",
+            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            (),
+            ("misleading-1",),
+            evidence_groups=["group"],
+        )
+
+    def test_evaluator_wrapper_adds_false_metadata_to_misleading_path(self):
+        policy = {
+            "resolution": OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            "satire_evidence_ids": (),
+            "misleading_evidence_ids": ("misleading-1",),
+            "false_evidence_ids": ("false-1",),
+        }
+        with patch(
+            "api.tasks.evaluate_claim_with_persisted_evidence",
+            return_value={"verdict": "MISLEADING"},
+        ) as evaluator:
+            tasks._evaluate_persisted_with_official_rating_policy(
+                "Claim.",
+                "Persisted evidence.",
+                "NEUTRAL",
+                policy,
+                evidence_groups=["group"],
+            )
+
+        evaluator.assert_called_once_with(
+            "Claim.",
+            "Persisted evidence.",
+            "NEUTRAL",
+            OFFICIAL_FACT_CHECK_RESOLUTION_NONE,
+            (),
+            ("misleading-1",),
+            official_false_evidence_ids=("false-1",),
+            evidence_groups=["group"],
+        )
+
     def test_rating_normalization_is_high_precision(self):
         for rating in (
             "Satire",
@@ -97,7 +210,14 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
                     "FALSE",
                 )
 
-        for rating in ("Misleading", "MISLEADING", " misleading "):
+        for rating in (
+            "Misleading",
+            "MISLEADING",
+            " misleading ",
+            "Needs Context",
+            "NEEDS CONTEXT",
+            " needs context ",
+        ):
             with self.subTest(rating=rating):
                 self.assertEqual(
                     classify_official_fact_check_rating(rating),
@@ -173,6 +293,7 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
         self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_NONE)
         self.assertEqual(result["satire_evidence_ids"], ())
         self.assertEqual(result["misleading_evidence_ids"], ())
+        self.assertEqual(result["false_evidence_ids"], ("evidence-1",))
 
     def test_exact_misleading_rating_becomes_context_signal_without_coverage(self):
         result = tasks._resolve_official_fact_check_rating_policy(
@@ -183,6 +304,31 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
         self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_NONE)
         self.assertEqual(result["satire_evidence_ids"], ())
         self.assertEqual(result["misleading_evidence_ids"], ("evidence-1",))
+
+    def test_exact_needs_context_rating_becomes_context_signal_without_coverage(self):
+        result = tasks._resolve_official_fact_check_rating_policy(
+            "Rex Gatchalian said air can be turned into water to help address El Niño.",
+            _groups((
+                "Rex Gatchalian said air can be turned into water to help address El Niño.",
+                "Needs Context",
+            )),
+        )
+
+        self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_NONE)
+        self.assertEqual(result["satire_evidence_ids"], ())
+        self.assertEqual(result["misleading_evidence_ids"], ("evidence-1",))
+        self.assertEqual(result["false_evidence_ids"], ())
+
+    def test_related_needs_context_rating_does_not_activate_context_signal(self):
+        reviewed = "DSWD deployed atmospheric water generators during El Niño."
+        result = tasks._resolve_official_fact_check_rating_policy(
+            "Rex Gatchalian said air can now be turned into water.",
+            _groups((reviewed, "Needs Context")),
+            coverage=_coverage((reviewed, "PARTIAL_OR_RELATED")),
+        )
+
+        self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_NONE)
+        self.assertEqual(result["misleading_evidence_ids"], ())
 
     def test_exact_equivalent_satire_rating_authorizes_satire_without_coverage(self):
         result = tasks._resolve_official_fact_check_rating_policy(
@@ -223,6 +369,7 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
             OFFICIAL_FACT_CHECK_RESOLUTION_FAKE_CONFLICT,
         )
         self.assertEqual(result["satire_evidence_ids"], ("evidence-1",))
+        self.assertEqual(result["false_evidence_ids"], ("evidence-2",))
 
     def test_equivalent_unknown_rating_defers_to_normal_evaluator(self):
         result = tasks._resolve_official_fact_check_rating_policy(
@@ -256,6 +403,20 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
         )
 
         self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE)
+
+    def test_semantic_coverage_preserves_equivalent_false_signal_without_shortcut(self):
+        reviewed = "The athlete met the head of state after the tournament final."
+        result = tasks._resolve_official_fact_check_rating_policy(
+            "The athlete met with the head of state after the tournament final.",
+            _groups((reviewed, "False")),
+            coverage=_coverage((reviewed, "EQUIVALENT_OR_COVERS")),
+        )
+
+        self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_NONE)
+        self.assertEqual(result["satire_evidence_ids"], ())
+        self.assertEqual(result["misleading_evidence_ids"], ())
+        self.assertEqual(result["false_evidence_ids"], ("evidence-1",))
+        self.assertFalse(tasks._official_rating_policy_has_signal(result))
 
     def test_semantic_coverage_can_activate_misleading_context_signal(self):
         reviewed = (
@@ -320,7 +481,7 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
         self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_SATIRE)
         self.assertEqual(result["satire_evidence_ids"], ("evidence-1",))
 
-    def test_equivalent_misleading_and_false_ratings_disable_context_signal(self):
+    def test_equivalent_misleading_and_false_ratings_preserve_both_signals(self):
         result = tasks._resolve_official_fact_check_rating_policy(
             "Same claim.",
             _groups(
@@ -330,7 +491,8 @@ class OfficialFactCheckRatingPolicyTests(SimpleTestCase):
         )
 
         self.assertEqual(result["resolution"], OFFICIAL_FACT_CHECK_RESOLUTION_NONE)
-        self.assertEqual(result["misleading_evidence_ids"], ())
+        self.assertEqual(result["misleading_evidence_ids"], ("evidence-1",))
+        self.assertEqual(result["false_evidence_ids"], ("evidence-2",))
 
     def test_equivalent_misleading_and_unknown_ratings_disable_context_signal(self):
         result = tasks._resolve_official_fact_check_rating_policy(

@@ -657,6 +657,7 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         audited = {
             "relationship": "MATERIAL_MISDESCRIPTION",
             "basis_kind": "FALSE_CONTEXT",
+            "basis_evidence_ids": [evidence_id],
             "summary": "The underlying event is real but materially misdescribed.",
             "extra": "Harmless extra field.",
         }
@@ -758,9 +759,11 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
             "contextual_basis_kind": "NONE",
             "contextual_basis_evidence_ids": [],
         }
+        supporting_id = "78787878-7878-7878-7878-787878787878"
         audited = {
             "relationship": "MATERIAL_MISDESCRIPTION",
             "basis_kind": "FALSE_CONTEXT",
+            "basis_evidence_ids": [supporting_id],
         }
         evidence_groups = [SimpleNamespace(evidence=(
             SimpleNamespace(
@@ -772,7 +775,7 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
                 directness_score=0.98,
             ),
             SimpleNamespace(
-                evidence_link_id="78787878-7878-7878-7878-787878787878",
+                evidence_link_id=supporting_id,
                 title="Supporting report",
                 content="The underlying video is genuine.",
                 stance="SUPPORTS",
@@ -794,6 +797,7 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
             )
 
         self.assertEqual(result["verdict"], "MISLEADING")
+        self.assertEqual(result["contextual_basis_evidence_ids"], [supporting_id])
         second_prompt = call_llm.call_args_list[1].args[1]
         self.assertIn("<structured_misleading_candidates>", second_prompt)
         self.assertIn(signal_id, second_prompt)
@@ -937,6 +941,7 @@ class PersistedEvidenceEvaluatorTests(SimpleTestCase):
         audited = {
             "relationship": "MATERIAL_MISDESCRIPTION",
             "basis_kind": "FALSE_CONTEXT",
+            "basis_evidence_ids": [evidence_id],
         }
 
         with patch(

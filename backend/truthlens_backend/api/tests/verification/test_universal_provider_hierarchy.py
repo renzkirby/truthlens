@@ -209,25 +209,38 @@ class UniversalProviderHierarchyPolicyTests(SimpleTestCase):
         ))
 
     def test_structured_misleading_contract_requires_relationship_specific_basis(self):
+        evidence_id = "11111111-2222-3333-4444-555555555555"
+        prompt = (
+            '<structured_misleading_candidates>'
+            f'[{{"evidence_id":"{evidence_id}","content":"Corrective evidence."}}]'
+            '</structured_misleading_candidates>'
+        )
         material = {
             "relationship": "MATERIAL_MISDESCRIPTION",
             "basis_kind": "FALSE_CONTEXT",
+            "basis_evidence_ids": [evidence_id],
             "explanation": "Harmless optional field.",
         }
         self.assertTrue(validate_pilot_response(
-            "structured_misleading_audit", json.dumps(material), "Evidence",
+            "structured_misleading_audit", json.dumps(material), prompt,
         ))
         self.assertFalse(validate_pilot_response(
             "structured_misleading_audit",
             json.dumps({**material, "basis_kind": "NONE"}),
-            "Evidence",
+            prompt,
+        ))
+        self.assertFalse(validate_pilot_response(
+            "structured_misleading_audit",
+            json.dumps({**material, "basis_evidence_ids": ["not-in-prompt"]}),
+            prompt,
         ))
         fabricated = {
             "relationship": "FABRICATED_CORE",
             "basis_kind": "NONE",
+            "basis_evidence_ids": [],
         }
         self.assertTrue(validate_pilot_response(
-            "structured_misleading_audit", json.dumps(fabricated), "Evidence",
+            "structured_misleading_audit", json.dumps(fabricated), prompt,
         ))
 
     @override_settings(APP_ENV="production", DEBUG=False)
