@@ -1636,6 +1636,7 @@ class CommunityFeedThreadSerializer(serializers.ModelSerializer):
             "id",
             "display_id",
             "caption",
+            "caption_rich",
             "status",
             "created_at",
             "comment_count",
