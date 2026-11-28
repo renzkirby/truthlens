@@ -29,7 +29,7 @@ const VERDICT_META = {
 
 const REVISION_LABELS = {
    INITIAL: "Initial publication",
-   EDITORIAL_REVISION: "Editorial revision",
+   EDITORIAL_REVISION: "Editorial update",
    FACTUAL_CORRECTION: "Factual correction",
 };
 
@@ -503,7 +503,7 @@ function PublicFactCheckPage() {
                               ? "The organization corrected a previously published factual conclusion."
                               : "This article was updated after publication. The factual conclusion did not change."}
                         </p>
-                        <a href="#publication-update-details">View update history</a>
+                        <a href="#publication-update-details">View update details</a>
                      </div>
                   </aside>
                )}
