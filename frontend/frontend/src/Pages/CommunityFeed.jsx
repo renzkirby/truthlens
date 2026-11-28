@@ -1291,9 +1291,6 @@ function CommunityFeed() {
                                              fallbackText={captionText}
                                              profile="discussion"
                                           />
-                                          <Link className="feed-context-open-link" to={detailPath}>
-                                             Open discussion
-                                          </Link>
                                        </div>
                                     )}
                                  </section>
