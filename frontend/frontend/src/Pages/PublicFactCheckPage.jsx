@@ -5,7 +5,6 @@ import {
    ExternalLink,
    FileClock,
    History,
-   Info,
    RefreshCw,
    ShieldCheck,
 } from "lucide-react";
@@ -353,7 +352,8 @@ function PublicFactCheckPage() {
    const selectedPredecessor = selectedIndex > 0 ? lineage[selectedIndex - 1] : null;
    const isCurrent = detail.history_state === "CURRENT";
    const selectedIsCorrection = article.revision_kind === "FACTUAL_CORRECTION";
-   const hasCorrectionHistory = lineage.some((item) => item?.revision_kind === "FACTUAL_CORRECTION");
+   const selectedIsEditorialRevision = article.revision_kind === "EDITORIAL_REVISION";
+   const selectedHasPublishedUpdate = selectedIsCorrection || selectedIsEditorialRevision;
    const sources = Array.isArray(detail.sources) ? detail.sources : [];
    const currentRoute = routeForVersion(
       organization.slug,
@@ -483,71 +483,27 @@ function PublicFactCheckPage() {
                   </aside>
                )}
 
-               {selectedIsCorrection && selectedPredecessor && (
-                  <aside className="public-fact-check-correction" aria-labelledby="factual-correction-heading">
-                     <div className="public-fact-check-correction__heading">
-                        <AlertTriangle aria-hidden="true" />
-                        <div>
-                           <h2 id="factual-correction-heading">
-                              {isCurrent ? "Factual correction" : "Factual correction in this version"}
-                           </h2>
-                           {detail.revision?.requested_at && (
-                              <p>Correction requested {formatDateTime(detail.revision.requested_at)}</p>
-                           )}
-                        </div>
-                     </div>
-
-                     <p className="public-fact-check-correction__intro">
-                        The organization changed its published factual conclusion through an accountable correction.
-                     </p>
-
-                     <div className="public-fact-check-transition">
-                        <FactualState label="Previous factual state" item={selectedPredecessor} />
-                        <ArrowRight className="public-fact-check-transition__arrow" aria-hidden="true" />
-                        <FactualState
-                           label="Corrected factual state"
-                           item={{
-                              verdict: decision.verdict,
-                              canonical_claim: decision.canonical_claim,
-                           }}
-                        />
-                     </div>
-
-                     {detail.revision?.reason && (
-                        <div className="public-fact-check-correction__reason">
-                           <h3>Why this changed</h3>
-                           <p>{detail.revision.reason}</p>
-                        </div>
-                     )}
-                  </aside>
-               )}
-
-               {isCurrent && !selectedIsCorrection && hasCorrectionHistory && (
-                  <aside className="public-fact-check-history-note" aria-labelledby="correction-history-heading">
+               {isCurrent && selectedHasPublishedUpdate && (
+                  <aside
+                     className={[
+                        "public-fact-check-update-summary",
+                        selectedIsCorrection ? "public-fact-check-update-summary--correction" : "",
+                     ]
+                        .filter(Boolean)
+                        .join(" ")}
+                     aria-labelledby="publication-update-summary-heading"
+                  >
                      <History aria-hidden="true" />
                      <div>
-                        <h2 id="correction-history-heading">Factual correction history</h2>
+                        <h2 id="publication-update-summary-heading">
+                           {selectedIsCorrection ? "Factual correction published" : "Editorial update published"}
+                        </h2>
                         <p>
-                           This publication lineage includes a factual correction. The exact correction version and
-                           reason remain available in the publication record below.
+                           {selectedIsCorrection
+                              ? "The organization corrected a previously published factual conclusion."
+                              : "This article was updated after publication. The factual conclusion did not change."}
                         </p>
-                        <a href="#publication-history">Review publication history</a>
-                     </div>
-                  </aside>
-               )}
-
-               {detail.revision?.kind === "EDITORIAL_REVISION" && (
-                  <aside className="public-fact-check-editorial-update" aria-labelledby="editorial-update-heading">
-                     <Info aria-hidden="true" />
-                     <div>
-                        <h2 id="editorial-update-heading">Editorial update</h2>
-                        {detail.revision.reason && <p>{detail.revision.reason}</p>}
-                        <p className="public-fact-check-editorial-update__metadata">
-                           Updated from Article v{detail.revision.predecessor?.version}
-                           {detail.revision.requested_at
-                              ? ` · Requested ${formatDateTime(detail.revision.requested_at)}`
-                              : ""}
-                        </p>
+                        <a href="#publication-update-details">View update history</a>
                      </div>
                   </aside>
                )}
@@ -606,6 +562,61 @@ function PublicFactCheckPage() {
                      </div>
                   </dl>
 
+                  {selectedHasPublishedUpdate && selectedPredecessor && (
+                     <section
+                        id="publication-update-details"
+                        className={[
+                           "public-fact-check-update-details",
+                           selectedIsCorrection ? "public-fact-check-update-details--correction" : "",
+                        ]
+                           .filter(Boolean)
+                           .join(" ")}
+                        aria-labelledby="publication-update-details-heading"
+                     >
+                        <div className="public-fact-check-update-details__heading">
+                           {selectedIsCorrection ? (
+                              <AlertTriangle aria-hidden="true" />
+                           ) : (
+                              <History aria-hidden="true" />
+                           )}
+                           <div>
+                              <h3 id="publication-update-details-heading">
+                                 {selectedIsCorrection ? "Factual correction" : "Editorial update"}
+                              </h3>
+                              <p>
+                                 Published {formatDateTime(detail.published_at)} from Article v
+                                 {detail.revision?.predecessor?.version ?? selectedPredecessor.version}.
+                              </p>
+                           </div>
+                        </div>
+
+                        {selectedIsCorrection ? (
+                           <>
+                              <p className="public-fact-check-update-details__summary">
+                                 The organization corrected its previously published factual conclusion. The
+                                 comparison below shows the published conclusion before and after the correction.
+                              </p>
+                              <div className="public-fact-check-transition">
+                                 <FactualState label="Previous published conclusion" item={selectedPredecessor} />
+                                 <ArrowRight className="public-fact-check-transition__arrow" aria-hidden="true" />
+                                 <FactualState
+                                    label="Corrected conclusion"
+                                    item={{
+                                       verdict: decision.verdict,
+                                       canonical_claim: decision.canonical_claim,
+                                    }}
+                                 />
+                              </div>
+                           </>
+                        ) : (
+                           <p className="public-fact-check-update-details__summary">
+                              The article content was updated after publication. The institutionally published
+                              factual conclusion and verdict did not change from the preceding version.
+                           </p>
+                        )}
+                     </section>
+                  )}
+
                   <nav id="publication-history" className="public-fact-check-history" aria-labelledby="history-heading">
                      <div className="public-fact-check-history__heading">
                         <h3 id="history-heading">Version history</h3>
@@ -651,16 +662,6 @@ function PublicFactCheckPage() {
                                     </div>
                                     {item.headline && <h4>{item.headline}</h4>}
                                     <Verdict value={item.verdict} compact />
-                                    {item.revision_reason && (
-                                       <p>
-                                          <strong>
-                                             {item.revision_kind === "FACTUAL_CORRECTION"
-                                                ? "Correction reason:"
-                                                : "Revision reason:"}
-                                          </strong>{" "}
-                                          {item.revision_reason}
-                                       </p>
-                                    )}
                                  </Link>
                               </li>
                            );
