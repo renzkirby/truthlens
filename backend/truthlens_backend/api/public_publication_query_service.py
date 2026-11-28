@@ -88,7 +88,6 @@ def _revision_values(fact_check, payload):
         EDITORIAL_REVISION_SCHEMA_VERSION,
         RICH_EDITORIAL_REVISION_SCHEMA_VERSION,
     }:
-        revision = payload["revision"]
         return {
             "kind": OfficialFactCheck.RevisionKind.EDITORIAL_REVISION,
         }
@@ -96,7 +95,6 @@ def _revision_values(fact_check, payload):
         FACTUAL_CORRECTION_SCHEMA_VERSION,
         RICH_FACTUAL_CORRECTION_SCHEMA_VERSION,
     }:
-        correction = payload["correction"]
         return {
             "kind": OfficialFactCheck.RevisionKind.FACTUAL_CORRECTION,
         }
@@ -152,7 +150,6 @@ def _source_payload(source):
 
 
 def _lineage_item(fact_check, payload, current_id):
-    revision = _revision_values(fact_check, payload)
     return {
         "publication_id": payload["fact_check_id"],
         "version": payload["article_version"],
