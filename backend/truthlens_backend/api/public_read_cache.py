@@ -169,7 +169,7 @@ def get_public_fact_check_detail_payload(
 ):
     generation = _generation(_publication_generation_key(organization_id))
     key = (
-        "public-fact-check-detail:v1:"
+        "public-fact-check-detail:v2:"
         f"{organization_id}:{generation}:{publication_id}"
     )
     return _copy_cached_payload(_safe_cache_get(key))
@@ -183,7 +183,7 @@ def set_public_fact_check_detail_payload(
 ):
     generation = _generation(_publication_generation_key(organization_id))
     key = (
-        "public-fact-check-detail:v1:"
+        "public-fact-check-detail:v2:"
         f"{organization_id}:{generation}:{publication_id}"
     )
     return _safe_cache_set(
