@@ -586,9 +586,10 @@ class PublicFactCheckApiTests(
         context = self.make_published("editorial-lineage")
         original = context["published"]
         original_payload = deepcopy(context["seal"].payload)
+        internal_revision_note = "Needs more details — internal reviewer note"
         revision = self.make_submitted_revision(
             context,
-            reason="Clarify public wording.",
+            reason=internal_revision_note,
         )
         current = self.replace(context, revision)["fact_check"]
 
@@ -613,13 +614,12 @@ class PublicFactCheckApiTests(
             original_payload["verdict"],
         )
         self.assertEqual(
-            current_response.data["revision"]["reason"],
-            "Clarify public wording.",
-        )
-        self.assertEqual(
             set(current_response.data["revision"]),
-            {"kind", "reason", "requested_at", "predecessor"},
+            {"kind", "predecessor"},
         )
+        self.assertNotIn(internal_revision_note, str(current_response.data))
+        self.assertNotIn("reason", current_response.data["revision"])
+        self.assertNotIn("requested_at", current_response.data["revision"])
         self.assertEqual(
             current_response.data["revision"]["predecessor"]["publication_id"],
             str(original.id),
@@ -636,7 +636,6 @@ class PublicFactCheckApiTests(
                     "verdict",
                     "published_at",
                     "history_state",
-                    "revision_reason",
                 }
                 for item in current_response.data["lineage"]
             )
@@ -663,10 +662,14 @@ class PublicFactCheckApiTests(
             detail.data["decision"]["verdict"],
             original_payload["verdict"],
         )
+        internal_correction_note = context["correction_request"].correction_reason
         self.assertEqual(
-            detail.data["revision"]["reason"],
-            context["correction_request"].correction_reason,
+            set(detail.data["revision"]),
+            {"kind", "predecessor"},
         )
+        self.assertNotIn(internal_correction_note, str(detail.data))
+        self.assertNotIn("reason", detail.data["revision"])
+        self.assertNotIn("requested_at", detail.data["revision"])
         self.assertEqual(
             [entry["history_state"] for entry in detail.data["lineage"]],
             ["SUPERSEDED", "CURRENT"],

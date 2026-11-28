@@ -88,21 +88,15 @@ def _revision_values(fact_check, payload):
         EDITORIAL_REVISION_SCHEMA_VERSION,
         RICH_EDITORIAL_REVISION_SCHEMA_VERSION,
     }:
-        revision = payload["revision"]
         return {
             "kind": OfficialFactCheck.RevisionKind.EDITORIAL_REVISION,
-            "reason": revision["revision_reason"],
-            "requested_at": revision["revision_requested_at"],
         }
     if schema_version in {
         FACTUAL_CORRECTION_SCHEMA_VERSION,
         RICH_FACTUAL_CORRECTION_SCHEMA_VERSION,
     }:
-        correction = payload["correction"]
         return {
             "kind": OfficialFactCheck.RevisionKind.FACTUAL_CORRECTION,
-            "reason": correction["correction_reason"],
-            "requested_at": correction["correction_requested_at"],
         }
     raise PublicPublicationNotFound("Publication not found.")
 
@@ -156,7 +150,6 @@ def _source_payload(source):
 
 
 def _lineage_item(fact_check, payload, current_id):
-    revision = _revision_values(fact_check, payload)
     return {
         "publication_id": payload["fact_check_id"],
         "version": payload["article_version"],
@@ -166,7 +159,6 @@ def _lineage_item(fact_check, payload, current_id):
         "verdict": payload["verdict"],
         "published_at": payload["published_at"],
         "history_state": "CURRENT" if fact_check.id == current_id else "SUPERSEDED",
-        "revision_reason": revision["reason"] if revision is not None else None,
     }
 
 

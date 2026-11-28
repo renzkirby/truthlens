@@ -141,6 +141,84 @@ class CommunityFeedApiTests(TestCase):
     def _result_ids(response):
         return [item["id"] for item in response.data["results"]]
 
+    @staticmethod
+    def _rich_context():
+        return {
+            "schema_version": 1,
+            "doc": {
+                "type": "doc",
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Important discussion context.",
+                                "marks": [{"type": "bold"}],
+                            }
+                        ],
+                    },
+                    {
+                        "type": "bulletList",
+                        "content": [
+                            {
+                                "type": "listItem",
+                                "content": [
+                                    {
+                                        "type": "paragraph",
+                                        "content": [
+                                            {
+                                                "type": "text",
+                                                "text": "Check the source attribution.",
+                                            }
+                                        ],
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                ],
+            },
+        }
+
+    def test_feed_exposes_rich_thread_context(self):
+        _claim, thread = self._create_thread("rich feed context")
+        rich = self._rich_context()
+        thread.caption = "Important discussion context.\n\n- Check the source attribution."
+        thread.caption_rich = rich
+        thread.save(update_fields=["caption", "caption_rich"])
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        item = next(
+            entry
+            for entry in response.data["results"]
+            if entry["id"] == str(thread.id)
+        )
+        self.assertEqual(item["caption"], thread.caption)
+        self.assertEqual(item["caption_rich"], rich)
+
+    def test_rich_thread_edit_preserves_document_and_derives_plain_caption(self):
+        _claim, thread = self._create_thread("rich feed edit")
+        rich = self._rich_context()
+
+        response = self.client.patch(
+            reverse("thread-detail", args=[thread.id]),
+            {"caption_rich": rich},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        thread.refresh_from_db()
+        self.assertEqual(thread.caption_rich, rich)
+        self.assertEqual(
+            thread.caption,
+            "Important discussion context.\n\n- Check the source attribution.",
+        )
+        self.assertEqual(response.data["caption_rich"], rich)
+        self.assertEqual(response.data["caption"], thread.caption)
+
     def test_default_ordering_is_newest_first(self):
         _old_claim, old_thread = self._create_thread("older")
         _new_claim, new_thread = self._create_thread("newer")
@@ -849,6 +927,7 @@ class CommunityFeedApiTests(TestCase):
                 "id",
                 "display_id",
                 "caption",
+                "caption_rich",
                 "status",
                 "created_at",
                 "comment_count",
@@ -879,6 +958,7 @@ class CommunityFeedApiTests(TestCase):
                 "verified_evidence_count",
             },
         )
+        self.assertIsNone(item["caption_rich"])
         self.assertEqual(item["evidence_count"], 1)
         self.assertEqual(item["claim"]["verified_evidence_count"], 0)
         self.assertIsNone(item["claim"]["public_topic"])

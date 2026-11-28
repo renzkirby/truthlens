@@ -91,8 +91,6 @@ class PublicFactCheckRevisionSerializer(serializers.Serializer):
     kind = serializers.ChoiceField(
         choices=["EDITORIAL_REVISION", "FACTUAL_CORRECTION"]
     )
-    reason = serializers.CharField(allow_blank=True)
-    requested_at = serializers.DateTimeField()
     predecessor = PublicFactCheckPublicationIdentitySerializer()
 
 
@@ -127,7 +125,6 @@ class PublicFactCheckLineageItemSerializer(serializers.Serializer):
     verdict = serializers.CharField()
     published_at = serializers.DateTimeField()
     history_state = serializers.ChoiceField(choices=["CURRENT", "SUPERSEDED"])
-    revision_reason = serializers.CharField(allow_blank=True, allow_null=True)
 
 
 class PublicFactCheckDetailSerializer(serializers.Serializer):
