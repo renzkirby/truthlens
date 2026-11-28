@@ -526,20 +526,6 @@
   white-space: normal;
 }
 
-.feed-context-open-link {
-  display: inline-flex;
-  margin-top: var(--tl-space-2);
-  color: var(--tl-color-brand-primary);
-  font-size: var(--tl-text-sm);
-  font-weight: 650;
-  text-decoration: none;
-}
-
-.feed-context-open-link:hover {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
 .feed-edit-wrap .tl-richtext-editor {
   width: 100%;
 }
