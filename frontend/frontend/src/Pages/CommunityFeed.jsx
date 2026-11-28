@@ -1285,13 +1285,16 @@ function CommunityFeed() {
                                           </div>
                                        </div>
                                     ) : (
-                                       <Link className="feed-context-link" to={detailPath}>
+                                       <div className="feed-context-rich">
                                           <RichTextRenderer
                                              value={thread.caption_rich}
                                              fallbackText={captionText}
                                              profile="discussion"
                                           />
-                                       </Link>
+                                          <Link className="feed-context-open-link" to={detailPath}>
+                                             Open discussion
+                                          </Link>
+                                       </div>
                                     )}
                                  </section>
                               )}
