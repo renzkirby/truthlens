@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Icons from "../components/Icons.jsx";
 import CommunityReportDialog from "../components/community/CommunityReportDialog.jsx";
 import PartnerAffiliations from "../components/partners/PartnerAffiliations.jsx";
+import RichTextEditor from "../components/richtext/RichTextEditor.jsx";
+import RichTextRenderer from "../components/richtext/RichTextRenderer.jsx";
 import { useAuth } from "../hooks/useAuth";
 import { useNotification } from "../hooks/useNotification";
 import {
@@ -259,6 +261,7 @@ function CommunityFeed() {
    const [openMenuThreadId, setOpenMenuThreadId] = useState(null);
    const [editingThreadId, setEditingThreadId] = useState(null);
    const [editingCaption, setEditingCaption] = useState("");
+   const [editingCaptionRich, setEditingCaptionRich] = useState(null);
    const [savingThreadId, setSavingThreadId] = useState(null);
    const [deletingThreadId, setDeletingThreadId] = useState(null);
    const [reportingThreadId, setReportingThreadId] = useState(null);
@@ -446,12 +449,14 @@ function CommunityFeed() {
       }
       setEditingThreadId(thread.id);
       setEditingCaption(thread.caption || "");
+      setEditingCaptionRich(thread.caption_rich || null);
       setOpenMenuThreadId(null);
    };
 
    const cancelEditThread = () => {
       setEditingThreadId(null);
       setEditingCaption("");
+      setEditingCaptionRich(null);
    };
 
    const saveEditThread = async (event, threadId) => {
@@ -474,12 +479,17 @@ function CommunityFeed() {
          const updated = await authFetch(threadDetailUrl(threadId), {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ caption: editingCaption.trim() }),
+            body: JSON.stringify({ caption_rich: editingCaptionRich }),
          });
          setThreads((currentThreads) =>
             currentThreads.map((thread) =>
                thread.id === threadId
-                  ? { ...thread, caption: updated?.caption ?? editingCaption.trim(), status: updated?.status ?? thread.status }
+                  ? {
+                       ...thread,
+                       caption: updated?.caption ?? editingCaption.trim(),
+                       caption_rich: updated?.caption_rich ?? editingCaptionRich,
+                       status: updated?.status ?? thread.status,
+                    }
                   : thread,
             ),
          );
@@ -1256,14 +1266,16 @@ function CommunityFeed() {
                                     <h2 className="feed-content-label">{contextLabel}</h2>
                                     {isEditing ? (
                                        <div className="feed-edit-wrap">
-                                          <label className="feed-visually-hidden" htmlFor={`edit-caption-${thread.id}`}>Edit community context</label>
-                                          <textarea
-                                             id={`edit-caption-${thread.id}`}
-                                             className="feed-edit-input"
-                                             value={editingCaption}
-                                             onChange={(event) => setEditingCaption(event.target.value)}
-                                             rows={3}
-                                             autoFocus
+                                          <RichTextEditor
+                                             value={editingCaptionRich}
+                                             fallbackText={editingCaption}
+                                             profile="discussion"
+                                             onChange={(richValue, plainText) => {
+                                                setEditingCaptionRich(richValue);
+                                                setEditingCaption(plainText);
+                                             }}
+                                             ariaLabel="Edit community context"
+                                             placeholder="Update community context..."
                                           />
                                           <div className="feed-edit-actions">
                                              <button type="button" className="feed-action-btn feed-action-btn--primary" onClick={(event) => saveEditThread(event, thread.id)} disabled={savingThreadId === thread.id}>
@@ -1273,7 +1285,13 @@ function CommunityFeed() {
                                           </div>
                                        </div>
                                     ) : (
-                                       <Link className="feed-context-link" to={detailPath}>{captionText}</Link>
+                                       <Link className="feed-context-link" to={detailPath}>
+                                          <RichTextRenderer
+                                             value={thread.caption_rich}
+                                             fallbackText={captionText}
+                                             profile="discussion"
+                                          />
+                                       </Link>
                                     )}
                                  </section>
                               )}
