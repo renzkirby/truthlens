@@ -927,6 +927,7 @@ class CommunityFeedApiTests(TestCase):
                 "id",
                 "display_id",
                 "caption",
+                "caption_rich",
                 "status",
                 "created_at",
                 "comment_count",
@@ -957,6 +958,7 @@ class CommunityFeedApiTests(TestCase):
                 "verified_evidence_count",
             },
         )
+        self.assertIsNone(item["caption_rich"])
         self.assertEqual(item["evidence_count"], 1)
         self.assertEqual(item["claim"]["verified_evidence_count"], 0)
         self.assertIsNone(item["claim"]["public_topic"])
