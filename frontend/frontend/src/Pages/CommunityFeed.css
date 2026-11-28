@@ -558,7 +558,6 @@
   gap: var(--tl-space-3);
 }
 
-.feed-edit-input,
 .feed-modal-select,
 .feed-modal-textarea {
   width: 100%;
@@ -566,13 +565,6 @@
   border-radius: var(--tl-radius-md);
   color: var(--tl-color-text-main);
   background: var(--tl-color-bg-surface);
-}
-
-.feed-edit-input {
-  min-height: 96px;
-  padding: var(--tl-space-3);
-  line-height: 1.5;
-  resize: vertical;
 }
 
 .feed-edit-actions,
